@@ -159,7 +159,8 @@ and the FDE applies it with `git apply -p1`. A grant names the tool in `tools`
 (`--tools hexagen_propose_patch`) like any other. Checks, in order, each
 denying before the next runs:
 
-1. the grant has an `id` (else a `grant_missing` trace record);
+1. the grant has an `id` that is a non-empty string (else a `grant_missing`
+   trace record);
 2. `checkGrantSignature`, then `checkGrantWindow`;
 3. the diff parses strictly: every `diff --git` header, `---`/`+++` line and
    rename/copy line is read (both sides of a rename or copy), `/dev/null` is
@@ -167,7 +168,10 @@ denying before the next runs:
    `normalizeSlicePath`. Symlink modes (`120000`), submodule mode (`160000`),
    binary patches, quoted paths that cannot be decoded safely, a patch with no
    file headers, any line outside the header/hunk grammar and a patch over
-   1 MiB are refused;
+   1 MiB are refused.
+   Any path equal to or under `.hexagen/` or `.git/` (first segment,
+   case-sensitive) is refused right after the parse, whatever the grant or
+   slice say;
 4. `checkWriteAgainstGrant` with tool `hexagen_propose_patch` over every path;
 5. the slice: every path inside `slice.paths` and outside `excludes`; no
    `.hexagen/slice.json` is a deny, and a grant wider than the slice is still
@@ -177,6 +181,11 @@ denying before the next runs:
    under the repo root and under a granted prefix, and the slice check runs
    again on that spelling, so a case- or normalisation-insensitive filesystem
    (APFS, NTFS) or a symlinked directory cannot reach an excluded path.
+   A path that is itself an existing symlink is denied ("path is a symlink; git
+   apply would rewrite its target"): git reads a link's target as its content
+   and keeps mode 120000, so a mode-less patch would retarget the link while
+   `realpath` resolved through it. The slice comparison NFC-normalises both the
+   path and every slice entry, so an exclude holds in either Unicode form.
 
 `checkGrantMode` is **never** run: propose-only grants carry `mode: "propose"`
 (plan BW-D9). Every call, allowed or denied, writes one trace line: `goal_id`

@@ -36,7 +36,12 @@ function fail<T>(error: unknown): Result<T, Error> {
  * (temp file, then link: never overwritten) under a random hex id.
  */
 export class ProposalWorkspaceAdapter implements ProposalWorkspacePort {
-  constructor(private readonly workspaceRoot: string) {}
+  /** `newId` is a test seam; the default is 24 random hex characters. */
+  constructor(
+    private readonly workspaceRoot: string,
+    private readonly newId: () => string = () =>
+      randomBytes(12).toString("hex"),
+  ) {}
 
   async readSlice(): Promise<Result<Slice, Error>> {
     const file = path.join(this.workspaceRoot, ".hexagen", "slice.json");
@@ -75,6 +80,16 @@ export class ProposalWorkspaceAdapter implements ProposalWorkspacePort {
 
   private async resolveOne(realRoot: string, p: string): Promise<OnDiskPath> {
     let current = path.join(realRoot, ...p.split("/"));
+    // git reads a symlink's target as its content and keeps mode 120000, so a
+    // mode-less content patch would retarget the link; realpath would resolve
+    // through it and hide that.
+    const leaf = await fs.lstat(current).catch(() => undefined);
+    if (leaf?.isSymbolicLink()) {
+      return {
+        path: p,
+        problem: "path is a symlink; git apply would rewrite its target",
+      };
+    }
     const tail: string[] = [];
     for (;;) {
       try {
@@ -112,13 +127,31 @@ export class ProposalWorkspaceAdapter implements ProposalWorkspacePort {
     }
   }
 
+  /**
+   * The proposals directory, created only after the real root and an existing
+   * `.hexagen` are known to be inside the repo.
+   */
   private async proposalsDir(): Promise<string> {
-    const dir = path.join(this.workspaceRoot, ...PROPOSALS_DIR);
-    await fs.mkdir(dir, { recursive: true });
     const realRoot = await realpathNative(this.workspaceRoot);
-    const realDir = await realpathNative(dir);
-    const rel = path.relative(realRoot, realDir);
-    if (rel.startsWith("..") || path.isAbsolute(rel)) {
+    const inside = (target: string): boolean => {
+      const rel = path.relative(realRoot, target);
+      return !(
+        rel === ".." ||
+        rel.startsWith(`..${path.sep}`) ||
+        path.isAbsolute(rel)
+      );
+    };
+    const sidecar = path.join(realRoot, PROPOSALS_DIR[0] as string);
+    const realSidecar = await realpathNative(sidecar).catch((error) => {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+      throw error;
+    });
+    if (realSidecar !== undefined && !inside(realSidecar)) {
+      throw new Error(".hexagen resolves outside the repository");
+    }
+    const dir = path.join(realRoot, ...PROPOSALS_DIR);
+    await fs.mkdir(dir, { recursive: true });
+    if (!inside(await realpathNative(dir))) {
       throw new Error(".hexagen/proposals resolves outside the repository");
     }
     return dir;
@@ -128,7 +161,7 @@ export class ProposalWorkspaceAdapter implements ProposalWorkspacePort {
     try {
       const dir = await this.proposalsDir();
       for (let attempt = 0; attempt < 5; attempt++) {
-        const id = randomBytes(12).toString("hex");
+        const id = this.newId();
         try {
           await writeFileExclusive(path.join(dir, `${id}.patch`), patch);
           return { success: true, value: { id } };

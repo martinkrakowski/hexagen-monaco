@@ -30,6 +30,8 @@ import { ProposalWorkspaceAdapter } from "../../src/infrastructure/adapters/prop
 import { TraceWriteAdapter } from "../../src/infrastructure/adapters/trace-write.adapter.js";
 import { proposePatchTool } from "../../src/infrastructure/adapters/tools/propose-patch.js";
 import { toolRegistry } from "../../src/infrastructure/adapters/tools/registry.js";
+import type { ProposalWorkspacePort } from "../../src/application/ports/out/proposal-workspace.port.js";
+import type { TraceWritePort } from "../../src/application/ports/out/trace-write.port.js";
 import type { MCPServerAdapterDependencies } from "../../src/infrastructure/adapters/mcp-server.types.js";
 
 const NOW = new Date("2026-10-02T12:00:00.000Z");
@@ -444,5 +446,160 @@ describe("hexagen_propose_patch", () => {
       deps,
     );
     expect(bad.isError).toBe(true);
+  });
+});
+
+function useWith(
+  workspace: ProposalWorkspacePort,
+  traceWrite: TraceWritePort = new TraceWriteAdapter(root),
+): ProposePatchToolUseCase {
+  return new ProposePatchToolUseCase(
+    workspace,
+    traceWrite,
+    new GrantSignatureAdapter(root, { keyFile, env: {} }),
+    () => NOW,
+  );
+}
+
+describe("hexagen_propose_patch fix round", () => {
+  it("denies a content patch to an existing symlink, even with an in-slice target", async () => {
+    symlinkSync("a.ts", path.join(root, "src", "l"));
+    const r = denied(await propose(modify("src/l")));
+    expect(r.code).toBe("grant_denied");
+    expect(r.reason).toMatch(
+      /path is a symlink; git apply would rewrite its target/,
+    );
+    expect(trace()[0]).toMatchObject({ halt_reason: "grant_denied" });
+    expect(proposals()).toEqual([]);
+  });
+
+  it("denies a path whose on-disk target is outside the grant, via the grant re-check", async () => {
+    mkdirSync(path.join(root, "src", "sub"), { recursive: true });
+    mkdirSync(path.join(root, "src", "other"), { recursive: true });
+    symlinkSync(
+      path.join(root, "src", "other"),
+      path.join(root, "src", "sub", "alias"),
+    );
+    const g = sign(baseGrant({ paths: ["src/sub/"] }));
+    const r = denied(await propose(modify("src/sub/alias/x.ts"), g));
+    expect(r.reason).toMatch(/On-disk spelling: Grant does not include path/);
+  });
+
+  it.each([".hexagen/slice.json", ".git/config", ".git/hooks/pre-commit"])(
+    "refuses %s outright, whatever the grant and slice say",
+    async (p) => {
+      writeSlice(["src/", ".hexagen/", ".git/"], []);
+      const g = sign(baseGrant({ paths: ["src/", ".hexagen/", ".git/"] }));
+      const r = denied(await propose(modify(p), g));
+      expect(r.code).toBe("grant_denied");
+      expect(r.reason).toMatch(/\.hexagen\/ and \.git\/ are never proposed/);
+      expect(trace()).toHaveLength(1);
+    },
+  );
+
+  it("refuses a rename whose other side is under .git/", async () => {
+    writeSlice(["src/", ".git/"], []);
+    const g = sign(baseGrant({ paths: ["src/", ".git/"] }));
+    const r = denied(await propose(rename("src/a.ts", ".git/x"), g));
+    expect(r.reason).toMatch(/never proposed/);
+  });
+
+  it("treats a non-string grant id as grant_missing", async () => {
+    const odd = sign({ ...baseGrant(), id: 123 as unknown as string });
+    const r = denied(await propose(modify("src/a.ts"), odd));
+    expect(r.code).toBe("grant_missing");
+    expect(trace()[0]).toMatchObject({ kind: "grant_missing" });
+    expect(trace()[0]?.grant_id).toBeUndefined();
+  });
+
+  it("denies an NFD spelling of an NFC exclude", async (ctx) => {
+    if (!caseInsensitive(root)) ctx.skip();
+    writeSlice(["src/"], ["src/café/"]);
+    const r = denied(await propose(modify("src/café/x.ts")));
+    expect(r.reason).toMatch(/outside the slice/);
+  });
+
+  it("appends a compensating error line when the metadata write fails, and discards the patch", async () => {
+    const real = new ProposalWorkspaceAdapter(root);
+    let savedId = "";
+    const failing: ProposalWorkspacePort = {
+      readSlice: () => real.readSlice(),
+      resolveOnDisk: (p) => real.resolveOnDisk(p),
+      savePatch: async (p) => {
+        const r = await real.savePatch(p);
+        if (r.success) savedId = r.value.id;
+        return r;
+      },
+      discardPatch: (id) => real.discardPatch(id),
+      saveMeta: async () => ({ success: false, error: new Error("boom") }),
+    };
+    const r = denied(
+      await useWith(failing).execute({
+        patch: modify("src/a.ts"),
+        grant: sign(baseGrant()),
+      }),
+    );
+    expect(r.code).toBe("error");
+    expect(proposals()).toEqual([]);
+    const lines = trace();
+    expect(lines.map((l) => l.halt_reason)).toEqual(["completed", "error"]);
+    const sha = (v: unknown): string =>
+      `sha256:${createHash("sha256").update(JSON.stringify(v)).digest("hex")}`;
+    const call = (lines[1]?.tool_calls as Array<{ result_digest: string }>)[0];
+    expect(call?.result_digest).toBe(
+      sha({
+        proposal_id: savedId,
+        discarded: true,
+        reason: "could not store the proposal metadata: boom",
+      }),
+    );
+  });
+
+  it("discards the patch when the completed trace line cannot be written", async () => {
+    const real = new ProposalWorkspaceAdapter(root);
+    const badTrace: TraceWritePort = {
+      appendLine: async () => ({ success: false, error: new Error("disk") }),
+      appendGrantMissing: async () => ({ success: true, value: undefined }),
+    };
+    const r = denied(
+      await useWith(real, badTrace).execute({
+        patch: modify("src/a.ts"),
+        grant: sign(baseGrant()),
+      }),
+    );
+    expect(r.code).toBe("error");
+    expect(proposals()).toEqual([]);
+  });
+});
+
+describe("ProposalWorkspaceAdapter storage", () => {
+  it("never overwrites a file at a colliding id, and retries with a fresh one", async () => {
+    mkdirSync(path.join(root, ".hexagen", "proposals"), { recursive: true });
+    const taken = "a".repeat(24);
+    const fresh = "b".repeat(24);
+    const file = path.join(root, ".hexagen", "proposals", `${taken}.patch`);
+    writeFileSync(file, "ORIGINAL");
+    const ids = [taken, fresh];
+    const ws = new ProposalWorkspaceAdapter(root, () => ids.shift() ?? taken);
+    const r = await ws.savePatch("NEW");
+    expect(r).toEqual({ success: true, value: { id: fresh } });
+    expect(readFileSync(file, "utf-8")).toBe("ORIGINAL");
+
+    const stuck = new ProposalWorkspaceAdapter(root, () => taken);
+    expect((await stuck.savePatch("NEW")).success).toBe(false);
+    expect(readFileSync(file, "utf-8")).toBe("ORIGINAL");
+  });
+
+  it("refuses, before creating anything, when .hexagen is a symlink out of the repo", async () => {
+    rmSync(path.join(root, ".hexagen"), { recursive: true });
+    const outside = mkdtempSync(path.join(tmpdir(), "propose-hex-"));
+    try {
+      symlinkSync(outside, path.join(root, ".hexagen"));
+      const r = await new ProposalWorkspaceAdapter(root).savePatch("x");
+      expect(r.success).toBe(false);
+      expect(readdirSync(outside)).toEqual([]);
+    } finally {
+      rmSync(outside, { recursive: true, force: true });
+    }
   });
 });

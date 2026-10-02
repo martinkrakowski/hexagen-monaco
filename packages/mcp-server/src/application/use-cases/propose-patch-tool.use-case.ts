@@ -21,6 +21,8 @@ import type {
 
 export const PROPOSE_PATCH_TOOL = "hexagen_propose_patch";
 
+const RESERVED_ROOTS: ReadonlySet<string> = new Set([".hexagen", ".git"]);
+
 /**
  * ProposePatchToolUseCase: `hexagen_propose_patch`, propose-only (plan BW-D9).
  *
@@ -59,11 +61,15 @@ export class ProposePatchToolUseCase implements ProposePatchToolPort {
     // The slice id names the cycle; without a slice the caller's id, else a fixed word.
     const goalId = slice?.id ?? input.goal_id ?? "no-slice";
 
+    // Only a non-empty string can be cited in a trace line.
+    const rawId: unknown = input.grant?.id;
+    const citedId =
+      typeof rawId === "string" && rawId.length > 0 ? rawId : undefined;
     const deny = (code: GrantDenialCode, reason: string) =>
-      this.deny(input, goalId, code, reason);
+      this.deny(input, citedId, goalId, code, reason);
 
     const grant = input.grant;
-    if (!grant?.id) {
+    if (grant === undefined || citedId === undefined) {
       return deny(
         "grant_denied",
         grant === undefined ? "No Grant supplied" : "Grant has no id",
@@ -86,6 +92,18 @@ export class ProposePatchToolUseCase implements ProposePatchToolPort {
     if (!parsed.ok)
       return deny("grant_denied", `Patch refused: ${parsed.reason}`);
     const paths = parsed.paths;
+
+    // The sidecar and git's own directory are never a proposal's business.
+    // First-segment, case-sensitive; the on-disk re-check covers case tricks.
+    const reserved = paths.find((p) =>
+      RESERVED_ROOTS.has(p.split("/")[0] ?? ""),
+    );
+    if (reserved !== undefined) {
+      return deny(
+        "grant_denied",
+        `Path '${reserved}' is refused: .hexagen/ and .git/ are never proposed`,
+      );
+    }
 
     const grantCheck = checkWriteAgainstGrant(verified, {
       tool: PROPOSE_PATCH_TOOL,
@@ -189,9 +207,9 @@ export class ProposePatchToolUseCase implements ProposePatchToolPort {
     const metaSaved = await this.workspace.saveMeta(meta);
     if (!metaSaved.success) {
       await this.workspace.discardPatch(id);
-      return this.failed(
-        `could not store the proposal metadata: ${metaSaved.error.message}`,
-      );
+      const reason = `could not store the proposal metadata: ${metaSaved.error.message}`;
+      await this.compensate(grantId, goalId, id, reason);
+      return this.failed(reason);
     }
     return {
       allowed: true,
@@ -204,6 +222,36 @@ export class ProposePatchToolUseCase implements ProposePatchToolPort {
     };
   }
 
+  /**
+   * The `completed` line already cites a proposal that was then discarded.
+   * Best effort: append an `error` line saying so; a failure here is ignored
+   * (the call is already reporting an error).
+   */
+  private async compensate(
+    grantId: string,
+    goalId: string,
+    proposalId: string,
+    reason: string,
+  ): Promise<void> {
+    const time = this.now().toISOString();
+    await this.traceWritePort
+      .appendLine({
+        grant_id: grantId,
+        goal_id: goalId,
+        tool_call: {
+          name: PROPOSE_PATCH_TOOL,
+          args: { proposal_id: proposalId },
+          result: { proposal_id: proposalId, discarded: true, reason },
+          time,
+        },
+        halt_reason: "error",
+        transaction_ids: [],
+        started_at: time,
+        ended_at: time,
+      })
+      .catch(() => undefined);
+  }
+
   private failed(reason: string): ProposePatchToolResult {
     return { allowed: false, code: "error", reason };
   }
@@ -214,13 +262,13 @@ export class ProposePatchToolUseCase implements ProposePatchToolPort {
    */
   private async deny(
     input: ProposePatchToolInput,
+    grantId: string | undefined,
     goalId: string,
     code: GrantDenialCode,
     reason: string,
   ): Promise<ProposePatchToolResult> {
     const time = this.now().toISOString();
     const args = { patch: input.patch };
-    const grantId = input.grant?.id;
     const traced = grantId
       ? await this.traceWritePort.appendLine({
           grant_id: grantId,
