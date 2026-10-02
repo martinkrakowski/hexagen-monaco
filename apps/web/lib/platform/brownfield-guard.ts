@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { projectMode, type SavedProject } from "@hexagen/shared";
-import { requirePersistenceOwner, resolveProjectAccess } from "./require-owner";
+import { requirePersistenceOwner } from "./require-owner";
 import { getPlatformStore } from "./store";
 
 /**
@@ -12,13 +12,17 @@ import { getPlatformStore } from "./store";
  * after parsing. The mode is ALWAYS read from the stored project; a mode sent
  * by the client is never read.
  *
- * Resolution covers every tenant the caller can reach, through the existing
- * access helper `resolveProjectAccess` (own tenant, org membership, and live
- * shares/grants from the tenancy work). Candidate owners are: the caller, the
- * caller's orgs, and the owner of every live grant naming this project
- * (`shares.selectSharedWith`, the store method the shared-with-me route uses).
- * Each candidate is then passed through `resolveProjectAccess`, so the
- * authorization decision stays in that one place.
+ * Resolution covers every tenant the caller can reach. Candidate enumeration
+ * IS the authorization: the only owners ever read are
+ *   1. the caller's own sub,
+ *   2. orgs the caller is a member of (`orgs.listOrgIdsForUser`), and
+ *   3. owners of LIVE grants (user, org or team) that name this project
+ *      (`shares.selectSharedWith(identity, projectId)`; revoked grants are
+ *      excluded by the store, and the query is bounded by the project, not by
+ *      how many projects the caller has been shared).
+ * A project under any other owner is never looked up, so it reads as unknown.
+ * This deliberately does not call `resolveProjectAccess`: it would re-check
+ * exactly what the enumeration already established.
  *
  * Two policies, chosen by the route:
  *
@@ -60,7 +64,7 @@ export async function guardBrownfieldProject(
 
   let found: Lookup;
   try {
-    found = await lookup(request, owner.ownerId, projectId.trim());
+    found = await lookup(owner.ownerId, projectId.trim());
   } catch (e) {
     found = {
       kind: "error",
@@ -91,33 +95,22 @@ export async function guardBrownfieldProject(
   return null;
 }
 
-async function lookup(
-  request: NextRequest,
-  sub: string,
-  projectId: string,
-): Promise<Lookup> {
+async function lookup(sub: string, projectId: string): Promise<Lookup> {
   const store = getPlatformStore();
   const [orgIds, teamIds] = await Promise.all([
     store.orgs.listOrgIdsForUser(sub),
     store.teams.listTeamIdsForUser(sub),
   ]);
-  const grants = await store.shares.selectSharedWith({
-    userId: sub,
-    orgIds,
-    teamIds,
-  });
+  const grants = await store.shares.selectSharedWith(
+    { userId: sub, orgIds, teamIds },
+    projectId,
+  );
   const candidates = [
-    ...new Set([
-      sub,
-      ...orgIds,
-      ...grants.filter((g) => g.projectId === projectId).map((g) => g.ownerId),
-    ]),
+    ...new Set([sub, ...orgIds, ...grants.map((g) => g.ownerId)]),
   ];
 
   for (const ownerId of candidates) {
-    const access = await resolveProjectAccess(request, ownerId, projectId);
-    if (!access.ok) continue;
-    const got = store.projectsFor(access.ownerId).getProject(projectId);
+    const got = store.projectsFor(ownerId).getProject(projectId);
     if (!got.success) return { kind: "error", message: got.error.message };
     if (got.value !== null) return { kind: "found", project: got.value };
   }

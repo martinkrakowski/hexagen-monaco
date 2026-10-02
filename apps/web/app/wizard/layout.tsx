@@ -2,6 +2,7 @@
 
 import { Suspense, useCallback, useEffect, useRef } from "react";
 import { useParams, useSearchParams, useRouter } from "next/navigation";
+import { projectMode } from "@hexagen/shared";
 import type { WorkspacePhase } from "../../features/workspace-shell/plan-phase/PhaseToggle";
 
 import { ProjectWorkspace } from "../../features/workspace-shell/ProjectWorkspace";
@@ -15,6 +16,7 @@ import { useActiveWorkspace } from "@/contexts/ActiveWorkspaceContext";
 import { useSavedProjects } from "@/hooks/useSavedProjects";
 
 function useProjectSearchParam() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const { activeWorkspace, setActiveWorkspace } = useActiveWorkspace();
   const { projects, isLoading } = useSavedProjects();
@@ -34,6 +36,15 @@ function useProjectSearchParam() {
     const saved = projects.find((p) => p.id === projectId);
     if (!saved) return;
 
+    // BW-D7: a brownfield workbook never becomes the active workspace of the
+    // greenfield shell; send it to its own viewer instead.
+    if (projectMode(saved) === "brownfield") {
+      router.replace(
+        `/projects/brownfield?project=${encodeURIComponent(saved.id)}`,
+      );
+      return;
+    }
+
     setActiveWorkspace({
       projectId: saved.id,
       name: saved.name,
@@ -42,7 +53,7 @@ function useProjectSearchParam() {
       wizardData: { ...saved.formState },
       manifestYaml: saved.manifestYaml,
     });
-  }, [projectId, isLoading, projects, setActiveWorkspace]);
+  }, [projectId, isLoading, projects, setActiveWorkspace, router]);
 }
 
 function WizardLayoutInner({ children }: { children: React.ReactNode }) {

@@ -5,9 +5,10 @@
  * BW-D7: this page is deliberately a SEPARATE surface from `ProjectWorkspace`.
  * It must never mount `GovernancePanelWrapper`, `useEditorPush`, the generate
  * flow (`useProjectGenerationFlow`, `/api/generate`) or any control that calls
- * `/api/architecture/modify/accept` or `/api/push/github`: those write the
+ * `/api/architecture/modify/accept`, `/api/push/github` or
+ * `/api/export/github`: those write the
  * server's monorepo or a user's own GitHub repo, never a client checkout.
- * `BrownfieldViewerPage.test.tsx` pins that with throwing mocks. Keep this
+ * `app/projects/brownfield/BrownfieldViewerClient.test.tsx` pins that with throwing mocks. Keep this
  * component presentational: text only, no hooks, no fetches.
  */
 

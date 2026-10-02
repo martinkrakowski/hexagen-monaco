@@ -32,11 +32,15 @@ const state = vi.hoisted(() => ({
   project: "wb-1" as string | null,
   projects: [] as Array<Record<string, unknown>>,
   isLoading: false,
+  clear: vi.fn(),
 }));
 vi.mock("next/navigation", () => ({
   useSearchParams: () => ({
     get: (k: string) => (k === "project" ? state.project : null),
   }),
+}));
+vi.mock("@/contexts/ActiveWorkspaceContext", () => ({
+  useActiveWorkspace: () => ({ clearActiveWorkspace: state.clear }),
 }));
 vi.mock("@/hooks/useSavedProjects", () => ({
   useSavedProjects: () => ({
@@ -80,6 +84,11 @@ describe("brownfield viewer page", () => {
     render(<BrownfieldViewerClient />);
     assert.deepEqual(forbidden.hit, []);
     assert.equal(vi.mocked(fetch).mock.calls.length, 0);
+  });
+
+  it("clears the active workspace on mount, so the shared chrome has no target", () => {
+    render(<BrownfieldViewerClient />);
+    assert.ok(state.clear.mock.calls.length >= 1);
   });
 
   it("does not render a greenfield project as a workbook", () => {

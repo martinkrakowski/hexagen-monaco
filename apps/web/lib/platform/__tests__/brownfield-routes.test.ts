@@ -18,6 +18,13 @@ const downstream = vi.hoisted(() => ({
   commitFiles: vi.fn(),
   generate: vi.fn(),
   execute: vi.fn(),
+  initiateExport: vi.fn(),
+}));
+vi.mock("@hexagen/project-generation", async (orig) => ({
+  ...(await orig<typeof import("@hexagen/project-generation")>()),
+  InitiateExportUseCase: class {
+    initiateExport = downstream.initiateExport;
+  },
 }));
 vi.mock("@/lib/wire.server", async () => {
   const { MonorepoRootNotFoundError } = await vi.importActual<
@@ -53,6 +60,7 @@ vi.mock("@/lib/request-guards", () => ({ guardMutation: () => null }));
 import { getToken } from "next-auth/jwt";
 import { POST as accept } from "../../../app/api/architecture/modify/accept/route";
 import { POST as push } from "../../../app/api/push/github/route";
+import { POST as exportGithub } from "../../../app/api/export/github/route";
 import { POST as generate } from "../../../app/api/generate/route";
 
 const GREEN = "11111111-1111-4111-8111-111111111111";
@@ -86,7 +94,7 @@ function post(url: string, body: unknown): NextRequest {
 
 interface RouteCase {
   name: string;
-  call: (extra: Record<string, unknown>) => Promise<Response>;
+  call: (extra: Record<string, unknown>, qs?: string) => Promise<Response>;
   /** The collaborator that proves the route got past the guard. */
   reached: () => boolean;
   /**
@@ -99,9 +107,9 @@ interface RouteCase {
 const cases: RouteCase[] = [
   {
     name: "/api/architecture/modify/accept",
-    call: (extra) =>
+    call: (extra, qs = "") =>
       accept(
-        post("/api/architecture/modify/accept", {
+        post(`/api/architecture/modify/accept${qs}`, {
           transactionId: "tx-1",
           ...extra,
         }),
@@ -110,9 +118,9 @@ const cases: RouteCase[] = [
   },
   {
     name: "/api/push/github",
-    call: (extra) =>
+    call: (extra, qs = "") =>
       push(
-        post("/api/push/github", {
+        post(`/api/push/github${qs}`, {
           githubLink: { owner: "o", repo: "r", branch: "main" },
           files: { "a.txt": "x" },
           ...extra,
@@ -122,9 +130,26 @@ const cases: RouteCase[] = [
     lenient: true,
   },
   {
+    name: "/api/export/github",
+    call: (extra, qs = "") =>
+      exportGithub(
+        post(`/api/export/github${qs}`, {
+          owner: "me",
+          repoName: "r",
+          isPrivate: true,
+          manifest: { system: "s" },
+          ...extra,
+        }),
+      ),
+    reached: () => downstream.initiateExport.mock.calls.length > 0,
+    lenient: true,
+  },
+  {
     name: "/api/generate",
-    call: (extra) =>
-      generate(post("/api/generate", { manifest: { system: "s" }, ...extra })),
+    call: (extra, qs = "") =>
+      generate(
+        post(`/api/generate${qs}`, { manifest: { system: "s" }, ...extra }),
+      ),
     reached: () => downstream.generate.mock.calls.length > 0,
   },
 ];
@@ -167,6 +192,10 @@ describe("brownfield route guards (BW-D7)", () => {
       accessToken: "gho_test",
       login: "octocat",
     } as never);
+    downstream.initiateExport.mockReset().mockResolvedValue({
+      success: true,
+      value: { destinationUrl: "u" },
+    });
     downstream.execute.mockReset().mockResolvedValue({ kind: "not-found" });
     downstream.commitFiles.mockReset().mockResolvedValue({
       success: true,
@@ -233,6 +262,52 @@ describe("brownfield route guards (BW-D7)", () => {
         assert.notEqual(res.status, 409);
         assert.notEqual(res.status, 403);
         assert.equal(c.reached(), true);
+      });
+
+      it("trims a whitespace-padded id before resolving it (409)", async () => {
+        const res = await c.call({ projectId: `  ${BROWN}\n` });
+        assert.equal(res.status, 409);
+        assert.equal(c.reached(), false);
+      });
+
+      it("reads the BODY only: a query-string projectId is ignored", async () => {
+        const res = await c.call({}, `?projectId=${BROWN}`);
+        assert.notEqual(res.status, 409);
+        assert.notEqual(res.status, 403);
+        assert.equal(c.reached(), true);
+      });
+
+      it("a revoked grant no longer resolves the project", async () => {
+        await store.shares.revoke({
+          ownerId: "owner-b",
+          projectId: SHARED_BROWN,
+          granteeType: "user",
+          granteeId: "owner-a",
+        });
+        const res = await c.call({ projectId: SHARED_BROWN });
+        if (c.lenient) {
+          assert.notEqual(res.status, 409);
+          assert.notEqual(res.status, 403);
+          assert.equal(c.reached(), true);
+        } else {
+          assert.equal(res.status, 403);
+          assert.equal(c.reached(), false);
+        }
+      });
+
+      it("a store that throws: strict routes 500 persistence, lenient routes proceed", async () => {
+        vi.spyOn(store, "projectsFor").mockImplementation(() => {
+          throw new Error("db down");
+        });
+        const res = await c.call({ projectId: GREEN });
+        if (c.lenient) {
+          assert.notEqual(res.status, 409);
+          assert.equal(c.reached(), true);
+        } else {
+          assert.equal(res.status, 500);
+          assert.equal((await res.json()).error, "persistence");
+          assert.equal(c.reached(), false);
+        }
       });
 
       if (c.lenient) {

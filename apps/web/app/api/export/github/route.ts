@@ -8,6 +8,7 @@ import { getGenerateProject } from "@/lib/wire.server";
 import { wizardToManifest } from "@hexagen/wizard-orchestration";
 import { readAddOnAnswers } from "@/lib/add-on-answers";
 import type { Manifest } from "@hexagen/sync";
+import { guardBrownfieldProject } from "../../../../lib/platform/brownfield-guard";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,6 +26,16 @@ interface GitHubExportRequest {
 export async function POST(request: NextRequest) {
   try {
     const body = (await request.json()) as GitHubExportRequest;
+
+    // BW-D7: a resolved brownfield workbook never reaches this route. Same
+    // policy as /api/push/github: callers already send ids of projects that
+    // may be IndexedDB-only or shared, so this only ADDS a refusal.
+    const brownfield = await guardBrownfieldProject(
+      request,
+      body.projectId,
+      "refuse-brownfield-only",
+    );
+    if (brownfield) return brownfield;
 
     const token = await getToken({
       req: request,
