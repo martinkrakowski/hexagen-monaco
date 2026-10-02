@@ -541,6 +541,32 @@ describe("workbook export --stage", () => {
     expect(text).not.toContain("+++ /dev/null");
   });
 
+  it("previews and stages the same pinned bytes when the file changes after it was read", async () => {
+    const file = path.join(root, ".hexagen/slice.json");
+    git(root, "add", "-f", ".hexagen/slice.json");
+    git(root, "commit", "-q", "-m", "track slice");
+    const base = await readFile(file, "utf8");
+    await writeFile(file, base.replace("eng-1", "ENG-PINNED"));
+    const pinned = await readFile(file);
+    const r = await run({
+      out: undefined,
+      stage: [".hexagen/slice.json"],
+      yes: true,
+      beforePreview: async () => {
+        await writeFile(file, base.replace("eng-1", "CHANGED-AFTER-READ"));
+      },
+    });
+    expect(r.exitCode).toBe(0);
+    const text = r.messages.join("\n");
+    expect(text).toContain("+++ b/.hexagen/slice.json");
+    expect(text).toContain("ENG-PINNED");
+    expect(text).not.toContain("CHANGED-AFTER-READ");
+    const blob = execFileSync("git", ["show", ":.hexagen/slice.json"], {
+      cwd: root,
+    });
+    expect(blob.equals(pinned)).toBe(true);
+  });
+
   it("accepts an absolute path inside the root", async () => {
     const r = await run({
       out: undefined,

@@ -54,6 +54,8 @@ export interface WorkbookExportOptions {
   readonly afterPack?: (zipPath: string) => Promise<void>;
   /** Test seam: runs after a file was validated, before it is opened. */
   readonly afterValidate?: (file: string) => Promise<void>;
+  /** Test seam: runs after the stage files were read, before the preview is computed. */
+  readonly beforePreview?: () => Promise<void>;
   /** Test seam: runs after the stage preview, before anything is staged. */
   readonly beforeStage?: () => Promise<void>;
 }
@@ -577,6 +579,65 @@ function git(root: string, args: string[], input?: Buffer): string {
   });
 }
 
+/**
+ * Unified diff of the HEAD blob against the pinned bytes, both written to a
+ * scratch directory outside the client tree. Headers read `a/<path> b/<path>`.
+ */
+async function diffAgainstHead(
+  root: string,
+  repoRel: string,
+  bytes: Buffer,
+): Promise<string> {
+  const headBytes = execFileSync(
+    "git",
+    ["cat-file", "blob", `HEAD:${repoRel}`],
+    {
+      cwd: root,
+      maxBuffer: 64 * 1024 * 1024,
+      env: {
+        ...process.env,
+        GIT_LITERAL_PATHSPECS: "1",
+        GIT_OPTIONAL_LOCKS: "0",
+      },
+    },
+  );
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "hexagen-stage-"));
+  try {
+    for (const [side, content] of [
+      ["a", headBytes],
+      ["b", bytes],
+    ] as const) {
+      const target = path.join(tmp, side, ...repoRel.split("/"));
+      await fs.mkdir(path.dirname(target), { recursive: true });
+      await fs.writeFile(target, content);
+    }
+    try {
+      execFileSync(
+        "git",
+        [
+          "diff",
+          "--no-index",
+          "--no-color",
+          "--src-prefix=",
+          "--dst-prefix=",
+          "--",
+          `a/${repoRel}`,
+          `b/${repoRel}`,
+        ],
+        { cwd: tmp, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
+      );
+      return ""; // identical
+    } catch (error) {
+      // --no-index exits 1 when the files differ; the diff is on stdout.
+      const e = error as { status?: number; stdout?: string };
+      if (e.status === 1 && typeof e.stdout === "string") return e.stdout;
+      throw error;
+    }
+  } finally {
+    await fs.rm(tmp, { recursive: true, force: true });
+  }
+}
+
 function newFileDiff(rel: string, text: string): string {
   const lines = text.split("\n");
   const endsWithNewline = text.endsWith("\n");
@@ -637,10 +698,11 @@ async function runStage(
     };
   }
 
+  await options.beforePreview?.();
   const parts: string[] = [];
   try {
     for (const f of accepted) {
-      // Against HEAD, so a change already sitting in the index is shown too.
+      // Against HEAD, from the pinned bytes, so a change already sitting in the index is shown too.
       const inHead = (() => {
         try {
           git(sc.root, ["cat-file", "-e", `HEAD:${f.repoRel}`]);
@@ -651,7 +713,7 @@ async function runStage(
       })();
       parts.push(
         inHead
-          ? git(sc.root, ["diff", "--no-color", "HEAD", "--", f.repoRel]) ||
+          ? (await diffAgainstHead(sc.root, f.repoRel, f.bytes)) ||
               `(${f.repoRel} is already tracked and unchanged)\n`
           : newFileDiff(f.repoRel, f.bytes.toString("utf8")),
       );
