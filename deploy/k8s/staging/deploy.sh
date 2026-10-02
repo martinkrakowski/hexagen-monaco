@@ -61,9 +61,12 @@ while IFS= read -r line || [ -n "$line" ]; do
 done < "$DIR/build-args.env"
 
 # Names and decoded lengths are produced on the node by kubectl's go-template,
-# so values never leave it. stderr is kept: kubectl error text carries no data.
+# so values never leave it. Per key the node reports the length and a "quoted"
+# flag when the value starts with a quote character (kubectl's go-template has
+# no arithmetic, so the closing quote cannot be inspected). `--from-env-file`
+# keeps quotes, so KEY="v" is stored with them. stderr is kept: kubectl error text carries no data.
 # shellcheck disable=SC2016 # the $k/$v are go-template variables, not shell
-SECRET_TPL='{{range $k,$v := .data}}{{$k}} {{len (base64decode $v)}}{{"\n"}}{{end}}'
+SECRET_TPL='{{range $k,$v := .data}}{{$d := base64decode $v}}{{$k}} {{len $d}}{{if gt (len $d) 0}}{{$f := slice $d 0 1}}{{if or (eq $f "\"") (eq $f (printf "%c" 39))}} quoted{{end}}{{end}}{{"\n"}}{{end}}'
 
 check_secret() {
   errf=$(mktemp)
@@ -81,14 +84,22 @@ check_secret() {
   rm -f "$errf"
   missing=""
   for want in $REQUIRED; do
-    len=$(printf '%s\n' "$out" | while read -r name n; do
-      if [ "$name" = "$want" ]; then echo "$n"; fi
+    row=$(printf '%s\n' "$out" | while read -r name n flag; do
+      if [ "$name" = "$want" ]; then echo "$n ${flag:-ok}"; fi
     done)
+    len=${row%% *}
+    flag=${row#* }
     case "$len" in
       '') echo "  $want: MISSING"; missing="$missing $want" ;;
       0) echo "  $want: EMPTY"; missing="$missing $want" ;;
       *[!0-9]*) echo "  $want: UNREADABLE"; missing="$missing $want" ;;
-      *) echo "  $want: length $len" ;;
+      *)
+        if [ "$flag" = quoted ]; then
+          echo "  $want: length $len, QUOTED (value is wrapped in quotes; --from-env-file keeps them, remove the quotes)"
+          missing="$missing $want"
+        else
+          echo "  $want: length $len"
+        fi ;;
     esac
   done
   if [ -n "$missing" ]; then

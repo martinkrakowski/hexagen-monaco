@@ -35,6 +35,10 @@ holds its values. On the node, with an env file you wrote there (not committed):
 kubectl -n webapps create secret generic hexagen-web-env --from-env-file=/path/to/hexagen-web.env
 ```
 
+Do not quote values in the env file: `--from-env-file` keeps the quotes, so
+`KEY="v"` is stored as `"v"` (and an empty `KEY=""` as two characters). The
+script fails a required key whose value starts with a quote character.
+
 Required keys (the script refuses to deploy without them):
 
 - Auth: `NEXTAUTH_SECRET`, `GITHUB_ID`, `GITHUB_SECRET`. The app reads
