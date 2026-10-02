@@ -6,7 +6,7 @@ import { isRepoMode } from "@hexagen/shared/node/grant-key";
 import {
   TraceChainError,
   appendChainedLineLocked,
-  peekTraceMode,
+  inspectTrace,
   withTraceLock,
 } from "@hexagen/shared/node/trace-chain";
 import type { TraceRecord } from "../../application/kernel/trace.js";
@@ -37,7 +37,9 @@ function digest(value: unknown): string {
  * means the plain append continues (the file is never converted). Only for a
  * new or empty file does the manifest decide, by the test the grant-key
  * resolver uses (a `.architecture/manifest.yaml` under the workspace root means
- * repo mode). A torn last line refuses in either mode, never a plain append.
+ * repo mode). A torn tail refuses only on a chained file (or a lone fragment
+ * with no manifest); a plain file's torn tail is appended after exactly as
+ * before BW3.
  * - plain (greenfield): today's unchained line, byte for byte; `grant_missing`
  *   is a no-op.
  * - chained (brownfield): lines carry `seq` and `prev_hash`
@@ -50,16 +52,22 @@ export class TraceWriteAdapter implements TraceWritePort {
    * Which format to append. Call only while holding the trace lock, so the
    * choice and the append are one lock hold: a writer that sees a half-written
    * line, or a manifest that flips between two writers, cannot mix formats.
-   * A torn tail is never a reason to fall back to the plain format: it refuses.
+   * The last complete line decides, so a torn tail never changes the format:
+   * a chained file stays chained (and the chained writer refuses the torn
+   * tail), a plain file stays plain and appends exactly as it always did. A
+   * file with no complete line at all is decided by the manifest; if it is
+   * only a fragment and there is no manifest, it refuses (in repo mode it keeps
+   * the plain behaviour).
    */
   private async isChainedLocked(filePath: string): Promise<boolean> {
-    const mode = await peekTraceMode(filePath);
+    const { mode } = await inspectTrace(filePath);
     if (mode === "chained") return true;
     if (mode === "unchained") return false;
-    if (mode === "torn") {
+    if (mode === "unknown") {
+      if (isRepoMode(this.workspaceRoot)) return false;
       throw new TraceChainError(
         "torn-tail",
-        `${filePath} has a torn last line; refusing to append (move it aside or repair it)`,
+        `${filePath} holds only a torn fragment; refusing to append (move it aside or repair it)`,
       );
     }
     return !isRepoMode(this.workspaceRoot);

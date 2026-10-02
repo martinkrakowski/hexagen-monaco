@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
@@ -168,6 +169,87 @@ describe("TraceWriteAdapter, manifest present (greenfield)", () => {
     await expect(readFile(`${tracePath(root)}.lock`)).rejects.toMatchObject({
       code: "ENOENT",
     });
+  });
+});
+
+describe("TraceWriteAdapter, torn tails by format", () => {
+  // What the pre-BW3 adapter wrote: JSON.stringify(record) + newline, appended
+  // straight onto whatever the file held, a torn fragment included.
+  const baseLine = (): string =>
+    `${JSON.stringify({
+      grant_id: "g1",
+      goal_id: "goal",
+      tool_calls: [
+        {
+          name: "hexagen_propose_patch",
+          args_digest: `sha256:${createHash("sha256")
+            .update(JSON.stringify({ a: 1 }))
+            .digest("hex")}`,
+          result_digest: `sha256:${createHash("sha256")
+            .update(JSON.stringify({ ok: true }))
+            .digest("hex")}`,
+          time: "2026-10-01T10:00:00.000Z",
+        },
+      ],
+      halt_reason: "completed",
+      transaction_ids: ["tx1"],
+      started_at: "2026-10-01T10:00:00.000Z",
+      ended_at: "2026-10-01T10:00:00.000Z",
+    })}\n`;
+
+  it("a plain file with a torn tail and a manifest appends exactly as the base adapter did", async () => {
+    const root = await tmp();
+    await makeRepoMode(root);
+    await mkdir(path.dirname(tracePath(root)), { recursive: true });
+    const head = `${JSON.stringify({ grant_id: "old", halt_reason: "completed" })}\n`;
+    const fragment = '{"grant_id":"old2","tool_c';
+    await writeFile(tracePath(root), head + fragment);
+    const adapter = new TraceWriteAdapter(root);
+    expect((await adapter.appendLine(input())).success).toBe(true);
+    expect(await readFile(tracePath(root), "utf8")).toBe(
+      head + fragment + baseLine(),
+    );
+    // grant_missing stays a no-op on a plain file.
+    await adapter.appendGrantMissing({
+      tool: "t",
+      reason: "r",
+      time: "2026-10-01T10:00:00.000Z",
+    });
+    expect(await readFile(tracePath(root), "utf8")).toBe(
+      head + fragment + baseLine(),
+    );
+  });
+
+  it("a plain file's last complete line decides even with no manifest", async () => {
+    const root = await tmp();
+    await mkdir(path.dirname(tracePath(root)), { recursive: true });
+    const head = `${JSON.stringify({ grant_id: "old", halt_reason: "completed" })}\n`;
+    await writeFile(tracePath(root), head + '{"grant');
+    expect(
+      (await new TraceWriteAdapter(root).appendLine(input())).success,
+    ).toBe(true);
+    expect(await readFile(tracePath(root), "utf8")).toBe(
+      head + '{"grant' + baseLine(),
+    );
+  });
+
+  it("a lone fragment keeps the old behaviour in repo mode and refuses with no manifest", async () => {
+    const repo = await tmp();
+    await makeRepoMode(repo);
+    await mkdir(path.dirname(tracePath(repo)), { recursive: true });
+    await writeFile(tracePath(repo), '{"frag');
+    expect(
+      (await new TraceWriteAdapter(repo).appendLine(input())).success,
+    ).toBe(true);
+    expect(await readFile(tracePath(repo), "utf8")).toBe('{"frag' + baseLine());
+
+    const bare = await tmp();
+    await mkdir(path.dirname(tracePath(bare)), { recursive: true });
+    await writeFile(tracePath(bare), '{"frag');
+    expect(
+      (await new TraceWriteAdapter(bare).appendLine(input())).success,
+    ).toBe(false);
+    expect(await readFile(tracePath(bare), "utf8")).toBe('{"frag');
   });
 });
 

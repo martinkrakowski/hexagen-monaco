@@ -360,6 +360,79 @@ export async function peekTraceMode(filePath: string): Promise<TraceFileMode> {
   }
 }
 
+export interface TraceInspection {
+  /**
+   * Decided on the last complete line (ends in a newline and parses):
+   * `chained` (has `seq`/`prev_hash`), `unchained` (a greenfield line),
+   * `absent` (missing or empty) or `unknown` (non-empty, but no complete line).
+   */
+  readonly mode: "absent" | "chained" | "unchained" | "unknown";
+  /** Something follows the last complete line: a fragment, or an unparsable line. */
+  readonly torn: boolean;
+}
+
+/** Index of the last newline strictly before `pos`, or -1. */
+async function lastNewlineBefore(
+  handle: Awaited<ReturnType<typeof open>>,
+  pos: number,
+): Promise<number> {
+  const CHUNK = 64 * 1024;
+  let end = pos;
+  while (end > 0) {
+    const from = Math.max(0, end - CHUNK);
+    const buf = Buffer.alloc(end - from);
+    await handle.read(buf, 0, buf.length, from);
+    const nl = buf.lastIndexOf(0x0a);
+    if (nl >= 0) return from + nl;
+    end = from;
+  }
+  return -1;
+}
+
+/**
+ * Classifies a trace file by its last complete line, so a torn tail (a crash
+ * mid-append) does not change which format the file is. Call it while holding
+ * the trace lock.
+ */
+export async function inspectTrace(filePath: string): Promise<TraceInspection> {
+  let handle;
+  try {
+    handle = await open(filePath, "r");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return { mode: "absent", torn: false };
+    }
+    throw error;
+  }
+  try {
+    const { size } = await handle.stat();
+    if (size === 0) return { mode: "absent", torn: false };
+    let torn = false;
+    let end = size;
+    const probe = Buffer.alloc(1);
+    await handle.read(probe, 0, 1, size - 1);
+    if (probe[0] !== 0x0a) {
+      torn = true;
+      end = (await lastNewlineBefore(handle, size)) + 1;
+    }
+    while (end > 0) {
+      const start = (await lastNewlineBefore(handle, end - 1)) + 1;
+      const buf = Buffer.alloc(end - 1 - start);
+      await handle.read(buf, 0, buf.length, start);
+      try {
+        const value: unknown = JSON.parse(buf.toString("utf8"));
+        return { mode: isChainFields(value) ? "chained" : "unchained", torn };
+      } catch {
+        torn = true;
+        end = start;
+      }
+    }
+    return { mode: "unknown", torn: true };
+  } finally {
+    await handle.close();
+  }
+}
+
 export interface AppendedLine {
   readonly seq: number;
   readonly hash: string;

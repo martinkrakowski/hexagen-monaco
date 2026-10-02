@@ -14,6 +14,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   GENESIS_PREV_HASH,
+  inspectTrace,
   lockTestHooks,
   TraceChainError,
   appendChainedLine,
@@ -265,6 +266,26 @@ describe("appendChainedLine", () => {
     await rm(path.join(real, "t.jsonl.lock"));
     await pending;
     expect(done).toBe(true);
+  });
+
+  it("inspectTrace decides on the last complete line, torn tail or not", async () => {
+    const f = path.join(await tmp(), "t.jsonl");
+    expect(await inspectTrace(f)).toEqual({ mode: "absent", torn: false });
+    await writeFile(f, '{"grant_id":"g"}\n');
+    expect(await inspectTrace(f)).toEqual({ mode: "unchained", torn: false });
+    await writeFile(f, '{"grant_id":"g"}\n{"grant_id":"h","tool_c');
+    expect(await inspectTrace(f)).toEqual({ mode: "unchained", torn: true });
+    await writeFile(f, '{"grant_id":"g"}\n{bad json}\n');
+    expect(await inspectTrace(f)).toEqual({ mode: "unchained", torn: true });
+    await rm(f);
+    await appendChainedLine(f, (n) => ({ ...n }));
+    expect(await inspectTrace(f)).toEqual({ mode: "chained", torn: false });
+    await writeFile(f, '{"seq":1,"pre', { flag: "a" });
+    expect(await inspectTrace(f)).toEqual({ mode: "chained", torn: true });
+    await writeFile(f, '{"only":"a fragment');
+    expect(await inspectTrace(f)).toEqual({ mode: "unknown", torn: true });
+    await writeFile(f, "x".repeat(200_000));
+    expect(await inspectTrace(f)).toEqual({ mode: "unknown", torn: true });
   });
 
   it("two racing waiters on a pre-existing stale lock keep seq contiguous", async () => {
