@@ -122,12 +122,11 @@ on every way trust can't be established — no key file, malformed hex in
 either the key or the signature, an I/O error reading the key — never by
 throwing past the check.
 
-**No issuer exists yet.** This closes the "self-asserted grant" gap (a
+**Signature verification.** This closes the "self-asserted grant" gap (a
 Qodo finding on PR #697) on the verification side: `hexagen_accept_
 transaction` now refuses anything not signed by `.hexagen/grant-signing.key`.
-Nothing in this repo yet _mints_ a signed grant — `hexagen grant compile`
-(see "Command spec" below) is still design-only. Until it exists, whoever
-tests or dogfoods this adapter signs a grant themselves with the same
+`hexagen grant issue` (see "Commands" below) mints a signed grant. Before it
+existed, whoever tested or dogfooded this adapter signed a grant themselves with the same
 `canonicalGrantPayload` + HMAC-SHA256 scheme, using the key at
 `.hexagen/grant-signing.key` (create it — a single hex-encoded secret — if
 it doesn't exist; treat it like any other credential, never commit it).
@@ -220,31 +219,49 @@ point, on either profile, checks `paths`/`tools`/`mode`/`expires_at`
 identically — `contexts` is purely how one profile happens to derive
 `paths`, never something a checker branches on.
 
-## Command spec (design only — not built)
+## Commands
+
+`hexagen grant issue` was built in place of the designed `compile` (it signs
+the grant and takes `--paths`/`--contexts` directly). `show` and `check` are
+built too. All three live in `@hexagen/sync` (`packages/sync/src/commands/grant/`).
 
 ```
-hexagen grant compile --contexts <name>[,<name>...] --tools <tool>[,<tool>...]
-    --mode <write|propose> --principal <id> --agent <id> [--path <extra>]...
-    [--expires-in <duration>]
-    Reads .architecture/manifest.yaml, validates each --contexts entry
-    exists, emits the compiled Grant (with a fresh id and expires_at) as
-    JSON on stdout (or --out <file>). Non-zero exit on an unknown context.
-
 hexagen grant show <grant-file>
-    Pretty-prints a compiled grant's id, principal, agent, contexts, paths
-    (context-derived and extra, distinguished), tools, mode, and expiry for
-    human review — the same object the runtime checks, not a paraphrase.
+    [--workspace-root <path>] [--key-file <path>] [--engagement <id>]
+    Pretty-prints id, principal, agent, contexts (when present), paths, tools,
+    mode, max_files, expires_at and revoked_at, then the window status and the
+    signature status (verified, or why not). The key is the one the shared
+    resolver finds (--key-file, HEXAGEN_GRANT_KEY_FILE, the engagement from
+    .hexagen/slice.json or --engagement, or the in-repo key in repo mode).
+    Prints the key path and fingerprint, never the key.
+    Exit 0 the signature verifies; 1 it does not (the reason is printed);
+    2 bad input (unreadable file, not JSON, not a grant). The window is
+    informational here: a revoked or expired grant with a valid signature
+    still exits 0. `check` enforces it.
+
+hexagen grant check <grant-file> --tool <tool> --path <path>...
+    [--workspace-root <path>] [--key-file <path>] [--engagement <id>]
+    The Field Kit form. Verifies the signature, then the window
+    (checkGrantWindow), then runs checkWriteAgainstGrant (tool, paths,
+    max_files). It does not run checkGrantMode: client grants are
+    propose-only. With no manifest at the workspace root (a client repo) it
+    also denies a path outside slice.paths or inside slice.excludes, even if
+    the grant allows it; with no .hexagen/slice.json the slice is not checked
+    and the output says so. Prints ALLOW or DENY with the reason, the
+    workspace root, the key path and the key fingerprint. When --key-file or
+    --engagement was given and the signature fails, the reason also names the
+    key the server would use without the override, with both fingerprints.
+    Exit 0 allow; 1 deny (including a missing, weak or mismatched key);
+    2 bad input (missing --tool or --path, a malformed path, an unreadable
+    grant file, a transaction id).
 
 hexagen grant check <grant-file> <transaction-id>
-    Dry-runs checkMutationAgainstGrant against a pending transaction's
-    PendingManifestMutation without accepting it. Exit code communicates
-    allow/deny for CI or a pre-accept hook.
+    The monaco form. NOT built: pending transactions live in the MCP
+    server process (an in-memory store), which the CLI cannot reach without
+    wiring that server. It exits 2 and says so. Deferred.
 ```
 
-None of these three subcommands exist yet in `@hexagen/sync`'s CLI. They
-are named here so the acceptance tests below have a target shape, and so a
-future implementation slice has a spec to build against rather than
-inventing flags ad hoc.
+`revoke` is specified by the brownfield workbook plan (BW2c), not yet built.
 
 ## Acceptance tests
 

@@ -173,8 +173,8 @@ hexagen evidence pack <trace-jsonl-file> [--grant <grant-file>] [--out <bundle>]
     reports "pass" while silently dropping a bad line.
 ```
 
-Only this one subcommand is specified here. `hexagen grant compile|show|
-check` remain as specified in `GRANT.md`; nothing here redefines them.
+Only this one subcommand is specified here. `hexagen grant issue|show|
+check` are specified in `GRANT.md`; nothing here redefines them.
 
 ## Acceptance tests
 

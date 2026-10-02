@@ -13,30 +13,15 @@
  * See docs/kernel/grant.schema.json for the wire shape.
  */
 import type { PendingManifestMutation } from "../pending-manifest-mutation.js";
+import {
+  checkGrantWindow,
+  type Grant,
+  type GrantCheck,
+  type GrantDenialCode,
+} from "@hexagen/shared";
 
-export interface Grant {
-  readonly id: string;
-  readonly principal: string;
-  readonly agent: string;
-  /** Absent on a client-repo grant (never `[]`); absent denies every monaco mutation. */
-  readonly contexts?: readonly string[];
-  readonly paths: readonly string[];
-  readonly tools: readonly string[];
-  readonly mode: "write" | "propose";
-  readonly max_files?: number;
-  readonly expires_at: string;
-  readonly revoked_at?: string;
-  /**
-   * HMAC-SHA256 (hex) over `canonicalGrantPayload(this)`, keyed by the
-   * trusted secret at `.hexagen/grant-signing.key` — see
-   * `GrantSignaturePort`/`GrantSignatureAdapter`. A caller-supplied grant
-   * with no signature, or one that doesn't verify, is never trusted as
-   * authorization (docs/kernel/GRANT.md "Enforcement point"): the fields
-   * above describe a scope, but only a valid signature says a trusted
-   * issuer actually granted it.
-   */
-  readonly signature?: string;
-}
+export { checkGrantWindow };
+export type { Grant, GrantCheck, GrantDenialCode };
 
 /**
  * The exact bytes a Grant's signature is computed over: every field except
@@ -65,27 +50,6 @@ export interface MutationRef {
   readonly tool: string;
   readonly context: string;
 }
-
-/**
- * Machine-readable denial category, set once at the point each check fails
- * rather than re-derived later by pattern-matching the human-readable
- * `reason` string (that string can embed caller-controlled values — a
- * context or grant id containing the word "expired" — so matching against
- * it is not safe; see accept-transaction-tool.use-case.ts `haltReasonFor`,
- * which this field replaces).
- */
-export type GrantDenialCode =
-  | "grant_denied"
-  | "grant_expired"
-  | "grant_revoked";
-
-export type GrantCheck =
-  | { readonly allowed: true }
-  | {
-      readonly allowed: false;
-      readonly reason: string;
-      readonly code: GrantDenialCode;
-    };
 
 /**
  * The one path every monaco manifest mutation actually writes through
@@ -239,49 +203,6 @@ export function checkMutationAgainstGrant(
       allowed: false,
       code: "grant_denied",
       reason: `Grant's max_files (${grant.max_files}) is smaller than the up to ${cap} file(s) tool '${mutation.tool}' can create`,
-    };
-  }
-  return { allowed: true };
-}
-
-/**
- * Rule from Martin's spec (2026-09-30): call time == revoked_at is denied,
- * == expires_at is allowed, > expires_at is denied. Revocation is
- * immediate (at-or-after); expiry is a closed interval (at-or-before is
- * still in-window).
- */
-export function checkGrantWindow(grant: Grant, now: Date): GrantCheck {
-  const nowMillis = now.getTime();
-  const expiresAtMillis = Date.parse(grant.expires_at);
-  if (Number.isNaN(expiresAtMillis)) {
-    return {
-      allowed: false,
-      code: "grant_expired",
-      reason: `Grant '${grant.id}' has an invalid expires_at timestamp: '${grant.expires_at}'`,
-    };
-  }
-  if (grant.revoked_at !== undefined) {
-    const revokedAtMillis = Date.parse(grant.revoked_at);
-    if (Number.isNaN(revokedAtMillis)) {
-      return {
-        allowed: false,
-        code: "grant_revoked",
-        reason: `Grant '${grant.id}' has an invalid revoked_at timestamp: '${grant.revoked_at}'`,
-      };
-    }
-    if (nowMillis >= revokedAtMillis) {
-      return {
-        allowed: false,
-        code: "grant_revoked",
-        reason: `Grant '${grant.id}' was revoked at ${grant.revoked_at}`,
-      };
-    }
-  }
-  if (nowMillis > expiresAtMillis) {
-    return {
-      allowed: false,
-      code: "grant_expired",
-      reason: `Grant '${grant.id}' expired at ${grant.expires_at}`,
     };
   }
   return { allowed: true };
