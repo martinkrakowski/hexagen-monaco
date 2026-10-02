@@ -1,6 +1,7 @@
 import { TEMPLATE_CONFIG_FILE } from "../internal/template-config.js";
 import {
   CONFIG_RELATIVE_PATH,
+  DEFAULT_WAVE_STATUS_PORT,
   type Config,
   type ConfigProblem,
 } from "../internal/config.js";
@@ -224,7 +225,7 @@ export function renderConfig(config: Config): string {
       ? [`repo: ${JSON.stringify(config.repo)}`]
       : ["# repo: (derive it with `gh repo view --json nameWithOwner`)"]),
     "",
-    "# The port the status server binds. 4318 rather than 4317, so two projects",
+    `# The port the status server binds. ${DEFAULT_WAVE_STATUS_PORT} rather than 4317, so two projects`,
     "# on one machine never collide.",
     `waveStatusPort: ${config.waveStatusPort}`,
     "",
@@ -272,13 +273,17 @@ export function renderHouseRules(
         "A delegated wave is only as good as its record. Three things make that",
         "record, and all three come from this overlay rather than from a constant:",
         "",
-        "**Events.** Every lane appends to `<wave log dir>/events.jsonl` through",
-        "`hexagen-orchestration-wave-event`. The log is the only source of what a",
+        "**Events.** The orchestrator emits every wave event, through",
+        "`hexagen-orchestration-wave-event`, into `<wave log dir>/events.jsonl`. A lane",
+        "emits none: its commits and its PR are its record, and the orchestrator emits",
+        "the event for each stage it observes. The log is the only source of what a",
         "wave did. Nothing is inferred from a process list or a directory name.",
         "",
         "**Status.** `hexagen-orchestration-wave-status` serves the wave from that",
-        `log. Its port is \`waveStatusPort\` in \`.agents/orchestration/${CONFIG_RELATIVE_PATH.split("/").pop()}\`` +
-          ` (${"default 4318"}), and it refuses every port in \`forbiddenPorts\`.`,
+        "log. The server is read-only and loopback-only: it answers GET requests on",
+        "127.0.0.1, and it starts, kills and merges nothing. Its port is",
+        `\`waveStatusPort\` in \`.agents/orchestration/${CONFIG_RELATIVE_PATH.split("/").pop()}\`` +
+          ` (default ${DEFAULT_WAVE_STATUS_PORT}), and it refuses every port in \`forbiddenPorts\`.`,
         "",
         "**The log directory is yours.** `waveLogDir` decides where waves are read",
         "from. It is per-repository on purpose. The default is",

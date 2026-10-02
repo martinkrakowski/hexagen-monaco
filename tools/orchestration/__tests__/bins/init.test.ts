@@ -12,9 +12,11 @@ import {
   TEMPLATE_CONFIG_PATH,
   formatReport,
   readAgentsMdAnswer,
+  renderConfig,
   runInit,
 } from "../../src/init/init.js";
 import {
+  DEFAULT_WAVE_STATUS_PORT,
   emptyConfig,
   matchesAppendOnly,
   parseConfig,
@@ -346,6 +348,30 @@ describe("the Wave Observability section follows the recorded agents_md answer",
     expect(text).toContain("forbiddenPorts");
     expect(text).toContain("waveLogDir");
     expect(text).toContain("~/.waves");
+  });
+
+  test("the section says who emits events, and that the status server is read-only and loopback-only", async () => {
+    const { text } = await initWith(withRecord({ agents_md: true }));
+    expect(text).toContain("The orchestrator emits every wave event");
+    expect(text).toContain("A lane");
+    expect(text).toContain("read-only and loopback-only");
+    expect(text).toContain("127.0.0.1");
+    expect(text).not.toContain("Every lane appends");
+  });
+
+  test("the section and the config comment carry the port constant, not a literal of their own", async () => {
+    const { text } = await initWith(withRecord({ agents_md: true }));
+    expect(text).toContain(`(default ${DEFAULT_WAVE_STATUS_PORT})`);
+    expect(renderConfig(emptyConfig())).toContain(
+      `binds. ${DEFAULT_WAVE_STATUS_PORT} rather than`,
+    );
+  });
+
+  test("the scaffolded gate carries no byte-scan step: the gate is a subset of CI and a scaffold never adds a required step", () => {
+    const { config } = parseConfig(renderConfig(emptyConfig()));
+    const names = (config?.gateSteps ?? []).map((step) => step.name);
+    expect(names).toEqual(["build", "typecheck", "lint", "test"]);
+    expect(renderConfig(emptyConfig())).not.toMatch(/control-bytes|lint:bytes/);
   });
 
   test("readAgentsMdAnswer reads only an explicit false as a refusal", () => {

@@ -8,12 +8,15 @@ here, so each one says what to do rather than what to avoid.
 A delegated wave is only as good as its record. Three things make that
 record, and all three come from this overlay rather than from a constant:
 
-**Events.** The orchestrator appends every lane's events to `<wave log dir>/events.jsonl` through
-`hexagen-orchestration-wave-event`, on the orchestrator's host. A lane on a remote lane host never emits: its `$HOME` is not the log the status page reads. The log is the only source of what a
+**Events.** The orchestrator emits every wave event, through
+`hexagen-orchestration-wave-event`, into `<wave log dir>/events.jsonl`. A lane
+emits none: its commits and its PR are its record, and the orchestrator emits
+the event for each stage it observes. The log is the only source of what a
 wave did. Nothing is inferred from a process list or a directory name.
 
 **Status.** `hexagen-orchestration-wave-status` serves the wave from that
-log. Its port is `waveStatusPort` in `.agents/orchestration/config.yaml` (default 4318), and it refuses every port in `forbiddenPorts`.
+log. The server is read-only and loopback-only: it answers GET requests on
+127.0.0.1, and it starts, kills and merges nothing. Its port is `waveStatusPort` in `.agents/orchestration/config.yaml` (default 4318), and it refuses every port in `forbiddenPorts`.
 
 **The log directory is yours.** `waveLogDir` decides where waves are read
 from. It is per-repository on purpose. This project sets it to

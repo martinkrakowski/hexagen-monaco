@@ -140,7 +140,7 @@ function isNonEmptyString(value: unknown): value is string {
 }
 
 /** An argv array of non-empty strings. `undefined` for absent or for refused. */
-function parseArgv(
+export function parseArgv(
   raw: unknown,
   at: string,
   add: (at: string, message: string) => void,

@@ -11,6 +11,7 @@ import {
   type DoctorDeps,
   type Finding,
 } from "../../src/doctor/doctor.js";
+import type { CheckStatus } from "../../src/internal/capabilities.js";
 import {
   emptyConfig,
   parseConfig,
@@ -959,5 +960,113 @@ describe("P-D2: a usage that names lane-watch needs the host's server", () => {
         seat,
     );
     expect(findings.filter((f) => f.severity === "info")).toEqual([]);
+  });
+});
+
+describe("P-D5: install probes in doctor", () => {
+  const yaml = (check: string, repair = "") =>
+    [
+      "repo: owner/name",
+      "installProbes:",
+      "  - package: '@esbuild/darwin-arm64'",
+      `    check: ${check}`,
+      ...(repair ? [`    repair: ${repair}`] : []),
+    ].join("\n");
+
+  /** A runCheck that answers by the argv's first word, and records every call. */
+  const fake = (answers: Record<string, CheckStatus>) => {
+    const calls: string[][] = [];
+    return {
+      calls,
+      runCheck: async (argv: readonly string[]) => {
+        calls.push([...argv]);
+        return answers[argv[0] as string] ?? "ok";
+      },
+    };
+  };
+
+  test("a passing check is not a finding", async () => {
+    const run = fake({ true: "ok" });
+    const { findings, code } = await doctor(yaml('["true"]'), {
+      runCheck: run.runCheck,
+    });
+    expect(code).toBe(EXIT_HEALTHY);
+    expect(findings.filter((f) => f.check.startsWith("install-probe"))).toEqual(
+      [],
+    );
+    expect(run.calls).toEqual([["true"]]);
+  });
+
+  test("a failing check is a FAIL that names the package, and exits unhealthy", async () => {
+    const run = fake({ false: "failed" });
+    const { findings, code, text } = await doctor(yaml('["false"]'), {
+      runCheck: run.runCheck,
+    });
+    expect(code).toBe(EXIT_UNHEALTHY);
+    const found = fails(findings, "install-probe @esbuild/darwin-arm64");
+    expect(found.message).toContain("false");
+    expect(text).toContain("FAIL");
+  });
+
+  const withPlatform = (platform: string) =>
+    [
+      "repo: owner/name",
+      "installProbes:",
+      "  - package: '@esbuild/darwin-arm64'",
+      "    check: ['false']",
+      `    platform: ${platform}`,
+    ].join("\n");
+
+  test("a probe whose platform matches this host runs", async () => {
+    const run = fake({ false: "failed" });
+    const { code } = await doctor(withPlatform("darwin"), {
+      runCheck: run.runCheck,
+      platform: () => "darwin",
+    });
+    expect(run.calls).toEqual([["false"]]);
+    expect(code).toBe(EXIT_UNHEALTHY);
+  });
+
+  test("a probe for another platform is skipped with one INFO line and never run", async () => {
+    const run = fake({ false: "failed" });
+    const { findings, code } = await doctor(withPlatform("darwin"), {
+      runCheck: run.runCheck,
+      platform: () => "linux",
+    });
+    expect(run.calls).toEqual([]);
+    expect(code).toBe(EXIT_HEALTHY);
+    const info = findings.filter((f) => f.check.startsWith("install-probe"));
+    expect(info).toEqual([
+      {
+        check: "install-probe @esbuild/darwin-arm64",
+        severity: "info",
+        message: "skipped (platform darwin, this host linux)",
+      },
+    ]);
+  });
+
+  test("a probe with no platform runs on every host", async () => {
+    const run = fake({ false: "failed" });
+    await doctor(yaml('["false"]'), {
+      runCheck: run.runCheck,
+      platform: () => "win32",
+    });
+    expect(run.calls).toEqual([["false"]]);
+  });
+
+  test("repair is never run, even when it is declared", async () => {
+    const run = fake({ false: "failed", fixit: "ok" });
+    await doctor(yaml('["false"]', "[fixit]"), { runCheck: run.runCheck });
+    expect(run.calls).toEqual([["false"]]);
+  });
+
+  test("a check that times out is a FAIL too, not a pass", async () => {
+    const run = fake({ slow: "timeout" });
+    const { findings } = await doctor(yaml("[slow]"), {
+      runCheck: run.runCheck,
+    });
+    expect(
+      fails(findings, "install-probe @esbuild/darwin-arm64").message,
+    ).toContain("did not finish");
   });
 });

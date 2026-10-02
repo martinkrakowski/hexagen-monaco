@@ -36,6 +36,7 @@ export function configFor(over: Partial<Config> = {}): Config {
     repo: `${REPO.owner}/${REPO.name}`,
     waveStatusPort: 4318,
     ciWorkflow: ".github/workflows/ci.yml",
+    installProbes: [],
     ...over,
   };
 }

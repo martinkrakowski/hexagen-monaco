@@ -34,6 +34,49 @@ name sets it, for example `ciWorkflow: .github/workflows/sync-integrity.yml`;
 non-empty string, not absolute, with no `..` segment and no NUL. `init` does
 not write it, so a scaffolded overlay keeps the default.
 
+### `installProbes`
+
+`installProbes` is an optional list of `{ package, check, repair?, platform? }`. It guards
+against a dependency whose postinstall output is silently skipped when installs
+run concurrently on one host. `check` and `repair` are argv lists, validated
+like `laneHosts[].check`.
+
+```yaml
+installProbes:
+  - package: "@esbuild/darwin-arm64"
+    check: [node, -e, "require.resolve('@esbuild/darwin-arm64/bin/esbuild')"]
+    repair:
+      - sh
+      - -c
+      - rm -rf node_modules/@esbuild/darwin-arm64 && yarn install
+    platform: darwin
+```
+
+A plain `yarn install` does not restore a stripped package directory, because
+the directory's presence makes the package look installed. So the repair removes
+the directory first.
+
+- On a remote lane host, the orchestrator runs each probe as
+  `ssh <alias> -- sh -c 'cd "$1" && shift && exec "$@"' sh <remote worktree path> <check argv…>`.
+  That runs the probe in the new worktree, and every argv word is its own
+  argument, so nothing is shell-joined. `repair` uses the same form. On a local
+  host it runs the `check` with its cwd set to the new worktree.
+- `platform` (optional: `darwin`, `linux` or `win32`, Node's
+  `process.platform` values) limits a probe to hosts of that platform. The
+  orchestrator runs it only on a lane host whose platform matches, found on a
+  remote host with `ssh <alias> -- uname -s` (Darwin is darwin, Linux is
+  linux). `doctor` runs it only when `process.platform` matches, and otherwise
+  reports one INFO line: `skipped (platform <p>, this host <q>)`.
+- An unknown key in a probe is a problem naming the known keys, and the probe is
+  dropped.
+- After a failed `check` the orchestrator runs `repair` once, in the same
+  worktree on the same host, then runs `check` again. A repair is logged as a
+  wave event. If `check` still fails, or `repair` is absent or exits non-zero,
+  the worktree is not dispatched, and the failure names the package and both
+  exit codes.
+- `doctor` runs each `check` on the orchestrator's host only, never runs
+  `repair`, and reports a failing `check` as `FAIL`.
+
 ## Lane hosts and seats
 
 A delegated lane can run on a remote opencode server that executes tools on the
@@ -82,6 +125,17 @@ working: `parseConfig` synthesizes a local `laneHosts` entry named
 `opencode-server` (its `server` is the URL the alias held), and reports a deprecation, which `doctor` prints as a `WARN`.
 A deprecation never refuses — `init`, `gate` and every other bin act on the
 config regardless — so an overlay can be migrated on its own schedule.
+
+### Fix rounds on an opencode lane
+
+A fix round resumes the lane's own session when the dispatch transport supports
+it, and forks that session when the branch has moved since the lane's last turn
+(a merge, a refresh). With opencode the orchestrator passes `run -s <sessionID>`
+to resume and adds `--fork` to fork, using the `sessionID` it recorded from the
+first `--format json` event of the dispatch. These flags are orchestrator-side:
+they never appear in a lane brief. Stagger forked resumes by about 20 s, because
+two forks launched in the same second fail with "database is locked" (opencode's
+sqlite).
 
 ## Bins
 
