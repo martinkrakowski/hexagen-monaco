@@ -1,7 +1,12 @@
 import { execFile } from "node:child_process";
 import { open, readdir, readFile, realpath } from "node:fs/promises";
 import path from "node:path";
-import { edgesComplete, ObservedReport, Slice } from "@hexagen/shared";
+import {
+  cleanText,
+  edgesComplete,
+  ObservedReport,
+  Slice,
+} from "@hexagen/shared";
 
 /**
  * Read-only access to `.hexagen/`. Every function here opens files for reading
@@ -20,20 +25,8 @@ const fail = (message: string): Loaded<never> => ({
   message: clean(message),
 });
 
-/**
- * Strips anything a terminal would act on. File contents are untrusted and ink
- * writes text verbatim, so every string read from disk or a child process goes
- * through this before it reaches a pane. Keeps \n and \t only.
- */
-/* eslint-disable no-control-regex */
-export function clean(text: string): string {
-  return text
-    .replace(/\x1b[\]PX^_][\s\S]*?(?:\x07|\x1b\\)/g, "")
-    .replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, "")
-    .replace(/\x1b[\s\S]?/g, "")
-    .replace(/[\x00-\x08\x0b-\x1f\x7f-\x9f]/g, "");
-}
-/* eslint-enable no-control-regex */
+/** Strips anything a terminal would act on (shared with the web viewer). */
+export const clean = cleanText;
 
 type Contained =
   | { readonly kind: "ok"; readonly real: string }
