@@ -7,3 +7,4 @@ export * from "./proposal.js";
 export * from "./bundle.js";
 export * from "./tip.js";
 export * from "./clean-text.js";
+export * from "./contract-eval.js";

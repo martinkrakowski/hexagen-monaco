@@ -172,15 +172,18 @@ describe("BrownfieldViewerPage: the left rail", () => {
     expect(within(ev).getByText(/outside the slice/)).toBeTruthy();
   });
 
-  it("leaves a named middle slot, and fills the right one", async () => {
+  it("fills both the middle and the right slot", async () => {
     page(ready(await load()));
-    expect(screen.getByTestId("slot-middle-panel").textContent).toBe("");
+    const middle = screen.getByTestId("slot-middle-panel");
+    expect(within(middle).getByTestId("observed-layer")).toBeTruthy();
+    expect(within(middle).getByTestId("code-panel")).toBeTruthy();
+    expect(middle.textContent).not.toBe("");
     expect(screen.getByTestId("slot-right-panel").textContent).not.toBe("");
   });
 
   it("has no chat or advance control: the only buttons are copy buttons", async () => {
     page(ready(await load()));
-    const names = screen
+    const names = within(screen.getByLabelText("Left rail"))
       .getAllByRole("button")
       .map((b) => b.getAttribute("aria-label"));
     expect(names).toHaveLength(8);

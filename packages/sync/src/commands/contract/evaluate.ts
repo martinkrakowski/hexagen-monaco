@@ -1,5 +1,6 @@
 import {
   UNRESOLVED_IMPORT_RULE_ID,
+  edgeViolatesRule,
   edgesComplete,
   isPathInSlice,
   type Contract,
@@ -7,12 +8,7 @@ import {
   type Slice,
 } from "@hexagen/shared";
 import { extOf } from "../observe/index.js";
-import {
-  isSuppressionExpired,
-  prefixHasTarget,
-  sliceEntryOf,
-  underPrefix,
-} from "../shared/brownfield-sidecar.js";
+import { sliceEntryOf } from "../shared/brownfield-sidecar.js";
 
 export interface Violation {
   rule: string;
@@ -68,14 +64,7 @@ export function evaluateContract(input: {
   if (edges.collected) {
     for (const rule of contract?.rules ?? []) {
       for (const e of edges.items) {
-        if (!isPathInSlice(slice, e.from)) continue;
-        if (!underPrefix(rule.from, e.from)) continue;
-        const hitsTo = prefixHasTarget(rule.to, e.to);
-        const bad =
-          rule.kind === "forbid"
-            ? hitsTo
-            : !hitsTo && !prefixHasTarget(rule.from, e.to);
-        if (bad) {
+        if (edgeViolatesRule(slice, rule, e)) {
           violations.push({
             rule: rule.id,
             file: e.from,
@@ -119,22 +108,8 @@ export function evaluateContract(input: {
   return { violations, incomplete };
 }
 
-export { isSuppressionExpired };
-
-/** True when a baseline entry covers the violation and has not expired. */
-export function isKnown(
-  contract: Contract | undefined,
-  v: Violation,
-  now: Date,
-): boolean {
-  return (contract?.knownViolations ?? []).some(
-    (k) =>
-      k.rule === v.rule &&
-      k.file === v.file &&
-      k.specifier === v.specifier &&
-      (k.expires === undefined || !isSuppressionExpired(k.expires, now)),
-  );
-}
+// The expiry and baseline-match rules live in @hexagen/shared.
+export { isSuppressionExpired, isKnown } from "@hexagen/shared";
 
 /** Cross-prefix edges inside the slice, deduplicated by prefix pair. */
 export function proposeCrossPrefixEdges(

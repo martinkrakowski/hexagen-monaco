@@ -6,9 +6,7 @@ import {
   Contract,
   ObservedReport,
   Slice,
-  nfc,
-  normalizeSlicePath,
-  type SlicePaths,
+  isSuppressionExpired,
 } from "@hexagen/shared";
 import { ObserveError } from "../observe/index.js";
 import { samePath } from "../observe/same-path.js";
@@ -47,39 +45,13 @@ export function asResult(e: unknown, messages: string[]): CommandResult {
 
 export const SIDECAR_ENTRY = ".hexagen/";
 
-/** `entry` is a directory prefix (trailing `/`) or an exact file path. */
-export function underPrefix(entry: string, candidate: string): boolean {
-  // NFC on both sides, as isPathInSlice does, so an exclude bites in either form.
-  const e = nfc(entry);
-  const c = nfc(candidate);
-  return e.endsWith("/") ? c.startsWith(e) : c === e;
-}
-
-/**
- * True when `to` (an edge target: a file, or a package root written without a
- * trailing `/`, or `.` for the root package) lies inside the slice. A package
- * root is a directory, so it is also tried with a trailing `/`.
- */
-export function targetInSlice(slice: SlicePaths, to: string): boolean {
-  if (to === "." || !normalizeSlicePath(to).ok) return false;
-  const hit = (entry: string): boolean =>
-    underPrefix(entry, to) || underPrefix(entry, `${to}/`);
-  // Excludes win under either spelling, then paths.
-  if (slice.excludes.some(hit)) return false;
-  return slice.paths.some(hit);
-}
-
-/** The first slice `paths` entry that contains `p` (a file or package root). */
-export function sliceEntryOf(slice: SlicePaths, p: string): string | undefined {
-  if (!targetInSlice(slice, p)) return undefined;
-  return slice.paths.find((e) => underPrefix(e, p) || underPrefix(e, `${p}/`));
-}
-
-/** True when `prefix` (a rule prefix) contains the edge target `to`. */
-export function prefixHasTarget(prefix: string, to: string): boolean {
-  if (to === ".") return false;
-  return underPrefix(prefix, to) || underPrefix(prefix, `${to}/`);
-}
+// The edge-rule helpers live in @hexagen/shared so the web viewer shares them.
+export {
+  prefixHasTarget,
+  sliceEntryOf,
+  targetInSlice,
+  underPrefix,
+} from "@hexagen/shared";
 
 export function git(root: string, args: string[]): string | null {
   try {
@@ -229,37 +201,8 @@ export async function loadObserved(root: string): Promise<ObservedReport> {
   );
 }
 
-const EXPIRES_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
-
-/**
- * Inclusive end-of-day UTC: an entry that expires on date D is still valid
- * throughout that UTC day and expires at D+1 00:00:00.000Z. Moved here so the contract loader can validate dates; a copy of
- * `isSuppressionExpired` in `tools/arch-linter/src/ratchet-baseline.ts`
- * (this package does not depend on the linter); a test pins the same cases.
- */
-export function isSuppressionExpired(
-  expires: string,
-  now: Date = new Date(),
-): boolean {
-  const match = EXPIRES_RE.exec(expires);
-  if (!match) {
-    throw new Error(
-      `'expires' must be YYYY-MM-DD (got ${JSON.stringify(expires)})`,
-    );
-  }
-  const year = Number(match[1]);
-  const month = Number(match[2]);
-  const day = Number(match[3]);
-  const utc = new Date(Date.UTC(year, month - 1, day));
-  if (
-    utc.getUTCFullYear() !== year ||
-    utc.getUTCMonth() !== month - 1 ||
-    utc.getUTCDate() !== day
-  ) {
-    throw new Error(`'expires' is not a real calendar date (${expires})`);
-  }
-  return now.getTime() > Date.UTC(year, month - 1, day, 23, 59, 59, 999);
-}
+// Moved to @hexagen/shared so the web viewer judges expiry the same way.
+export { isSuppressionExpired } from "@hexagen/shared";
 
 /** The contract, or undefined when none exists yet. */
 export async function loadContract(

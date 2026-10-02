@@ -447,6 +447,15 @@ describe("contract: review round 3", () => {
     }
   });
 
+  it("an impossible expires date fails at the schema, never reports clean", async () => {
+    const root = await withEntry("2026-02-30");
+    const r = await runContractCheck({ root });
+    expect(r.exitCode).toBe(2);
+    expect(all(r)).toContain("does not match its schema");
+    expect(all(r)).toContain("not a real calendar date");
+    expect(all(r)).toContain("2026-02-30");
+  });
+
   it("re-baselining drops an expired date, so the violation is hidden again", async () => {
     const root = await withEntry("2020-01-01");
     expect((await runContractCheck({ root })).exitCode).toBe(1);

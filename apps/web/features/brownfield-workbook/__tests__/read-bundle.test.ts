@@ -161,6 +161,32 @@ describe("readBundle: the index", () => {
     expect(await refused(zip)).toMatch(/contract\.json.*missing/i);
   });
 
+  it("refuses a contract whose known violation expires on an impossible date", async () => {
+    const files = validFiles().map((f) =>
+      f.path === "contract.json"
+        ? {
+            ...f,
+            content: JSON.stringify({
+              schemaVersion: "1.0.0",
+              sliceId: "slice-1",
+              rules: [],
+              knownViolations: [
+                {
+                  rule: "r",
+                  file: "a.ts",
+                  specifier: "x",
+                  expires: "2026-02-30",
+                },
+              ],
+            }),
+          }
+        : f,
+    );
+    expect(await refused(await buildBundle(files))).toMatch(
+      /contract\.json.*not a valid contract/i,
+    );
+  });
+
   it("refuses a missing bundle.json", async () => {
     const z = new JSZip();
     z.file("slice.json", "{}");
