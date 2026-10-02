@@ -15,9 +15,16 @@
  *   specifier.
  * - A wrong regex or string guess can swallow a backtick and flip template
  *   state until the next backtick, so a mistake can reach past its own line.
- * - After `>` a `/` starts a regex, because a comparison against a regex is
- *   more common than JSX text that starts with a slash. After `<` it never
- *   does, since `</tag>` is the usual case.
+ * - After `>` a `/` starts a regex, because `=>` tokenizes as `=` then `>` and
+ *   `x => /re/.test(x)` must work. After `<` it never does, since `</tag>` is
+ *   the usual case.
+ * - A postfix `++`/`--` is read as two operators, so the `/` after it starts a
+ *   regex attempt. If that attempt reads an unbalanced `[` from a divisor
+ *   string, the line guard can then hide a later quote-bearing regex on the
+ *   same line: `x = i++ / "["; y = /it's/.test(s); import a from './a';`.
+ * - A block statement after a semicolon-less non-literal `require(x)` (ASI
+ *   only, `const m = require(name)\n{ … }`) is read as a method definition
+ *   and the call is dropped.
  */
 
 export interface ScannedSpecifier {

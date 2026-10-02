@@ -72,14 +72,14 @@ describe("hexagen observe: deadlines", () => {
 
   it("the import pass runs on its own clock, not the walk's (F12)", async () => {
     const root = await mkRepo();
-    // Every clock read costs 600 ms. The pass itself reads the clock a few
-    // times (about 1200 ms), well under maxImportMs, but many reads happened
+    // Every clock read costs 600 ms. The pass itself reads the clock three
+    // times (1200 ms elapsed), under maxImportMs, but many reads happened
     // between the start of the run and the start of the pass.
     let t = 0;
     const report = await observe({
       root,
       maxMs: 10_000_000,
-      maxImportMs: 2000,
+      maxImportMs: 1300,
       now: () => (t += 600),
     });
     expect(report.edges.collected).toBe(true);

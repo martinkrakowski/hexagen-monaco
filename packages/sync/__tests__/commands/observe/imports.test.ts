@@ -474,7 +474,7 @@ describe("hexagen observe: import pass", () => {
     const root = await mkRepo({
       "package.json": '{"name":"p"}',
       "a.ts":
-        "import 'C:/x'; import 'D:\\\\y'; import '.\\\\z'; import '..\\\\w';\n",
+        "import 'C:/x'; import 'D:\\\\y'; import '.\\\\z'; import '..\\\\w'; import 'E:x';\n",
     });
     const { edges, unresolved } = await run(root);
     expect(edges).toEqual([]);
@@ -483,6 +483,7 @@ describe("hexagen observe: import pass", () => {
       { from: "a.ts", specifier: ".\\z", reason: "not-found" },
       { from: "a.ts", specifier: "C:/x", reason: "outside-repo" },
       { from: "a.ts", specifier: "D:\\y", reason: "outside-repo" },
+      { from: "a.ts", specifier: "E:x", reason: "outside-repo" },
     ]);
   });
 

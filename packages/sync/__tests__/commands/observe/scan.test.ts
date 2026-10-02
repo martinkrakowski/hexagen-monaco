@@ -155,10 +155,10 @@ describe("scanSpecifiers: hostile and JSX input", () => {
     ).toEqual(["./after"]);
   });
 
-  it("still reads a regex after a comparison >", () => {
-    expect(specs("if (a > /import 'x'/.test(b)) {}\nrequire('./r');")).toEqual([
-      "./r",
-    ]);
+  it("still reads a regex after the > of an arrow function", () => {
+    expect(
+      specs("arr.filter(x => /import 'x'/.test(x)); import a from './a';"),
+    ).toEqual(["./a"]);
   });
 
   it("does not report a method named require or import (F10)", () => {

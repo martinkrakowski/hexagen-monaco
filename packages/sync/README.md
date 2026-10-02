@@ -158,8 +158,12 @@ What it reads:
   line end; a regex literal right after `)` (`if (x) /re/.test(y)`) is read as
   division, so a specifier-shaped string inside it can appear as a phantom
   import; a wrong regex or string guess can swallow a backtick and misread the
-  template state until the next one; and a `/` after `>` starts a regex but
-  after `<` it does not (`</p>`). A class method named `require` or `import`
+  template state until the next one; and a `/` after `>` starts a regex (so
+  `x => /re/.test(x)` works) but after `<` it does not (`</p>`); a postfix
+  `++`/`--` followed by an unbalanced `[` in a divisor string can make the line
+  guard hide a later quote-bearing regex on the same line
+  (`x = i++ / "["; y = /it's/.test(s);`); a block statement after a
+  semicolon-less non-literal `require(x)` (ASI only) is dropped. A class method named `require` or `import`
   (`require(id) {}`) is not reported.
   - **Resolution order, per specifier:** (1) a relative specifier (`./`, `../`)
     against the walked files: the exact file, then `.js`→`.ts/.tsx`

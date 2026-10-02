@@ -106,8 +106,8 @@ type Step = (spec: string, fromDir: string) => Resolution | null;
 const RELATIVE = /^\.\.?(\/|$)/;
 /** `.\x` and `..\x`: Windows-style, relative-looking, never resolvable here. */
 const WINDOWS_RELATIVE = /^\.\.?\\/;
-/** `C:/x` and `C:\x`: a drive path, outside any repo. */
-const DRIVE_PATH = /^[A-Za-z]:[\\/]/;
+/** `C:/x`, `C:\x` and `C:x`: a drive path, outside any repo. */
+const DRIVE_PATH = /^[A-Za-z]:/;
 
 function relativeStep(ctx: ResolveContext): Step {
   return (spec, fromDir) => {
