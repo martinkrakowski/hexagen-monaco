@@ -104,9 +104,9 @@ export function checkGrantWindow(grant: Grant, now: Date): GrantCheck {
  * Every path goes through the brownfield slice-path rules before matching
  * (`isPathInSlice`, no excludes): an entry ending `/` is a directory prefix,
  * any other entry is an exact path, matching is case-sensitive, and the
- * filesystem is never consulted. Matching is text-only by intent: there is
- * no Unicode (NFC) normalisation; the caller's on-disk spelling check is the
- * guard. A candidate ending `/` is refused (a write target is a file). An
+ * filesystem is never consulted. Matching is text-only by intent; both sides
+ * are NFC-normalised before comparing (`isPathInSlice`), and the caller's
+ * on-disk spelling check guards case tricks. A candidate ending `/` is refused (a write target is a file). An
  * empty `paths` input is a denial, never an allow. The tool is checked
  * before the paths, and the distinct-path count is checked against
  * `max_files` (when set) after the per-path checks.

@@ -12,6 +12,7 @@ export * from "./generate-topology-tool.port.js";
 export * from "./get-transaction-tool.port.js";
 export * from "./list-transactions-tool.port.js";
 export * from "./mcp-server.port.js";
+export * from "./propose-patch-tool.port.js";
 export * from "./reject-transaction-tool.port.js";
 export * from "./remove-context-tool.port.js";
 export * from "./remove-port-tool.port.js";

@@ -268,7 +268,7 @@ export class AcceptTransactionToolUseCase implements AcceptTransactionToolPort {
     const result: unknown = appliedResult ?? { halt_reason: haltReason };
     const now = this.now().toISOString();
 
-    return this.traceWritePort.appendLine({
+    const appended = await this.traceWritePort.appendLine({
       grant_id: grant.id,
       goal_id: input.goal_id ?? input.transaction_id,
       tool_call: {
@@ -282,5 +282,7 @@ export class AcceptTransactionToolUseCase implements AcceptTransactionToolPort {
       started_at: now,
       ended_at: now,
     });
+    // This caller has no use for the receipt; only success or failure.
+    return appended.success ? { success: true, value: undefined } : appended;
   }
 }

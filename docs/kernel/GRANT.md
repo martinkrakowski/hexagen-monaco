@@ -148,6 +148,53 @@ That is where a path-and-tool allowlist belongs for this surface — before
 `"write"` maps directly onto "may create a Transaction" vs "may also
 accept it."
 
+**The second adapter, for client repos: `hexagen_propose_patch`.** A client
+repo has no manifest and no transactions; an agent there proposes a unified
+diff and the FDE applies it. The MCP tool `hexagen_propose_patch` (input:
+`patch`, `grant`, optional `goal_id`) is **propose-only**: it never applies the
+patch and never writes anywhere in the working tree. An allowed patch is
+stored as `.hexagen/proposals/<id>.patch` with `<id>.json` beside it (the
+`ProposalMeta` format: id, grantId, sliceId, tool, paths, traceSeq (null for an unchained trace), createdAt),
+and the FDE applies it with `git apply -p1`. A grant names the tool in `tools`
+(`--tools hexagen_propose_patch`) like any other. Checks, in order, each
+denying before the next runs:
+
+1. the grant has an `id` that is a non-empty string (else a `grant_missing`
+   trace record);
+2. `checkGrantSignature`, then `checkGrantWindow`;
+3. the diff parses strictly: every `diff --git` header, `---`/`+++` line and
+   rename/copy line is read (both sides of a rename or copy), `/dev/null` is
+   a created or deleted file and never a path, and each path goes through
+   `normalizeSlicePath`. Symlink modes (`120000`), submodule mode (`160000`),
+   binary patches, quoted paths that cannot be decoded safely, a patch with no
+   file headers, any line outside the header/hunk grammar and a patch over
+   1 MiB are refused.
+   Any path equal to or under `.hexagen/` or `.git/` (first segment,
+   case-sensitive), as parsed or as resolved on disk, is refused, whatever the grant or
+   slice say;
+4. `checkWriteAgainstGrant` with tool `hexagen_propose_patch` over every path;
+5. the slice: every path inside `slice.paths` and outside `excludes`; no
+   `.hexagen/slice.json` is a deny, and a grant wider than the slice is still
+   bounded by it;
+6. the on-disk spelling: each path is resolved through `realpath` (the
+   deepest existing parent, then the part that does not exist yet), must stay
+   under the repo root and under a granted prefix, and the slice check runs
+   again on that spelling, so a case- or normalisation-insensitive filesystem
+   (APFS, NTFS) or a symlinked directory cannot reach an excluded path.
+   A path that is itself an existing symlink is denied ("path is a symlink; git
+   apply would rewrite its target"): git reads a link's target as its content
+   and keeps mode 120000, so a mode-less patch would retarget the link while
+   `realpath` resolved through it. The slice comparison NFC-normalises both the
+   path and every slice entry, so an exclude holds in either Unicode form.
+
+`checkGrantMode` is **never** run: propose-only grants carry `mode: "propose"`
+(plan BW-D9). Every call, allowed or denied, writes one trace line: `goal_id`
+is the slice id (the caller's `goal_id`, else `no-slice`, only when there is
+no usable slice), `halt_reason` is `completed` or the denial code, and a call
+with no grant or no grant id writes `grant_missing`. A malformed or refused
+patch is recorded as `grant_denied`, the nearest code in the shared
+vocabulary; its reason is in the tool's reply.
+
 Each `PendingManifestMutation` names exactly one context it would write to
 (the create-context/scaffold-module `name`, the create-port/create-adapter
 `domain_name`/`infrastructure_name`, the remove-port/remove-context
@@ -189,7 +236,10 @@ class of defect, one layer up — see "Known holes."
 Stating these here rather than glossing over them:
 
 - **Every write surface that never becomes a `PendingManifestMutation` is
-  unmuzzled by this slice.** A coding agent editing `apps/web`, or any
+  unmuzzled by this slice,** except patches proposed through
+  `hexagen_propose_patch` (above), which is propose-only. A coding agent that
+  writes client files directly through an editor or shell tool is still
+  unmuzzled. A coding agent editing `apps/web`, or any
   client file, through a regular file-write tool never enters
   `hexagen_accept_transaction` — the general rule above says that write
   should be denied when its path is outside `grant.paths`, but no adapter
@@ -261,8 +311,9 @@ hexagen grant check <grant-file> --tool <tool> --path <path>...
     repo with a manifest, mutations are checked at accept, so check exits 2.
     The workspace root is the git toplevel unless --workspace-root is given.
     In a client repo with no .hexagen/slice.json, check denies (exit 1): the
-    slice bounds every write. Paths are judged by text only; the MCP propose
-    tool (BW10) also checks the on-disk spelling, which this CLI does not.
+    slice bounds every write. Paths are judged by text only; the MCP
+    `hexagen_propose_patch` tool also checks the on-disk spelling, which this
+    CLI does not.
 
 hexagen grant check <grant-file> <transaction-id>
     The monaco form. NOT built: pending transactions live in the MCP

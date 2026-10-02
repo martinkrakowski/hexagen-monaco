@@ -86,6 +86,22 @@ inventing a synonym for:
   decision. A trace with `halt_reason: "error"` is still valid evidence:
   it records that the cycle failed, not that it succeeded.
 
+Two tools write Trace lines today. `hexagen_accept_transaction` writes one line
+per accept or denial, with the pending mutation's tool as `tool_calls[0].name`.
+`hexagen_propose_patch` (see `GRANT.md`) writes one line per call, allowed or
+denied: `name` is `hexagen_propose_patch`, `goal_id` is the slice id,
+`halt_reason` is `completed` for a stored proposal and otherwise the denial
+code (`grant_denied`, `grant_expired`, `grant_revoked`; a patch the tool refuses
+to read is `grant_denied` too), and `transaction_ids` is empty. A call with no
+grant, or a grant with no `id`, is a `grant_missing` record. The proposal's
+metadata (`.hexagen/proposals/<id>.json`) holds the `seq` of its `completed` line
+as `traceSeq` (`null` when the trace is unchained and has no seq). A patch that cannot be stored, or a call whose `patch` is missing or not a string, is traced too (`error`, and `grant_denied` with reason "patch must be a string"). If the proposal's metadata cannot be stored after that
+line was written, the patch is discarded and a best-effort `error` line follows
+(`result`: `{proposal_id, discarded: true, reason}`), so no `completed` line is
+left citing a proposal that does not exist. "Every call writes a trace line"
+holds for a chained (brownfield) trace; in an unchained repo-mode trace a
+`grant_missing` denial writes nothing.
+
 ### Storage
 
 Append-only JSONL at `.hexagen/evidence/trace.jsonl` — the Field Kit

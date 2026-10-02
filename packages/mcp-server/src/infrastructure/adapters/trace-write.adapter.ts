@@ -13,6 +13,7 @@ import type { TraceRecord } from "../../application/kernel/trace.js";
 import type {
   GrantMissingAppendInput,
   TraceAppendInput,
+  TraceAppendReceipt,
   TraceWritePort,
 } from "../../application/ports/out/trace-write.port.js";
 
@@ -73,7 +74,9 @@ export class TraceWriteAdapter implements TraceWritePort {
     return !isRepoMode(this.workspaceRoot);
   }
 
-  async appendLine(input: TraceAppendInput): Promise<Result<void, Error>> {
+  async appendLine(
+    input: TraceAppendInput,
+  ): Promise<Result<TraceAppendReceipt | void, Error>> {
     try {
       const trace: TraceRecord = {
         grant_id: input.grant_id,
@@ -94,18 +97,25 @@ export class TraceWriteAdapter implements TraceWritePort {
 
       const dir = path.join(this.workspaceRoot, ...EVIDENCE_DIR);
       const filePath = path.join(dir, EVIDENCE_FILE);
-      await withTraceLock(filePath, async () => {
-        if (await this.isChainedLocked(filePath)) {
-          await appendChainedLineLocked(filePath, (next) => ({
-            ...trace,
-            ...next,
-          }));
-          return;
-        }
-        await fs.mkdir(dir, { recursive: true });
-        await fs.appendFile(filePath, `${JSON.stringify(trace)}\n`, "utf-8");
-      });
-      return { success: true, value: undefined };
+      const receipt = await withTraceLock(
+        filePath,
+        async (): Promise<TraceAppendReceipt> => {
+          if (await this.isChainedLocked(filePath)) {
+            const appended = await appendChainedLineLocked(
+              filePath,
+              (next) => ({
+                ...trace,
+                ...next,
+              }),
+            );
+            return { seq: appended.seq };
+          }
+          await fs.mkdir(dir, { recursive: true });
+          await fs.appendFile(filePath, `${JSON.stringify(trace)}\n`, "utf-8");
+          return {};
+        },
+      );
+      return { success: true, value: receipt };
     } catch (error) {
       return {
         success: false,

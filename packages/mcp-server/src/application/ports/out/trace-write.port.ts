@@ -20,6 +20,16 @@ export interface TraceAppendInput {
   readonly ended_at: string;
 }
 
+/**
+ * What a successful append reports. `seq` is the line's position in a chained
+ * (brownfield) trace; absent when the trace is unchained (greenfield), which
+ * has no sequence numbers. A writer with no receipt to give may resolve void
+ * (the pre-BW10 shape), which readers treat as no `seq`.
+ */
+export interface TraceAppendReceipt {
+  readonly seq?: number;
+}
+
 export interface GrantMissingAppendInput {
   /** The tool the denied call named. */
   readonly tool: string;
@@ -37,7 +47,9 @@ export interface GrantMissingAppendInput {
  * — see docs/kernel/TRACE.md. Never rewrites or truncates existing lines.
  */
 export interface TraceWritePort {
-  appendLine(input: TraceAppendInput): Promise<Result<void, Error>>;
+  appendLine(
+    input: TraceAppendInput,
+  ): Promise<Result<TraceAppendReceipt | void, Error>>;
   /**
    * Records a call denied for carrying no grant, or a grant with no id, as a
    * `grant_missing` record. Only a chained (brownfield) trace has a place for

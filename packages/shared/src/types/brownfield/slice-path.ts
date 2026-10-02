@@ -5,7 +5,8 @@
  * a directory prefix; any other entry is an exact file path. `.` and `..`
  * segments, empty segments, absolute paths (POSIX or drive-letter),
  * backslashes and control characters (U+0000-U+001F, U+007F, U+2028,
- * U+2029) are refused. Nothing here touches the filesystem: a
+ * U+2029) are refused. Matching NFC-normalises the candidate and every slice
+ * entry first. Nothing here touches the filesystem: a
  * path is judged by its text alone, never `stat`ed or resolved.
  */
 
@@ -57,6 +58,13 @@ function matches(entry: string, candidate: string): boolean {
     : candidate === entry;
 }
 
+/**
+ * NFC-normalised, so an NFD spelling (macOS) and an NFC one name the same
+ * file. Applied to the candidate and to every slice entry before comparing,
+ * so an exclude bites whichever form either side uses.
+ */
+export const nfc = (text: string): string => text.normalize("NFC");
+
 /** Shape the helper needs; the full `Slice` satisfies it. */
 export interface SlicePaths {
   readonly paths: readonly string[];
@@ -72,6 +80,7 @@ export interface SlicePaths {
  */
 export function isPathInSlice(slice: SlicePaths, candidate: string): boolean {
   if (!normalizeSlicePath(candidate).ok) return false;
-  if (slice.excludes.some((e) => matches(e, candidate))) return false;
-  return slice.paths.some((p) => matches(p, candidate));
+  const c = nfc(candidate);
+  if (slice.excludes.some((e) => matches(nfc(e), c))) return false;
+  return slice.paths.some((p) => matches(nfc(p), c));
 }

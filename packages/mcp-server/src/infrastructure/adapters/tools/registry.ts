@@ -18,6 +18,7 @@ import { rejectTransactionTool } from "./reject-transaction.js";
 import { generateTopologyTool } from "./generate-topology.js";
 import { generateAdaptersTool } from "./generate-adapters.js";
 import { generateManifestPipelineTool } from "./generate-manifest-pipeline.js";
+import { proposePatchTool } from "./propose-patch.js";
 
 const allTools: ToolDefinition[] = [
   auditBoundariesTool,
@@ -39,6 +40,7 @@ const allTools: ToolDefinition[] = [
   generateTopologyTool,
   generateAdaptersTool,
   generateManifestPipelineTool,
+  proposePatchTool,
 ];
 
 export const toolRegistry: Map<string, ToolDefinition> = new Map(

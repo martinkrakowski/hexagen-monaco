@@ -100,3 +100,19 @@ describe("control characters", () => {
     });
   });
 });
+
+describe("isPathInSlice Unicode forms", () => {
+  const nfc = "src/café/";
+  const nfd = "src/café/";
+  it("excludes bite whichever form either side uses", () => {
+    for (const entry of [nfc, nfd]) {
+      for (const candidate of [`${nfc}x.ts`, `${nfd}x.ts`]) {
+        expect(isPathInSlice(slice(["src/"], [entry]), candidate)).toBe(false);
+      }
+    }
+  });
+  it("paths match whichever form either side uses", () => {
+    expect(isPathInSlice(slice([nfd]), `${nfc}x.ts`)).toBe(true);
+    expect(isPathInSlice(slice([nfc]), `${nfd}x.ts`)).toBe(true);
+  });
+});

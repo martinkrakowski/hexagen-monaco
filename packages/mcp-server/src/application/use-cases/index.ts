@@ -24,6 +24,7 @@ export * from "./get-workspace-context-resource.use-case.js";
 export * from "./initialize-feature-worktree-tool.use-case.js";
 export * from "./list-transactions-tool.use-case.js";
 export * from "./log-agent-remediation-tool.use-case.js";
+export * from "./propose-patch-tool.use-case.js";
 export * from "./reject-transaction-tool.use-case.js";
 export * from "./remove-context-tool.use-case.js";
 export * from "./remove-port-tool.use-case.js";
