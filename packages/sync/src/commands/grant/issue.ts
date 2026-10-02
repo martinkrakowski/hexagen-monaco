@@ -36,6 +36,7 @@ import {
   ensureExcluded,
   excludeWouldChange,
 } from "../shared/git-exclude.js";
+import { isSameOrInside } from "../observe/same-path.js";
 import { resolveSidecarOut } from "../shared/sidecar-out.js";
 import { grantKeyCommander } from "./key-init.js";
 import { signGrantPayload } from "./sign.js";
@@ -96,7 +97,7 @@ function gitToplevel(cwd: string): string | null {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "ignore"],
     }).trim();
-    return top ? realpathSync(top) : null;
+    return top ? realpathSync.native(path.resolve(top)) : null;
   } catch {
     return null;
   }
@@ -116,10 +117,11 @@ function discoverRoot(options: IssueOptions): string {
   const top = gitToplevel(cwd);
   if (top === null) return discovered;
   try {
-    const rel = path.relative(top, realpathSync(discovered));
-    const outside =
-      rel === ".." || rel.startsWith(`..${path.sep}`) || path.isAbsolute(rel);
-    return outside ? top : discovered;
+    // `top` came from git (forward slashes, maybe another case or an 8.3 name
+    // on Windows); resolve both sides the same way before comparing.
+    const realTop = realpathSync.native(path.resolve(top));
+    const realDiscovered = realpathSync.native(path.resolve(discovered));
+    return isSameOrInside(realTop, realDiscovered) ? discovered : top;
   } catch {
     return top;
   }
