@@ -10,6 +10,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { mkdtemp } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { BUNDLE_FORBIDDEN_PATH_PATTERN, BundleIndex } from "@hexagen/shared";
@@ -18,6 +19,8 @@ import {
   verifyBundleIndex,
 } from "@hexagen/shared/node/trace-chain";
 import { ensureExcluded } from "../../../src/commands/shared/git-exclude.js";
+import { readZipStore } from "../../../src/commands/workbook/zip-read.js";
+import { writeZipStore } from "../../../src/commands/report/zip-store.js";
 import { runWorkbookExport } from "../../../src/commands/workbook/export.js";
 import { canonicalGrantPayload } from "../../../src/commands/grant/canonical.js";
 import { signGrantPayload } from "../../../src/commands/grant/sign.js";
@@ -313,6 +316,67 @@ describe("workbook export, fix round", () => {
   });
 });
 
+describe("workbook export, round 3", () => {
+  it.skipIf(process.platform === "win32")(
+    "refuses a file swapped for a symlink after it was validated, and never reads the target",
+    async () => {
+      const secret = "SWAPPED-TARGET-CONTENT";
+      const target = path.join(home, "target.json");
+      await writeFile(target, secret);
+      const r = await run({
+        afterValidate: async (file: string) => {
+          if (!file.endsWith("observed.json")) return;
+          await rm(file);
+          await symlink(target, file);
+        },
+      });
+      expect(r.exitCode).toBe(2);
+      expect(await exists(bundle())).toBe(false);
+      expect(r.messages.join("\n")).not.toContain(secret);
+    },
+  );
+
+  it("exits 1 when tip.json exists but the trace is missing", async () => {
+    expect((await run({ out: ".hexagen/first.zip" })).exitCode).toBe(0);
+    await rm(path.join(root, ".hexagen/evidence/trace.jsonl"));
+    const r = await run();
+    expect(r.exitCode).toBe(1);
+    expect(r.messages.join("\n")).toContain(
+      "evidence/tip.json exists but trace.jsonl is missing; the trace was removed or truncated",
+    );
+    expect(await exists(bundle())).toBe(false);
+  });
+
+  it("maps an unreadable temp pack to exit 1", async () => {
+    const r = await run({
+      afterPack: async (zip: string) => {
+        await writeFile(zip, "not a zip");
+      },
+    });
+    expect(r.exitCode).toBe(1);
+    expect(r.messages.join("\n")).toContain("failed re-verification");
+    expect(await exists(bundle())).toBe(false);
+  });
+
+  it("maps a temp pack missing an adopted entry to exit 1", async () => {
+    const r = await run({
+      afterPack: async (zip: string) => {
+        const entries = readZipStore(await readFile(zip));
+        entries.delete("evidence/verdicts.json");
+        await writeFile(
+          zip,
+          writeZipStore(
+            [...entries].map(([name, content]) => ({ name, content })),
+          ),
+        );
+      },
+    });
+    expect(r.exitCode).toBe(1);
+    expect(r.messages.join("\n")).toContain("failed re-verification");
+    expect(await exists(bundle())).toBe(false);
+  });
+});
+
 describe("workbook export, the allow-list", () => {
   it("never lists planted key files that sit outside the allow-listed names", async () => {
     await put(root, ".hexagen/grant-signing.key", SECRET);
@@ -438,6 +502,43 @@ describe("workbook export --stage", () => {
       ".hexagen/proposals/p1.patch",
       ".hexagen/slice.json",
     ]);
+  });
+
+  it("stages exactly the previewed bytes when the file changes before staging", async () => {
+    await ensureExcluded(root, ".hexagen/");
+    const file = path.join(root, ".hexagen/slice.json");
+    const previewed = await readFile(file);
+    const r = await run({
+      out: undefined,
+      stage: [".hexagen/slice.json"],
+      yes: true,
+      beforeStage: async () => {
+        await writeFile(file, "CHANGED AFTER PREVIEW\n");
+      },
+    });
+    expect(r.exitCode).toBe(0);
+    expect(cached()).toBe(".hexagen/slice.json");
+    const blob = execFileSync("git", ["show", ":.hexagen/slice.json"], {
+      cwd: root,
+    });
+    expect(blob.equals(previewed)).toBe(true);
+  });
+
+  it("previews a tracked file against HEAD, including changes already in the index", async () => {
+    const file = path.join(root, ".hexagen/slice.json");
+    git(root, "add", "-f", ".hexagen/slice.json");
+    git(root, "commit", "-q", "-m", "track slice");
+    const base = await readFile(file, "utf8");
+    await writeFile(file, base.replace("eng-1", "ENG-STAGED"));
+    git(root, "add", "-f", ".hexagen/slice.json");
+    await writeFile(file, base.replace("eng-1", "ENG-WORKTREE"));
+    const r = await run({ out: undefined, stage: [".hexagen/slice.json"] });
+    expect(r.exitCode).toBe(0);
+    const text = r.messages.join("\n");
+    expect(text).toContain("ENG-WORKTREE");
+    expect(text).toContain("eng-1");
+    // the staged-only spelling is not what will be staged, so it is not shown as the result
+    expect(text).not.toContain("+++ /dev/null");
   });
 
   it("accepts an absolute path inside the root", async () => {

@@ -431,8 +431,12 @@ than `HEAD` the commands warn, and with `--strict` fail.
 
 ### `hexagen workbook export`
 
-Writes the brownfield workbook as one zip, or stages named `.hexagen/` files
-into the client's history. Neither mode touches the client's working tree.
+Two separate modes:
+
+- `--out` creates one new file under `.hexagen/` in the working tree. It changes
+  nothing else.
+- `--stage` changes the git index and nothing else: it writes no file and
+  never commits.
 
 ```bash
 # the bundle: one new file under .hexagen/, never overwritten

@@ -32,6 +32,7 @@ import {
   type AllowedFile,
   type BundleRole,
 } from "./allow-list.js";
+import { safeReadBytes } from "../observe/imports/safe-read.js";
 import { readZipStore } from "./zip-read.js";
 
 export interface WorkbookExportOptions {
@@ -51,6 +52,10 @@ export interface WorkbookExportOptions {
   readonly now?: () => Date;
   /** Test seam: runs after the temporary pack was written, before it is read back. */
   readonly afterPack?: (zipPath: string) => Promise<void>;
+  /** Test seam: runs after a file was validated, before it is opened. */
+  readonly afterValidate?: (file: string) => Promise<void>;
+  /** Test seam: runs after the stage preview, before anything is staged. */
+  readonly beforeStage?: () => Promise<void>;
 }
 
 export interface WorkbookExportResult {
@@ -89,9 +94,14 @@ interface Sidecar {
   /** Real path of `<root>/.hexagen`. */
   readonly real: string;
   readonly homeKeys: string;
+  readonly afterValidate?: (file: string) => Promise<void>;
 }
 
-async function openSidecar(root: string, home: string): Promise<Sidecar> {
+async function openSidecar(
+  root: string,
+  home: string,
+  afterValidate?: (file: string) => Promise<void>,
+): Promise<Sidecar> {
   const dir = path.join(root, ".hexagen");
   let real: string;
   try {
@@ -105,6 +115,7 @@ async function openSidecar(root: string, home: string): Promise<Sidecar> {
     dir,
     real,
     homeKeys: path.join(realHome, ".hexagen", "keys"),
+    afterValidate,
   };
 }
 
@@ -146,7 +157,18 @@ async function readAllowed(
   if (st.size > MAX_FILE_BYTES) {
     throw new Refusal(`${entry.source}: larger than ${MAX_FILE_BYTES} bytes`);
   }
-  return { text: await fs.readFile(file), file };
+  await sc.afterValidate?.(file);
+  // Open with O_NOFOLLOW and read through the handle: a swap after the checks
+  // above is refused, and the size checked is the size read.
+  const read = await safeReadBytes(file, MAX_FILE_BYTES);
+  if (!read.ok) {
+    throw new Refusal(
+      read.why === "too-large"
+        ? `${entry.source}: larger than ${MAX_FILE_BYTES} bytes`
+        : `${entry.source}: is not a regular file (symlinks are refused)`,
+    );
+  }
+  return { text: read.bytes, file };
 }
 
 async function realOutDirInsideSidecar(
@@ -416,11 +438,6 @@ async function runExport(
           ],
         };
       }
-      await options.afterPack?.(tmpAbs);
-      // Re-verify the pack before adopting anything from it: its own index
-      // must verify with the engagement key, and each adopted entry must match
-      // the index's sha256.
-      const zip = readZipStore(await fs.readFile(tmpAbs));
       const tampered = (why: string) => ({
         exitCode: 1 as const,
         messages: [
@@ -428,6 +445,16 @@ async function runExport(
           `  - the temporary evidence pack failed re-verification (${why})`,
         ],
       });
+      await options.afterPack?.(tmpAbs);
+      // Re-verify the pack before adopting anything from it: its own index
+      // must verify with the engagement key, and each adopted entry must match
+      // the index's sha256.
+      let zip: Map<string, Buffer>;
+      try {
+        zip = readZipStore(await fs.readFile(tmpAbs));
+      } catch (error) {
+        return tampered(`unreadable: ${(error as Error).message}`);
+      }
       let packIndex: BundleIndex;
       try {
         packIndex = BundleIndex.parse(
@@ -447,7 +474,7 @@ async function runExport(
         ["evidence/tip.json", "tip", "tip.json"],
       ] as const) {
         const content = zip.get(name);
-        if (content === undefined) throw new Refusal(`the pack lacks ${name}`);
+        if (content === undefined) return tampered(`it lacks ${name}`);
         const listed = packIndex.files.find((e) => e.path === name);
         if (listed === undefined || listed.sha256 !== sha256(content)) {
           return tampered(`${name} does not match the pack's index`);
@@ -460,6 +487,19 @@ async function runExport(
     } finally {
       await fs.unlink(tmpAbs).catch(() => undefined);
     }
+  } else if (
+    await fs.lstat(path.join(sc.dir, "evidence", "tip.json")).then(
+      () => true,
+      () => false,
+    )
+  ) {
+    return {
+      exitCode: 1,
+      messages: [
+        "workbook export FAILED; no bundle written:",
+        "  - evidence/tip.json exists but trace.jsonl is missing; the trace was removed or truncated",
+      ],
+    };
   } else {
     c.notes.push(
       "note: .hexagen/evidence/trace.jsonl is absent; the bundle carries no evidence",
@@ -523,11 +563,12 @@ async function runExport(
   };
 }
 
-function git(root: string, args: string[]): string {
+function git(root: string, args: string[], input?: Buffer): string {
   return execFileSync("git", args, {
+    input,
     cwd: root,
     encoding: "utf8",
-    stdio: ["ignore", "pipe", "pipe"],
+    stdio: [input === undefined ? "ignore" : "pipe", "pipe", "pipe"],
     env: {
       ...process.env,
       GIT_LITERAL_PATHSPECS: "1",
@@ -551,7 +592,7 @@ async function runStage(
   sc: Sidecar,
   files: readonly string[],
 ): Promise<WorkbookExportResult> {
-  const accepted: Array<{ repoRel: string; text: string }> = [];
+  const accepted: Array<{ repoRel: string; bytes: Buffer }> = [];
   const refusals: string[] = [];
   const seen = new Set<string>();
   for (const given of files) {
@@ -580,7 +621,7 @@ async function runStage(
       const read = await readAllowed(sc, entry);
       accepted.push({
         repoRel: `.hexagen/${entry.source}`,
-        text: read.text.toString("utf8"),
+        bytes: read.text,
       });
     } catch (error) {
       refusals.push(`${given}: ${(error as Error).message}`);
@@ -599,12 +640,20 @@ async function runStage(
   const parts: string[] = [];
   try {
     for (const f of accepted) {
-      const tracked = git(sc.root, ["ls-files", "--", f.repoRel]).trim() !== "";
+      // Against HEAD, so a change already sitting in the index is shown too.
+      const inHead = (() => {
+        try {
+          git(sc.root, ["cat-file", "-e", `HEAD:${f.repoRel}`]);
+          return true;
+        } catch {
+          return false;
+        }
+      })();
       parts.push(
-        tracked
-          ? git(sc.root, ["diff", "--no-color", "--", f.repoRel]) ||
+        inHead
+          ? git(sc.root, ["diff", "--no-color", "HEAD", "--", f.repoRel]) ||
               `(${f.repoRel} is already tracked and unchanged)\n`
-          : newFileDiff(f.repoRel, f.text),
+          : newFileDiff(f.repoRel, f.bytes.toString("utf8")),
       );
     }
   } catch (error) {
@@ -621,14 +670,29 @@ async function runStage(
       messages: [
         diff.trimEnd(),
         "",
-        `will stage (git add -f): ${names.join(", ")}`,
+        `will stage (as git add -f would): ${names.join(", ")}`,
         "nothing was staged. Re-run with --yes to stage exactly these files into this repo's history.",
       ],
       staged: [],
     };
   }
   try {
-    git(sc.root, ["add", "-f", "--", ...names]);
+    await options.beforeStage?.();
+    // Stage the previewed bytes themselves, not whatever the path holds now:
+    // the equivalent of `git add -f`, pinned to the bytes that were shown.
+    for (const f of accepted) {
+      const sha = git(
+        sc.root,
+        ["hash-object", "-w", "--stdin"],
+        f.bytes,
+      ).trim();
+      git(sc.root, [
+        "update-index",
+        "--add",
+        "--cacheinfo",
+        `100644,${sha},${f.repoRel}`,
+      ]);
+    }
   } catch (error) {
     return {
       exitCode: 2,
@@ -640,7 +704,7 @@ async function runStage(
     messages: [
       diff.trimEnd(),
       "",
-      `staged (git add -f): ${names.join(", ")}`,
+      `staged (git add -f equivalent): ${names.join(", ")}`,
       "commit them yourself; nothing was committed.",
     ],
     staged: names,
@@ -666,7 +730,11 @@ export async function runWorkbookExport(
         "give --out <zip> to write a bundle, or --stage <file...> to stage files",
       );
     }
-    const sc = await openSidecar(root, options.homeDir ?? os.homedir());
+    const sc = await openSidecar(
+      root,
+      options.homeDir ?? os.homedir(),
+      options.afterValidate,
+    );
     if (options.out !== undefined)
       return await runExport(options, sc, options.out);
     return await runStage(options, sc, options.stage ?? []);

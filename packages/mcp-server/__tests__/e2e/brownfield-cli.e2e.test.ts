@@ -19,7 +19,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync, statSync } from "node:fs";
 import {
   lstat,
   mkdir,
@@ -38,6 +38,29 @@ import { verifyBundleIndex } from "@hexagen/shared/node/trace-chain";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const mcpDir = path.resolve(here, "../..");
+/** Newest mtime (ms) of any file under `dir`, skipping node_modules. */
+function newestMtime(dir: string): number {
+  let newest = 0;
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (entry.name === "node_modules") continue;
+    const p = path.join(dir, entry.name);
+    newest = Math.max(
+      newest,
+      entry.isDirectory() ? newestMtime(p) : statSync(p).mtimeMs,
+    );
+  }
+  return newest;
+}
+
+/** A dist older than its src is a stale build: fail loudly (CI always rebuilds). */
+function assertFresh(pkgDir: string, dist: string, filter: string): void {
+  if (statSync(dist).mtimeMs < newestMtime(path.join(pkgDir, "src"))) {
+    throw new Error(
+      `${path.basename(pkgDir)} dist is older than src; run yarn turbo build --filter=${filter}`,
+    );
+  }
+}
+
 const syncCli = path.resolve(mcpDir, "../sync/dist/cli.js");
 const mcpDist = path.join(mcpDir, "dist/cli.js");
 
@@ -152,6 +175,7 @@ beforeAll(async () => {
     existsSync(syncCli),
     `${syncCli} is missing: build @hexagen/sync first (turbo does, via ^build)`,
   ).toBe(true);
+  assertFresh(path.resolve(mcpDir, "../sync"), syncCli, "@hexagen/sync");
   work = await mkdtemp(path.join(tmpdir(), "bf-e2e-"));
   await writeFile(path.join(work, "empty.gitconfig"), "");
   const upstream = path.join(work, "upstream");
@@ -293,6 +317,7 @@ describe("brownfield workbook, end to end with no web app", () => {
       await readFile(path.join(clone, ".hexagen/grants/g1.json"), "utf8"),
     );
     const useDist = existsSync(mcpDist);
+    if (useDist) assertFresh(mcpDir, mcpDist, "@hexagen/mcp-server");
     if (!useDist) {
       process.stderr.write(
         "[e2e] packages/mcp-server/dist/cli.js is missing: running the mcp-server from source through tsx\n",
