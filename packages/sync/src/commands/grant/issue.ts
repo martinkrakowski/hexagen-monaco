@@ -20,6 +20,11 @@ import {
   expandContexts,
   type IssuedGrant,
 } from "./build.js";
+import {
+  GitExcludeError,
+  ensureExcluded,
+  excludeWouldChange,
+} from "../shared/git-exclude.js";
 import { grantKeyCommander } from "./key-init.js";
 import { signGrantPayload } from "./sign.js";
 import { loadOrCreateSigningKey } from "./signing-key.js";
@@ -47,6 +52,8 @@ interface IssueOptions {
   engagement?: string;
   /** Test seam; defaults to `os.homedir()`. */
   homeDir?: string;
+  /** Brownfield: consent to the writes listed in the preflight. */
+  yes?: boolean;
 }
 
 /** Brownfield failures exit 2 (usage/precondition), distinct from repo mode's 1. */
@@ -226,6 +233,44 @@ export async function issueGrantCommand(options: IssueOptions): Promise<void> {
     );
   }
 
+  if (brownfield) {
+    // The sidecar dir stays out of `git status` via .git/info/exclude (never
+    // the client's .gitignore). List every write, then require --yes.
+    let exclude: { file: string; changes: boolean };
+    try {
+      exclude = await excludeWouldChange(workspaceRoot, ".hexagen/");
+    } catch (error) {
+      failBrownfield(`[grant issue] ${(error as Error).message}`);
+      return;
+    }
+    const writes: string[] = [];
+    if (options.out) {
+      writes.push(`grant file: ${path.resolve(workspaceRoot, options.out)}`);
+    }
+    if (exclude.changes) {
+      writes.push(`exclude file: ${exclude.file} (adds .hexagen/)`);
+    }
+    console.error(
+      writes.length > 0
+        ? `[grant issue] preflight, will write:\n${writes.map((w) => `  - ${w}`).join("\n")}`
+        : "[grant issue] preflight: no files to write (grant goes to stdout)",
+    );
+    if (!options.yes) {
+      failBrownfield(
+        "[grant issue] nothing written; re-run with --yes to proceed.",
+      );
+      return;
+    }
+    try {
+      await ensureExcluded(workspaceRoot, ".hexagen/");
+    } catch (error) {
+      failBrownfield(
+        `[grant issue] ${error instanceof GitExcludeError ? error.message : String(error)}`,
+      );
+      return;
+    }
+  }
+
   let keyHex: string;
   try {
     const explicit =
@@ -350,6 +395,10 @@ grantCommander
   .option(
     "--engagement <id>",
     "Brownfield: engagement id naming ~/.hexagen/keys/<id>.key (default: the id in .hexagen/slice.json)",
+  )
+  .option(
+    "--yes",
+    "Brownfield: proceed with the writes the preflight lists (grant file, .git/info/exclude)",
   )
   .option("--out <file>", "Write the signed grant JSON here instead of stdout")
   .action(async (options: IssueOptions) => {

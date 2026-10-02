@@ -89,6 +89,28 @@ function isExcluded(text: string, entry: string): boolean {
 }
 
 /**
+ * Read-only twin of `ensureExcluded`: true when it would append `entry`.
+ * Lets a caller list the write in a preflight before making it.
+ */
+export async function excludeWouldChange(
+  root: string,
+  entry: string,
+): Promise<{ file: string; changes: boolean }> {
+  const file = await resolveExcludeFile(root);
+  let text = "";
+  try {
+    text = await fs.readFile(file, "utf8");
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== "ENOENT") {
+      throw new GitExcludeError(
+        `could not read ${file}: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    }
+  }
+  return { file, changes: !isExcluded(text, entry) };
+}
+
+/**
  * Append `entry` (e.g. `.hexagen/`) to the repo's exclude file if absent.
  * Idempotent. Returns the file and whether anything was written; any failure
  * throws `GitExcludeError` so the caller can stop before writing its own file.

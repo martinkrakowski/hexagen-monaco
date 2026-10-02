@@ -11,6 +11,7 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createHmac } from "node:crypto";
+import { execFileSync } from "node:child_process";
 import { issueGrantCommand } from "../../../src/commands/grant/issue.js";
 import { grantKeyInitCommand } from "../../../src/commands/grant/key-init.js";
 import { canonicalGrantPayload } from "../../../src/commands/grant/canonical.js";
@@ -19,6 +20,8 @@ const dirs: string[] = [];
 async function tmp(prefix: string): Promise<string> {
   const d = await mkdtemp(path.join(tmpdir(), prefix));
   dirs.push(d);
+  // Brownfield roots are client repos; the exclude step needs a git dir.
+  if (prefix === "bf-root-") execFileSync("git", ["init", "-q", d]);
   return d;
 }
 
@@ -75,6 +78,7 @@ function base(root: string, home: string) {
     expiresIn: "1h",
     workspaceRoot: root,
     homeDir: home,
+    yes: true,
   };
 }
 
@@ -94,7 +98,7 @@ describe("grant issue, brownfield (no manifest)", () => {
     expect(process.exitCode).toBe(2);
     expect(existsSync(path.join(root, ".hexagen"))).toBe(false);
     expect(existsSync(path.join(root, ".gitignore"))).toBe(false);
-    expect(await readdir(root)).toEqual([]);
+    expect((await readdir(root)).filter((n) => n !== ".git")).toEqual([]);
   });
 
   it("issues from the slice defaults, omits contexts, and the grant verifies", async () => {
