@@ -44,10 +44,9 @@ Required keys (the script refuses to deploy without them):
 - Auth: `NEXTAUTH_SECRET`, `GITHUB_ID`, `GITHUB_SECRET`. The app reads
   `NEXTAUTH_SECRET ?? AUTH_SECRET` (next-auth 4.24.13). We standardise on
   `NEXTAUTH_SECRET`, and that is the key the script checks.
-- LLM: `LLM_API_KEY`, `LLM_BASE_URL`, `LLM_MODEL`, `WEB_LLM_API_KEY`,
-  `INCEPTION_API_KEY`, `INCEPTION_MODEL`.
+- LLM: `LLM_BASE_URL`, `LLM_MODEL`, `WEB_LLM_API_KEY`, `INCEPTION_API_KEY`.
 
-Optional: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`,
+Optional: `LLM_API_KEY`, `INCEPTION_MODEL`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`,
 `STRIPE_PRICE_REPO_MONTHLY` (Stripe cannot deliver webhooks to a `.lan` host,
 so billing stays off on staging unless these are set), `LLM_REASONING`, `STAGE1_REFINER_*`, `STAGE6_REVIEWER_*`,
 `STAGE6_VALIDATOR_API_KEY`, `STAGE6_VALIDATOR_BASE_URL`,
@@ -65,6 +64,9 @@ The GitHub OAuth App's callback URL must be
 - The StorageClass keeps `reclaimPolicy: Delete`; we rely on backups.
 - `NEXT_PUBLIC_LLM_MODEL=z-ai/glm-5.2` stays.
 - Stripe is optional on staging.
+- `LLM_API_KEY` is optional: prod runs without it after the mercury flip, and
+  chat and governance read `WEB_LLM_API_KEY ?? LLM_API_KEY`.
+- `INCEPTION_MODEL` is optional: it defaults to `mercury-2`.
 
 ## State
 
