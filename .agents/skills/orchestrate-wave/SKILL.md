@@ -285,12 +285,18 @@ that did not happen.
    **Run the config's `installProbes` once the install finishes, before the worktree is
    dispatched.** Under concurrent installs on one host a dependency's postinstall binary can be
    silently skipped, and a lane then fails on a missing binary it cannot repair. Each probe is
-   `{package, check, repair?}`. On a remote lane host run it as `ssh <alias> -- <check>` inside the
-   new worktree; on a local host run `check` in the worktree. When a `check` fails, run its
+   `{package, check, repair?, platform?}`. On a remote lane host run it as
+   `ssh <alias> -- sh -c 'cd "$1" && shift && exec "$@"' sh <remote worktree path> <check argv…>`, which runs the probe in the new worktree and passes every argv word
+   as its own argument, so nothing is shell-joined; `repair` uses the same form. On a local host
+   run `check` with its cwd set to the new worktree. A probe with a `platform` (`darwin`, `linux`
+   or `win32`) runs only on a lane host whose platform matches; on a remote host find it with
+   `ssh <alias> -- uname -s` (`Darwin` is darwin, `Linux` is linux). When a `check` fails, run its
    `repair` ONCE (same host, same worktree), emit the repair as a wave event, then run `check`
-   again. If `check` still fails, or `repair` is absent or exits non-zero, **do not dispatch that
+   again. A repair for a stripped package removes the package directory before it reinstalls, as the
+   native-binary check below says. If `check` still fails, or `repair` is absent or exits non-zero, **do not dispatch that
    worktree**: report the package and both exit codes. `hexagen-orchestration-doctor` runs the
-   `check` of each probe on your own host, never a `repair`, and reports a failing `check` as FAIL.
+   `check` of each probe whose platform matches your own host, never a `repair`, and reports a failing
+   `check` as FAIL.
    (why: [rationale](references/rationale.md#install-probes))
 
    And **after a wave's installs, verify the main checkout still has its native binaries** rather

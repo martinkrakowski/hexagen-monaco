@@ -65,7 +65,12 @@ describe("process rules in the orchestrate-wave skill", () => {
 
   it("P-D5: installProbes semantics are stated for the orchestrator", () => {
     expect(skill).toContain("installProbes");
-    expect(skill).toContain("ssh <alias> -- <check>");
+    expect(skill).toContain(
+      'ssh <alias> -- sh -c \'cd "$1" && shift && exec "$@"\' sh <remote worktree path> <check argv…>',
+    );
+    expect(skill).toContain("ssh <alias> -- uname -s");
+    expect(skill).toContain("runs only on a lane host whose platform matches");
+    expect(skill).toContain("with its cwd set to the new worktree");
     expect(skill).toContain("run its `repair` ONCE");
     expect(skill).toContain("do not dispatch that worktree");
     expect(skill).toContain("both exit codes");

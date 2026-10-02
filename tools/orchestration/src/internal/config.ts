@@ -82,7 +82,15 @@ export interface InstallProbe {
   readonly package: string;
   readonly check: readonly string[];
   readonly repair?: readonly string[];
+  /** Absent: the probe applies on every platform. Otherwise `process.platform`'s value. */
+  readonly platform?: ProbePlatform;
 }
+
+/** The `process.platform` values a probe may name. */
+export const PROBE_PLATFORMS = ["darwin", "linux", "win32"] as const;
+export type ProbePlatform = (typeof PROBE_PLATFORMS)[number];
+
+const PROBE_KEYS = ["package", "check", "repair", "platform"] as const;
 
 /** A project that has deliberately departed from a locked invariant, and why. */
 export interface ConfigOverride {
@@ -344,7 +352,7 @@ function parseInstallProbes(raw: unknown, problems: Problems): InstallProbe[] {
   if (!Array.isArray(raw)) {
     problems.add(
       "installProbes",
-      "must be a list of { package, check, repair? } entries",
+      "must be a list of { package, check, repair?, platform? } entries",
     );
     return [];
   }
@@ -356,6 +364,26 @@ function parseInstallProbes(raw: unknown, problems: Problems): InstallProbe[] {
       return;
     }
     let valid = true;
+    for (const key of Object.keys(entry)) {
+      if ((PROBE_KEYS as readonly string[]).includes(key)) continue;
+      problems.add(
+        `${at}.${key}`,
+        `is not a known installProbes key. Known keys: ${PROBE_KEYS.join(", ")}`,
+      );
+      valid = false;
+    }
+    let platform: ProbePlatform | undefined;
+    if (entry.platform !== undefined) {
+      if (PROBE_PLATFORMS.includes(entry.platform as ProbePlatform)) {
+        platform = entry.platform as ProbePlatform;
+      } else {
+        problems.add(
+          `${at}.platform`,
+          `must be one of: ${PROBE_PLATFORMS.join(", ")}. Read ${JSON.stringify(entry.platform)}`,
+        );
+        valid = false;
+      }
+    }
     if (!isNonEmptyString(entry.package)) {
       problems.add(`${at}.package`, "must be a non-empty string");
       valid = false;
@@ -380,6 +408,7 @@ function parseInstallProbes(raw: unknown, problems: Problems): InstallProbe[] {
       package: entry.package as string,
       check,
       ...(repair !== undefined ? { repair } : {}),
+      ...(platform !== undefined ? { platform } : {}),
     });
   });
   return probes;

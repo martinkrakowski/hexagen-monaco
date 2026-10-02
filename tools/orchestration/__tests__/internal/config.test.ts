@@ -682,6 +682,42 @@ describe("installProbes (P-D5)", () => {
     ]);
   });
 
+  test("an unknown key is a problem naming the known keys, and the entry is dropped", () => {
+    const result = parseConfig(
+      [
+        "installProbes:",
+        "  - package: a",
+        "    check: ['true']",
+        "    repiar: [yarn, install]",
+      ].join("\n"),
+    );
+    expect(result.problems.map((p) => p.at)).toEqual([
+      "installProbes[0].repiar",
+    ]);
+    expect(result.problems[0]?.message).toContain(
+      "Known keys: package, check, repair, platform",
+    );
+    expect(result.config?.installProbes).toEqual([]);
+  });
+
+  test("platform accepts darwin, linux and win32 only", () => {
+    const entry = (platform: string) =>
+      [
+        "installProbes:",
+        "  - package: a",
+        "    check: ['true']",
+        `    platform: ${platform}`,
+      ].join("\n");
+    for (const platform of ["darwin", "linux", "win32"]) {
+      expect(ok(entry(platform)).installProbes[0]?.platform).toBe(platform);
+    }
+    const bad = parseConfig(entry("macos"));
+    expect(bad.problems.map((p) => p.at)).toEqual([
+      "installProbes[0].platform",
+    ]);
+    expect(bad.config?.installProbes).toEqual([]);
+  });
+
   test("an invalid probe is dropped, so a gate never runs half of one", () => {
     const result = parseConfig(
       [

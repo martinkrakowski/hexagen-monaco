@@ -36,7 +36,7 @@ not write it, so a scaffolded overlay keeps the default.
 
 ### `installProbes`
 
-`installProbes` is an optional list of `{ package, check, repair? }`. It guards
+`installProbes` is an optional list of `{ package, check, repair?, platform? }`. It guards
 against a dependency whose postinstall output is silently skipped when installs
 run concurrently on one host. `check` and `repair` are argv lists, validated
 like `laneHosts[].check`.
@@ -45,12 +45,30 @@ like `laneHosts[].check`.
 installProbes:
   - package: "@esbuild/darwin-arm64"
     check: [node, -e, "require.resolve('@esbuild/darwin-arm64/bin/esbuild')"]
-    repair: [yarn, install]
+    repair:
+      - sh
+      - -c
+      - rm -rf node_modules/@esbuild/darwin-arm64 && yarn install
+    platform: darwin
 ```
 
+A plain `yarn install` does not restore a stripped package directory, because
+the directory's presence makes the package look installed. So the repair removes
+the directory first.
+
 - On a remote lane host, the orchestrator runs each probe as
-  `ssh <alias> -- <check>` inside the new worktree. On a local host it runs the
-  `check` in the worktree directly.
+  `ssh <alias> -- sh -c 'cd "$1" && shift && exec "$@"' sh <remote worktree path> <check argv…>`.
+  That runs the probe in the new worktree, and every argv word is its own
+  argument, so nothing is shell-joined. `repair` uses the same form. On a local
+  host it runs the `check` with its cwd set to the new worktree.
+- `platform` (optional: `darwin`, `linux` or `win32`, Node's
+  `process.platform` values) limits a probe to hosts of that platform. The
+  orchestrator runs it only on a lane host whose platform matches, found on a
+  remote host with `ssh <alias> -- uname -s` (Darwin is darwin, Linux is
+  linux). `doctor` runs it only when `process.platform` matches, and otherwise
+  reports one INFO line: `skipped (platform <p>, this host <q>)`.
+- An unknown key in a probe is a problem naming the known keys, and the probe is
+  dropped.
 - After a failed `check` the orchestrator runs `repair` once, in the same
   worktree on the same host, then runs `check` again. A repair is logged as a
   wave event. If `check` still fails, or `repair` is absent or exits non-zero,
