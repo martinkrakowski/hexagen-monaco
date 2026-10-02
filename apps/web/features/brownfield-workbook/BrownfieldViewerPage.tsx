@@ -3,6 +3,7 @@ import { BundleIntake } from "./BundleIntake";
 import { MiddlePanel } from "./middle/MiddlePanel";
 import { StepRail } from "./StepRail";
 import { deriveSteps } from "./steps";
+import { RightPanel } from "./right/RightPanel";
 import type { LoadedBundle } from "./bundle/read-bundle";
 
 /**
@@ -114,8 +115,9 @@ export function BrownfieldViewerPage({
             <section aria-label="Middle panel" data-testid="slot-middle-panel">
               <MiddlePanel bundle={intake.bundle} />
             </section>
-            {/* BW9 fills this slot: the agent under the grant. Leave it empty here. */}
-            <section aria-label="Right panel" data-testid="slot-right-panel" />
+            <section aria-label="Right panel" data-testid="slot-right-panel">
+              <RightPanel bundle={intake.bundle} />
+            </section>
           </div>
         </>
       )}

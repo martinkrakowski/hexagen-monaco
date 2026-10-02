@@ -99,6 +99,7 @@ function bundleOf(p: {
     proposals: [],
     trace: null,
     verdicts: null,
+    proposalFiles: new Map(),
   };
 }
 
