@@ -18,6 +18,13 @@ import {
 } from "../shared/git-exclude.js";
 import { globToRegExp } from "../shared/glob.js";
 import { parseIgnoreLine, verdict, type IgnoreRule } from "../shared/ignore.js";
+import {
+  DEFAULT_MAX_IMPORT_BYTES,
+  DEFAULT_MAX_IMPORT_FILES,
+  DEFAULT_MAX_IMPORT_MS,
+  READ_EXTENSIONS,
+  runImportPass,
+} from "./imports/pass.js";
 import { samePath } from "./same-path.js";
 import { timeCapReason, walk, type WalkResult } from "./walk.js";
 
@@ -27,13 +34,17 @@ import { timeCapReason, walk, type WalkResult } from "./walk.js";
  * hexagen-lint, and the only thing it can write is `--out`, which must
  * resolve under `<root>/.hexagen/`.
  *
- * The import pass (`edges`, `unresolved`) is a separate lane (BW4b); here
- * both sections are reported as not collected.
+ * The import pass (`edges`, `unresolved`) is a bounded lexical scan of
+ * JS/TS files; see `./imports/`.
  */
 
 export const DEFAULT_MAX_FILES = 50_000;
 export const DEFAULT_MAX_MS = 30_000;
-const IMPORT_PASS_PENDING = "import pass not run (BW4b)";
+export {
+  DEFAULT_MAX_IMPORT_BYTES,
+  DEFAULT_MAX_IMPORT_FILES,
+  DEFAULT_MAX_IMPORT_MS,
+};
 
 type Section<T> =
   | { collected: true; items: T[] }
@@ -98,6 +109,10 @@ function isBuildMarker(base: string): boolean {
   return BUILD_MARKERS.has(base) || base.startsWith("build.gradle");
 }
 
+function extOf(file: string): string {
+  return file.slice(file.lastIndexOf(".") + 1).toLowerCase();
+}
+
 function baseName(file: string): string {
   return file.slice(file.lastIndexOf("/") + 1);
 }
@@ -108,6 +123,10 @@ export interface ObserveOptions {
   dontTouch?: string[];
   maxFiles?: number;
   maxMs?: number;
+  /** Import pass caps; the pass has its own clock, started when it begins. */
+  maxImportFiles?: number;
+  maxImportBytes?: number;
+  maxImportMs?: number;
   /** Clock seam for the time cap. */
   now?: () => number;
 }
@@ -271,6 +290,7 @@ async function collectPackages(
   root: string,
   files: readonly string[],
   notes: string[],
+  declared?: Set<string>,
 ): Promise<Section<{ name: string; root: string; manifestFile: string }>> {
   const exclusions = await workspaceExclusions(root, notes);
   const items: { name: string; root: string; manifestFile: string }[] = [];
@@ -295,6 +315,7 @@ async function collectPackages(
     // basename for ".". Nothing is made up beyond what is on disk.
     const fallback =
       dir === "." ? path.basename(path.resolve(root)) || "root" : dir;
+    if (name !== undefined) declared?.add(file);
     if (name === undefined) {
       notes.push(`note: ${file} has no name; reported under its directory`);
     }
@@ -547,21 +568,68 @@ export async function observe(
     reason: truncatedReason ?? "walk did not complete",
   });
 
+  const declaredManifests = new Set<string>();
+  const packages = truncatedReason
+    ? notCollected<{ name: string; root: string; manifestFile: string }>()
+    : await collectPackages(root, tree.files, notes, declaredManifests);
+
+  const unreadLanguages = [
+    ...new Set(
+      tree.files
+        .filter((f) => languageOf(f) !== undefined)
+        .map(extOf)
+        .filter((e) => !READ_EXTENSIONS.has(e)),
+    ),
+  ].sort();
+  const walkReason = truncatedReason ?? "walk did not complete";
+  let edges: ObservedReport["edges"] = {
+    collected: false,
+    reason: walkReason,
+  };
+  let unresolved: ObservedReport["unresolved"] = {
+    collected: false,
+    reason: walkReason,
+  };
+  let importPassReason: string | null = null;
+  if (!truncatedReason && packages.collected) {
+    // Only packages that declare a name can be imported by it.
+    const named = packages.items
+      .filter((p) => declaredManifests.has(p.manifestFile))
+      .map((p) => ({ name: p.name, root: p.root }));
+    const pass = await runImportPass({
+      root,
+      files: tree.files,
+      packages: named,
+      maxFiles: options.maxImportFiles ?? DEFAULT_MAX_IMPORT_FILES,
+      maxBytes: options.maxImportBytes ?? DEFAULT_MAX_IMPORT_BYTES,
+      maxMs: options.maxImportMs ?? DEFAULT_MAX_IMPORT_MS,
+      now,
+      start: now(),
+      notes,
+    });
+    if (pass.collected) {
+      edges = { collected: true, unreadLanguages, items: pass.edges };
+      unresolved = { collected: true, items: pass.unresolved };
+    } else {
+      importPassReason = pass.reason;
+      edges = { collected: false, reason: pass.reason };
+      unresolved = { collected: false, reason: pass.reason };
+    }
+  }
+
   const report = {
     schemaVersion: BROWNFIELD_SCHEMA_VERSION,
     repo,
     generatedAt: new Date().toISOString(),
-    packages: truncatedReason
-      ? notCollected()
-      : await collectPackages(root, tree.files, notes),
+    packages,
     languages: truncatedReason ? notCollected() : collectLanguages(tree.files),
     build: truncatedReason ? notCollected() : collectBuild(tree.files),
     generated: truncatedReason
       ? notCollected()
       : await collectGenerated(root, tree, now, start, maxMs, notes),
     dontTouch,
-    edges: { collected: false as const, reason: IMPORT_PASS_PENDING },
-    unresolved: { collected: false as const, reason: IMPORT_PASS_PENDING },
+    edges,
+    unresolved,
     limits: { truncated: false, reasons: [] as string[], maxFiles },
   };
 
@@ -572,6 +640,10 @@ export async function observe(
   } else if (!generated.collected) {
     report.limits.truncated = true;
     report.limits.reasons.push(generated.reason);
+  }
+  if (importPassReason) {
+    report.limits.truncated = true;
+    report.limits.reasons.push(importPassReason);
   }
   // `note:` lines are observations, not truncation; `truncated` stays false.
   const MAX_NOTES = 50;
@@ -748,6 +820,21 @@ export const observeCommander = new Command("observe")
     `Stop the walk after this many milliseconds (default ${DEFAULT_MAX_MS})`,
     parsePositiveInt("--max-ms"),
   )
+  .option(
+    "--max-import-files <n>",
+    `Import pass: stop after this many JS/TS files (default ${DEFAULT_MAX_IMPORT_FILES})`,
+    parsePositiveInt("--max-import-files"),
+  )
+  .option(
+    "--max-import-bytes <n>",
+    `Import pass: stop after reading this many bytes (default ${DEFAULT_MAX_IMPORT_BYTES})`,
+    parsePositiveInt("--max-import-bytes"),
+  )
+  .option(
+    "--max-import-ms <n>",
+    `Import pass: stop after this many milliseconds (default ${DEFAULT_MAX_IMPORT_MS})`,
+    parsePositiveInt("--max-import-ms"),
+  )
   .action(
     async (opts: {
       root?: string;
@@ -756,6 +843,9 @@ export const observeCommander = new Command("observe")
       dontTouch?: string[];
       maxFiles?: number;
       maxMs?: number;
+      maxImportFiles?: number;
+      maxImportBytes?: number;
+      maxImportMs?: number;
     }) => {
       const result = await runObserve({
         root: opts.root ?? process.cwd(),
@@ -764,6 +854,9 @@ export const observeCommander = new Command("observe")
         dontTouch: opts.dontTouch,
         maxFiles: opts.maxFiles,
         maxMs: opts.maxMs,
+        maxImportFiles: opts.maxImportFiles,
+        maxImportBytes: opts.maxImportBytes,
+        maxImportMs: opts.maxImportMs,
       });
       for (const line of result.messages) console.error(line);
       if (result.stdout !== undefined) process.stdout.write(result.stdout);

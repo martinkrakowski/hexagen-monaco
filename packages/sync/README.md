@@ -126,8 +126,12 @@ npx hexagen observe --dont-touch src/legacy/ vendor-patches/ # report-only
   walk. A tripped cap marks `packages`, `languages`, `build` and `generated` as
   `collected: false` with the reason, and sets `limits.truncated`.
 - The output validates against `ObservedReport` (`docs/kernel/observed.schema.json`)
-  and has no `type`, layer, plane or context key. `edges` and `unresolved` are
-  `collected: false` ("import pass not run (BW4b)") until the import pass lands.
+  and has no `type`, layer, plane or context key.
+- `--max-import-files <n>` (default 20000), `--max-import-bytes <n>` (default 268435456) and `--max-import-ms <n>` (default 30000) cap the import pass,
+  which has its own clock, started when it begins. A tripped cap sets `edges`
+  and `unresolved` to `collected: false` with the reason, and sets
+  `limits.truncated`; the other sections are unaffected. If the walk itself
+  was truncated, the pass does not run and both sections carry the walk's reason.
 
 What it reads:
 
@@ -137,6 +141,43 @@ What it reads:
   `.gitignore` files (not `info/exclude` or `core.excludesFile`). A path that
   fails the slice-path rules (a backslash or control character) is skipped
   with a note.
+- **Import pass (`edges`, `unresolved`).** A lexical scan of `.ts .tsx .mts
+.cts .js .jsx .mjs .cjs` files from the same walk. It is a tokenizer, not a
+  parser, and never uses ts-morph or the TypeScript compiler API. It reads
+  `import … from 'x'`, `import 'x'`, `export … from 'x'`, `import('x')`,
+  `require('x')` and `import x = require('x')`; comments, strings and
+  template literals (including `${…}` contents) are skipped. Only files up to
+  1 MiB are read; a larger one is noted in `limits.reasons` and skipped. Known
+  limits: JSX text with an apostrophe can open a string that ends at the line
+  end, and a regex literal right after `)` is read as division.
+  - **Resolution order, per specifier:** (1) a relative specifier (`./`, `../`)
+    against the walked files: the exact file, then `.js`→`.ts/.tsx`
+    (`.jsx`→`.tsx`, `.mjs`→`.mts`, `.cjs`→`.cts`), then each extension, then
+    `/index.*`; (2) a workspace package name, exactly as declared including
+    scope, mapped to that package's root (`"."` for the root package); (3) the
+    nearest `tsconfig.json` at or above the file, within the repo:
+    `compilerOptions.paths` (longest matching prefix wins) and `baseUrl`,
+    following `extends` only to repo-relative files, at most 5 levels, with a
+    note on a cycle, an unreadable file or an `extends` that leaves the repo;
+    (4) a `#` specifier (package `imports`). A tsconfig further up the tree is
+    not consulted when the nearest one has no `paths`/`baseUrl`.
+  - **`edges[]`** are `{from, to, specifier}` with `to` a file or a package
+    root, deduplicated.
+  - **`unresolved[]`** are `{from, specifier, reason}`. Reasons:
+    `not-found` (a relative or alias target that is not in the walk),
+    `exports-subpath` (`@scope/pkg/sub`; `exports` maps are not read),
+    `non-literal` (`import(x)`, `require(a + b)`; the specifier is recorded as
+    `import(<non-literal>)` or `require(<non-literal>)`), `outside-repo` (the
+    target leaves the repo root, or is an absolute path) and `package-imports`
+    (a `#` specifier).
+  - **External specifiers** (node builtins, `node:` URLs, dependencies) are
+    neither edges nor unresolved. They are counted in one note in
+    `limits.reasons`.
+  - **`edgesComplete`.** `edges.unreadLanguages` lists the file extension of
+    every counted language the pass does not read (`go`, `py`, `rs`, `vue`, …).
+    A non-empty list makes `edgesComplete(edges)` false, so an empty edge list
+    for such a repo never reads as a clean bill. Consumers must call
+    `edgesComplete`, never read `collected` alone.
 - **Metadata files** (`package.json`, `pnpm-workspace.yaml`, `.gitattributes`,
   `CODEOWNERS`) are never read through a symlink; a link is noted and skipped.
 - **Packages.** Every `package.json` the walk reaches is a package: a repo with no
