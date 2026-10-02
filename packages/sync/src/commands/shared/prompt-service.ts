@@ -47,7 +47,7 @@ export class PromptService {
   }
 
   async askRequired(prompt: string): Promise<string> {
-    while (true) {
+    for (;;) {
       const answer = await this.ask(prompt);
       if (answer.length > 0) {
         return answer;
@@ -65,7 +65,7 @@ export class PromptService {
       console.log(`  ${i + 1}. ${opt}`);
     });
 
-    while (true) {
+    for (;;) {
       const answer = await this.ask("Select number: ");
       const index = parseInt(answer, 10) - 1;
 
