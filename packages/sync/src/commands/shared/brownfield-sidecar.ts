@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { realpathSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { open, readFile, unlink } from "node:fs/promises";
 import path from "node:path";
 import {
   Contract,
@@ -227,10 +227,43 @@ export async function loadObserved(root: string): Promise<ObservedReport> {
   );
 }
 
+const EXPIRES_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+/**
+ * Inclusive end-of-day UTC: an entry that expires on date D is still valid
+ * throughout that UTC day and expires at D+1 00:00:00.000Z. Moved here so the contract loader can validate dates; a copy of
+ * `isSuppressionExpired` in `tools/arch-linter/src/ratchet-baseline.ts`
+ * (this package does not depend on the linter); a test pins the same cases.
+ */
+export function isSuppressionExpired(
+  expires: string,
+  now: Date = new Date(),
+): boolean {
+  const match = EXPIRES_RE.exec(expires);
+  if (!match) {
+    throw new Error(
+      `'expires' must be YYYY-MM-DD (got ${JSON.stringify(expires)})`,
+    );
+  }
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const utc = new Date(Date.UTC(year, month - 1, day));
+  if (
+    utc.getUTCFullYear() !== year ||
+    utc.getUTCMonth() !== month - 1 ||
+    utc.getUTCDate() !== day
+  ) {
+    throw new Error(`'expires' is not a real calendar date (${expires})`);
+  }
+  return now.getTime() > Date.UTC(year, month - 1, day, 23, 59, 59, 999);
+}
+
 /** The contract, or undefined when none exists yet. */
 export async function loadContract(
   root: string,
 ): Promise<Contract | undefined> {
+  assertTopLevel(root);
   const file = contractPath(root);
   let value: unknown;
   try {
@@ -239,7 +272,19 @@ export async function loadContract(
     if (e instanceof NotFoundError) return undefined;
     throw e;
   }
-  return parseWith(Contract, value, file);
+  const contract = parseWith(Contract, value, file);
+  // A date that is not a real calendar day would crash the expiry check later.
+  for (const k of contract.knownViolations) {
+    if (k.expires === undefined) continue;
+    try {
+      isSuppressionExpired(k.expires);
+    } catch (err) {
+      throw new UsageError(
+        `${file}: knownViolations entry ${k.rule} ${k.file} ${k.specifier}: ${(err as Error).message}`,
+      );
+    }
+  }
+  return contract;
 }
 
 /**
@@ -302,4 +347,39 @@ export async function preflight(
     throw new UsageError("nothing written; re-run with --yes to proceed.");
   }
   return { applyExclude: exclude.changes };
+}
+
+/**
+ * Run `fn` holding `.hexagen/contract.json.lock`, created with O_EXCL and
+ * holding this pid. A lock that is already there exits 2; it is never broken
+ * automatically. The lock is removed in a `finally`. When `.hexagen` does not
+ * exist yet nothing can be locked and `fn` runs (it fails on the missing slice).
+ */
+export async function withContractLock<T>(
+  root: string,
+  fn: () => Promise<T>,
+): Promise<T> {
+  const lock = `${contractPath(root)}.lock`;
+  let handle;
+  try {
+    handle = await open(lock, "wx");
+  } catch (e) {
+    const code = (e as NodeJS.ErrnoException).code;
+    if (code === "EEXIST") {
+      throw new UsageError(
+        "another contract command is running (remove .hexagen/contract.json.lock if no command is)",
+      );
+    }
+    if (code === "ENOENT") return fn();
+    throw e;
+  }
+  try {
+    await handle.writeFile(`${process.pid}\n`);
+    await handle.close();
+    handle = undefined;
+    return await fn();
+  } finally {
+    await handle?.close().catch(() => undefined);
+    await unlink(lock).catch(() => undefined);
+  }
 }

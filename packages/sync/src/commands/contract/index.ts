@@ -24,12 +24,14 @@ import {
   loadSlice,
   preflight,
   staleInputs,
+  withContractLock,
   type CommandResult,
 } from "../shared/brownfield-sidecar.js";
 import { type SliceRootOptions } from "../slice/index.js";
 import {
   evaluateContract,
   isKnown,
+  isSuppressionExpired,
   proposeCrossPrefixEdges,
 } from "./evaluate.js";
 
@@ -100,9 +102,27 @@ async function writeContract(
   messages.push(`wrote ${target}`);
 }
 
-export async function runContractAddRule(
+/** Run a read-modify-write under the contract lock when it will write. */
+async function locked(
+  root: string,
+  willWrite: boolean,
+  fn: () => Promise<CommandResult>,
+): Promise<CommandResult> {
+  if (!willWrite) return fn();
+  try {
+    return await withContractLock(path.resolve(root), fn);
+  } catch (e) {
+    return asResult(e, []);
+  }
+}
+
+export function runContractAddRule(
   options: AddRuleOptions,
 ): Promise<CommandResult> {
+  return locked(options.root, options.yes === true, () => addRule(options));
+}
+
+async function addRule(options: AddRuleOptions): Promise<CommandResult> {
   const messages: string[] = [];
   try {
     const root = path.resolve(options.root);
@@ -195,9 +215,17 @@ export interface ContractCheckOptions extends SliceRootOptions {
   strict?: boolean;
 }
 
-export async function runContractCheck(
+export function runContractCheck(
   options: ContractCheckOptions,
 ): Promise<CommandResult> {
+  return locked(
+    options.root,
+    options.baseline === true && options.yes === true,
+    () => check(options),
+  );
+}
+
+async function check(options: ContractCheckOptions): Promise<CommandResult> {
   const messages: string[] = [];
   try {
     const root = path.resolve(options.root);
@@ -235,6 +263,7 @@ export async function runContractCheck(
         rules: [],
         knownViolations: [],
       };
+      const now = new Date();
       const known = failing.map((v) => {
         const prior = base.knownViolations.find(
           (k) =>
@@ -242,8 +271,13 @@ export async function runContractCheck(
             k.file === v.file &&
             k.specifier === v.specifier,
         );
+        // A past expiry is dropped on re-baseline, so the entry hides again.
+        const { expires, ...kept } = prior ?? {};
         return {
-          ...(prior ?? {}),
+          ...kept,
+          ...(expires !== undefined && !isSuppressionExpired(expires, now)
+            ? { expires }
+            : {}),
           rule: v.rule,
           file: v.file,
           specifier: v.specifier,
@@ -260,11 +294,12 @@ export async function runContractCheck(
       return { exitCode: 0, messages };
     }
 
+    const now = new Date();
     const lines: string[] = [];
     let failing = 0;
     let known = 0;
     for (const v of violations) {
-      if (isKnown(contract, v, new Date())) {
+      if (isKnown(contract, v, now)) {
         known++;
         continue;
       }

@@ -347,6 +347,14 @@ npx hexagen contract check --baseline --yes  # record today's violations
   of that UTC day) no longer hides its violation. A root-package target (`.`)
   is never inside a `to` prefix, so it always violates an `allow-only` rule.
 
+**Concurrent edits.** `add-rule` and `check --baseline` (with `--yes`) hold
+`.hexagen/contract.json.lock`, created exclusively with the process id inside,
+while they read and rewrite `contract.json`, and remove it when they finish. If
+the lock is already there they exit 2 ("another contract command is running").
+A lock left behind by a killed command is never broken automatically: delete
+the file yourself. A `knownViolations[].expires` that is not a real calendar
+date is refused at load (exit 2).
+
 **Writes.** `slice init`, `contract add-rule` and `contract check --baseline`
 print a `will write:` line for each file, including the git exclude file when
 `.hexagen/` is not yet in it, and write nothing without `--yes` (exit 2). The

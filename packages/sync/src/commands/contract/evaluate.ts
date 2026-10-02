@@ -8,6 +8,7 @@ import {
 } from "@hexagen/shared";
 import { extOf } from "../observe/index.js";
 import {
+  isSuppressionExpired,
   prefixHasTarget,
   sliceEntryOf,
   underPrefix,
@@ -118,37 +119,7 @@ export function evaluateContract(input: {
   return { violations, incomplete };
 }
 
-const EXPIRES_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
-
-/**
- * Inclusive end-of-day UTC: an entry that expires on date D is still valid
- * throughout that UTC day and expires at D+1 00:00:00.000Z. A copy of
- * `isSuppressionExpired` in `tools/arch-linter/src/ratchet-baseline.ts`
- * (this package does not depend on the linter); a test pins the same cases.
- */
-export function isSuppressionExpired(
-  expires: string,
-  now: Date = new Date(),
-): boolean {
-  const match = EXPIRES_RE.exec(expires);
-  if (!match) {
-    throw new Error(
-      `'expires' must be YYYY-MM-DD (got ${JSON.stringify(expires)})`,
-    );
-  }
-  const year = Number(match[1]);
-  const month = Number(match[2]);
-  const day = Number(match[3]);
-  const utc = new Date(Date.UTC(year, month - 1, day));
-  if (
-    utc.getUTCFullYear() !== year ||
-    utc.getUTCMonth() !== month - 1 ||
-    utc.getUTCDate() !== day
-  ) {
-    throw new Error(`'expires' is not a real calendar date (${expires})`);
-  }
-  return now.getTime() > Date.UTC(year, month - 1, day, 23, 59, 59, 999);
-}
+export { isSuppressionExpired };
 
 /** True when a baseline entry covers the violation and has not expired. */
 export function isKnown(

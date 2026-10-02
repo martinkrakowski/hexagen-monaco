@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import {
@@ -9,7 +10,13 @@ import {
 } from "../../../src/commands/contract/index.js";
 import { isSuppressionExpired } from "../../../src/commands/contract/evaluate.js";
 import { runSliceInit } from "../../../src/commands/slice/index.js";
-import { cleanup, git, makeRepo, writeObserved } from "../slice/fixture.js";
+import {
+  cleanup,
+  git,
+  makeRepo,
+  put,
+  writeObserved,
+} from "../slice/fixture.js";
 
 afterEach(cleanup);
 
@@ -409,6 +416,123 @@ describe("contract check: expiry and root package", () => {
     const sub = await runContractCheck({ root: path.join(root, "src") });
     expect(sub.exitCode).toBe(2);
     expect(all(sub)).toContain("top level");
+  });
+});
+
+describe("contract: review round 3", () => {
+  const unresolved = [
+    { from: "src/a.ts", specifier: "@app/missing", reason: "not-found" },
+  ];
+
+  async function withEntry(expires: string): Promise<string> {
+    const root = await setup();
+    await writeObserved(root, { unresolved });
+    await runContractCheck({ root, baseline: true, yes: true });
+    const c = await readContract(root);
+    c.knownViolations[0]!.expires = expires;
+    await put(root, ".hexagen/contract.json", JSON.stringify(c));
+    return root;
+  }
+
+  it("an impossible expires date exits 2 and names the entry", async () => {
+    const root = await withEntry("2026-02-30");
+    for (const run of [
+      () => runContractCheck({ root }),
+      () => runContractShow({ root }),
+    ]) {
+      const r = await run();
+      expect(r.exitCode).toBe(2);
+      expect(all(r)).toContain("@app/missing");
+      expect(all(r)).toContain("2026-02-30");
+    }
+  });
+
+  it("re-baselining drops an expired date, so the violation is hidden again", async () => {
+    const root = await withEntry("2020-01-01");
+    expect((await runContractCheck({ root })).exitCode).toBe(1);
+    expect(
+      (await runContractCheck({ root, baseline: true, yes: true })).exitCode,
+    ).toBe(0);
+    expect((await readContract(root)).knownViolations[0]).not.toHaveProperty(
+      "expires",
+    );
+    expect((await runContractCheck({ root })).exitCode).toBe(0);
+  });
+
+  it("re-baselining keeps a still-valid date", async () => {
+    const root = await withEntry("2999-01-01");
+    await runContractCheck({ root, baseline: true, yes: true });
+    expect((await readContract(root)).knownViolations[0]).toMatchObject({
+      expires: "2999-01-01",
+    });
+  });
+
+  it("contract show refuses from a subdirectory", async () => {
+    const root = await setup();
+    await runContractAddRule({
+      root,
+      kind: "forbid",
+      from: "ui/",
+      to: "api/",
+      id: "r",
+      yes: true,
+    });
+    const r = await runContractShow({ root: path.join(root, "src") });
+    expect(r.exitCode).toBe(2);
+    expect(all(r)).toContain("top level");
+  });
+
+  it("add-rule and baseline exit 2 while the lock is held, leaving the contract unchanged", async () => {
+    const root = await setup();
+    await runContractAddRule({
+      root,
+      kind: "forbid",
+      from: "ui/",
+      to: "api/",
+      id: "r1",
+      yes: true,
+    });
+    const file = path.join(root, ".hexagen", "contract.json");
+    const before = await readFile(file, "utf8");
+    await put(root, ".hexagen/contract.json.lock", "99999\n");
+    const add = await runContractAddRule({
+      root,
+      kind: "forbid",
+      from: "src/",
+      to: "api/",
+      id: "r2",
+      yes: true,
+    });
+    expect(add.exitCode).toBe(2);
+    expect(all(add)).toContain("another contract command is running");
+    await writeObserved(root, { unresolved });
+    const base = await runContractCheck({ root, baseline: true, yes: true });
+    expect(base.exitCode).toBe(2);
+    expect(await readFile(file, "utf8")).toBe(before);
+    expect(await readFile(file + ".lock", "utf8")).toBe("99999\n");
+  });
+
+  it("removes its lock after a run, including a refused one", async () => {
+    const root = await setup();
+    const lock = path.join(root, ".hexagen", "contract.json.lock");
+    await runContractAddRule({
+      root,
+      kind: "forbid",
+      from: "ui/",
+      to: "api/",
+      id: "r1",
+      yes: true,
+    });
+    expect(existsSync(lock)).toBe(false);
+    await runContractAddRule({
+      root,
+      kind: "forbid",
+      from: "ui/",
+      to: "api/",
+      id: "r1",
+      yes: true,
+    });
+    expect(existsSync(lock)).toBe(false);
   });
 });
 
