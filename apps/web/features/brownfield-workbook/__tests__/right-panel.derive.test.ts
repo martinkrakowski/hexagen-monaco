@@ -3,7 +3,7 @@ import {
   decodeProposal,
   PROPOSAL_DISPLAY_CAP_BYTES,
 } from "../right/proposal-text";
-import { deriveRightPanel } from "../right/derive";
+import { deriveRightPanel, PROPOSAL_TOTAL_BUDGET_BYTES } from "../right/derive";
 import {
   BUNDLE_TIME,
   grantDoc,
@@ -174,6 +174,68 @@ describe("deriveRightPanel: the window boundary", () => {
       true,
       false,
     ]);
+  });
+});
+
+describe("deriveRightPanel: revocation and malformed grants", () => {
+  it("flags a present but unparseable revoked_at (checkGrantWindow denies it)", async () => {
+    const v = deriveRightPanel(
+      await loadSpec({
+        grants: [
+          grantDoc({ id: "bad", revoked_at: "later" }),
+          grantDoc({ id: "empty", revoked_at: "" }),
+          grantDoc({ id: "null", revoked_at: null }),
+          grantDoc({ id: "none" }),
+        ],
+      }),
+    );
+    expect(v.grants.map((g) => [g.id, g.revocationUnreadable])).toEqual([
+      ["bad", true],
+      ["empty", true],
+      ["null", true],
+      ["none", false],
+    ]);
+  });
+
+  it("lists a grant with malformed authorization fields as unreadable, never active", async () => {
+    for (const bad of [
+      { mode: "bogus" },
+      { tools: "read" },
+      { paths: [1] },
+      { principal: undefined },
+      { agent: "" },
+    ]) {
+      const v = deriveRightPanel(
+        await loadSpec({
+          grants: [grantDoc({ id: "g1", ...bad })],
+          trace: [traceLine({ grant_id: "g1" })],
+        }),
+      );
+      expect(v.grants).toHaveLength(0);
+      expect(v.unreadableGrants).toHaveLength(1);
+      expect(v.activeGrantId).toBeNull();
+    }
+  });
+});
+
+describe("deriveRightPanel: the proposal display budget", () => {
+  const patch = (n: number) => `+${"x".repeat(n)}\n`;
+  it("decodes proposals only while the total budget holds", async () => {
+    const each = 200 * 1024;
+    const count = Math.ceil(PROPOSAL_TOTAL_BUDGET_BYTES / each) + 2;
+    const proposals = Array.from({ length: count }, (_, i) => ({
+      path: `proposals/p${i}.patch`,
+      role: "proposal",
+      content: patch(each),
+    }));
+    const v = deriveRightPanel(await loadSpec({ proposals }));
+    const fit = Math.floor(PROPOSAL_TOTAL_BUDGET_BYTES / each);
+    expect(v.proposals).toHaveLength(fit);
+    expect(v.proposalsOverBudget.map((p) => p.path)).toEqual(
+      proposals.slice(fit).map((p) => p.path),
+    );
+    expect(v.proposalsOverBudget[0]).not.toHaveProperty("decoded");
+    expect(v.proposalsOverBudget[0]).not.toHaveProperty("lines");
   });
 });
 

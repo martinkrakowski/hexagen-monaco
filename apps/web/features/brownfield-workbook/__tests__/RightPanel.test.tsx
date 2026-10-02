@@ -261,6 +261,42 @@ describe("RightPanel: more of the record", () => {
     ).toBeTruthy();
   });
 
+  it("says an unreadable revocation is denied", async () => {
+    render(
+      <RightPanel
+        bundle={await loadSpec({ grants: [grantDoc({ revoked_at: "later" })] })}
+      />,
+    );
+    expect(
+      screen.getByText(/unreadable revocation; such a grant is denied/i),
+    ).toBeTruthy();
+  });
+
+  it("does not show a grant with mode bogus as active", async () => {
+    render(
+      <RightPanel
+        bundle={await loadSpec({ grants: [grantDoc({ mode: "bogus" })] })}
+      />,
+    );
+    expect(screen.getByText(/could not be read as a grant/i)).toBeTruthy();
+    expect(screen.queryByTestId("grant-g1")).toBeNull();
+    expect(screen.queryByText("active")).toBeNull();
+  });
+
+  it("lists proposals past the display budget by path, without a diff", async () => {
+    const each = 200 * 1024;
+    const proposals = Array.from({ length: 12 }, (_, i) => ({
+      path: `proposals/p${i}.patch`,
+      role: "proposal",
+      content: `+${"x".repeat(each)}\n`,
+    }));
+    render(<RightPanel bundle={await loadSpec({ proposals })} />);
+    expect(screen.getAllByText(/display budget reached/i)).toHaveLength(2);
+    expect(screen.queryByTestId("proposal-p11")).toBeNull();
+    expect(screen.getByText("proposals/p11.patch")).toBeTruthy();
+    expect(screen.getByTestId("proposal-p0")).toBeTruthy();
+  });
+
   it("shows max_files when present", async () => {
     render(
       <RightPanel

@@ -7,6 +7,14 @@
 /** At most this many bytes of one proposal are shown. */
 export const PROPOSAL_DISPLAY_CAP_BYTES = 256 * 1024;
 
+/**
+ * All proposals together may show at most this many bytes. 2 MiB is eight
+ * proposals at the per-proposal cap: about 50k diff lines, which a browser
+ * lays out without stalling. A proposal that would pass the budget is listed
+ * by path and never decoded.
+ */
+export const PROPOSAL_TOTAL_BUDGET_BYTES = 2 * 1024 * 1024;
+
 export interface DecodedProposal {
   readonly text: string;
   /** The bytes were not valid UTF-8, so the text holds replacement characters. */

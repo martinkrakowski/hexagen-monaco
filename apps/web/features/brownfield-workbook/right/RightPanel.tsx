@@ -74,15 +74,9 @@ function Grant({
         )}
       </p>
       <dl className="mt-2 space-y-2 text-sm">
-        <Row label="principal">
-          {grant.principal === null ? "not recorded" : safe(grant.principal)}
-        </Row>
-        <Row label="agent">
-          {grant.agent === null ? "not recorded" : safe(grant.agent)}
-        </Row>
-        <Row label="mode">
-          {grant.mode === null ? "not recorded" : safe(grant.mode)}
-        </Row>
+        <Row label="principal">{safe(grant.principal)}</Row>
+        <Row label="agent">{safe(grant.agent)}</Row>
+        <Row label="mode">{safe(grant.mode)}</Row>
         <Row label="tools">
           <List items={grant.tools} />
         </Row>
@@ -109,15 +103,24 @@ function Grant({
         {grant.maxFiles !== null && (
           <Row label="max files">{grant.maxFiles}</Row>
         )}
-        {grant.revokedAt !== null && (
+        {grant.revocationUnreadable ? (
           <Row label="revoked">
-            {safe(grant.revokedAt)}
-            {grant.revokedAtBundle && (
-              <span className="ml-2 font-medium">
-                revoked at bundle time ({safe(bundleTime)})
-              </span>
-            )}
+            <span className="font-medium">
+              unreadable revocation; such a grant is denied
+              {grant.revokedAt !== null && <> ({safe(grant.revokedAt)})</>}
+            </span>
           </Row>
+        ) : (
+          grant.revokedAt !== null && (
+            <Row label="revoked">
+              {safe(grant.revokedAt)}
+              {grant.revokedAtBundle && (
+                <span className="ml-2 font-medium">
+                  revoked at bundle time ({safe(bundleTime)})
+                </span>
+              )}
+            </Row>
+          )
         )}
       </dl>
     </li>
@@ -289,6 +292,15 @@ export function RightPanel({ bundle }: { readonly bundle: LoadedBundle }) {
           <ul className="space-y-2">
             {v.proposals.map((p, i) => (
               <Proposal key={p.path} proposal={p} ordinal={i + 1} />
+            ))}
+            {v.proposalsOverBudget.map((p) => (
+              <li key={p.path} className="rounded-lg border p-3 text-sm">
+                <p className="font-medium break-all">{safe(p.path)}</p>
+                <p role="note">
+                  not shown: display budget reached (
+                  {p.totalBytes.toLocaleString()} bytes)
+                </p>
+              </li>
             ))}
           </ul>
         )}

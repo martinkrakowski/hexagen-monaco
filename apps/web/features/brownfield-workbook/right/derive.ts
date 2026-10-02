@@ -1,7 +1,14 @@
 import { z } from "zod";
-import { ProposalMeta, type Slice } from "@hexagen/shared";
+import { ProposalMeta, type Grant, type Slice } from "@hexagen/shared";
 import type { LoadedBundle } from "../bundle/read-bundle";
-import { decodeProposal, type DecodedProposal } from "./proposal-text";
+import {
+  decodeProposal,
+  PROPOSAL_DISPLAY_CAP_BYTES,
+  PROPOSAL_TOTAL_BUDGET_BYTES,
+  type DecodedProposal,
+} from "./proposal-text";
+
+export { PROPOSAL_TOTAL_BUDGET_BYTES };
 
 /**
  * Everything the right panel shows, derived from the bundle alone. Pure: no
@@ -18,30 +25,45 @@ export const DENIAL_CODES = [
 ] as const;
 export type DenialCode = (typeof DENIAL_CODES)[number];
 
+/**
+ * The authorization fields follow the shared `Grant` type exactly (docs/kernel/grant.schema.json).
+ * `expires_at` and `revoked_at` are read loosely on purpose: a missing or
+ * unreadable one is shown as such (`checkGrantWindow` denies both), not hidden.
+ */
 const GrantDoc = z.object({
   id: z.string().min(1),
-  principal: z.string().nullish(),
-  agent: z.string().nullish(),
-  contexts: z.array(z.string()).nullish(),
-  paths: z.array(z.string()).nullish(),
-  tools: z.array(z.string()).nullish(),
-  mode: z.string().nullish(),
-  max_files: z.number().nullish(),
-  expires_at: z.string().nullish(),
-  revoked_at: z.string().nullish(),
+  principal: z.string().min(1),
+  agent: z.string().min(1),
+  contexts: z.array(z.string().min(1)).optional(),
+  paths: z.array(z.string().min(1)),
+  tools: z.array(z.string().min(1)),
+  mode: z.enum(["write", "propose"]),
+  max_files: z.number().int().min(1).optional(),
+  expires_at: z.unknown().optional(),
+  revoked_at: z.unknown().optional(),
 });
+
+// Compile-time guard: the schema may not drift looser than the shared Grant.
+type AuthFields = "id" | "principal" | "agent" | "paths" | "tools" | "mode";
+const _grantShape: Pick<Grant, AuthFields> = {} as Pick<
+  z.infer<typeof GrantDoc>,
+  AuthFields
+>;
+void _grantShape;
 
 export interface GrantView {
   readonly file: string;
   readonly id: string;
-  readonly principal: string | null;
-  readonly agent: string | null;
-  readonly mode: string | null;
+  readonly principal: string;
+  readonly agent: string;
+  readonly mode: "write" | "propose";
   readonly tools: readonly string[];
   readonly paths: readonly string[];
   readonly maxFiles: number | null;
   /** `expires_at` is missing or not a timestamp: such a grant is denied (fail closed). */
   readonly expiryUnreadable: boolean;
+  /** `revoked_at` is present but not a timestamp: `checkGrantWindow` denies such a grant. */
+  readonly revocationUnreadable: boolean;
   readonly expiresAt: string | null;
   readonly revokedAt: string | null;
   /** Strictly before the bundle's time (a call exactly at `expires_at` is still in-window). */
@@ -85,6 +107,12 @@ export interface RightPanelView {
   readonly otherHaltLines: number;
   /** Proposal entries the panel cannot show (no matching .patch, or an odd path). */
   readonly proposalsNotShown: readonly string[];
+  /** Proposals past the total display budget: listed by path, never decoded. */
+  readonly proposalsOverBudget: readonly {
+    readonly path: string;
+    readonly id: string;
+    readonly totalBytes: number;
+  }[];
 }
 
 const isRecord = (v: unknown): v is Record<string, unknown> =>
@@ -117,22 +145,23 @@ function grantView(
   doc: z.infer<typeof GrantDoc>,
   bundleMs: number,
 ): GrantView {
-  const expires =
-    doc.expires_at == null ? Number.NaN : Date.parse(doc.expires_at);
-  const revoked =
-    doc.revoked_at == null ? Number.NaN : Date.parse(doc.revoked_at);
+  const expiresAt = typeof doc.expires_at === "string" ? doc.expires_at : null;
+  const revokedAt = typeof doc.revoked_at === "string" ? doc.revoked_at : null;
+  const expires = expiresAt === null ? Number.NaN : Date.parse(expiresAt);
+  const revoked = revokedAt === null ? Number.NaN : Date.parse(revokedAt);
   return {
     file,
     id: doc.id,
-    principal: doc.principal ?? null,
-    agent: doc.agent ?? null,
-    mode: doc.mode ?? null,
-    tools: doc.tools ?? [],
-    paths: doc.paths ?? [],
+    principal: doc.principal,
+    agent: doc.agent,
+    mode: doc.mode,
+    tools: doc.tools,
+    paths: doc.paths,
     maxFiles: doc.max_files ?? null,
     expiryUnreadable: Number.isNaN(expires),
-    expiresAt: doc.expires_at ?? null,
-    revokedAt: doc.revoked_at ?? null,
+    revocationUnreadable: doc.revoked_at !== undefined && Number.isNaN(revoked),
+    expiresAt,
+    revokedAt,
     expiredAtBundle: expires < bundleMs,
     revokedAtBundle: revoked <= bundleMs,
   };
@@ -149,7 +178,10 @@ const PATCH_PATH = /^proposals\/([^/]+)\.patch$/;
 function proposals(b: LoadedBundle): {
   shown: ProposalView[];
   notShown: string[];
+  overBudget: { path: string; id: string; totalBytes: number }[];
 } {
+  const overBudget: { path: string; id: string; totalBytes: number }[] = [];
+  let budget = PROPOSAL_TOTAL_BUDGET_BYTES;
   const strict = new TextDecoder("utf-8", { fatal: true });
   const shown: ProposalView[] = [];
   const used = new Set<string>();
@@ -159,6 +191,14 @@ function proposals(b: LoadedBundle): {
     if (m === null || bytes === undefined) continue;
     const id = m[1] as string;
     used.add(path);
+    used.add(`proposals/${id}.json`);
+    // Decided from the byte length alone: a skipped proposal is never decoded.
+    const cost = Math.min(bytes.length, PROPOSAL_DISPLAY_CAP_BYTES);
+    if (cost > budget) {
+      overBudget.push({ path, id, totalBytes: bytes.length });
+      continue;
+    }
+    budget -= cost;
     let meta: ProposalMeta | null = null;
     const metaPath = `proposals/${id}.json`;
     const metaBytes = b.proposalFiles.get(metaPath);
@@ -184,7 +224,11 @@ function proposals(b: LoadedBundle): {
         .map((text) => ({ text, kind: lineKind(text) })),
     });
   }
-  return { shown, notShown: b.proposals.filter((p) => !used.has(p)) };
+  return {
+    shown,
+    overBudget,
+    notShown: b.proposals.filter((p) => !used.has(p)),
+  };
 }
 
 export function deriveRightPanel(b: LoadedBundle): RightPanelView {
@@ -263,6 +307,7 @@ export function deriveRightPanel(b: LoadedBundle): RightPanelView {
         : null,
     proposals: shownProposals.shown,
     proposalsNotShown: shownProposals.notShown,
+    proposalsOverBudget: shownProposals.overBudget,
     denials,
     otherHaltLines,
   };
