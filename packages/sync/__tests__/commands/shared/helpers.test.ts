@@ -1,4 +1,4 @@
-/* eslint-disable no-control-regex, turbo/no-undeclared-env-vars */
+/* eslint-disable no-control-regex */
 // no-control-regex: ANSI escape sequences are the code-under-test
 // turbo/no-undeclared-env-vars: CI + HEXAGEN_NO_PROMPT are observed behavior
 // inside shared/prompt-service.ts; this test mutates them transiently and

@@ -31,7 +31,6 @@ async function loadManifest(path: string): Promise<Manifest> {
 }
 
 function detectEditor(): { editor: string; args: string[] } {
-  // eslint-disable-next-line turbo/no-undeclared-env-vars
   const editor = process.env.VISUAL || process.env.EDITOR;
 
   if (editor) {
