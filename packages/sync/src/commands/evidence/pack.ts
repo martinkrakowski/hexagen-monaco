@@ -3,6 +3,7 @@ import { promises as fs, realpathSync } from "node:fs";
 import path from "node:path";
 import {
   BROWNFIELD_SCHEMA_VERSION,
+  type Grant,
   BUNDLE_FORBIDDEN_PATH_PATTERN,
   BundleIndex,
   Tip,
@@ -23,13 +24,8 @@ import {
 import { writeZipStore, type ZipEntry } from "../report/zip-store.js";
 import { realpathOfExistingAncestor } from "../shared/git-exclude.js";
 import { resolveSidecarOut } from "../shared/sidecar-out.js";
-import { parsePackGrant } from "./grant-file.js";
-import {
-  checkLines,
-  grantSignatureOk,
-  type LineVerdict,
-  type PackGrant,
-} from "./check.js";
+import { parseGrant, verifyGrantSignature } from "../grant/verify.js";
+import { checkLines, type LineVerdict } from "./check.js";
 
 export interface EvidencePackOptions {
   /** Repo root; `.hexagen/` lives here. Never searched upward. */
@@ -194,7 +190,7 @@ export async function runEvidencePack(
   if (!key.ok) return usage(`engagement key unusable: ${key.problem}`);
   const keyHex = key.keyHex;
 
-  const grants = new Map<string, PackGrant>();
+  const grants = new Map<string, Grant>();
   const grantProblems: string[] = [];
   const grantTexts = new Map<string, string>();
   for (const file of options.grantFiles) {
@@ -206,9 +202,9 @@ export async function runEvidencePack(
     } catch (error) {
       return usage(`cannot read grant ${file}: ${(error as Error).message}`);
     }
-    const checked = parsePackGrant(parsed);
+    const checked = parseGrant(parsed, file);
     if (!checked.ok) {
-      grantProblems.push(`grant ${file}: ${checked.problem}`);
+      grantProblems.push(checked.problem);
       continue;
     }
     const g = checked.grant;
@@ -216,9 +212,16 @@ export async function runEvidencePack(
       return usage(`grant id '${g.id}' is given twice`);
     }
     grantTexts.set(g.id, text);
-    if (!grantSignatureOk(g, keyHex)) {
+    const signature = verifyGrantSignature(g, {
+      workspaceRoot: root,
+      keyFile: options.keyFile,
+      engagement: options.engagement,
+      env,
+      homeDir: options.homeDir,
+    });
+    if (!signature.verified) {
       grantProblems.push(
-        `grant '${g.id}' (${file}): signature does not verify with the engagement key`,
+        `grant '${g.id}' (${file}): signature does not verify with the engagement key (${signature.reason})`,
       );
       continue;
     }

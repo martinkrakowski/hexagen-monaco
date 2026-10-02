@@ -481,7 +481,7 @@ describe("evidence pack, grant and shape validation", () => {
       await writeFile(grantFile, JSON.stringify(grant));
       const r = await run();
       expect(r.exitCode, label).toBe(1);
-      expect(r.messages.join("\n"), label).toMatch(/not a valid grant/);
+      expect(r.messages.join("\n"), label).toMatch(/is not a grant/);
       expect(await exists(bundlePath()), label).toBe(false);
     }
   });

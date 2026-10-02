@@ -1,0 +1,16 @@
+# State for the three SQLite databases (quota, BYOK, platform). local-path is
+# the cluster default and binds on first use (WaitForFirstConsumer).
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: hexagen-web-data
+  labels:
+    app: hexagen-web
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: local-path
+  resources:
+    requests:
+      # Three small SQLite files; 1Gi is ample for staging. local-path does not
+      # enforce the size, so this is documentation more than a limit.
+      storage: 1Gi

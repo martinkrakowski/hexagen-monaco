@@ -1,20 +1,10 @@
 /* eslint-disable no-console */
-import { execFileSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { realpathSync } from "node:fs";
-import {
-  link,
-  lstat,
-  mkdir,
-  open,
-  readFile,
-  unlink,
-  writeFile,
-} from "node:fs/promises";
+import { link, lstat, mkdir, open, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { Command } from "commander";
 import {
-  Slice,
+  type Slice,
   isPathInSlice,
   normalizeSlicePath,
   type SlicePaths,
@@ -36,12 +26,18 @@ import {
   ensureExcluded,
   excludeWouldChange,
 } from "../shared/git-exclude.js";
-import { isSameOrInside } from "../observe/same-path.js";
 import { resolveSidecarOut } from "../shared/sidecar-out.js";
 import { grantKeyCommander } from "./key-init.js";
 import { signGrantPayload } from "./sign.js";
 import { loadOrCreateSigningKey } from "./signing-key.js";
-import { findWorkspaceRoot } from "../shared/project-root.js";
+import { discoverWorkspaceRoot, loadSlice } from "./workspace.js";
+import { grantShowCommand, type ShowOptions } from "./show.js";
+import { grantCheckCommand, type CheckOptions } from "./check.js";
+
+/** Commander parser that keeps every occurrence of a repeated flag. */
+function collectValues(value: string, previous?: string[]): string[] {
+  return [...(previous ?? []), value];
+}
 
 function splitCsv(value: string): string[] {
   return value
@@ -73,58 +69,6 @@ interface IssueOptions {
 function failBrownfield(message: string): void {
   console.error(message);
   process.exitCode = 2;
-}
-
-async function loadSlice(workspaceRoot: string): Promise<Slice | undefined> {
-  let raw: string;
-  try {
-    raw = await readFile(
-      path.join(workspaceRoot, ".hexagen", "slice.json"),
-      "utf-8",
-    );
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
-    throw error;
-  }
-  return Slice.parse(JSON.parse(raw));
-}
-
-/** Real path of the git work tree containing `cwd`, or null outside git. */
-function gitToplevel(cwd: string): string | null {
-  try {
-    const top = execFileSync("git", ["rev-parse", "--show-toplevel"], {
-      cwd,
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"],
-    }).trim();
-    return top ? realpathSync.native(path.resolve(top)) : null;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Where to issue from. `findWorkspaceRoot` walks up to ANY parent manifest,
- * so a client repo checked out beneath a monorepo would inherit its repo mode
- * (and its key). The git toplevel is the repo boundary: when discovery lands
- * outside it, the toplevel wins. A manifest at or below the toplevel (a HexaGen
- * project inside a larger repo) stays the root. `--workspace-root` overrides.
- */
-function discoverRoot(options: IssueOptions): string {
-  if (options.workspaceRoot) return path.resolve(options.workspaceRoot);
-  const cwd = process.cwd();
-  const discovered = findWorkspaceRoot(cwd) ?? cwd;
-  const top = gitToplevel(cwd);
-  if (top === null) return discovered;
-  try {
-    // `top` came from git (forward slashes, maybe another case or an 8.3 name
-    // on Windows); resolve both sides the same way before comparing.
-    const realTop = realpathSync.native(path.resolve(top));
-    const realDiscovered = realpathSync.native(path.resolve(discovered));
-    return isSameOrInside(realTop, realDiscovered) ? discovered : top;
-  } catch {
-    return top;
-  }
 }
 
 class GrantFileExistsError extends Error {}
@@ -159,7 +103,7 @@ async function writeGrantFileExclusive(
 }
 
 export async function issueGrantCommand(options: IssueOptions): Promise<void> {
-  const workspaceRoot = discoverRoot(options);
+  const workspaceRoot = discoverWorkspaceRoot(options.workspaceRoot);
 
   if (options.mode !== "write" && options.mode !== "propose") {
     console.error(`--mode must be 'write' or 'propose', got '${options.mode}'`);
@@ -503,7 +447,7 @@ export async function issueGrantCommand(options: IssueOptions): Promise<void> {
 }
 
 export const grantCommander = new Command("grant").description(
-  "Issue and inspect Grant objects (docs/kernel/GRANT.md)",
+  "Issue, show and check Grant objects (docs/kernel/GRANT.md)",
 );
 
 grantCommander.addCommand(grantKeyCommander);
@@ -562,3 +506,72 @@ grantCommander
   .action(async (options: IssueOptions) => {
     await issueGrantCommand(options);
   });
+
+grantCommander
+  .command("show")
+  .description(
+    "Pretty-print a grant file and report whether its signature verifies (exit 0 verified, 1 not, 2 bad input)",
+  )
+  .argument("<grant-file>", "Path to a signed grant JSON file")
+  .option(
+    "--workspace-root <path>",
+    "Workspace root (default: nearest project/workspace root, bounded by the git toplevel)",
+  )
+  .option(
+    "--key-file <path>",
+    "Verification key file (overrides HEXAGEN_GRANT_KEY_FILE and ~/.hexagen/keys/<engagement>.key)",
+  )
+  .option(
+    "--engagement <id>",
+    "Brownfield: engagement id naming ~/.hexagen/keys/<id>.key (default: the id in .hexagen/slice.json)",
+  )
+  .action(
+    async (
+      grantFile: string,
+      options: Omit<ShowOptions, "grantFile">,
+    ): Promise<void> => {
+      await grantShowCommand({ ...options, grantFile });
+    },
+  );
+
+grantCommander
+  .command("check")
+  .description(
+    "Dry-run whether a write is allowed: signature, then window, then tool and paths (and, in a client repo, the slice). Exit 0 allow, 1 deny, 2 bad input",
+  )
+  .argument("<grant-file>", "Path to a signed grant JSON file")
+  .argument(
+    "[transaction-id]",
+    "Monaco form: a pending transaction id (not built; exits 2)",
+  )
+  .option(
+    "--tool <tool>",
+    "Tool the write would use (once; a repeat exits 2)",
+    collectValues,
+  )
+  .option(
+    "--path <path...>",
+    "Repo-relative file path(s) the write would touch; repeat the flag or list several",
+    collectValues,
+  )
+  .option(
+    "--workspace-root <path>",
+    "Workspace root (default: nearest project/workspace root, bounded by the git toplevel)",
+  )
+  .option(
+    "--key-file <path>",
+    "Verification key file (overrides HEXAGEN_GRANT_KEY_FILE and ~/.hexagen/keys/<engagement>.key)",
+  )
+  .option(
+    "--engagement <id>",
+    "Brownfield: engagement id naming ~/.hexagen/keys/<id>.key (default: the id in .hexagen/slice.json)",
+  )
+  .action(
+    async (
+      grantFile: string,
+      transactionId: string | undefined,
+      options: Omit<CheckOptions, "grantFile" | "transactionId">,
+    ): Promise<void> => {
+      await grantCheckCommand({ ...options, grantFile, transactionId });
+    },
+  );

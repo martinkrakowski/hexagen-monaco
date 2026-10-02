@@ -1,12 +1,13 @@
 import {
   GENESIS_PREV_HASH,
   lineHash,
-  safeEqualHex,
   type SplitLine,
 } from "@hexagen/shared/node/trace-chain";
-import { traceRuleReasons, type TraceRuleLine } from "@hexagen/shared";
-import { signGrantPayload } from "../grant/sign.js";
-import { canonicalGrantPayload, type GrantFields } from "../grant/canonical.js";
+import {
+  traceRuleReasons,
+  type Grant,
+  type TraceRuleLine,
+} from "@hexagen/shared";
 
 /**
  * Reader-side checks for `hexagen evidence pack`: chain, line shape and the
@@ -16,10 +17,6 @@ import { canonicalGrantPayload, type GrantFields } from "../grant/canonical.js";
  * function the MCP server's `checkTrace` calls: a denial skips the allowlist and
  * window checks, but still has to cite a known grant.
  */
-
-export interface PackGrant extends GrantFields {
-  readonly signature?: string;
-}
 
 export type LineKind = "evidence" | "denial" | "invalid";
 
@@ -49,15 +46,6 @@ function str(v: unknown): v is string {
 function millis(iso: string): number | null {
   const m = Date.parse(iso);
   return Number.isNaN(m) ? null : m;
-}
-
-/** True when the signature on `grant` verifies under `keyHex`. */
-export function grantSignatureOk(grant: PackGrant, keyHex: string): boolean {
-  if (!grant.signature) return false;
-  return safeEqualHex(
-    signGrantPayload(canonicalGrantPayload(grant), keyHex),
-    grant.signature,
-  );
 }
 
 function chainReasons(
@@ -138,7 +126,7 @@ function evidenceShapeReasons(value: Record<string, unknown>): string[] {
 
 function ruleReasons(
   value: Record<string, unknown>,
-  grants: ReadonlyMap<string, PackGrant>,
+  grants: ReadonlyMap<string, Grant>,
 ): string[] {
   return traceRuleReasons(value as unknown as TraceRuleLine, [
     ...grants.values(),
@@ -151,7 +139,7 @@ function ruleReasons(
  */
 export function checkLines(
   lines: readonly SplitLine[],
-  grants: ReadonlyMap<string, PackGrant>,
+  grants: ReadonlyMap<string, Grant>,
 ): LineVerdict[] {
   return lines.map((line, i) => {
     const previous = i === 0 ? undefined : lines[i - 1];

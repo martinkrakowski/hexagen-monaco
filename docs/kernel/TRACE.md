@@ -292,8 +292,8 @@ the tip unchanged; a bundle that exists is a bundle that passed. It exits 2 for
 usage or precondition problems (a missing or weak key, `--out` outside
 `.hexagen/`, a trace the tip does not anchor, an empty trace).
 
-Only this one subcommand is specified here. `hexagen grant compile|show|
-check` remain as specified in `GRANT.md`; nothing here redefines them.
+Only this one subcommand is specified here. `hexagen grant issue|show|
+check` are specified in `GRANT.md`; nothing here redefines them.
 
 ## Acceptance tests
 

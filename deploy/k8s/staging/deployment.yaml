@@ -1,0 +1,103 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hexagen-web
+  labels:
+    app: hexagen-web
+spec:
+  # One replica + Recreate: the SQLite files live on a ReadWriteOnce volume and
+  # must have a single writer. A rolling update would overlap two pods.
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: hexagen-web
+  template:
+    metadata:
+      labels:
+        app: hexagen-web
+    spec:
+      imagePullSecrets:
+        - name: harbor-regcred
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: web
+          # The deploy script rewrites :latest to the commit tag.
+          image: registry.midnight.lan/library/hexagen-monaco:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 3000
+          envFrom:
+            # Created by the owner on the node; never by this repo or script.
+            - secretRef:
+                name: hexagen-web-env
+          env:
+            - name: NODE_ENV
+              value: production
+            # Next standalone binds to $HOSTNAME, which in a pod is the pod
+            # name; force all interfaces so the probes and Service can connect.
+            - name: HOSTNAME
+              value: 0.0.0.0
+            - name: NEXTAUTH_URL
+              value: https://hexagen.midnight.lan
+            - name: QUOTA_DB_PATH
+              value: /data/quota.db
+            - name: BYOK_DB_PATH
+              value: /data/byok.db
+            - name: PLATFORM_DB_PATH
+              value: /data/platform.db
+          volumeMounts:
+            # local-path creates the directory root-owned with mode 0777, so
+            # uid 1001 can write without a root initContainer or chown.
+            - name: data
+              mountPath: /data
+          securityContext:
+            # readOnlyRootFilesystem stays off on purpose: repository scans
+            # write to /app/.scan-workspaces, and bootstrap and governance
+            # write to os.tmpdir().
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          startupProbe:
+            httpGet:
+              path: /api/auth/providers
+              port: http
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: /api/auth/providers
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /api/auth/providers
+              port: http
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+              ephemeral-storage: 256Mi
+            limits:
+              cpu: "1"
+              # 512Mi is tight for a Next server that also clones and scans
+              # repositories in child processes; 1Gi gives headroom.
+              memory: 1Gi
+              ephemeral-storage: 2Gi
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: hexagen-web-data
