@@ -1,6 +1,7 @@
 # Trace — kernel object spec
 
-Status: design spec + acceptance tests. Not wired into any running server.
+Status: spec. The `TraceWriteAdapter` and `hexagen evidence pack` implement it;
+the acceptance tests below remain the standalone reference.
 Does not reopen Grant design — see `docs/kernel/GRANT.md`, which is source
 of truth for the Grant schema; this document only ever _references_
 `Grant.id`, never redefines it.
@@ -109,7 +110,11 @@ write, or the trace, as valid evidence) rather than warns:
    describes (`hexagen_accept_transaction` for the MCP adapter) — a
    mutation that would produce a trace entry with no grant to attribute it
    to must never be allowed to happen, symmetrically with "no Transaction
-   line is a defect" from `GRANT.md`.
+   line is a defect" from `GRANT.md`. The denial itself is not lost: in a
+   chained trace (see "Chain and tip") a call with no grant, or a grant with
+   no `id`, is recorded as a `grant_missing` record (below). That record is
+   a denial, carries no `grant_id`, and is never evidence of a write. A
+   greenfield trace (a manifest is present) writes nothing for it, as before.
 2. **A write whose grant is expired or revoked is fail closed.** Checked
    against the same two Grant fields `GRANT.md` added for exactly this:
    `expires_at` and `revoked_at`. A tool call recorded with `time` at or
@@ -119,7 +124,10 @@ write, or the trace, as valid evidence) rather than warns:
 3. **A Trace without a matching `Grant.id` is invalid.** `trace.grant_id`
    must equal some real grant's `id`. A trace whose `grant_id` matches
    nothing is not "a trace with an unknown grant" to be tolerated — it is
-   invalid evidence, full stop. This spec does **not** invent a second
+   invalid evidence, full stop. This holds for denial lines too (a line
+   whose `halt_reason` is not `completed`): they still have to cite a known
+   grant. The one exception is the `grant_missing` record, which by
+   definition has no grant to cite and must not carry a `grant_id`. This spec does **not** invent a second
    identity for a trace to carry independent of its grant; `grant_id` is
    the only identity a Trace has an opinion about.
 
@@ -130,6 +138,68 @@ _reader_ of a trace file makes (a `hexagen evidence pack` run, or a CI
 gate) before trusting what it finds. Both directions matter: a producer
 that never emits an invalid trace, and a consumer that never trusts one it
 didn't produce itself.
+
+## Denials
+
+A line whose `halt_reason` is not `completed` documents a refused attempt,
+not an authorized write. Its tool is outside the grant, or its time is outside
+the grant's window, because that is why it was refused; so a reader skips the
+allowlist and window checks for it (Rule 2 and the `tools` check apply only to
+`completed` lines). Such lines, together with `grant_missing` records, are
+reported in a separate `denials` section of the pack and **never** count as
+evidence that a write was allowed: the pack's `evidence` count and list hold
+`completed` lines only.
+
+`grant_missing` is the record for a call that carried no grant, or a grant with
+no `id`:
+
+```json
+{
+  "kind": "grant_missing",
+  "seq": 7,
+  "prev_hash": "…",
+  "time": "…",
+  "tool": "…",
+  "reason": "…",
+  "goal_id": "…",
+  "args_digest": "sha256:…"
+}
+```
+
+`goal_id` and `args_digest` are optional; there is no `grant_id`. It uses
+`time`, not `at`, to match `tool_calls[].time`. See `trace.schema.json`.
+
+## Chain and tip
+
+A greenfield trace is plain JSONL with no integrity of its own; it is left
+exactly as it was, and a pack refuses it. A **brownfield** trace (no
+`.architecture/manifest.yaml` under the workspace root, the same test the
+grant-key resolver uses) is a hash chain:
+
+- Every line carries `seq` (0 for the first line, then +1) and `prev_hash`:
+  the SHA-256 (hex) of the previous line's canonical bytes, where canonical
+  means JSON with keys sorted at every depth, including that line's own
+  `prev_hash`. The first line's `prev_hash` is 64 zeros (genesis). Lines are
+  written in their canonical form.
+- The writer holds an exclusive lock (`trace.jsonl.lock`, created with
+  `O_EXCL`, holding the pid; a lock whose process is gone, or that is older
+  than 30 s, is broken) across reading the last line, appending and fsync, so
+  concurrent writers cannot fork the chain. It refuses, never guesses, when the
+  last line is torn or the file is unchained, and never rewrites the file. A
+  brownfield trace always starts a new file at genesis; an older greenfield
+  file is neither read as a chain nor rewritten.
+- `.hexagen/evidence/tip.json` (`{seq, hash, hmac}`) anchors the head: the
+  `seq` and hash of the last line a pack accepted, HMAC'd with the engagement
+  key. A chain that only looks backwards cannot see tail truncation or a file
+  restarted from genesis; the tip can. It is written only by a successful pack,
+  via a temp file and rename.
+
+HMACs use the engagement key (the grant-signing key resolved by
+`@hexagen/shared/node/grant-key`), over `hexagen-tip-v1\n<canonical {seq,hash}>`
+for the tip and `hexagen-bundle-v1\n<canonical index without hmac>` for the
+bundle. Limit: a tip protects only what a pack has already anchored. Deleting
+`tip.json` removes the anchor, and the next pack then passes on the chain
+checks alone.
 
 ## Relationship to Grant and Transaction
 
@@ -159,19 +229,37 @@ of scope for this slice for the same reason it was out of scope for Grant:
 closing it needs a second adapter (editor/shell-write), not a change to
 what Trace or Grant _mean_.
 
-## Command spec (design only — not built)
+## Command spec
 
 ```
-hexagen evidence pack <trace-jsonl-file> [--grant <grant-file>] [--out <bundle>]
-    Reads every line of the JSONL file (one Trace per line, per "Storage"
-    above — not a single record), validates the three Rules above against
-    each one, and emits a bundle (all traces, the grants they name, and a
-    pass/fail verdict per line) for a CI gate or a human reviewer.
-    Non-zero exit if ANY line fails any Rule — one invalid trace in the
-    file is enough to fail the whole pack; an invalid trace never produces
-    a bundle that reads as evidence of anything, and a bundle never
-    reports "pass" while silently dropping a bad line.
+hexagen evidence pack <trace> --grant <file>... --out <zip>
+                      [--root <dir>] [--key-file <path>] [--engagement <id>]
 ```
+
+Reads every line of `<trace>` (which must be `<root>/.hexagen/evidence/trace.jsonl`,
+the one file the tip anchors; one Trace per line, per "Storage") and checks:
+
+1. the chain over every line: `seq` equals the position, `prev_hash` equals
+   the hash of the previous line, the first line starts at genesis. An edited,
+   reordered or deleted interior line breaks it; an unchained line fails;
+2. a **torn last line** (invalid JSON, or no trailing newline) fails the pack;
+3. the three Rules above on every `completed` line, with denials skipping the
+   allowlist and window checks (see "Denials"). Each `--grant` file's
+   signature is verified with the engagement key; a line citing a grant that
+   does not verify cites no known grant;
+4. the anchored tip: when `tip.json` exists, its HMAC must verify and the line
+   at `tip.seq` must exist with that hash. Otherwise the pack fails.
+
+On success it writes `<zip>` (which must resolve under `<root>/.hexagen/`):
+`bundle.json` (the BW0 index, `hmac` over it with the engagement key),
+`evidence/trace.jsonl`, `evidence/verdicts.json` (a verdict per line, a
+`denials` section and the `evidence` count), `evidence/tip.json` and the grants
+the trace references under `grants/`; then it writes the new `tip.json`.
+
+It exits 1 on any invalid line or failed check, writing no bundle and leaving
+the tip unchanged; a bundle that exists is a bundle that passed. It exits 2 for
+usage or precondition problems (a missing or weak key, `--out` outside
+`.hexagen/`, a trace the tip does not anchor, an empty trace).
 
 Only this one subcommand is specified here. `hexagen grant compile|show|
 check` remain as specified in `GRANT.md`; nothing here redefines them.
