@@ -1,5 +1,16 @@
 /* eslint-disable no-console */
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
+import { randomBytes } from "node:crypto";
+import { realpathSync } from "node:fs";
+import {
+  link,
+  lstat,
+  mkdir,
+  open,
+  readFile,
+  unlink,
+  writeFile,
+} from "node:fs/promises";
 import path from "node:path";
 import { Command } from "commander";
 import {
@@ -25,6 +36,7 @@ import {
   ensureExcluded,
   excludeWouldChange,
 } from "../shared/git-exclude.js";
+import { resolveSidecarOut } from "../shared/sidecar-out.js";
 import { grantKeyCommander } from "./key-init.js";
 import { signGrantPayload } from "./sign.js";
 import { loadOrCreateSigningKey } from "./signing-key.js";
@@ -76,15 +88,72 @@ async function loadSlice(workspaceRoot: string): Promise<Slice | undefined> {
   return Slice.parse(JSON.parse(raw));
 }
 
+/** Real path of the git work tree containing `cwd`, or null outside git. */
+function gitToplevel(cwd: string): string | null {
+  try {
+    const top = execFileSync("git", ["rev-parse", "--show-toplevel"], {
+      cwd,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+    return top ? realpathSync(top) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Where to issue from. `findWorkspaceRoot` walks up to ANY parent manifest,
+ * so a client repo checked out beneath a monorepo would inherit its repo mode
+ * (and its key). The git toplevel is the repo boundary: when discovery lands
+ * anywhere else, the toplevel wins. `--workspace-root` still overrides all.
+ */
+function discoverRoot(options: IssueOptions): string {
+  if (options.workspaceRoot) return path.resolve(options.workspaceRoot);
+  const cwd = process.cwd();
+  const discovered = findWorkspaceRoot(cwd) ?? cwd;
+  const top = gitToplevel(cwd);
+  if (top === null) return discovered;
+  try {
+    return realpathSync(discovered) === top ? discovered : top;
+  } catch {
+    return top;
+  }
+}
+
+class GrantFileExistsError extends Error {}
+
+/**
+ * Temp file, then a hard link to the final name: `link` fails with EEXIST
+ * instead of replacing, so an existing grant is never overwritten, and a
+ * reader never sees a half-written grant.
+ */
+async function writeGrantFileExclusive(
+  target: string,
+  text: string,
+): Promise<void> {
+  await mkdir(path.dirname(target), { recursive: true });
+  const tmp = `${target}.${process.pid}.${randomBytes(4).toString("hex")}.tmp`;
+  const handle = await open(tmp, "wx");
+  try {
+    try {
+      await handle.writeFile(text, "utf-8");
+    } finally {
+      await handle.close();
+    }
+    await link(tmp, target);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "EEXIST") {
+      throw new GrantFileExistsError(`${target} already exists`);
+    }
+    throw error;
+  } finally {
+    await unlink(tmp).catch(() => undefined);
+  }
+}
+
 export async function issueGrantCommand(options: IssueOptions): Promise<void> {
-  // Discovered root, not raw cwd — invoked from a package subdirectory,
-  // cwd would separate the manifest lookup and the signing key from the
-  // workspace the verifier actually reads (see Qodo "Nested-directory
-  // issuance uses the wrong key"). `--workspace-root` still overrides this
-  // outright, same as before.
-  const workspaceRoot = options.workspaceRoot
-    ? path.resolve(options.workspaceRoot)
-    : (findWorkspaceRoot(process.cwd()) ?? process.cwd());
+  const workspaceRoot = discoverRoot(options);
 
   if (options.mode !== "write" && options.mode !== "propose") {
     console.error(`--mode must be 'write' or 'propose', got '${options.mode}'`);
@@ -100,6 +169,18 @@ export async function issueGrantCommand(options: IssueOptions): Promise<void> {
     } catch (error) {
       failBrownfield(
         `.hexagen/slice.json is not a valid slice: ${(error as Error).message}`,
+      );
+      return;
+    }
+    if (options.contexts) {
+      failBrownfield(
+        "--contexts needs a manifest; there is none here. Pass --paths (or rely on the slice's paths).",
+      );
+      return;
+    }
+    if (slice && !options.paths && slice.paths.length === 0) {
+      failBrownfield(
+        "The slice names no paths, so a grant from it would deny everything. Edit .hexagen/slice.json or pass --paths.",
       );
       return;
     }
@@ -163,6 +244,7 @@ export async function issueGrantCommand(options: IssueOptions): Promise<void> {
   let brownfieldKey:
     | { keyHex: string; path: string; fingerprint: string }
     | undefined;
+  let brownfieldOut: string | undefined;
   if (brownfield) {
     if (engagementId === undefined) {
       failBrownfield(
@@ -184,6 +266,30 @@ export async function issueGrantCommand(options: IssueOptions): Promise<void> {
         );
         return;
       }
+    }
+    if (options.out !== undefined) {
+      const target = await resolveSidecarOut(workspaceRoot, options.out).catch(
+        () => null,
+      );
+      if (!target) {
+        failBrownfield(
+          `--out must name a file under ${path.join(workspaceRoot, ".hexagen")}${path.sep}; got "${options.out}"`,
+        );
+        return;
+      }
+      if (
+        await lstat(target).then(
+          () => true,
+          () => false,
+        )
+      ) {
+        console.error(
+          `[grant issue] ${target} already exists; refusing to overwrite a grant.`,
+        );
+        process.exitCode = 1;
+        return;
+      }
+      brownfieldOut = target;
     }
     const env = process.env;
     const resolved = resolveGrantKey({
@@ -231,11 +337,10 @@ export async function issueGrantCommand(options: IssueOptions): Promise<void> {
     console.error(
       `[grant issue] workspace root ${workspaceRoot}; key ${brownfieldKey.path}; fingerprint ${brownfieldKey.fingerprint}`,
     );
-  }
 
-  if (brownfield) {
     // The sidecar dir stays out of `git status` via .git/info/exclude (never
-    // the client's .gitignore). List every write, then require --yes.
+    // the client's .gitignore). List every write; --yes is required only when
+    // something will actually be written (the grant file or an exclude change).
     let exclude: { file: string; changes: boolean };
     try {
       exclude = await excludeWouldChange(workspaceRoot, ".hexagen/");
@@ -244,30 +349,30 @@ export async function issueGrantCommand(options: IssueOptions): Promise<void> {
       return;
     }
     const writes: string[] = [];
-    if (options.out) {
-      writes.push(`grant file: ${path.resolve(workspaceRoot, options.out)}`);
-    }
+    if (brownfieldOut) writes.push(`grant file: ${brownfieldOut}`);
     if (exclude.changes) {
       writes.push(`exclude file: ${exclude.file} (adds .hexagen/)`);
     }
-    console.error(
-      writes.length > 0
-        ? `[grant issue] preflight, will write:\n${writes.map((w) => `  - ${w}`).join("\n")}`
-        : "[grant issue] preflight: no files to write (grant goes to stdout)",
-    );
-    if (!options.yes) {
-      failBrownfield(
-        "[grant issue] nothing written; re-run with --yes to proceed.",
+    if (writes.length > 0) {
+      console.error(
+        `[grant issue] preflight, will write:\n${writes.map((w) => `  - ${w}`).join("\n")}`,
       );
-      return;
+      if (!options.yes) {
+        failBrownfield(
+          "[grant issue] nothing written; re-run with --yes to proceed.",
+        );
+        return;
+      }
     }
-    try {
-      await ensureExcluded(workspaceRoot, ".hexagen/");
-    } catch (error) {
-      failBrownfield(
-        `[grant issue] ${error instanceof GitExcludeError ? error.message : String(error)}`,
-      );
-      return;
+    if (exclude.changes) {
+      try {
+        await ensureExcluded(workspaceRoot, ".hexagen/");
+      } catch (error) {
+        failBrownfield(
+          `[grant issue] ${error instanceof GitExcludeError ? error.message : String(error)}`,
+        );
+        return;
+      }
     }
   }
 
@@ -292,6 +397,9 @@ export async function issueGrantCommand(options: IssueOptions): Promise<void> {
       const read = readGrantKey(explicit.path);
       if (!read.ok) throw new Error(read.problem);
       key = { keyHex: read.keyHex, created: false, path: explicit.path };
+      console.error(
+        `[grant issue] workspace root ${workspaceRoot}; key ${explicit.path}; fingerprint ${read.fingerprint}`,
+      );
     } else {
       key = await loadOrCreateSigningKey(workspaceRoot);
     }
@@ -335,6 +443,25 @@ export async function issueGrantCommand(options: IssueOptions): Promise<void> {
   }
 
   const json = JSON.stringify(grant, null, 2);
+  if (brownfield) {
+    if (brownfieldOut) {
+      try {
+        await writeGrantFileExclusive(brownfieldOut, `${json}\n`);
+      } catch (error) {
+        console.error(
+          `[grant issue] could not write ${brownfieldOut}: ${(error as Error).message}`,
+        );
+        process.exitCode = error instanceof GrantFileExistsError ? 1 : 2;
+        return;
+      }
+      console.error(
+        `[grant issue] wrote ${brownfieldOut} (id: ${grant.id}, expires: ${grant.expires_at})`,
+      );
+    } else {
+      console.log(json);
+    }
+    return;
+  }
   if (options.out) {
     const outPath = path.resolve(workspaceRoot, options.out);
     await mkdir(path.dirname(outPath), { recursive: true });
@@ -398,9 +525,12 @@ grantCommander
   )
   .option(
     "--yes",
-    "Brownfield: proceed with the writes the preflight lists (grant file, .git/info/exclude)",
+    "Brownfield: required when the preflight lists a write (the --out grant file or a .git/info/exclude change)",
   )
-  .option("--out <file>", "Write the signed grant JSON here instead of stdout")
+  .option(
+    "--out <file>",
+    "Write the signed grant JSON here instead of stdout (brownfield: must be a new file under <root>/.hexagen/)",
+  )
   .action(async (options: IssueOptions) => {
     await issueGrantCommand(options);
   });

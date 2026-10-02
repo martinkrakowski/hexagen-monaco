@@ -6,6 +6,7 @@ import {
   readFile,
   readdir,
   rm,
+  symlink,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -109,10 +110,13 @@ describe("grant issue, brownfield (no manifest)", () => {
     out.length = 0;
     await issueGrantCommand({
       ...base(root, home),
-      out: "grant.json",
+      out: ".hexagen/grants/grant.json",
     });
     expect(process.exitCode).toBe(0);
-    const raw = await readFile(path.join(root, "grant.json"), "utf-8");
+    const raw = await readFile(
+      path.join(root, ".hexagen", "grants", "grant.json"),
+      "utf-8",
+    );
     const grant = JSON.parse(raw);
     expect("contexts" in grant).toBe(false);
     expect(grant.paths).toEqual(["src/", "docs/readme.md"]);
@@ -154,11 +158,16 @@ describe("grant issue, brownfield (no manifest)", () => {
       ...base(root, home),
       engagement: "eng-3",
       paths: "src/a.ts",
-      out: "g.json",
+      out: ".hexagen/grants/g.json",
     });
     expect(process.exitCode).toBe(0);
     expect(
-      JSON.parse(await readFile(path.join(root, "g.json"), "utf-8")).paths,
+      JSON.parse(
+        await readFile(
+          path.join(root, ".hexagen", "grants", "g.json"),
+          "utf-8",
+        ),
+      ).paths,
     ).toEqual(["src/a.ts"]);
   });
 
@@ -215,7 +224,7 @@ describe("grant issue, brownfield (no manifest)", () => {
     await issueGrantCommand({
       ...base(root, home),
       keyFile: otherKeyFile,
-      out: "g.json",
+      out: ".hexagen/grants/g.json",
     });
     expect(process.exitCode).toBe(0);
     const text = out.join("\n");
@@ -252,5 +261,196 @@ describe("repo mode is unchanged", () => {
       await readFile(path.join(root, "g.json"), "utf-8"),
     );
     expect(grant.contexts).toEqual(["billing"]);
+  });
+});
+
+describe("fix round: custody boundaries", () => {
+  it("F3: never falls back to the in-repo key when the engagement key is missing", async () => {
+    const root = await tmp("bf-root-");
+    const home = await tmp("bf-home-");
+    await writeSlice(root, "eng-f3", ["src/"]);
+    const repoKey = "d4".repeat(32);
+    await writeFile(path.join(root, ".hexagen", "grant-signing.key"), repoKey);
+    await issueGrantCommand({
+      ...base(root, home),
+      out: ".hexagen/grants/f3.json",
+    });
+    expect(process.exitCode).toBe(2);
+    expect(existsSync(path.join(root, ".hexagen", "grants", "f3.json"))).toBe(
+      false,
+    );
+    const text = out.join("\n");
+    expect(text).toContain(path.join(home, ".hexagen", "keys", "eng-f3.key"));
+    expect(text).not.toContain(repoKey);
+  });
+
+  it("F1: a client repo nested under a directory with a manifest is brownfield", async () => {
+    const parent = await tmp("bf-parent-");
+    const home = await tmp("bf-home-");
+    await mkdir(path.join(parent, ".architecture"), { recursive: true });
+    await writeFile(
+      path.join(parent, ".architecture", "manifest.yaml"),
+      "bounded_contexts: []\n",
+    );
+    const child = path.join(parent, "client");
+    await mkdir(child);
+    execFileSync("git", ["init", "-q", child]);
+    await writeSlice(child, "eng-f1", ["src/"]);
+    await mintKey(home, "eng-f1");
+    vi.spyOn(process, "cwd").mockReturnValue(child);
+    const { workspaceRoot: _omit, ...rest } = base(child, home);
+    void _omit;
+    await issueGrantCommand({ ...rest, out: ".hexagen/grants/f1.json" });
+    expect(process.exitCode).toBe(0);
+    const grant = JSON.parse(
+      await readFile(
+        path.join(child, ".hexagen", "grants", "f1.json"),
+        "utf-8",
+      ),
+    );
+    expect("contexts" in grant).toBe(false);
+    expect(existsSync(path.join(parent, ".hexagen"))).toBe(false);
+    expect(existsSync(path.join(parent, ".gitignore"))).toBe(false);
+  });
+
+  it("F2: --out must stay under <root>/.hexagen/", async () => {
+    const root = await tmp("bf-root-");
+    const home = await tmp("bf-home-");
+    await writeSlice(root, "eng-f2", ["src/"]);
+    await mintKey(home, "eng-f2");
+    for (const bad of [
+      "grant.json",
+      "../escape.json",
+      ".hexagen/",
+      "/tmp/x.json",
+    ]) {
+      process.exitCode = 0;
+      await issueGrantCommand({ ...base(root, home), out: bad });
+      expect(process.exitCode, bad).toBe(2);
+    }
+    expect(existsSync(path.join(root, "grant.json"))).toBe(false);
+  });
+
+  it("F2: a symlink under .hexagen/ cannot redirect --out outside it", async () => {
+    if (process.platform === "win32") return;
+    const root = await tmp("bf-root-");
+    const home = await tmp("bf-home-");
+    const elsewhere = await tmp("bf-elsewhere-");
+    await writeSlice(root, "eng-f2b", ["src/"]);
+    await mintKey(home, "eng-f2b");
+    await symlink(elsewhere, path.join(root, ".hexagen", "grants"));
+    await issueGrantCommand({
+      ...base(root, home),
+      out: ".hexagen/grants/x.json",
+    });
+    expect(process.exitCode).toBe(2);
+    expect(existsSync(path.join(elsewhere, "x.json"))).toBe(false);
+  });
+
+  it("F2: refuses to overwrite an existing grant file (exit 1), leaving no temp files", async () => {
+    const root = await tmp("bf-root-");
+    const home = await tmp("bf-home-");
+    await writeSlice(root, "eng-f2c", ["src/"]);
+    await mintKey(home, "eng-f2c");
+    const o = { ...base(root, home), out: ".hexagen/grants/dup.json" };
+    await issueGrantCommand(o);
+    expect(process.exitCode).toBe(0);
+    const first = await readFile(
+      path.join(root, ".hexagen/grants/dup.json"),
+      "utf-8",
+    );
+    await issueGrantCommand(o);
+    expect(process.exitCode).toBe(1);
+    expect(
+      await readFile(path.join(root, ".hexagen/grants/dup.json"), "utf-8"),
+    ).toBe(first);
+    expect(await readdir(path.join(root, ".hexagen", "grants"))).toEqual([
+      "dup.json",
+    ]);
+  });
+
+  it("F4: an explicit --key-file in repo mode prints root, key path and fingerprint", async () => {
+    const root = await tmp("bf-repo-");
+    const home = await tmp("bf-home-");
+    await mkdir(path.join(root, ".architecture"), { recursive: true });
+    await writeFile(
+      path.join(root, ".architecture", "manifest.yaml"),
+      "bounded_contexts: []\n",
+    );
+    const keyFile = path.join(home, "explicit.key");
+    await writeFile(keyFile, `${"e5".repeat(32)}\n`);
+    await issueGrantCommand({
+      ...base(root, home),
+      paths: ".architecture/",
+      keyFile,
+      out: "g.json",
+    });
+    expect(process.exitCode).toBe(0);
+    const text = out.join("\n");
+    expect(text).toContain(`key ${keyFile}`);
+    expect(text).toMatch(/fingerprint [0-9a-f]{16}/);
+    expect(text).toContain(root);
+    expect(text).not.toContain("e5".repeat(32));
+  });
+
+  it("F5: outside a git repo exits 2 and creates no .hexagen/", async () => {
+    const root = await tmp("bf-nogit-");
+    const home = await tmp("bf-home-");
+    await mintKey(home, "eng-f5");
+    for (const o of [undefined, ".hexagen/grants/g.json"]) {
+      process.exitCode = 0;
+      await issueGrantCommand({
+        ...base(root, home),
+        engagement: "eng-f5",
+        paths: "src/",
+        out: o,
+      });
+      expect(process.exitCode).toBe(2);
+    }
+    expect(existsSync(path.join(root, ".hexagen"))).toBe(false);
+  });
+
+  it("F7: brownfield refuses --contexts and an empty slice.paths with exit 2", async () => {
+    const root = await tmp("bf-root-");
+    const home = await tmp("bf-home-");
+    await writeSlice(root, "eng-f7", ["src/"]);
+    await mintKey(home, "eng-f7");
+    await issueGrantCommand({ ...base(root, home), contexts: "billing" });
+    expect(process.exitCode).toBe(2);
+    expect(out.join("\n")).toContain("--contexts");
+    await writeSlice(root, "eng-f7", []);
+    process.exitCode = 0;
+    out.length = 0;
+    await issueGrantCommand(base(root, home));
+    expect(process.exitCode).toBe(2);
+    expect(out.join("\n")).toContain("no paths");
+  });
+
+  it("F9: needs no --yes when nothing will be written (stdout grant, exclude already covers .hexagen/)", async () => {
+    const root = await tmp("bf-root-");
+    const home = await tmp("bf-home-");
+    await writeSlice(root, "eng-f9", ["src/"]);
+    await mintKey(home, "eng-f9");
+    await issueGrantCommand({
+      ...base(root, home),
+      out: ".hexagen/grants/a.json",
+    });
+    expect(process.exitCode).toBe(0);
+    out.length = 0;
+    await issueGrantCommand({ ...base(root, home), yes: false });
+    expect(process.exitCode).toBe(0);
+    expect(out.some((l) => l.trimStart().startsWith("{"))).toBe(true);
+  });
+
+  it("F5/F1: an invalid slice.json exits 2", async () => {
+    const root = await tmp("bf-root-");
+    const home = await tmp("bf-home-");
+    await mkdir(path.join(root, ".hexagen"), { recursive: true });
+    await writeFile(
+      path.join(root, ".hexagen", "slice.json"),
+      JSON.stringify({ id: "x" }),
+    );
+    await issueGrantCommand({ ...base(root, home), paths: "src/" });
+    expect(process.exitCode).toBe(2);
   });
 });

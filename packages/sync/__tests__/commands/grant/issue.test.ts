@@ -228,7 +228,7 @@ describe("issueGrantCommand", () => {
   });
 
   it("rejects an unknown --contexts entry before touching the signing key", async () => {
-    const workspaceRoot = await makeWorkspace();
+    const workspaceRoot = await makeRepoWorkspace();
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     await issueGrantCommand({
       principal: "martin",
@@ -241,7 +241,7 @@ describe("issueGrantCommand", () => {
     });
     assert.ok(
       errorSpy.mock.calls.some((call) =>
-        String(call[0]).includes("no manifest exists"),
+        String(call[0]).includes("Unknown bounded context"),
       ),
     );
     assert.equal(process.exitCode, 1);

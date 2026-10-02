@@ -81,6 +81,7 @@ export class GrantSignatureAdapter implements GrantSignaturePort {
         return { success: true, value: false };
       }
 
+      // TODO(BW2a F4): ignores resolved.problem and re-reads the key below; fixing it changes repo-mode behaviour, so it is a follow-up.
       const keyPath = this.resolveKey().path;
       if (keyPath === null) {
         return { success: true, value: false };

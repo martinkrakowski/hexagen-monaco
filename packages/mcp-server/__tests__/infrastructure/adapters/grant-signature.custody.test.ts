@@ -64,7 +64,15 @@ describe("GrantSignatureAdapter key custody", () => {
     await fs.mkdir(path.join(root, ".hexagen"), { recursive: true });
     await fs.writeFile(
       path.join(root, ".hexagen", "slice.json"),
-      JSON.stringify({ id: "eng-1" }),
+      JSON.stringify({
+        schemaVersion: "1.0.0",
+        id: "eng-1",
+        repo: { commit: "0123456789abcdef" },
+        paths: ["src/"],
+        excludes: [],
+        createdBy: "t",
+        createdAt: "2026-10-01T00:00:00Z",
+      }),
     );
     await writeKey(path.join(home, ".hexagen", "keys", "eng-1.key"), KEY);
     const adapter = new GrantSignatureAdapter(root, { env: {}, homeDir: home });
@@ -87,6 +95,26 @@ describe("GrantSignatureAdapter key custody", () => {
       value: false,
     });
     assert.match(adapter.describeKey(), /no key location/);
+  });
+
+  it("F3: denies when the engagement key is missing even though an in-repo key exists", async () => {
+    const root = await tmp();
+    const home = await tmp();
+    await writeKey(path.join(root, ".hexagen", "grant-signing.key"), KEY);
+    const adapter = new GrantSignatureAdapter(root, {
+      env: {},
+      engagementId: "eng-1",
+      homeDir: home,
+    });
+    assert.deepEqual(await adapter.verify(clientGrant(KEY)), {
+      success: true,
+      value: false,
+    });
+    assert.ok(
+      adapter
+        .describeKey()
+        .includes(path.join(home, ".hexagen", "keys", "eng-1.key")),
+    );
   });
 
   it("--key-file and HEXAGEN_GRANT_KEY_FILE select the key (flag wins)", async () => {

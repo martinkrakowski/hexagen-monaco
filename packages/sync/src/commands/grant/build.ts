@@ -135,7 +135,9 @@ export async function buildGrant(
     now.getTime() + parseDurationMs(input.expiresIn),
   ).toISOString();
 
-  const contexts = input.contexts ?? [];
+  // Brownfield grants name no contexts, so nothing may reach for the
+  // manifest-only `.architecture/` path below either.
+  const contexts = input.omitContexts ? [] : (input.contexts ?? []);
   const unsigned: GrantFields = {
     id: randomUUID(),
     principal: input.principal,

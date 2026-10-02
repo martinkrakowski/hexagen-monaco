@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { Slice } from "../types/brownfield/slice.js";
 
 /**
  * The one place that decides which grant-signing key a process uses. The
@@ -169,18 +170,24 @@ export function resolveGrantKey(input: ResolveGrantKeyInput): ResolvedGrantKey {
 }
 
 /**
- * The engagement id recorded in `<workspaceRoot>/.hexagen/slice.json`, or
- * undefined when the file is absent, unreadable, or has no string `id`.
+ * The engagement id recorded in `<workspaceRoot>/.hexagen/slice.json`. The
+ * file must parse as a BW0 `Slice` — the same rule `grant issue` applies — so
+ * the CLI and the server agree on what a valid slice is. Undefined when the
+ * file is absent, unreadable or not a valid slice.
  */
 export function readSliceEngagementId(
   workspaceRoot: string,
 ): string | undefined {
   try {
-    const parsed: unknown = JSON.parse(
-      readFileSync(path.join(workspaceRoot, ".hexagen", "slice.json"), "utf-8"),
+    const parsed = Slice.safeParse(
+      JSON.parse(
+        readFileSync(
+          path.join(workspaceRoot, ".hexagen", "slice.json"),
+          "utf-8",
+        ),
+      ),
     );
-    const id = (parsed as { id?: unknown } | null)?.id;
-    return typeof id === "string" && id.length > 0 ? id : undefined;
+    return parsed.success ? parsed.data.id : undefined;
   } catch {
     return undefined;
   }

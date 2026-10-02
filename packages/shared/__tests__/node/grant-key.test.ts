@@ -106,6 +106,22 @@ describe("resolveGrantKey", () => {
     expect(r.problem).toContain(r.path as string);
   });
 
+  it("F3: never falls back to the in-repo key when the engagement key is missing", async () => {
+    const root = await tmp();
+    const home = await tmp();
+    await writeKey(path.join(root, ".hexagen", "grant-signing.key"), KEY_A);
+    const r = resolveGrantKey({
+      workspaceRoot: root,
+      engagementId: "eng-1",
+      homeDir: home,
+      env: {},
+    });
+    expect(r.source).toBe("engagement");
+    expect(r.path).toBe(path.join(home, ".hexagen", "keys", "eng-1.key"));
+    expect(r.fingerprint).toBeUndefined();
+    expect(r.problem).toBeDefined();
+  });
+
   it("rejects hostile engagement ids", async () => {
     const root = await tmp();
     for (const id of ["..", "a/b", "a..b", "", "x".repeat(65), "a b", "a\\b"]) {
@@ -140,6 +156,20 @@ describe("readSliceEngagementId", () => {
     await writeFile(
       path.join(root, ".hexagen", "slice.json"),
       JSON.stringify({ id: "eng-7" }),
+    );
+    // not a valid Slice: the CLI would refuse it, so the server must too
+    expect(readSliceEngagementId(root)).toBeUndefined();
+    await writeFile(
+      path.join(root, ".hexagen", "slice.json"),
+      JSON.stringify({
+        schemaVersion: "1.0.0",
+        id: "eng-7",
+        repo: { commit: "0123456789abcdef" },
+        paths: ["src/"],
+        excludes: [],
+        createdBy: "t",
+        createdAt: "2026-10-01T00:00:00Z",
+      }),
     );
     expect(readSliceEngagementId(root)).toBe("eng-7");
   });

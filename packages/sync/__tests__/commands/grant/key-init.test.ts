@@ -1,5 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { grantKeyInitCommand } from "../../../src/commands/grant/key-init.js";
@@ -89,5 +97,19 @@ describe("grant key init", () => {
       homeDir: h,
     });
     expect(process.exitCode).toBe(1);
+  });
+
+  it("tightens a pre-existing loose key directory to 0700 and says so", async () => {
+    if (!posix) return;
+    const h = await home();
+    const keys = path.join(h, ".hexagen", "keys");
+    await mkdir(keys, { recursive: true });
+    await chmod(path.join(h, ".hexagen"), 0o755);
+    await chmod(keys, 0o755);
+    await grantKeyInitCommand({ engagement: "eng-3", homeDir: h });
+    expect(process.exitCode).toBe(0);
+    expect((await stat(keys)).mode & 0o777).toBe(0o700);
+    expect((await stat(path.join(h, ".hexagen"))).mode & 0o777).toBe(0o700);
+    expect(out.join("\n")).toContain("tightened");
   });
 });

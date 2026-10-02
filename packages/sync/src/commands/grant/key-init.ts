@@ -1,6 +1,6 @@
 /* eslint-disable no-console */
 import { randomBytes } from "node:crypto";
-import { mkdir, writeFile } from "node:fs/promises";
+import { chmod, mkdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { Command } from "commander";
 import {
@@ -14,6 +14,26 @@ export interface KeyInitOptions {
   keyFile?: string;
   /** Test seam; defaults to `os.homedir()`. */
   homeDir?: string;
+}
+
+/**
+ * `mkdir` leaves an existing directory's mode alone, so a `~/.hexagen` or
+ * `~/.hexagen/keys` created loosely by something else would expose the keys.
+ * Only the default location is touched; a custom `--key-file` directory is the
+ * caller's own.
+ */
+async function tightenKeyDirs(keyPath: string): Promise<void> {
+  if (process.platform === "win32") return;
+  const keysDir = path.dirname(keyPath);
+  for (const dir of [keysDir, path.dirname(keysDir)]) {
+    const { mode } = await stat(dir);
+    if ((mode & 0o077) !== 0) {
+      await chmod(dir, 0o700);
+      console.error(
+        `note: tightened ${dir} to 0700 (it was ${(mode & 0o777).toString(8)}); it holds signing keys`,
+      );
+    }
+  }
 }
 
 /**
@@ -38,6 +58,7 @@ export async function grantKeyInitCommand(
   const keyHex = randomBytes(32).toString("hex");
   try {
     await mkdir(path.dirname(keyPath), { recursive: true, mode: 0o700 });
+    if (!options.keyFile) await tightenKeyDirs(keyPath);
     await writeFile(keyPath, `${keyHex}\n`, { mode: 0o600, flag: "wx" });
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "EEXIST") {
