@@ -8,6 +8,7 @@ import {
   runContractPropose,
   runContractShow,
 } from "../../../src/commands/contract/index.js";
+import { readContractBase } from "../../../src/commands/contract/growth.js";
 import { isSuppressionExpired } from "../../../src/commands/contract/evaluate.js";
 import { runSliceInit } from "../../../src/commands/slice/index.js";
 import {
@@ -1090,5 +1091,46 @@ describe("contract check --base: the growth guard", () => {
     expect(all(noSlice)).toContain(
       "absent at base because it was never staged",
     );
+  });
+
+  it("19. a base contract bigger than git's default output buffer is read, not called 'never staged'", async () => {
+    const root = await staged();
+    // Past execFileSync's default maxBuffer of 1 MiB, which used to surface as a
+    // failed `git show` and therefore as "never staged".
+    const big: TreeContract = {
+      schemaVersion: "1.0.0",
+      sliceId: "s1",
+      rules: [{ ...RULE, from: `src/${"x".repeat(1_100_000)}`, to: "api/" }],
+      knownViolations: [],
+    };
+    await writeTreeContract(root, big);
+    git(root, "add", "-f", ".hexagen/contract.json");
+    git(root, "commit", "-q", "-m", "a large contract");
+    const small: TreeContract = {
+      schemaVersion: "1.0.0",
+      sliceId: "s1",
+      rules: [RULE],
+      knownViolations: [],
+    };
+    await writeTreeContract(root, small);
+    const r = await runContractCheck({ root, base: "HEAD" });
+    expect(r.exitCode).toBe(1);
+    expect(all(r)).not.toContain("never staged");
+    expect(all(r)).toContain("from changed");
+  });
+
+  it("20. a base file that exists but cannot be read says so, and is not 'never staged'", async () => {
+    const stagedRoot = await staged();
+    const hash = git(stagedRoot, "rev-parse", "HEAD");
+    // GitReader.show returns null for a failed subprocess as well as for an
+    // absent path, so the two are told apart by probing the object first.
+    expect(() =>
+      readContractBase(stagedRoot, "HEAD", { show: () => null }),
+    ).toThrow(`cannot read .hexagen/contract.json at ${hash}`);
+
+    const neverStaged = await staged({ stageContract: false });
+    expect(() =>
+      readContractBase(neverStaged, "HEAD", { show: () => null }),
+    ).toThrow("absent at base because it was never staged");
   });
 });
