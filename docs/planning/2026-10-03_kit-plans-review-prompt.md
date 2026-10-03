@@ -27,7 +27,7 @@ Use `origin/main` after `git fetch origin`. The plans were checked at `951acf1d`
 
 1. **Verify every "verified" claim.** Each plan has a section titled "What is on main". For each file, line number, command and behavior cited, open the file and confirm it. A line number that is off by a few lines is a minor finding; a claim about behavior that the code contradicts is a major one. List every claim you could not confirm.
 2. **Check for work that already exists.** The plans were written after an earlier proposal turned out to be stale. For each plan, search the repo for anything that already does the proposed work, and for open or merged PRs that touch the same files. Report duplicates.
-3. **Check scope.** For each plan, answer: which single kernel object does it write? Does any step quietly depend on a UI, a server, a database, or the web app? Does any step redesign Grant or Trace beyond what the plan labels as an owner decision? Does any step wire Grant or Trace into `mcp-server` in a way the plan does not state?
+3. **Check scope.** For each plan, answer: which kernel object does it read, and which does it write (the answer to either may be "none", as for a read-only check)? Does any step quietly depend on a UI, a server, a database, or the web app? Does any step redesign Grant or Trace beyond what the plan labels as an owner decision? Does any step wire Grant or Trace into `mcp-server` in a way the plan does not state?
 4. **Attack the designs.**
    - Plan 1: can an agent or a human satisfy the check without the change being real? What does a forged `paths` entry buy? What happens on squash merges, rebases, renames, shallow clones, and a trace written after the fact?
    - Plan 2: is the growth guard bypassable other than by the stated `--allow-growth`? Does it fail closed when git history is missing?
@@ -37,7 +37,7 @@ Use `origin/main` after `git fetch origin`. The plans were checked at `951acf1d`
    - Plan 6: would the timeline rule reject any line that `accept_transaction` or `propose_patch` writes today? Check this against the actual writers and their tests.
 5. **Check the wording.** Flag any sentence that overclaims: "verifiable governance", "tamper-proof", or "enforces" for something that only detects after the fact. The accepted wording is that a grant is signed so the accept path can refuse a tampered blob. Enforcement today covers only the seven MCP manifest tools through `hexagen_accept_transaction`, plus the propose-only patch tool. It does not cover editor agents, shell writes, or humans editing `.architecture/` by hand.
 6. **Check the order and the dependencies** between plans. Is anything scheduled before the thing it needs? Is anything sequenced that does not need to be?
-7. **Check the Step Zero rule** in `AGENTS.md`. Does every plan name a liveness proof that actually executes the new code path, not just imports it?
+7. **Check the Step Zero rule** in `AGENTS.md`. Does every plan name one of the liveness proofs `AGENTS.md` accepts (a route that renders it, a test that executes it, a CLI command that reaches it, or a consumer search with at least one match), and where it relies on a test, does that test execute the new code path rather than just import it?
 
 ## Output
 

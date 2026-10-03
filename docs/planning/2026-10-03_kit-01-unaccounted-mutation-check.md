@@ -41,13 +41,15 @@ The plan assumes A. C is a usable first slice if A is refused.
 hexagen evidence verify --since <git-ref> [--until <git-ref>]
                         --grant <file>... [--root <dir>]
                         [--key-file <path>] [--engagement <id>]
+                        [--allow-empty]
 ```
 
 1. Resolve the changed files in `<since>..<until>` (default `HEAD`) with `git diff --name-status -M -z`, not `--name-only`, which prints one name per rename. Expand every `R` and `C` record into both its old and its new path, and judge each independently.
 2. Keep the files inside the slice (minus excludes) or inside any supplied grant's `paths`. Count the rest as skipped and print the count.
 3. Verify the trace as `evidence pack` does (chain, tip, rules), without writing a bundle.
 4. For each kept file, find one `tool_calls[]` record, in a `completed` line, whose own `paths` include the file and whose own `time` falls inside that line's grant window. The path and the time are always read from the same record, never one from a record and one from another in the same line. A line with several calls covers a file only through the call that names it. Only mutation calls need to carry `paths`; a read-only call may omit it. No such record: the file is unaccounted.
-5. Exit 0 if none are unaccounted. Exit 1 and print each unaccounted file with the nearest candidate line, if any. Exit 2 for bad input, a bad trace, or a shallow clone that cannot resolve `<since>`.
+5. Count the raw changed paths from step 1 before any filtering. If that count is zero, exit 2 with "empty diff: nothing was checked", unless `--allow-empty` is given, in which case print the same line and exit 0. A non-empty diff whose paths are all outside the slice and grants is not empty: it follows the skipped-count behavior of step 2 and can exit 0. A clean result never means "nothing was looked at" by default.
+6. Exit 0 if none are unaccounted. Exit 1 and print each unaccounted file with the nearest candidate line, if any. Exit 2 for bad input, a bad trace, an empty diff without `--allow-empty`, or a shallow clone that cannot resolve `<since>`.
 
 It reads only. It never writes `.hexagen/`.
 
@@ -68,6 +70,7 @@ Out: write-time enforcement, an editor or shell adapter, any UI, any change to G
 8. A change outside the slice and every grant is reported only as part of the skipped count.
 9. A shallow clone with an unresolvable `<since>` exits 2, never 0.
 10. A trace line from before the field existed covers nothing.
+11. `--since` and `--until` resolving to the same commit (an empty diff) exits 2 without `--allow-empty` and exits 0 with it, and both print that nothing was checked.
 
 ## 8. Risks
 
