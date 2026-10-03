@@ -921,6 +921,313 @@ test("an abort mid-stream never reconnects — no backoff timers outlive unmount
   }
 });
 
+test("an aborted old run does not reset the phase of the run that replaced it (#723)", async () => {
+  // retry() = reset() + generate(). reset() aborts the in-flight run, whose
+  // unwinding catch/finally then wrote phase "idle" and nulled abortRef over
+  // whichever run had already claimed them — so a run that had COMPLETED was
+  // left showing "idle", and its abort controller reference was dropped. The
+  // shared state belongs to the run that owns it, not to whichever one is
+  // unwinding.
+  vi.useFakeTimers();
+  let call = 0;
+  let streamController!: ReadableStreamDefaultController<Uint8Array>;
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      streamController = controller;
+    },
+  });
+
+  global.fetch = (async (_input: unknown, init?: RequestInit) => {
+    call++;
+    if (call === 1) {
+      const signal = init?.signal ?? undefined;
+      if (signal) {
+        // A real aborted body rejects the read on a LATER task, not inside
+        // abort() itself — so the old run is still unwinding after the new one
+        // has already finished, which is the ordering this bug needs.
+        signal.addEventListener(
+          "abort",
+          () => {
+            setTimeout(() => {
+              streamController.error(new DOMException("aborted", "AbortError"));
+            }, 0);
+          },
+          { once: true },
+        );
+      }
+      return { ok: true, body: stream } as unknown as Response;
+    }
+    return {
+      ok: true,
+      status: 200,
+      body: createMockReadableStream(['{"type":"done","yaml":"second"}']),
+    } as unknown as Response;
+  }) as typeof fetch;
+
+  try {
+    const { result } = renderHook(() =>
+      useStagedGenerationStream({ endpoint: "/api/test", stageLabels: {} }),
+    );
+
+    let firstRun!: ReturnType<typeof result.current.generate>;
+    await act(async () => {
+      firstRun = result.current.generate({ description: "run 1" });
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    assert.strictEqual(call, 1);
+    assert.strictEqual(result.current.phase, "stage-0");
+
+    // retry() aborts run 1 and starts run 2, which completes on microtasks
+    // alone (no timers), so the new run's terminal frame lands first.
+    let retryPromise!: Promise<void>;
+    await act(async () => {
+      retryPromise = result.current.retry();
+      // A rejected retry must not become an unhandled rejection mid-test.
+      retryPromise.catch(() => {});
+      await retryPromise;
+    });
+    assert.strictEqual(call, 2, "retry issued exactly one new request");
+    assert.strictEqual(result.current.generatedManifest, "second");
+    assert.strictEqual(result.current.phase, "complete");
+
+    // NOW the superseded run's aborted body surfaces and it unwinds for real.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10);
+      await firstRun;
+    });
+
+    // The assertions: run 2 owns the state and must still be showing it. Today
+    // the old run's catch/finally land last and reset the phase to "idle".
+    assert.strictEqual(result.current.phase, "complete");
+    assert.strictEqual(result.current.generatedManifest, "second");
+    assert.strictEqual(
+      result.current.stepDetail,
+      "Manifest generation complete",
+      "the completed run's own step detail survives the old run's unwind",
+    );
+  } finally {
+    vi.useRealTimers();
+    global.fetch = originalFetch;
+  }
+});
+
+test("a run's reconnect carries THAT run's signal, never the next run's (#723)", async () => {
+  // The signal half of the backoff bug. attemptReconnect read
+  // `abortRef.current?.signal`, and by the time a backoff expires that ref
+  // belongs to whatever run started most recently — so a parked run reconnected
+  // on a DIFFERENT run's authority, and once that run finished (its finally
+  // nulled the ref) the request went out with no signal at all: nothing could
+  // cancel it. The signal a run reconnects on must be the one it started with.
+  vi.useFakeTimers();
+  const signals: (AbortSignal | null | undefined)[] = [];
+  let call = 0;
+
+  global.fetch = (async (_input: unknown, init?: RequestInit) => {
+    call++;
+    signals.push(init?.signal ?? undefined);
+    if (call === 1) {
+      return {
+        ok: true,
+        body: new ReadableStream({
+          pull() {
+            throw new Error("Connection lost");
+          },
+        }),
+      } as unknown as Response;
+    }
+    return {
+      ok: true,
+      status: 200,
+      body: createMockReadableStream(['{"type":"done","yaml":"run"}']),
+    } as unknown as Response;
+  }) as typeof fetch;
+
+  try {
+    const { result } = renderHook(() =>
+      useStagedGenerationStream({ endpoint: "/api/test", stageLabels: {} }),
+    );
+
+    // Run 1 loses its connection and parks in the 1s backoff (no timer advance).
+    let firstRun!: ReturnType<typeof result.current.generate>;
+    await act(async () => {
+      firstRun = result.current.generate({ description: "run 1" });
+    });
+    assert.strictEqual(call, 1);
+    assert.ok(signals[0], "the first request carries its own signal");
+
+    // Run 2 starts (nothing aborts run 1 on a bare generate — a bare supersede
+    // is not a cancellation) and completes, nulling the ref on its way out.
+    let secondRun!: ReturnType<typeof result.current.generate>;
+    await act(async () => {
+      secondRun = result.current.generate({ description: "run 2" });
+      secondRun.catch(() => {});
+      await secondRun;
+    });
+    assert.strictEqual(call, 2);
+
+    // The parked run's backoff now expires and it reconnects.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000);
+      await firstRun.catch(() => {});
+    });
+
+    assert.strictEqual(call, 3, "the parked run did reconnect");
+    assert.strictEqual(
+      signals[2],
+      signals[0],
+      "the reconnect must ride run 1's own signal",
+    );
+    assert.notStrictEqual(
+      signals[2],
+      signals[1],
+      "and never the newer run's signal",
+    );
+    assert.ok(signals[2], "nor a missing signal once the ref is null");
+  } finally {
+    vi.useRealTimers();
+    global.fetch = originalFetch;
+  }
+});
+
+test("a superseded run whose backoff expires never reconnects at all (#723)", async () => {
+  // attemptReconnect used to pass `signal: abortRef.current?.signal` — whatever
+  // run held the ref when the backoff WOKE, not the run that is backing off.
+  // So a run parked in backoff while retry() replaced it came back to life on
+  // the new run's live signal (or, once the new run finished, on no signal at
+  // all): a zombie read loop racing the live run for the same endpoint. Each
+  // run must abort only itself.
+  vi.useFakeTimers();
+  let call = 0;
+
+  global.fetch = (async () => {
+    call++;
+    if (call === 1) {
+      return {
+        ok: true,
+        body: new ReadableStream({
+          pull() {
+            throw new Error("Connection lost");
+          },
+        }),
+      } as unknown as Response;
+    }
+    return {
+      ok: true,
+      status: 200,
+      body: createMockReadableStream(['{"type":"done","yaml":"second"}']),
+    } as unknown as Response;
+  }) as typeof fetch;
+
+  try {
+    const { result } = renderHook(() =>
+      useStagedGenerationStream({ endpoint: "/api/test", stageLabels: {} }),
+    );
+
+    // Run 1 loses its connection and parks in the 1s backoff. No timer is
+    // advanced yet, so it stays there.
+    let firstRun!: ReturnType<typeof result.current.generate>;
+    await act(async () => {
+      firstRun = result.current.generate({ description: "run 1" });
+    });
+    assert.strictEqual(call, 1);
+
+    // retry() = reset() + generate(): reset() aborts run 1, and run 2 claims
+    // the ref. Run 2 completes on microtasks alone.
+    let retryPromise!: Promise<void>;
+    await act(async () => {
+      retryPromise = result.current.retry();
+      // A rejected retry must not become an unhandled rejection mid-test.
+      retryPromise.catch(() => {});
+      await retryPromise;
+    });
+    assert.strictEqual(call, 2);
+    assert.strictEqual(result.current.phase, "complete");
+
+    // Now let the superseded run's backoff expire. It must find its OWN signal
+    // aborted and stop — instead of today, where it wakes on run 2's dead/null
+    // signal and fires a third request.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000);
+      await firstRun;
+    });
+
+    assert.strictEqual(
+      call,
+      2,
+      "a superseded run must not reconnect once its own abort landed",
+    );
+    assert.strictEqual(result.current.phase, "complete");
+  } finally {
+    vi.useRealTimers();
+    global.fetch = originalFetch;
+  }
+});
+
+test("an abort during the reconnect backoff ends it immediately — no further tiers (#723)", async () => {
+  // An abort that lands WHILE the backoff sleeps still let the timer fire and
+  // the next fetch fail with an AbortError, which the catch counted as a
+  // reconnect failure: it climbed to the next tier, so 1s/2s/4s timers stayed
+  // alive for about 7 seconds after the component was gone. An AbortError is
+  // the abort, not a lost connection.
+  vi.useFakeTimers();
+  let call = 0;
+
+  global.fetch = (async () => {
+    call++;
+    if (call === 1) {
+      return {
+        ok: true,
+        body: new ReadableStream({
+          pull() {
+            throw new Error("Connection lost");
+          },
+        }),
+      } as unknown as Response;
+    }
+    // What a fetch against a dead signal does. Today the backoff reads this as
+    // "connection still lost" and tries again at 2s, then 4s.
+    return Promise.reject(
+      new DOMException("This operation was aborted", "AbortError"),
+    );
+  }) as typeof fetch;
+
+  try {
+    const { result, unmount } = renderHook(() =>
+      useStagedGenerationStream({ endpoint: "/api/test", stageLabels: {} }),
+    );
+
+    let run!: ReturnType<typeof result.current.generate>;
+    await act(async () => {
+      run = result.current.generate({ description: "test" });
+    });
+    assert.strictEqual(call, 1, "parked in the first backoff tier");
+
+    // Unmount while the backoff is still sleeping.
+    unmount();
+
+    await act(async () => {
+      // Enough time for every remaining tier to have fired.
+      await vi.advanceTimersByTimeAsync(60_000);
+    });
+
+    assert.strictEqual(
+      call,
+      1,
+      "an abort during backoff must issue no further request",
+    );
+    // The run's own result is the observable contract here; the hook's React
+    // state is frozen at its last render because the component is gone.
+    let runResult!: Awaited<typeof run>;
+    await act(async () => {
+      runResult = await run;
+    });
+    assert.strictEqual(runResult.phase, "idle");
+  } finally {
+    vi.useRealTimers();
+    global.fetch = originalFetch;
+  }
+});
+
 test("unmounting mid-stream aborts the in-flight request (review fix)", async () => {
   // Early-enable makes unmount-mid-stream a routine path: the user can
   // navigate away on the `manifest` frame while Stage 6/7 still stream.

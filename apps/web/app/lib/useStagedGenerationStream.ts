@@ -133,6 +133,20 @@ function stageToPhase(stage: number): StagedPhase {
   return "idle";
 }
 
+/** An AbortError is the caller's signal (or an unmount), never a transport
+ *  failure worth retrying. `DOMException` is the shape fetch rejects with; the
+ *  name check covers the plain-Error carriers some runtimes use. */
+function isAbortError(error: unknown): boolean {
+  if (typeof DOMException !== "undefined" && error instanceof DOMException) {
+    return error.name === "AbortError";
+  }
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    (error as { name?: unknown }).name === "AbortError"
+  );
+}
+
 export function useStagedGenerationStream(
   options: StagedGenerationStreamOptions,
 ): StagedGenerationStreamReturn {
@@ -320,16 +334,37 @@ export function useStagedGenerationStream(
 
           await new Promise((resolve) => setTimeout(resolve, delay));
 
+          // An abort that lands WHILE the backoff sleeps must end it here.
+          // Returning (rather than fetching) is what keeps this run from
+          // spending another 2s/4s tier on a signal it already knows is dead:
+          // the fetch below would reject with an AbortError, which the catch
+          // would otherwise read as "connection still lost" and escalate.
+          if (controller.signal.aborted) {
+            logger.info("[SSE] Reconnect aborted while backing off");
+            return null;
+          }
+
           try {
             const newResponse = await fetchWithCsrf(endpoint, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify(body),
-              signal: abortRef.current?.signal,
+              // This RUN's signal, never `abortRef.current?.signal`: a later
+              // generate() replaces that ref, so a run backing off would wake
+              // up on the new run's live signal and reconnect as a zombie read
+              // loop against an endpoint the live run is already using.
+              signal: controller.signal,
             });
             if (!newResponse.ok || !newResponse.body) return null;
             return newResponse.body.getReader();
-          } catch {
+          } catch (error) {
+            // An AbortError is the ABORT, not another lost connection —
+            // escalating past it would leave a 2s/4s timer alive for a run
+            // nobody is waiting on.
+            if (controller.signal.aborted || isAbortError(error)) {
+              logger.info("[SSE] Reconnect attempt aborted, giving up");
+              return null;
+            }
             return attemptReconnect(attempt + 1);
           }
         };
@@ -558,8 +593,14 @@ export function useStagedGenerationStream(
         if (controller.signal.aborted) {
           logger.info("[staged-gen] Generation aborted");
           result.phase = "idle";
-          setPhase("idle");
-          setIsGenerating(false);
+          // Ownership: only the run the ref still points at may write the
+          // shared state. An OLD run unwinding here (retry() aborted it, and a
+          // newer generate() has since claimed the ref) must not reset the
+          // phase of the run that replaced it.
+          if (abortRef.current === controller) {
+            setPhase("idle");
+            setIsGenerating(false);
+          }
           return result;
         }
         const message =
@@ -572,8 +613,13 @@ export function useStagedGenerationStream(
         // Same stale-label hazard as applyTerminalFrame's error arm.
         setStepDetail(result.stepDetail);
       } finally {
-        setIsGenerating(false);
-        abortRef.current = null;
+        // Same ownership rule: nulling the ref is how the next run claims it,
+        // and an old run clearing it on its way out would drop the LIVE run's
+        // controller — leaving nothing for cancel()/unmount to abort.
+        if (abortRef.current === controller) {
+          setIsGenerating(false);
+          abortRef.current = null;
+        }
       }
 
       return result;
