@@ -42,6 +42,9 @@ export function unreadLanguageSpecifier(ext: string): string {
  * `allow-only`: an edge from the `from` prefix to anywhere that is neither
  * the `to` prefix nor the `from` prefix itself (same-prefix imports are
  * allowed).
+ * `closed`: the slice is the rule's `from` side, so an edge from anywhere in
+ * the slice to a target that is neither inside the slice nor under one of the
+ * rule's `except` prefixes (an exclude still wins over an except).
  */
 export function evaluateContract(input: {
   slice: Slice;

@@ -1,12 +1,14 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import {
+  contractCommander,
   runContractAddRule,
   runContractCheck,
   runContractPropose,
   runContractShow,
+  type AddRuleOptions,
 } from "../../../src/commands/contract/index.js";
 import { isSuppressionExpired } from "../../../src/commands/contract/evaluate.js";
 import { runSliceInit } from "../../../src/commands/slice/index.js";
@@ -130,6 +132,101 @@ describe("contract add-rule", () => {
     expect(
       (await runContractAddRule({ ...base, id: "r1", yes: true })).exitCode,
     ).toBe(2);
+  });
+
+  it("adds a closed rule with its except list and no from/to", async () => {
+    const root = await setup();
+    const r = await runContractAddRule({
+      root,
+      kind: "closed",
+      except: ["lib/", "outside"],
+      id: "closed-slice",
+      yes: true,
+    });
+    expect(r.exitCode).toBe(0);
+    expect(all(r)).toContain("added rule closed-slice");
+    expect((await readContract(root)).rules).toEqual([
+      {
+        id: "closed-slice",
+        kind: "closed",
+        except: ["lib/", "outside"],
+        severity: "error",
+      },
+    ]);
+  });
+
+  it("a closed rule may be given --except with no prefixes at all", async () => {
+    const root = await setup();
+    const r = await runContractAddRule({
+      root,
+      kind: "closed",
+      except: [],
+      id: "c",
+      yes: true,
+    });
+    expect(r.exitCode).toBe(0);
+    expect((await readContract(root)).rules[0]).toEqual({
+      id: "c",
+      kind: "closed",
+      except: [],
+      severity: "error",
+    });
+  });
+
+  it("each kind takes only its own flags, and names the wrong one", async () => {
+    const root = await setup();
+    // Each case carries its whole flag set: nothing is inherited.
+    const cases: Array<[string, Omit<AddRuleOptions, "root">, string]> = [
+      [
+        "closed with --from",
+        { kind: "closed", except: [], from: "ui/" },
+        "takes no --from",
+      ],
+      [
+        "closed with --to",
+        { kind: "closed", except: [], to: "api/" },
+        "takes no --to",
+      ],
+      ["closed without --except", { kind: "closed" }, "needs --except"],
+      [
+        "forbid with --except",
+        { kind: "forbid", from: "ui/", to: "api/", except: ["lib/"] },
+        "takes no --except",
+      ],
+      [
+        "allow-only with --except",
+        { kind: "allow-only", from: "ui/", to: "api/", except: ["lib/"] },
+        "takes no --except",
+      ],
+      ["forbid without --from", { kind: "forbid", to: "api/" }, "needs --from"],
+      ["forbid without --to", { kind: "forbid", from: "ui/" }, "needs --to"],
+      [
+        "allow-only without --from",
+        { kind: "allow-only", to: "api/" },
+        "needs --from",
+      ],
+      [
+        "allow-only without --to",
+        { kind: "allow-only", from: "ui/" },
+        "needs --to",
+      ],
+      [
+        "a bad --except entry",
+        { kind: "closed", except: ["../x/"] },
+        '--except "../x/"',
+      ],
+      [
+        "an unknown kind",
+        { kind: "deny" as never, from: "ui/", to: "api/" },
+        "--kind must be",
+      ],
+    ];
+    for (const [label, flags, message] of cases) {
+      const r = await runContractAddRule({ ...flags, root, yes: true });
+      expect(r.exitCode, label).toBe(2);
+      expect(all(r), label).toContain(message);
+    }
+    await expect(readContract(root)).rejects.toThrow();
   });
 
   it("needs a slice", async () => {
@@ -416,6 +513,140 @@ describe("contract check: expiry and root package", () => {
     const sub = await runContractCheck({ root: path.join(root, "src") });
     expect(sub.exitCode).toBe(2);
     expect(all(sub)).toContain("top level");
+  });
+});
+
+describe("contract check: the closed kind", () => {
+  /** A contract written by hand, as a client repo would stage it. */
+  const withContract = (root: string, rules: unknown[]): Promise<void> =>
+    put(
+      root,
+      ".hexagen/contract.json",
+      JSON.stringify({
+        schemaVersion: "1.0.0",
+        sliceId: "s1",
+        rules,
+        knownViolations: [],
+      }),
+    );
+
+  async function withClosedRule(except: string[]): Promise<string> {
+    const root = await setup();
+    await writeObserved(root, {
+      edges: [
+        { from: "src/a.ts", to: "lib/c.ts", specifier: "../lib/c" },
+        { from: "src/a.ts", to: "src/b.ts", specifier: "./b" },
+      ],
+    });
+    await withContract(root, [
+      { id: "c1", kind: "closed", except, severity: "error" },
+    ]);
+    return root;
+  }
+
+  it("fails on every outward edge when the except list is empty", async () => {
+    const root = await withClosedRule([]);
+    const r = await runContractCheck({ root });
+    expect(r.exitCode).toBe(1);
+    expect(all(r)).toContain("violation: c1  src/a.ts  ../lib/c");
+    expect(all(r)).not.toContain("src/b.ts");
+  });
+
+  it("passes once the target's prefix is excepted", async () => {
+    const root = await withClosedRule(["lib/"]);
+    expect((await runContractCheck({ root })).exitCode).toBe(0);
+  });
+
+  it("baselines the violation and keeps the rule free of from/to", async () => {
+    const root = await withClosedRule([]);
+    expect(
+      (await runContractCheck({ root, baseline: true, yes: true })).exitCode,
+    ).toBe(0);
+    const c = await readContract(root);
+    expect(c.knownViolations[0]).toMatchObject({
+      rule: "c1",
+      file: "src/a.ts",
+      specifier: "../lib/c",
+    });
+    expect(c.rules).toEqual([
+      { id: "c1", kind: "closed", except: [], severity: "error" },
+    ]);
+    expect((await runContractCheck({ root })).exitCode).toBe(0);
+  });
+});
+
+describe("contract add-rule: what commander collects for --except", () => {
+  /**
+   * Parses the real command, so the pin is on commander itself rather than on
+   * `runContractAddRule` (which skips the parser). Returns the exit code the
+   * command emitted and the messages it printed.
+   */
+  async function parse(args: string[]): Promise<{
+    code: number | string | null | undefined;
+    said: string;
+    root: string;
+  }> {
+    const root = await makeRepo();
+    await runSliceInit({ root, paths: ["src/"], id: "s1", yes: true });
+    const before = process.exitCode;
+    const said: string[] = [];
+    const spy = vi.spyOn(console, "error").mockImplementation((...line) => {
+      said.push(line.map(String).join(" "));
+    });
+    try {
+      await contractCommander.parseAsync(
+        ["add-rule", ...args, "--root", root, "--yes"],
+        { from: "user" },
+      );
+      return { code: process.exitCode, said: said.join("\n"), root };
+    } finally {
+      process.exitCode = before;
+      spy.mockRestore();
+    }
+  }
+
+  const exceptOf = async (args: string[]): Promise<unknown> => {
+    const { root } = await parse(args);
+    const c = await readContract(root);
+    return (c.rules[0] as { except: unknown }).except;
+  };
+
+  it("a bare second occurrence keeps the prefixes already collected", async () => {
+    // commander fills an optional-value option given without one with `true`,
+    // which used to replace the collected list and silently drop the crossing.
+    expect(
+      await exceptOf(["--kind", "closed", "--except", "lib/", "--except"]),
+    ).toEqual(["lib/"]);
+  });
+
+  it("a bare occurrence on its own collects nothing, which is a legal rule", async () => {
+    expect(await exceptOf(["--kind", "closed", "--except"])).toEqual([]);
+  });
+
+  it("one occurrence collects every following prefix", async () => {
+    expect(await exceptOf(["--kind", "closed", "--except", "a", "b"])).toEqual([
+      "a",
+      "b",
+    ]);
+  });
+
+  it("two occurrences collect both lists", async () => {
+    expect(
+      await exceptOf([
+        "--kind",
+        "closed",
+        "--except",
+        "lib/",
+        "--except",
+        "b/",
+      ]),
+    ).toEqual(["lib/", "b/"]);
+  });
+
+  it("an entry that is not a slice path is refused with exit 2", async () => {
+    const { code, said } = await parse(["--kind", "closed", "--except", ""]);
+    expect(code).toBe(2);
+    expect(said).toContain('--except ""');
   });
 });
 

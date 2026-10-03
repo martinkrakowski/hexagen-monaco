@@ -22,16 +22,27 @@ export function underPrefix(entry: string, candidate: string): boolean {
 }
 
 /**
+ * True when an `excludes` entry covers `to` (an edge target), under either
+ * spelling. Factored out of `targetInSlice` so the `closed` judgement and the
+ * slice check cannot disagree about what an exclude covers.
+ */
+export function targetExcluded(slice: SlicePaths, to: string): boolean {
+  const hit = (entry: string): boolean =>
+    underPrefix(entry, to) || underPrefix(entry, `${to}/`);
+  return slice.excludes.some(hit);
+}
+
+/**
  * True when `to` (an edge target: a file, or a package root written without a
  * trailing `/`, or `.` for the root package) lies inside the slice. A package
  * root is a directory, so it is also tried with a trailing `/`.
  */
 export function targetInSlice(slice: SlicePaths, to: string): boolean {
   if (to === "." || !normalizeSlicePath(to).ok) return false;
+  // Excludes win under either spelling, then paths.
+  if (targetExcluded(slice, to)) return false;
   const hit = (entry: string): boolean =>
     underPrefix(entry, to) || underPrefix(entry, `${to}/`);
-  // Excludes win under either spelling, then paths.
-  if (slice.excludes.some(hit)) return false;
   return slice.paths.some(hit);
 }
 
@@ -55,10 +66,17 @@ export type ObservedEdge = Extract<
 export type ContractRule = Contract["rules"][number];
 
 /**
- * True when `rule` is broken by `edge`: the edge starts in the slice and under
- * the rule's `from` prefix, and either lands in a `forbid` target, or leaves an
- * `allow-only` prefix for anywhere but the `to` prefix or the `from` prefix
- * itself (same-prefix imports are allowed).
+ * True when `rule` is broken by `edge`:
+ *  - `closed`: the edge starts in the slice and lands neither in the slice nor
+ *    under one of the rule's `except` prefixes. The slice is the `from` side, so
+ *    the rule carries no `from`/`to`; `except[]` is the whole escape hatch, so
+ *    two accepted crossings out of one source are one rule. Excludes still win:
+ *    an except cannot re-open an excluded target.
+ *  - `forbid`: the edge starts in the slice and under the rule's `from` prefix
+ *    and lands in its `to` prefix.
+ *  - `allow-only`: the edge starts in the slice and under the rule's `from`
+ *    prefix and leaves it for anywhere but the `to` prefix or the `from` prefix
+ *    itself (same-prefix imports are allowed).
  */
 export function edgeViolatesRule(
   slice: SlicePaths,
@@ -66,6 +84,11 @@ export function edgeViolatesRule(
   edge: ObservedEdge,
 ): boolean {
   if (!isPathInSlice(slice, edge.from)) return false;
+  if (rule.kind === "closed") {
+    if (targetInSlice(slice, edge.to)) return false;
+    if (targetExcluded(slice, edge.to)) return true;
+    return !rule.except.some((entry) => prefixHasTarget(entry, edge.to));
+  }
   if (!underPrefix(rule.from, edge.from)) return false;
   const hitsTo = prefixHasTarget(rule.to, edge.to);
   return rule.kind === "forbid"

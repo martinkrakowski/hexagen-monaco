@@ -76,12 +76,61 @@ export async function runContractPropose(
 }
 
 export interface AddRuleOptions extends SliceRootOptions {
-  kind: "forbid" | "allow-only";
-  from: string;
-  to: string;
+  /** `closed` takes `except` and no `from`/`to`; the prefix kinds the reverse. */
+  kind: "forbid" | "allow-only" | "closed";
+  from?: string;
+  to?: string;
+  /** The accepted crossings of a `closed` rule. `undefined` when the flag was not given, `[]` when it was given with no prefixes. */
+  except?: string[];
   severity?: "error" | "warn";
   id?: string;
   yes?: boolean;
+}
+
+/**
+ * The rule the flags describe, or a `UsageError` naming the one that does not
+ * belong to the kind. Kept apart from the writing so each refusal is one guard.
+ */
+function ruleFromFlags(
+  id: string,
+  kind: AddRuleOptions["kind"],
+  flags: Pick<AddRuleOptions, "from" | "to" | "except">,
+  severity: "error" | "warn",
+): Contract["rules"][number] {
+  const slicePath = (flag: string, value: string): string => {
+    const check = normalizeSlicePath(value);
+    if (!check.ok) throw new UsageError(`${flag} "${value}": ${check.reason}`);
+    return value;
+  };
+  if (kind === "closed") {
+    if (flags.from !== undefined)
+      throw new UsageError("--kind closed takes no --from");
+    if (flags.to !== undefined)
+      throw new UsageError("--kind closed takes no --to");
+    if (flags.except === undefined)
+      throw new UsageError(
+        "--kind closed needs --except <prefix>... (it may be given no prefixes, which accepts no crossing)",
+      );
+    return {
+      id,
+      kind,
+      except: flags.except.map((entry) => slicePath("--except", entry)),
+      severity,
+    };
+  }
+  if (flags.except !== undefined)
+    throw new UsageError(`--kind ${kind} takes no --except`);
+  if (flags.from === undefined)
+    throw new UsageError(`--kind ${kind} needs --from <prefix>`);
+  if (flags.to === undefined)
+    throw new UsageError(`--kind ${kind} needs --to <prefix>`);
+  return {
+    id,
+    kind,
+    from: slicePath("--from", flags.from),
+    to: slicePath("--to", flags.to),
+    severity,
+  };
 }
 
 async function writeContract(
@@ -126,22 +175,19 @@ async function addRule(options: AddRuleOptions): Promise<CommandResult> {
   const messages: string[] = [];
   try {
     const root = path.resolve(options.root);
-    if (options.kind !== "forbid" && options.kind !== "allow-only") {
-      throw new UsageError("--kind must be forbid or allow-only");
+    if (
+      options.kind !== "forbid" &&
+      options.kind !== "allow-only" &&
+      options.kind !== "closed"
+    ) {
+      throw new UsageError("--kind must be forbid, allow-only or closed");
     }
     const severity = options.severity ?? "error";
     if (severity !== "error" && severity !== "warn") {
       throw new UsageError("--severity must be error or warn");
     }
-    for (const [flag, value] of [
-      ["--from", options.from],
-      ["--to", options.to],
-    ] as const) {
-      const check = normalizeSlicePath(value);
-      if (!check.ok)
-        throw new UsageError(`${flag} "${value}": ${check.reason}`);
-    }
     const id = options.id ?? `rule-${randomBytes(4).toString("hex")}`;
+    const rule = ruleFromFlags(id, options.kind, options, severity);
     if (BUILTIN_RULE_IDS.includes(id)) {
       throw new UsageError(`rule id "${id}" is reserved for a built-in rule`);
     }
@@ -168,16 +214,7 @@ async function addRule(options: AddRuleOptions): Promise<CommandResult> {
     };
     const next: Contract = {
       ...contract,
-      rules: [
-        ...contract.rules,
-        {
-          id,
-          kind: options.kind,
-          from: options.from,
-          to: options.to,
-          severity,
-        },
-      ],
+      rules: [...contract.rules, rule],
     };
     await writeContract(
       root,
@@ -363,39 +400,55 @@ contractCommander
     );
   });
 
-contractCommander
+const addRuleCommander = contractCommander
   .command("add-rule")
   .description("Add a rule to .hexagen/contract.json (requires --yes)")
-  .requiredOption("--kind <kind>", "forbid or allow-only")
-  .requiredOption("--from <prefix>", "Source path prefix")
-  .requiredOption("--to <prefix>", "Target path prefix")
+  .requiredOption("--kind <kind>", "forbid, allow-only or closed")
+  .option("--from <prefix>", "Source path prefix (forbid and allow-only)")
+  .option("--to <prefix>", "Target path prefix (forbid and allow-only)")
   .option("--severity <severity>", "error (default) or warn")
   .option("--id <id>", "Rule id (not a built-in id); random by default")
   .option(ROOT_FLAG, ROOT_DESC)
-  .option("--yes", "Confirm the writes listed by the `will write:` lines")
-  .action(
-    async (opts: {
-      kind: string;
-      from: string;
-      to: string;
-      severity?: string;
-      id?: string;
-      root?: string;
-      yes?: boolean;
-    }) => {
-      emit(
-        await runContractAddRule({
-          root: opts.root ?? process.cwd(),
-          kind: opts.kind as "forbid" | "allow-only",
-          from: opts.from,
-          to: opts.to,
-          severity: opts.severity as "error" | "warn" | undefined,
-          id: opts.id,
-          yes: opts.yes,
-        }),
-      );
-    },
-  );
+  .option("--yes", "Confirm the writes listed by the `will write:` lines");
+// A bare occurrence of an optional-value option is otherwise collected as
+// `true`, which replaced the prefixes an earlier `--except` had gathered and
+// dropped the user's crossings. `preset([])` appends an empty group instead, so
+// nothing collected is lost; the action flattens the groups.
+addRuleCommander.addOption(
+  addRuleCommander
+    .createOption(
+      "--except [prefix...]",
+      "Accepted crossing prefix; repeatable, and may be given no prefixes at all (closed)",
+    )
+    .preset([]),
+);
+
+addRuleCommander.action(
+  async (opts: {
+    kind: string;
+    from?: string;
+    to?: string;
+    /** One group per occurrence, as `preset([])` collects them. */
+    except?: string[][];
+    severity?: string;
+    id?: string;
+    root?: string;
+    yes?: boolean;
+  }) => {
+    emit(
+      await runContractAddRule({
+        root: opts.root ?? process.cwd(),
+        kind: opts.kind as AddRuleOptions["kind"],
+        from: opts.from,
+        to: opts.to,
+        except: Array.isArray(opts.except) ? opts.except.flat() : undefined,
+        severity: opts.severity as "error" | "warn" | undefined,
+        id: opts.id,
+        yes: opts.yes,
+      }),
+    );
+  },
+);
 
 contractCommander
   .command("show")
