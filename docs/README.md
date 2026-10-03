@@ -6,11 +6,12 @@ This `docs/` folder is the home for **narrative, planning, and remediation** con
 
 ## Quick Navigation
 
-| Section                                                 | What You'll Find                                    | Related Machine Source                                  |
-| ------------------------------------------------------- | --------------------------------------------------- | ------------------------------------------------------- |
-| [Decisions](index.md)                                   | Human-friendly index into the ADRs                  | [.architecture/decisions/](../.architecture/decisions/) |
-| [Architecture](planning/three-plane-system-overview.md) | Human-oriented three-plane system overview          | [.architecture/README.md](../.architecture/README.md)   |
-| [Planning](planning/)                                   | Per-feature plans, incl. generator add-on templates | [.architecture/](../.architecture/) (contracts)         |
+| Section                                                 | What You'll Find                                                                                      | Related Machine Source                                  |
+| ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| [Decisions](index.md)                                   | Human-friendly index into the ADRs                                                                    | [.architecture/decisions/](../.architecture/decisions/) |
+| [Architecture](planning/three-plane-system-overview.md) | Human-oriented three-plane system overview                                                            | [.architecture/README.md](../.architecture/README.md)   |
+| [Planning](planning/)                                   | Per-feature plans, incl. generator add-on templates                                                   | [.architecture/](../.architecture/) (contracts)         |
+| [Brownfield CI gate](ci/brownfield-gate-recipe.md)      | The leave-behind gate recipe for a client repo, with an example workflow and the engagement-key story | [`packages/sync`](../packages/sync/) (the CLI it runs)  |
 
 ## Core Principle
 

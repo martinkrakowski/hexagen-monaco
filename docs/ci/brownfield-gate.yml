@@ -1,0 +1,362 @@
+# EXAMPLE — copy this into the CLIENT repo's .github/workflows/ and edit the two
+# spots marked EDIT SPOT below.
+#
+# It is not wired into this repository's CI and must not be: a client repo holds
+# only `.hexagen/` and no `.architecture/manifest.yaml`, so the generated
+# conformance gate (which runs `hexagen-lint --ratchet` and `hexagen sync
+# --check`) has nothing to run there. This repository's own gate is
+# `.github/workflows/sync-integrity.yml`.
+#
+# Every step below prints `step <n> exit <code>`, and the job stops at the first
+# non-zero one except step 2, which is a drift report. The recipe that explains
+# each step, what 1 and 2 mean, and the key story is
+# docs/ci/brownfield-gate-recipe.md — keep the two in step with each other.
+name: "Brownfield gate"
+
+on:
+  pull_request:
+  # No `paths:` filter on purpose. A filter that skips this job emits no check at
+  # all on a non-matching PR, which blocks the merge rather than passing it — and
+  # a skipped gate would also be indistinguishable from a passing one. Step 0
+  # tells "nothing to gate" apart from "clean" by name and exit code.
+
+# Reads the checkout and publishes nothing: contents: read and nothing more. No
+# pull-requests: read, because no step calls the API — the base SHA comes from
+# the event payload.
+permissions:
+  contents: read
+
+concurrency:
+  group: brownfield-gate-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  # EDIT SPOT 1 — the CLI pin. Pin it to the version the FDE ran locally, and
+  # bump it deliberately: `hexagen --help` is the check that the pin exists.
+  HEXAGEN_VERSION: "0.13.0"
+  # EDIT SPOT 2 — flip to "true" when `hexagen evidence verify` ships (kit plan 1,
+  # lane 1A), then commit. It swaps step 4 for step 4b: the pack step stops
+  # running and the read-only verify step takes its place. Both are written out
+  # here so both are linted today; the disabled one has never been executed by
+  # this job, so treat its first run as new.
+  USE_EVIDENCE_VERIFY: "false"
+
+jobs:
+  brownfield-gate:
+    name: "Brownfield gate"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Every `hexagen` step below runs from the checkout root, which is the repo
+    # root on a GitHub runner. The commands default `--root` to the cwd and never
+    # search upward, so a client whose repo root is not the checkout root passes
+    # `--root` explicitly rather than relying on the default.
+    steps:
+      - name: "Checkout the repository"
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          # Full history, not depth 1: step 3 reads `.hexagen/contract.json` and
+          # `.hexagen/slice.json` AT the base commit with `git show`, and step 2
+          # diffs from the slice's commit. A shallow clone resolves neither, and
+          # both fail with exit 2 rather than passing.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: "Setup Node.js"
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: "22.12.0"
+          package-manager-cache: false
+
+      - name: "Install the hexagen CLI"
+        run: |
+          # From npm at the pinned version, into RUNNER_TEMP: not the workspace
+          # (which is the tree the PR controls) and not a global npm prefix (which
+          # wants sudo on a runner). The bin lands in <prefix>/node_modules/.bin.
+          prefix="${RUNNER_TEMP}/hexagen-cli"
+          npm install --prefix "${prefix}" "@hexagen-monaco/sync@${HEXAGEN_VERSION}"
+          # GITHUB_PATH is read when the NEXT step starts, so it cannot put the
+          # bin on PATH in this one: every later step gets it, this step has to
+          # call the binary by its full path.
+          echo "${prefix}/node_modules/.bin" >> "${GITHUB_PATH}"
+          # The smoke check that the pin exists, run the only way this step can.
+          "${prefix}/node_modules/.bin/hexagen" --help
+
+      - name: "Resolve the base commit"
+        id: base
+        run: |
+          # From the event payload, never from a workflow input or a PR-supplied
+          # value. The base decides what counts as growth in step 3, so a PR that
+          # could choose it could choose a commit where the contract is already
+          # weakened — the same pin sync-integrity.yml derives. This check is not
+          # belt-and-braces: `contract check --base` with an unresolvable ref is
+          # exit 2, but failing here names the cause instead of the symptom.
+          base="${{ github.event.pull_request.base.sha }}"
+          if [ -z "${base}" ] || ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
+            echo "::error::base commit '${base}' is not in this checkout; a pull_request run needs fetch-depth: 0. Refusing to gate against an unknown base."
+            exit 2
+          fi
+          echo "base=${base}" >> "${GITHUB_OUTPUT}"
+          echo "gating against base ${base}"
+
+      - name: "step 0: the .hexagen/ inputs must be tracked"
+        run: |
+          # Every writer of `.hexagen/` adds it to `.git/info/exclude`
+          # (`slice init`, `contract add-rule`, `contract check --baseline`,
+          # `observe`, `grant issue`), so a fresh clone has none of it and the
+          # first commit that adds a file is indistinguishable from a file that
+          # was never staged. Step 0 exists to tell those apart: an un-staged
+          # repo must not look like a first commit. Not a kit command — it is the
+          # only step that can name a missing path.
+          set -uo pipefail
+          required=(
+            .hexagen/slice.json
+            .hexagen/contract.json
+            .hexagen/evidence/trace.jsonl
+            .hexagen/evidence/tip.json
+          )
+          grants=()
+          while IFS= read -r grant; do
+            [ -n "${grant}" ] || continue
+            grants+=("${grant}")
+          done < <(git ls-files -- ".hexagen/grants/*.json")
+          missing=""
+          for path in "${required[@]}"; do
+            if ! git ls-files --error-unmatch "${path}" >/dev/null 2>&1; then
+              missing="${path}"
+              break
+            fi
+          done
+          if [ -z "${missing}" ] && [ "${#grants[@]}" -eq 0 ]; then
+            missing=".hexagen/grants/<at least one grant the trace cites>.json"
+          fi
+          if [ -n "${missing}" ]; then
+            echo "::error::${missing} is not tracked. It was never staged — this is not a first commit. Stage it from the engagement machine, then commit it on the branch:"
+            echo "hexagen workbook export --stage ${required[*]} ${grants[*]:-<every grant the trace cites>.json} --yes"
+            echo "step 0 exit 2"
+            exit 2
+          fi
+          echo "tracked: ${required[*]} and ${#grants[@]} grant(s)"
+          echo "step 0 exit 0"
+
+      - name: "step 1: observe"
+        run: |
+          # Rescans the checkout and rewrites `.hexagen/observed.json` in the CI
+          # workspace only — nothing is committed back. This is what makes steps 2
+          # and 3 judge the PR's own tree rather than the tree the committed
+          # report described, and it is why `--strict` passes on the next step.
+          #
+          # The caps are honest limits, not skips: over `--max-import-files`
+          # (20 000 JS/TS files) or `--max-import-ms` the import pass reports
+          # `collected: false`, observe still exits 0, and steps 2 and 3 then say
+          # the edges are incomplete — which is never clean. Raise the caps for a
+          # large repo; do not let a green observe hide an unread tree.
+          set +e
+          hexagen observe --out .hexagen/observed.json --yes
+          code=$?
+          set -e
+          echo "step 1 exit ${code}"
+          if [ "${code}" -ne 0 ]; then
+            echo "::error::observe exit ${code}: 2 = bad input or a refused write (the --out path must resolve under <root>/.hexagen/). Nothing else in this gate can run without a fresh report."
+          fi
+          exit "${code}"
+
+      - name: "step 2: slice check (drift report, not a gate)"
+        run: |
+          # NOT in the fail-fast chain, on purpose. `slice check` fails (exit 1)
+          # on any in-slice file changed since `slice.repo.commit`, and
+          # `slice init` writes that commit once and refuses to overwrite it — so
+          # after the first in-slice commit every PR exits 1 here, forever. That
+          # is a property of the engagement, not of the PR, and it carries no
+          # per-PR signal: a gate that is always red is not a gate.
+          #
+          # Exit 2 is different: that is bad input or stale state, and it stays
+          # fatal. `hexagen slice check --since <base>` — the fix that puts this
+          # step back in the chain — does not exist yet.
+          set +e
+          hexagen slice check --strict
+          code=$?
+          set -e
+          echo "step 2 exit ${code}"
+          case "${code}" in
+            0)
+              echo "::notice::slice check: no drift"
+              ;;
+            1)
+              echo "::notice::slice check reported drift (exit 1): an in-slice file changed since slice.repo.commit, or the edge list is incomplete. Logged, not gated — see docs/ci/brownfield-gate-recipe.md."
+              ;;
+            *)
+              echo "::error::slice check exit ${code}: 2 = bad input or stale state (a missing or invalid sidecar file, or --strict with observed.json read at another commit). Failing."
+              ;;
+          esac
+          if [ "${code}" -eq 2 ]; then
+            exit 2
+          fi
+          exit 0
+
+      - name: "step 3: contract check --base <pinned base>"
+        run: |
+          # stale observed.json is not on this list: step 1 rewrote it at HEAD, and this
+          # step does not pass --strict, so it could only warn.
+          set -uo pipefail
+          base="${{ steps.base.outputs.base }}"
+          # The growth guard reads BOTH sidecar files AT the base commit and exits
+          # 2 when either is absent there — with `.hexagen/` in the exclude file,
+          # "never staged" and "the commit that adds it" look the same to `git
+          # show`, so there is no first-commit pass inside the command. The PR
+          # that first stages `.hexagen/` therefore has a base that predates the
+          # contract, and `--base` would fail that PR for a reason that has
+          # nothing to do with the change. So probe first: when the base holds no
+          # contract, run the plain check, which still fails on any violation.
+          # That PR is judged on violations only; growth is guarded from the next
+          # PR onward, once the base carries the contract.
+          #
+          # A base that DOES hold them, and a PR that deletes them, is a different
+          # thing and step 0 has already failed that PR by name — so this branch
+          # is only reachable on the PR that introduces the sidecars.
+          absent=""
+          for sidecar in .hexagen/contract.json .hexagen/slice.json; do
+            if ! git cat-file -e "${base}:${sidecar}" 2>/dev/null; then
+              absent="${absent} ${sidecar}"
+            fi
+          done
+          if [ -n "${absent}" ]; then
+            echo "::notice::bootstrap: no contract at base ${base}; growth guard starts on the next PR"
+            echo "::notice::absent at the base commit:${absent} — nothing to compare against, so this run judges violations only"
+            set +e
+            hexagen contract check
+          else
+            set +e
+            hexagen contract check --base "${base}"
+          fi
+          code=$?
+          set -e
+          echo "step 3 exit ${code}"
+          if [ "${code}" -eq 1 ]; then
+            if [ -n "${absent}" ]; then
+              echo "::error::contract check exit 1: a rule was crossed that is not in the baseline. This is the bootstrap PR, so there is no base to compare growth against."
+            else
+              echo "::error::contract check exit 1: a rule was crossed that is not in the baseline, or the gate was weakened against the base (a rule dropped or downgraded, a suppression added or extended, a slice exclude added). Both are refusals, not warnings."
+            fi
+          elif [ "${code}" -eq 2 ]; then
+            echo "::error::contract check exit 2: bad input — an unresolvable base, a sidecar file that cannot be read at the base, or a slice/contract file that does not parse."
+          fi
+          exit "${code}"
+
+      - name: "Inject the engagement key"
+        env:
+          HEXAGEN_GRANT_KEY: ${{ secrets.HEXAGEN_GRANT_KEY }}
+        run: |
+          # The key comes from a secret and only from a secret. It is written to
+          # RUNNER_TEMP, outside the checkout, so nothing in the tree can read it
+          # and `git add -f` cannot reach it; `--key-file`/`HEXAGEN_GRANT_KEY_FILE`
+          # is the second step of key resolution, after `--key-file`. Never commit
+          # a key and never let the job fall back to a key file in the checkout.
+          #
+          # A `pull_request` run from a fork gets no secrets, so this step exits 2
+          # there. That is deliberate: without the key the evidence step cannot
+          # verify anything, and a gate that skips what it cannot do is not a
+          # gate. Run this job on branches in the repository, not on forks.
+          key_file="${RUNNER_TEMP}/engagement.key"
+          install -m 600 /dev/null "${key_file}"
+          printf '%s' "${HEXAGEN_GRANT_KEY:-}" >"${key_file}"
+          if [ ! -s "${key_file}" ]; then
+            echo "::error::the HEXAGEN_GRANT_KEY secret is empty. A missing or weak key is a denial, not a skip: set the repository secret, or stop using the evidence step."
+            exit 2
+          fi
+          echo "HEXAGEN_GRANT_KEY_FILE=${key_file}" >> "${GITHUB_ENV}"
+          echo "wrote the engagement key to ${key_file} (mode 600, outside the checkout)"
+
+      - name: "step 4: evidence pack"
+        if: env.USE_EVIDENCE_VERIFY != 'true'
+        run: |
+          # Reads the whole trace and writes a bundle the job throws away. That is
+          # deliberate: `evidence pack`'s contract is that it either writes a
+          # bundle that passed or writes nothing, so a CI step that only wants a
+          # yes/no has to write somewhere disposable. A pass also advances
+          # `.hexagen/evidence/tip.json` in this workspace; nothing is pushed, so
+          # the repository's tip is untouched.
+          set -uo pipefail
+          grants=()
+          while IFS= read -r grant; do
+            [ -n "${grant}" ] || continue
+            grants+=("${grant}")
+          done < <(git ls-files -- ".hexagen/grants/*.json")
+          if [ "${#grants[@]}" -eq 0 ]; then
+            echo "::error::no tracked grant under .hexagen/grants/; --grant is required, and every grant the trace cites must be supplied or Rule 3 fails the line that cites it."
+            echo "step 4 exit 2"
+            exit 2
+          fi
+          set +e
+          hexagen evidence pack .hexagen/evidence/trace.jsonl \
+            --grant "${grants[@]}" \
+            --out .hexagen/ci-evidence-bundle.zip
+          code=$?
+          set -e
+          echo "step 4 exit ${code}"
+          if [ "${code}" -eq 1 ]; then
+            echo "::error::evidence pack exit 1: the evidence is invalid — a broken hash chain, a torn last line, a line citing a grant that was not supplied or does not verify, a tool or time outside the grant's window, or a tip that does not match. No bundle was written and the tip is unchanged."
+          elif [ "${code}" -eq 2 ]; then
+            echo "::error::evidence pack exit 2: bad input or a failed precondition — no engagement key, an --out path outside .hexagen/ or one that already exists, a trace the tip does not anchor, an unreadable grant file, or the same grant id passed twice."
+          fi
+          exit "${code}"
+
+      - name: "step 4b: evidence verify --since <base>"
+        if: env.USE_EVIDENCE_VERIFY == 'true'
+        run: |
+          # The read-only replacement for step 4, once `hexagen evidence verify`
+          # ships (kit plan 1, lane 1A). It never writes: no bundle, no tip. It
+          # also narrows to what the PR changed — a file inside the slice or
+          # inside a supplied grant with no trace line covering it is unaccounted
+          # and exits 1, which is a per-PR signal the whole-trace pack cannot
+          # give. Exit 1 = an unaccounted change; 2 = bad input or stale state
+          # (an unresolvable --since, a missing trace, an empty diff).
+          set -uo pipefail
+          grants=()
+          while IFS= read -r grant; do
+            [ -n "${grant}" ] || continue
+            grants+=("${grant}")
+          done < <(git ls-files -- ".hexagen/grants/*.json")
+          if [ "${#grants[@]}" -eq 0 ]; then
+            echo "::error::no tracked grant under .hexagen/grants/; --grant is required, and every grant the trace cites must be supplied."
+            echo "step 4b exit 2"
+            exit 2
+          fi
+          set +e
+          hexagen evidence verify --since "${{ steps.base.outputs.base }}" \
+            --grant "${grants[@]}"
+          code=$?
+          set -e
+          echo "step 4b exit ${code}"
+          if [ "${code}" -eq 1 ]; then
+            echo "::error::evidence verify exit 1: a changed file inside the slice or a grant has no covering trace line."
+          elif [ "${code}" -eq 2 ]; then
+            echo "::error::evidence verify exit 2: bad input or stale state — an unresolvable --since, a missing trace, or an empty diff."
+          fi
+          exit "${code}"
+
+      - name: "Key fingerprint (report only)"
+        if: always()
+        # Non-blocking by declaration, not by swallowing: this step's exit code
+        # is whatever `hexagen grant show` returns — 1 when a signature does not
+        # verify — and `continue-on-error` is what keeps that from deciding the
+        # job. `set -e` stays on, so a failure inside the step is still a failure
+        # the log shows; nothing here rescues an exit code it does not re-raise.
+        continue-on-error: true
+        run: |
+          # Diagnostic, never a gate: names the key the job resolved, by path and
+          # fingerprint, so a mismatch is visible in the log. The key itself is
+          # never printed. `hexagen grant check <grant> --tool <tool> --path
+          # <path>` is the enforcing form and needs a tool and a path.
+          set -uo pipefail
+          shopt -s nullglob
+          # A glob into an array, not `git ls-files | head -n 1`: a pipeline here
+          # would need its own failure handling, and `head` closing the pipe early
+          # is SIGPIPE on a status nobody reads. The glob reads the workspace,
+          # which on a fresh checkout is exactly the tracked set, and it sorts, so
+          # the same grant is named on every run.
+          grants=(.hexagen/grants/*.json)
+          if [ "${#grants[@]}" -gt 0 ]; then
+            hexagen grant show "${grants[0]}"
+          else
+            echo "::notice::no grant under .hexagen/grants/, so there is no signature to report a fingerprint for"
+          fi
