@@ -81,7 +81,6 @@ run. An un-staged repo must not look like a first commit.
 
 1. **A documented gate recipe**: a README section with a copyable workflow
    block, run in this order and numbered as the acceptance tests number them.
-
    - **Step 0** — `git ls-files --error-unmatch <each path in §4.0>`. The
      precondition. Not a kit command, and the only step that reports a missing
      path by name.
