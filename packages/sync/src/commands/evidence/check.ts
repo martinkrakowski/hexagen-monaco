@@ -86,6 +86,12 @@ function chainReasons(
   return reasons;
 }
 
+/** One verdict as a reader reports it: its position and every reason. */
+export function describeVerdict(v: LineVerdict): string {
+  const where = v.seq === undefined ? `line ${v.index}` : `seq ${v.seq}`;
+  return `${where}: ${v.reasons.join("; ")}`;
+}
+
 function evidenceShapeReasons(value: Record<string, unknown>): string[] {
   const reasons: string[] = [];
   for (const f of ["grant_id", "goal_id", "halt_reason"] as const) {

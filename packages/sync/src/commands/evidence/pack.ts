@@ -26,7 +26,7 @@ import { writeFileReplace } from "../shared/sidecar-write.js";
 import { realpathOfExistingAncestor } from "../shared/git-exclude.js";
 import { resolveSidecarOut } from "../shared/sidecar-out.js";
 import { parseGrant, verifyGrantSignature } from "../grant/verify.js";
-import { checkLines, type LineVerdict } from "./check.js";
+import { checkLines, describeVerdict, type LineVerdict } from "./check.js";
 
 export interface EvidencePackOptions {
   /** Repo root; `.hexagen/` lives here. Never searched upward. */
@@ -92,11 +92,6 @@ async function realOutDirInsideSidecar(
     throw new Error(`${dir} resolves into the evidence directory`);
   }
   return realDir;
-}
-
-function describe(v: LineVerdict): string {
-  const where = v.seq === undefined ? `line ${v.index}` : `seq ${v.seq}`;
-  return `${where}: ${v.reasons.join("; ")}`;
 }
 
 /**
@@ -237,7 +232,9 @@ export async function runEvidencePack(
       );
     }
     const verdicts = checkLines(split.lines, grants);
-    for (const v of verdicts) if (!v.valid) problems.push(describe(v));
+    for (const v of verdicts) {
+      if (!v.valid) problems.push(describeVerdict(v));
+    }
 
     // The anchored tip: catches tail truncation and a restart from genesis,
     // which a chain that only looks backwards cannot.
