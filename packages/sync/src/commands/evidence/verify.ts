@@ -6,6 +6,7 @@ import {
   Tip,
   checkGrantWindow,
   isPathInSlice,
+  nfc,
   type Grant,
   type Slice,
 } from "@hexagen/shared";
@@ -18,11 +19,15 @@ import {
   lineHash,
   splitTrace,
   verifyTip,
-  withTraceLock,
 } from "@hexagen/shared/node/trace-chain";
 import { loadGrantFile, verifyGrantSignature } from "../grant/verify.js";
 import { createGitReader } from "../report/exec-git.js";
-import { changedPaths, git, loadSlice } from "../shared/brownfield-sidecar.js";
+import {
+  changedPaths,
+  git,
+  isAncestor,
+  loadSlice,
+} from "../shared/brownfield-sidecar.js";
 import { checkLines, describeVerdict, type LineVerdict } from "./check.js";
 
 /**
@@ -44,11 +49,25 @@ import { checkLines, describeVerdict, type LineVerdict } from "./check.js";
  * Option A follow-on lands, a change applied through
  * `hexagen_accept_transaction` is unaccounted here, because that writer leaves
  * no path list at all.
+ *
+ * Two things make the evidence worth reading, and both are why this reads the
+ * `<until>` tree rather than the checkout:
+ *
+ * - **Only anchored lines cover.** The chain binds every line to the one above
+ *   it, but only `tip.json` binds the head to the engagement key. A line above
+ *   `tip.seq` is a chain any editor could have extended, so it covers nothing;
+ *   a run that would otherwise pass on one says so and names the pack that
+ *   anchors it.
+ * - **The evidence is the tree, not the working copy.** A trace, tip or
+ *   proposal that is not committed at `<until>` is not evidence for the range,
+ *   and a rewritten base commit is caught by comparing the line the trace had at
+ *   `<since>` with the one it has now. A committed blob cannot change under the
+ *   command, so no trace lock is taken.
  */
 
 const TRACE_RELATIVE = [".hexagen", "evidence", "trace.jsonl"];
 const TIP_RELATIVE = [".hexagen", "evidence", "tip.json"];
-const PROPOSALS_RELATIVE = [".hexagen", "proposals"];
+const PROPOSALS_RELATIVE = ".hexagen/proposals";
 
 /** Named verbatim: without staged evidence there is nothing to judge. */
 const STAGE_HINT = [
@@ -61,10 +80,14 @@ const STAGE_HINT = [
   "    --yes",
 ].join("\n");
 
+/** Named verbatim: only a key-holder's pack can anchor a line. */
+const PACK_HINT =
+  "hexagen evidence pack .hexagen/evidence/trace.jsonl --grant <file>... --out <zip>";
+
 export interface EvidenceVerifyOptions {
   /** Repo root; `.hexagen/` lives here. Never searched upward. */
   readonly root: string;
-  /** Any git ref: only lines appended after it can cover anything. */
+  /** Any git ref; only lines appended after it can cover anything. */
   readonly since: string;
   /** Upper end of the range. Defaults to `HEAD`. */
   readonly until?: string;
@@ -77,13 +100,16 @@ export interface EvidenceVerifyOptions {
   readonly env?: Readonly<Record<string, string | undefined>>;
   /** Test seam; defaults to `os.homedir()`. */
   readonly homeDir?: string;
-  /** Milliseconds to wait for the trace lock (default 15 s). */
-  readonly lockTimeoutMs?: number;
 }
 
-/** One changed file no candidate line covers, with the nearest line that does. */
+/** One changed file no anchored line covers, with the nearest line that does. */
 export interface UnaccountedFile {
   readonly path: string;
+  /**
+   * Lines that would cover `path` but that no `evidence pack` has anchored.
+   * Present only when the run failed because the cover exists on paper only.
+   */
+  readonly unanchoredCover?: readonly number[];
   readonly nearestSeq?: number;
   readonly nearestGrantId?: string;
   readonly nearestPaths?: readonly string[];
@@ -118,6 +144,11 @@ export interface CandidateLine {
     readonly result_digest: string;
     readonly time: string;
   }[];
+  /**
+   * A key-holder's `evidence pack` anchored this line (`seq <= tip.seq` with the
+   * tip's HMAC verified). An unanchored line covers nothing.
+   */
+  readonly anchored: boolean;
 }
 
 const usage = (messages: readonly string[]): EvidenceVerifyResult => ({
@@ -202,7 +233,9 @@ function callsOf(
  * Whether `candidate` covers `file`. Three things must hold, and the path and
  * the time always come from the same record:
  *
- * 1. the joined proposal names `file`, exactly as the writer recorded it;
+ * 1. the joined proposal names `file`, exactly as the writer recorded it (both
+ *    sides NFC-normalised, so a tree that spells a name in NFD and a proposal
+ *    that spells it in NFC still name one file);
  * 2. `file` sits inside *that* line's grant's paths — coverage is scoped to one
  *    grant, so a file another supplied grant allows is not covered here;
  * 3. one of the line's calls carries the proposal's recomputed digest and sits
@@ -215,7 +248,8 @@ export function coveringLine(
   grant: Grant,
   file: string,
 ): boolean {
-  if (!candidate.paths.includes(file)) return false;
+  const wanted = nfc(file);
+  if (!candidate.paths.some((p) => nfc(p) === wanted)) return false;
   if (!isPathInSlice({ paths: grant.paths, excludes: [] }, file)) return false;
   return candidate.calls.some((call) => {
     if (call.result_digest !== candidate.digest) return false;
@@ -241,40 +275,56 @@ function nearestTo(
   );
 }
 
-/** Every proposal under `.hexagen/proposals/`, joined to its line. */
-interface JoinedProposal {
-  readonly candidate: CandidateLine;
-}
-
+/**
+ * Every proposal under `.hexagen/proposals/` **in the `<until>` tree**, joined
+ * to its line. A proposal that is only in the working tree is not evidence for
+ * the range, so it is invisible here and its line covers nothing.
+ *
+ * Only a proposal naming a line above `lastSeqAtSince` can be a candidate, so
+ * only those are read strictly: an older one — schema or digest — covers
+ * nothing and is ignored, rather than refusing every later run forever.
+ */
 async function joinProposals(
   root: string,
+  until: string,
+  lastSeqAtSince: number,
+  tipSeq: number,
   lines: readonly { readonly value?: unknown }[],
   verdicts: readonly LineVerdict[],
 ): Promise<{
-  readonly joined: ReadonlyMap<number, JoinedProposal>;
+  readonly joined: ReadonlyMap<number, CandidateLine>;
   readonly problem?: string;
 }> {
-  const joined = new Map<number, JoinedProposal>();
-  const dir = path.join(root, ...PROPOSALS_RELATIVE);
-  let names: string[];
-  try {
-    names = await fs.readdir(dir);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      return { joined };
-    }
-    throw error;
+  const joined = new Map<number, CandidateLine>();
+  const listed = git(root, [
+    "ls-tree",
+    "-r",
+    "--name-only",
+    until,
+    "--",
+    PROPOSALS_RELATIVE,
+  ]);
+  if (listed === null) {
+    return {
+      joined,
+      problem: `git ls-tree ${until} -- ${PROPOSALS_RELATIVE} failed`,
+    };
   }
-  for (const name of [...names].sort()) {
-    if (!name.endsWith(".json")) continue;
-    const file = path.join(dir, name);
+  const reader = createGitReader(root);
+  const names = listed
+    .split("\n")
+    .map((n) => n.trim())
+    .filter((n) => n.endsWith(".json"));
+  for (const file of names.sort()) {
+    const text = reader.show(until, file);
+    if (text === null) continue;
     let json: unknown;
     try {
-      json = JSON.parse(await fs.readFile(file, "utf8"));
+      json = JSON.parse(text);
     } catch (error) {
       return {
         joined,
-        problem: `${file} cannot be read as JSON: ${(error as Error).message}`,
+        problem: `${file}: cannot be read as JSON: ${(error as Error).message}`,
       };
     }
     const parsed = ProposalMeta.safeParse(json);
@@ -286,9 +336,9 @@ async function joinProposals(
       };
     }
     const meta = parsed.data;
-    // The trace was unchained when the proposal was written, so there is no
-    // line to join and nothing is covered.
-    if (meta.traceSeq === null) continue;
+    // A proposal from before `<since>`, and one written while the trace was
+    // unchained, can never join a line that can cover this range.
+    if (meta.traceSeq === null || meta.traceSeq <= lastSeqAtSince) continue;
     const verdict = verdicts.find((v) => (v.seq ?? v.index) === meta.traceSeq);
     const line = asRecord(lines[meta.traceSeq]?.value);
     // No line at that seq, or a line that is not evidence of a write: nothing
@@ -307,13 +357,12 @@ async function joinProposals(
       };
     }
     joined.set(meta.traceSeq, {
-      candidate: {
-        seq: meta.traceSeq,
-        grantId: verdict.grantId ?? meta.grantId,
-        paths: meta.paths,
-        digest,
-        calls,
-      },
+      seq: meta.traceSeq,
+      grantId: verdict.grantId ?? meta.grantId,
+      paths: meta.paths,
+      digest,
+      calls,
+      anchored: meta.traceSeq <= tipSeq,
     });
   }
   return { joined };
@@ -333,23 +382,25 @@ export async function runEvidenceVerify(
   const until = resolveCommit(root, untilRef);
   if (until === null) return usage([unresolvable(root, untilRef)]);
   const range = joinRef(options.since, untilRef);
+  // The range has to run forwards: `since..until` with `until` behind `since`
+  // is not a range of work, and reading it backwards would let a change be
+  // judged against evidence that predates it.
+  if (!isAncestor(root, since, until)) {
+    return usage([
+      `since is not an ancestor of until: ${options.since} is not in the history of ${untilRef}. Verifying ${range} would judge a change against evidence from before it.`,
+    ]);
+  }
 
-  // The staging precondition: without the slice and the trace there is nothing
-  // to judge, and naming every file unaccounted would be a false alarm.
-  for (const [label, relative] of [
-    ["slice", [".hexagen", "slice.json"]],
-    ["trace", TRACE_RELATIVE],
-  ] as const) {
-    const file = path.join(root, ...relative);
-    if (
-      await fs.lstat(file).then(
-        () => true,
-        () => false,
-      )
-    ) {
-      continue;
-    }
-    return usage([`no ${label} at ${file}; nothing was judged.`, STAGE_HINT]);
+  // The staging precondition: without the slice there is nothing to judge, and
+  // naming every file unaccounted would be a false alarm.
+  const sliceFile = path.join(root, ".hexagen", "slice.json");
+  if (
+    !(await fs.lstat(sliceFile).then(
+      () => true,
+      () => false,
+    ))
+  ) {
+    return usage([`no slice at ${sliceFile}; nothing was judged.`, STAGE_HINT]);
   }
 
   let slice: Slice;
@@ -428,175 +479,193 @@ export async function runEvidenceVerify(
 
   const skipNote = `skipped ${plural(skipped, "change")} outside the slice and every grant`;
 
-  // Everything that reads the trace runs under the writer's lock, so a
-  // half-finished append is never seen.
-  const judge = async (): Promise<EvidenceVerifyResult> => {
-    const tracePath = path.join(root, ...TRACE_RELATIVE);
-    const split = splitTrace(await fs.readFile(tracePath, "utf8"));
-    if (split.lines.length === 0) {
-      return usage([
-        `${tracePath} has no lines; there is nothing to judge.`,
-        STAGE_HINT,
-      ]);
-    }
-
-    // The same pass `evidence pack` runs: chain, line shape, the four Rules,
-    // and the anchored tip. An absent tip is not a failure here either.
-    const problems: string[] = [];
-    if (split.torn) {
-      problems.push(
-        "the last line is torn (invalid JSON or no trailing newline)",
-      );
-    }
-    const verdicts = checkLines(split.lines, grants);
-    for (const v of verdicts) if (!v.valid) problems.push(describeVerdict(v));
-    const tipPath = path.join(root, ...TIP_RELATIVE);
-    let tipText: string | null = null;
-    try {
-      tipText = await fs.readFile(tipPath, "utf8");
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
-        problems.push(`cannot read ${tipPath}: ${(error as Error).message}`);
-      }
-    }
-    if (tipText !== null) {
-      let tip: Tip | undefined;
-      try {
-        tip = Tip.parse(JSON.parse(tipText));
-      } catch (error) {
-        problems.push(
-          `${tipPath} is not a valid tip: ${(error as Error).message}`,
-        );
-      }
-      if (tip) {
-        if (!verifyTip(tip, keyHex)) {
-          problems.push(
-            "tip.json HMAC does not verify with the engagement key",
-          );
-        } else {
-          const at = split.lines[tip.seq];
-          if (at === undefined) {
-            problems.push(
-              `the trace ends before the recorded tip (seq ${tip.seq}): lines were removed`,
-            );
-          } else if (
-            at.value === undefined ||
-            lineHash(at.value) !== tip.hash
-          ) {
-            problems.push(
-              `the line at the recorded tip (seq ${tip.seq}) differs from the one anchored: the trace was altered or restarted`,
-            );
-          }
-        }
-      }
-    }
-    if (problems.length > 0) {
-      return usage([
-        `evidence verify cannot judge ${range}: the trace is not sound evidence, so no coverage was judged and nothing is called accounted:`,
-        ...problems.map((p) => `  - ${p}`),
-      ]);
-    }
-
-    // Only a line appended after `<since>` can cover a change made in the range.
-    // The trace has to have been tracked at `<since>` for that to be decidable:
-    // neither a call's own clock nor an adjusted commit date proves a line was
-    // appended after it, and a stale line must never cover a new change.
-    const trackedAtSince = createGitReader(root).show(
-      since,
-      TRACE_RELATIVE.join("/"),
-    );
-    if (trackedAtSince === null) {
-      return usage([
-        `the trace is not tracked at ${options.since} (${TRACE_RELATIVE.join("/")}); only lines appended after it could cover a change, and this checkout cannot tell which those are. Refusing to guess.`,
-        STAGE_HINT,
-      ]);
-    }
-    const lastSeqAtSince = lastSeqIn(trackedAtSince);
-    const candidateVerdicts = verdicts.filter(
-      (v) => v.kind === "evidence" && (v.seq ?? v.index) > lastSeqAtSince,
-    );
-
-    // A clean result never means "nothing was looked at" by default.
-    if (changed.length === 0) {
-      const line = "empty diff: nothing was checked";
-      return options.allowEmpty === true
-        ? { exitCode: 0, messages: [line], stdout: "" }
-        : usage([line, "re-run with --allow-empty to accept an empty range"]);
-    }
-
-    const { joined, problem } = await joinProposals(
-      root,
-      split.lines,
-      verdicts,
-    );
-    if (problem !== undefined) return usage([problem]);
-
-    const candidates: CandidateLine[] = candidateVerdicts.flatMap((v) => {
-      const entry = joined.get(v.seq ?? v.index);
-      return entry === undefined ? [] : [entry.candidate];
-    });
-
-    const covered: string[] = [];
-    const unaccounted: UnaccountedFile[] = [];
-    for (const file of kept) {
-      const hit = candidates.find((candidate) => {
-        const grant = grants.get(candidate.grantId);
-        // Narrowing, not a second check: Rule 3 already refused every line
-        // citing a grant no supplied file verifies, so the map always answers.
-        return grant !== undefined && coveringLine(candidate, grant, file);
-      });
-      if (hit !== undefined) {
-        covered.push(file);
-        continue;
-      }
-      const nearest = nearestTo(candidates, file);
-      unaccounted.push({
-        path: file,
-        ...(nearest === undefined
-          ? {}
-          : {
-              nearestSeq: nearest.seq,
-              nearestGrantId: nearest.grantId,
-              nearestPaths: nearest.paths,
-            }),
-      });
-    }
-
-    const nearestNote = (entry: UnaccountedFile): string =>
-      entry.nearestSeq === undefined
-        ? "no line was appended after --since at all"
-        : `nearest line appended after --since: seq ${entry.nearestSeq} under grant ${entry.nearestGrantId}, which named ${(entry.nearestPaths ?? []).join(", ")}`;
-    const summary = `${plural(covered.length + unaccounted.length, "in-scope change")} judged, ${plural(covered.length, "change")} covered by a line appended after ${options.since}; ${skipNote}`;
-    const messages =
-      unaccounted.length === 0
-        ? [`evidence verify ok: ${summary}`]
-        : [
-            `evidence verify FAILED: ${plural(unaccounted.length, "change")} found after the fact in ${range} with no covering line`,
-            ...unaccounted.map(
-              (entry) => `  unaccounted: ${entry.path} (${nearestNote(entry)})`,
-            ),
-            `  ${skipNote}`,
-          ];
-    return {
-      exitCode: unaccounted.length === 0 ? 0 : 1,
-      messages,
-      stdout: `${unaccounted.map((u) => u.path).join("\n")}${unaccounted.length > 0 ? "\n" : ""}`,
-      unaccounted,
-      covered,
-      skipped,
-      candidateLines: candidateVerdicts.length,
-    };
-  };
-
-  try {
-    return await withTraceLock(path.join(root, ...TRACE_RELATIVE), judge, {
-      timeoutMs: options.lockTimeoutMs,
-    });
-  } catch (error) {
-    // A lock that cannot be taken, or a trace that vanished or became
-    // unreadable, is a precondition failure (2), never a pass.
+  // The evidence is read from the `<until>` tree, so it cannot change under the
+  // command and no trace lock is taken: a committed blob is either there or it
+  // is not, and what the working copy holds is none of this command's business.
+  const reader = createGitReader(root);
+  const traceRel = TRACE_RELATIVE.join("/");
+  const tipRel = TIP_RELATIVE.join("/");
+  const traceText = reader.show(until, traceRel);
+  if (traceText === null) {
     return usage([
-      `cannot read the trace under its lock: ${(error as Error).message}`,
+      `no trace at ${traceRel} in ${untilRef}; nothing was judged. An unstaged trace is not evidence for this range.`,
+      STAGE_HINT,
     ]);
   }
+  const split = splitTrace(traceText);
+  if (split.lines.length === 0) {
+    return usage([
+      `the trace at ${traceRel} in ${untilRef} has no lines; there is nothing to judge.`,
+      STAGE_HINT,
+    ]);
+  }
+
+  // The same pass `evidence pack` runs: chain, line shape, the four Rules, and
+  // the anchored tip.
+  const problems: string[] = [];
+  if (split.torn) {
+    problems.push(
+      "the last line is torn (invalid JSON or no trailing newline)",
+    );
+  }
+  const verdicts = checkLines(split.lines, grants);
+  for (const v of verdicts) if (!v.valid) problems.push(describeVerdict(v));
+
+  // The tip is required, not optional: it is the only thing that binds a line to
+  // the engagement key, and a run that cannot see it cannot tell evidence from a
+  // hand-written chain.
+  const tipText = reader.show(until, tipRel);
+  if (tipText === null) {
+    return usage([
+      `no anchored tip at ${tipRel} in ${untilRef}; nothing was judged. Only a line a key-holder's pack anchored can cover a change, so anchor the head first: ${PACK_HINT}`,
+    ]);
+  }
+  let tip: Tip | undefined;
+  try {
+    tip = Tip.parse(JSON.parse(tipText));
+  } catch (error) {
+    problems.push(`${tipRel} is not a valid tip: ${(error as Error).message}`);
+  }
+  let tipSeq = -1;
+  if (tip) {
+    if (!verifyTip(tip, keyHex)) {
+      problems.push("tip.json HMAC does not verify with the engagement key");
+    } else {
+      tipSeq = tip.seq;
+      const at = split.lines[tip.seq];
+      if (at === undefined) {
+        problems.push(
+          `the trace ends before the recorded tip (seq ${tip.seq}): lines were removed`,
+        );
+      } else if (at.value === undefined || lineHash(at.value) !== tip.hash) {
+        problems.push(
+          `the line at the recorded tip (seq ${tip.seq}) differs from the one anchored: the trace was altered or restarted`,
+        );
+      }
+    }
+  }
+  if (problems.length > 0) {
+    return usage([
+      `evidence verify cannot judge ${range}: the trace is not sound evidence, so no coverage was judged and nothing is called accounted:`,
+      ...problems.map((p) => `  - ${p}`),
+    ]);
+  }
+
+  // Only a line appended after `<since>` can cover a change made in the range.
+  // The trace has to have been tracked at `<since>` for that to be decidable:
+  // neither a call's own clock nor an adjusted commit date proves a line was
+  // appended after it, and a stale line must never cover a new change.
+  const trackedAtSince = reader.show(since, traceRel);
+  if (trackedAtSince === null) {
+    return usage([
+      `the trace is not tracked at ${options.since} (${traceRel}); only lines appended after it could cover a change, and this checkout cannot tell which those are. Refusing to guess.`,
+      STAGE_HINT,
+    ]);
+  }
+  const atSince = splitTrace(trackedAtSince).lines;
+  const lastSeqAtSince = lastSeqIn(trackedAtSince);
+  // Freshness is a history claim, not a number: the trace now has to *be* the
+  // trace it was at `<since>`, continued. A rewritten, reordered or replaced
+  // base commit breaks that, and a `seq` comparison would not notice.
+  if (lastSeqAtSince >= 0) {
+    const then = atSince[lastSeqAtSince]?.value;
+    const now = split.lines[lastSeqAtSince]?.value;
+    if (
+      then === undefined ||
+      now === undefined ||
+      lineHash(then) !== lineHash(now)
+    ) {
+      return usage([
+        `trace rewritten since ${options.since}: the line at seq ${lastSeqAtSince} is not the one the trace held there, so the chain says nothing about ${range}.`,
+      ]);
+    }
+  }
+  const candidateVerdicts = verdicts.filter(
+    (v) => v.kind === "evidence" && (v.seq ?? v.index) > lastSeqAtSince,
+  );
+
+  // A clean result never means "nothing was looked at" by default.
+  if (changed.length === 0) {
+    const line = "empty diff: nothing was checked";
+    return options.allowEmpty === true
+      ? { exitCode: 0, messages: [line], stdout: "" }
+      : usage([line, "re-run with --allow-empty to accept an empty range"]);
+  }
+
+  const { joined, problem } = await joinProposals(
+    root,
+    until,
+    lastSeqAtSince,
+    tipSeq,
+    split.lines,
+    verdicts,
+  );
+  if (problem !== undefined) return usage([problem]);
+
+  const candidates: CandidateLine[] = candidateVerdicts.flatMap((v) => {
+    const candidate = joined.get(v.seq ?? v.index);
+    return candidate === undefined ? [] : [candidate];
+  });
+  const anchored = candidates.filter((c) => c.anchored);
+
+  const covered: string[] = [];
+  const unaccounted: UnaccountedFile[] = [];
+  for (const file of kept) {
+    const covering = (candidate: CandidateLine): boolean => {
+      const grant = grants.get(candidate.grantId);
+      // Narrowing, not a second check: Rule 3 already refused every line
+      // citing a grant no supplied file verifies, so the map always answers.
+      return grant !== undefined && coveringLine(candidate, grant, file);
+    };
+    if (anchored.some(covering)) {
+      covered.push(file);
+      continue;
+    }
+    // A line that would cover it, but that no pack has anchored, is the case
+    // worth naming: the work is accounted for on paper and not in fact.
+    const unanchored = candidates.filter((c) => !c.anchored && covering(c));
+    const nearest = nearestTo(candidates, file);
+    unaccounted.push({
+      path: file,
+      unanchoredCover: unanchored.map((c) => c.seq),
+      ...(nearest === undefined
+        ? {}
+        : {
+            nearestSeq: nearest.seq,
+            nearestGrantId: nearest.grantId,
+            nearestPaths: nearest.paths,
+          }),
+    });
+  }
+
+  const nearestNote = (entry: UnaccountedFile): string => {
+    const unanchored =
+      entry.unanchoredCover !== undefined && entry.unanchoredCover.length > 0
+        ? `cover exists but is not anchored: run hexagen evidence pack (seq ${entry.unanchoredCover.join(", ")}); `
+        : "";
+    if (entry.nearestSeq === undefined) {
+      return `${unanchored}no line was appended after --since at all`;
+    }
+    return `${unanchored}nearest line appended after --since: seq ${entry.nearestSeq} under grant ${entry.nearestGrantId}, which named ${(entry.nearestPaths ?? []).join(", ")}`;
+  };
+  const summary = `${plural(covered.length + unaccounted.length, "in-scope change")} judged, ${plural(covered.length, "change")} covered by a line appended after ${options.since}; ${skipNote}`;
+  const messages =
+    unaccounted.length === 0
+      ? [`evidence verify ok: ${summary}`]
+      : [
+          `evidence verify FAILED: ${plural(unaccounted.length, "change")} found after the fact in ${range} with no covering line`,
+          ...unaccounted.map(
+            (entry) => `  unaccounted: ${entry.path} (${nearestNote(entry)})`,
+          ),
+          `  ${skipNote}`,
+        ];
+  return {
+    exitCode: unaccounted.length === 0 ? 0 : 1,
+    messages,
+    stdout: `${unaccounted.map((u) => u.path).join("\n")}${unaccounted.length > 0 ? "\n" : ""}`,
+    unaccounted,
+    covered,
+    skipped,
+    candidateLines: candidateVerdicts.length,
+  };
 }

@@ -12,7 +12,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { Grant } from "@hexagen/shared";
@@ -165,10 +165,36 @@ async function setup(): Promise<void> {
   grant2File = path.join(root, GRANT2_REL);
 }
 
+/** Writes `tip.json` for the trace's current head, without committing it. */
+async function writeTip(): Promise<number> {
+  const lines = (await readFile(traceFile, "utf8")).trimEnd().split("\n");
+  const seq = lines.length - 1;
+  const hash = lineHash(
+    JSON.parse(lines[seq] as string) as Record<string, unknown>,
+  );
+  await put(
+    root,
+    ".hexagen/evidence/tip.json",
+    JSON.stringify({ seq, hash, hmac: signTip(seq, hash, KEY) }),
+  );
+  return seq;
+}
+
+/**
+ * The `hexagen evidence pack` step: anchor the current head and commit the tip.
+ * Only a line an anchored tip covers can cover a change, so every fixture that
+ * expects coverage runs this after its line.
+ */
+async function anchorHead(message = "anchor the head"): Promise<number> {
+  const seq = await writeTip();
+  commit(message);
+  return seq;
+}
+
 /**
  * The common fixture: one covering line (seq 0) and its proposal committed at
- * `since`, so the range after it is judged with one old line plus whatever the
- * test appends next.
+ * `since`, then an anchored tip, so the range after it is judged with one old
+ * line plus whatever the test appends next.
  */
 async function setupWithOldLine(): Promise<void> {
   await setup();
@@ -176,7 +202,8 @@ async function setupWithOldLine(): Promise<void> {
   await appendLine(proposeLine("p0", ["src/a.ts"]));
   await writeMeta("p0", { traceSeq: 0 });
   await put(root, GRANT_REL, JSON.stringify(signedGrant()));
-  since = commit("base: slice, grant, one covering line");
+  await anchorHead("base: slice, grant, one covering line, anchored head");
+  since = git(root, "rev-parse", "HEAD");
 }
 
 const run = (
@@ -198,7 +225,7 @@ const pathsOf = (r: EvidenceVerifyResult): string[] | undefined =>
 beforeEach(setupWithOldLine);
 afterEach(cleanup);
 
-/** Appends a line covering `paths`, and commits the change it accounts for. */
+/** Appends a line covering `paths`, commits the change and anchors the tip. */
 async function changeAndAccount(
   changes: Record<string, string>,
   id: string,
@@ -211,6 +238,7 @@ async function changeAndAccount(
   await appendLine(proposeLine(id, paths));
   await writeMeta(id, { paths: [...paths], traceSeq: 1 });
   commit(message);
+  await anchorHead();
 }
 
 describe("evidence verify, a covered change", () => {
@@ -249,16 +277,58 @@ describe("evidence verify, a covered change", () => {
     expect(r.covered).toEqual(["src/a.ts"]);
   });
 
-  it("a line appended after the fact still covers (it cannot tell when it was written)", async () => {
-    // A hand edit that landed first, with an authorized line written after it.
+  it("a line appended after the fact covers nothing until a pack anchors it", async () => {
+    // A hand edit that landed first, with a well-formed line written after it.
+    // The line is real, and it is still not evidence: the anchored tip is what
+    // binds a line to the engagement key, so the run fails and says why.
     await put(root, "src/a.ts", "edited by hand\n");
     commit("hand edit, no trace line");
     expect((await run()).exitCode).toBe(1);
     const seq = await appendLine(proposeLine("p1", ["src/a.ts"]));
     await writeMeta("p1", { traceSeq: seq });
+    commit("line written after the edit");
+    const unanchored = await run();
+    expect(unanchored.exitCode).toBe(1);
+    expect(text(unanchored)).toMatch(
+      /cover exists but is not anchored: run hexagen evidence pack/,
+    );
+    expect(pathsOf(unanchored)).toEqual(["src/a.ts"]);
+
+    // A key-holder packs: the tip now anchors the line, and it covers.
+    await anchorHead("pack: anchor the late line");
     const r = await run();
     expect(r.exitCode).toBe(0);
     expect(r.covered).toEqual(["src/a.ts"]);
+  });
+
+  it("a missing tip exits 2 and names the packing command", async () => {
+    await changeAndAccount({ "src/a.ts": "changed\n" }, "p1", ["src/a.ts"]);
+    git(root, "rm", "-q", "--cached", ".hexagen/evidence/tip.json");
+    await rm(path.join(root, ".hexagen", "evidence", "tip.json"));
+    commit("tip removed");
+    const r = await run();
+    expect(r.exitCode).toBe(2);
+    expect(text(r)).toMatch(/hexagen evidence pack/);
+    expect(r.unaccounted).toBeUndefined();
+  });
+
+  it("a tip whose HMAC does not verify anchors nothing: exit 2", async () => {
+    await changeAndAccount({ "src/a.ts": "changed\n" }, "p1", ["src/a.ts"]);
+    const tip = JSON.parse(
+      await readFile(
+        path.join(root, ".hexagen", "evidence", "tip.json"),
+        "utf8",
+      ),
+    );
+    await put(
+      root,
+      ".hexagen/evidence/tip.json",
+      JSON.stringify({ ...tip, hmac: "0".repeat(64) }),
+    );
+    commit("tampered tip");
+    const r = await run();
+    expect(r.exitCode).toBe(2);
+    expect(text(r)).toMatch(/tip\.json HMAC/);
   });
 });
 
@@ -278,6 +348,7 @@ describe("evidence verify, an unaccounted change", () => {
     await appendLine(proposeLine("p1", ["src/b.ts"]));
     await writeMeta("p1", { paths: ["src/b.ts"], traceSeq: 1 });
     commit("one accounted change, one silent");
+    await anchorHead();
     const r = await run();
     expect(r.exitCode).toBe(1);
     expect(pathsOf(r)).toEqual(["src/a.ts"]);
@@ -392,11 +463,12 @@ describe("evidence verify, scope", () => {
       traceSeq: 1,
     });
     commit("a grant-2 path outside the slice, accounted");
+    await anchorHead();
     const r = await run({ grantFiles: [grantFile, grant2File] });
     expect(r.exitCode).toBe(0);
-    // The range also carries the grant, the slice, the line and the proposal,
-    // none of which is in the slice or in a grant.
-    expect(r.skipped).toBe(4);
+    // The range also carries the grant, the slice, the line, the proposal and
+    // the tip, none of which is in the slice or in a grant.
+    expect(r.skipped).toBe(5);
     expect(r.covered).toEqual(["lib/c.ts"]);
     // Omitting grant-2 is not "out of scope, then": the line cites a grant that
     // no supplied file verifies, which is no known grant at all (Rule 3).
@@ -409,9 +481,9 @@ describe("evidence verify, scope", () => {
     await changeAndAccount({ "src/a.ts": "changed\n" }, "p1", ["src/a.ts"]);
     const r = await run();
     expect(r.exitCode).toBe(0);
-    // .hexagen/evidence/trace.jsonl and .hexagen/proposals/p1.json are in the
-    // range, and neither is inside the slice or a grant.
-    expect(r.skipped).toBe(2);
+    // .hexagen/evidence/trace.jsonl, .hexagen/proposals/p1.json and the tip
+    // are in the range, and none of them is inside the slice or a grant.
+    expect(r.skipped).toBe(3);
   });
 });
 
@@ -430,6 +502,7 @@ describe("evidence verify, tampering and forged evidence", () => {
       '"goal_id":"EDIT"',
     );
     await writeFile(traceFile, `${lines.join("\n")}\n`);
+    commit("an interior line edited in place");
     const r = await run();
     expect(r.exitCode).toBe(2);
     expect(text(r)).toMatch(/prev_hash does not match/);
@@ -443,6 +516,7 @@ describe("evidence verify, tampering and forged evidence", () => {
     // The forgery: a path added to the metadata the digest was taken over. The
     // chain is intact; the join is not.
     await writeMeta("p1", { paths: ["src/a.ts", "src/b.ts"], traceSeq: 1 });
+    commit("a proposal whose paths were edited after its line");
     const r = await run();
     expect(r.exitCode).toBe(2);
     expect(text(r)).toMatch(/result_digest/);
@@ -463,6 +537,7 @@ describe("evidence verify, tampering and forged evidence", () => {
     await put(root, "src/a.ts", "changed with no line\n");
     commit("silent change");
     await put(root, ".hexagen/proposals/torn.json", "{ not json");
+    commit("a proposal that is not JSON");
     const r = await run();
     expect(r.exitCode).toBe(2);
     expect(text(r)).toMatch(/torn\.json/);
@@ -472,9 +547,23 @@ describe("evidence verify, tampering and forged evidence", () => {
       ".hexagen/proposals/torn.json",
       JSON.stringify({ id: "x" }),
     );
+    commit("a proposal that is not a proposal");
     const partial = await run();
     expect(partial.exitCode).toBe(2);
     expect(text(partial)).toMatch(/is not a proposal/);
+  });
+
+  it("a stale proposal is ignored, not a permanent exit 2", async () => {
+    await put(root, "src/a.ts", "changed\n");
+    await appendLine(proposeLine("p1", ["src/a.ts"]));
+    // Its digest no longer matches, but it names a line from before `<since>`,
+    // so it can never be a candidate: it is ignored, not refused.
+    await writeMeta("p1", { paths: ["src/a.ts", "src/b.ts"], traceSeq: 0 });
+    commit("a stale proposal that does not reproduce its line");
+    const r = await run();
+    expect(r.exitCode).toBe(1);
+    expect(pathsOf(r)).toEqual(["src/a.ts"]);
+    expect(text(r)).not.toMatch(/result_digest/);
   });
 
   it("14a. a proposal whose grantId differs from its line's grant_id covers nothing", async () => {
@@ -556,6 +645,7 @@ describe("evidence verify, grant windows", () => {
       calls: [
         { result_digest: proposalDigest("p1", ["src/a.ts"]), time: CALL_TIME },
       ],
+      anchored: true,
     };
     expect(coveringLine(candidate, grantOf(), "src/a.ts")).toBe(true);
     // Out of window at the call's own time.
@@ -672,6 +762,7 @@ describe("evidence verify, two-call lines", () => {
     );
     await writeMeta("p1", { paths: ["src/a.ts"], traceSeq: 1 });
     commit("a hand-made two-call line, covering call second");
+    await anchorHead();
     const r = await run();
     expect(r.exitCode).toBe(0);
     expect(r.covered).toEqual(["src/a.ts"]);
@@ -684,9 +775,11 @@ describe("evidence verify, renames", () => {
     await appendLine(proposeLine("p1", ["src/renamed.ts"]));
     await writeMeta("p1", { paths: ["src/renamed.ts"], traceSeq: 1 });
     commit("rename, accounted for the new path only");
+    await anchorHead();
     const r = await run();
     expect(r.exitCode).toBe(1);
     expect(pathsOf(r)).toEqual(["src/a.ts"]);
+    expect(text(r)).toMatch(/unaccounted: src\/a\.ts/);
   });
 
   it("6b. the reverse case exits 1 naming the new path", async () => {
@@ -694,9 +787,25 @@ describe("evidence verify, renames", () => {
     await appendLine(proposeLine("p1", ["src/a.ts"]));
     await writeMeta("p1", { paths: ["src/a.ts"], traceSeq: 1 });
     commit("rename, accounted for the old path only");
+    await anchorHead();
     const r = await run();
     expect(r.exitCode).toBe(1);
     expect(pathsOf(r)).toEqual(["src/renamed.ts"]);
+  });
+
+  it("matches a changed path and a proposal path across Unicode forms", async () => {
+    // The diff prints the name as the tree holds it; the proposal recorded an
+    // NFD spelling of the same file. Both name one file, so it is covered.
+    const nfc = "src/caf\u00e9.ts";
+    const nfd = "src/cafe\u0301.ts";
+    await put(root, nfc, "export const a = 1;\n");
+    await appendLine(proposeLine("p1", [nfd]));
+    await writeMeta("p1", { paths: [nfd], traceSeq: 1 });
+    commit("a file whose name is compared in two Unicode forms");
+    await anchorHead();
+    const r = await run();
+    expect(r.exitCode).toBe(0);
+    expect(r.covered).toEqual([nfc]);
   });
 
   it("a rename with both sides covered passes", async () => {
@@ -707,6 +816,7 @@ describe("evidence verify, renames", () => {
       traceSeq: 1,
     });
     commit("rename, both sides accounted");
+    await anchorHead();
     expect((await run()).exitCode).toBe(0);
   });
 });
@@ -731,6 +841,28 @@ describe("evidence verify, the range", () => {
     expect(r.exitCode).toBe(0);
     expect(r.skipped).toBe(1);
     expect(text(r)).not.toMatch(/empty diff/);
+  });
+
+  it("a rewrite of the evidence since <since> exits 2", async () => {
+    // Someone replaced the base commit's trace: the current trace no longer
+    // extends the one at `<since>`, so the chain says nothing about the range.
+    const original = await readFile(traceFile, "utf8");
+    const lines = original.trimEnd().split("\n");
+    lines[0] = (lines[0] as string).replace(
+      '"goal_id":"eng-1"',
+      '"goal_id":"REWRITTEN"',
+    );
+    await writeFile(traceFile, `${lines.join("\n")}\n`);
+    const rewritten = commit("base, rewritten");
+    await writeFile(traceFile, original);
+    await appendLine(proposeLine("p1", ["src/b.ts"]));
+    await put(root, "src/b.ts", "changed\n");
+    commit("change, with the original trace restored");
+    await anchorHead();
+    const r = await run({ since: rewritten });
+    expect(r.exitCode).toBe(2);
+    expect(text(r)).toMatch(/trace rewritten since/);
+    expect(r.unaccounted).toBeUndefined();
   });
 
   it("9. a shallow clone that cannot resolve <since> exits 2, never 0", async () => {
@@ -769,6 +901,7 @@ describe("evidence verify, the range", () => {
     await writeMeta("p1", { traceSeq: 0 });
     await put(root, "src/a.ts", "changed\n");
     commit("the trace is first committed alongside the change");
+    await anchorHead("pack: anchor the head");
     const r = await run();
     expect(r.exitCode).toBe(2);
     expect(text(r)).toMatch(/not tracked at/);
@@ -779,6 +912,54 @@ describe("evidence verify, the range", () => {
     const r = await run({ since: "no-such-ref" });
     expect(r.exitCode).toBe(2);
     expect(text(r)).toMatch(/no-such-ref/);
+  });
+
+  it("a <since> that is not an ancestor of <until> exits 2", async () => {
+    await changeAndAccount({ "src/a.ts": "changed\n" }, "p1", ["src/a.ts"]);
+    // A range the wrong way round: `since` is the later commit.
+    const r = await run({
+      since: git(root, "rev-parse", "HEAD"),
+      until: since,
+    });
+    expect(r.exitCode).toBe(2);
+    expect(text(r)).toMatch(/since is not an ancestor of until/);
+  });
+
+  it("the evidence comes from the <until> tree, not the working tree", async () => {
+    await put(root, "src/a.ts", "changed with no line\n");
+    commit("silent change");
+    // A line written but never committed is not evidence for this range: the
+    // tree at <until> has no trace for it to join.
+    const seq = await appendLine(proposeLine("p1", ["src/a.ts"]));
+    await writeMeta("p1", { traceSeq: seq });
+    expect((await run()).exitCode).toBe(1);
+    await commit("line written, committed");
+    await anchorHead();
+    expect((await run()).exitCode).toBe(0);
+
+    // The same rule for the proposal: a metadata file that only the working
+    // copy has cannot join the line, however anchored that line is.
+    await setupWithOldLine();
+    await put(root, "src/a.ts", "changed again\n");
+    const late = await appendLine(proposeLine("p1", ["src/a.ts"]));
+    await writeMeta("p1", { traceSeq: late });
+    // Stage the line and the change only, so the proposal stays outside history.
+    git(root, "add", ".hexagen/evidence/trace.jsonl", "src/a.ts");
+    git(
+      root,
+      "commit",
+      "-q",
+      "-m",
+      "line committed, proposal left uncommitted",
+    );
+    await writeTip();
+    git(root, "add", ".hexagen/evidence/tip.json");
+    git(root, "commit", "-q", "-m", "pack: anchor the head");
+    const unjoined = await run();
+    expect(unjoined.exitCode).toBe(1);
+    expect(text(unjoined)).not.toMatch(/not anchored/);
+    commit("proposal committed");
+    expect((await run()).exitCode).toBe(0);
   });
 });
 
@@ -801,10 +982,12 @@ describe("evidence verify, preconditions", () => {
     expect(r.unaccounted).toBeUndefined();
   });
 
-  it("a missing trace file names the staging command, never a wall of unaccounted files", async () => {
+  it("a trace missing from the <until> tree names the staging command", async () => {
     await put(root, "src/a.ts", "changed with no line\n");
     commit("silent change");
-    await writeFile(traceFile, "");
+    git(root, "rm", "-q", "--cached", ".hexagen/evidence/trace.jsonl");
+    await rm(traceFile);
+    commit("the trace unstaged from the tree");
     const r = await run();
     expect(r.exitCode).toBe(2);
     expect(text(r)).toMatch(/hexagen workbook export --stage/);
@@ -871,33 +1054,6 @@ describe("evidence verify, preconditions", () => {
     expect(text(r)).toMatch(/--grant/);
   });
 
-  it("a tip that anchors the head is checked, and an absent tip is not a failure", async () => {
-    await changeAndAccount({ "src/a.ts": "changed\n" }, "p1", ["src/a.ts"]);
-    expect((await run()).exitCode).toBe(0);
-    const lines = (await readFile(traceFile, "utf8")).trimEnd().split("\n");
-    const last = JSON.parse(lines[lines.length - 1] as string) as Record<
-      string,
-      unknown
-    >;
-    const hash = lineHash(last);
-    await put(
-      root,
-      ".hexagen/evidence/tip.json",
-      JSON.stringify({ seq: 1, hash, hmac: signTip(1, hash, KEY) }),
-    );
-    commit("anchor the head");
-    expect((await run()).exitCode).toBe(0);
-
-    await put(
-      root,
-      ".hexagen/evidence/tip.json",
-      JSON.stringify({ seq: 1, hash, hmac: "0".repeat(64) }),
-    );
-    const r = await run();
-    expect(r.exitCode).toBe(2);
-    expect(text(r)).toMatch(/tip\.json HMAC/);
-  });
-
   it("a trace the tip does not anchor is exit 2", async () => {
     await changeAndAccount({ "src/a.ts": "changed\n" }, "p1", ["src/a.ts"]);
     await put(
@@ -909,9 +1065,22 @@ describe("evidence verify, preconditions", () => {
         hmac: signTip(9, "f".repeat(64), KEY),
       }),
     );
+    commit("a tip past the end of the trace");
     const r = await run();
     expect(r.exitCode).toBe(2);
     expect(text(r)).toMatch(/ends before the recorded tip/);
+  });
+
+  it("a tip that anchors an older line leaves the newer one unanchored", async () => {
+    await put(root, "src/a.ts", "changed\n");
+    await appendLine(proposeLine("p1", ["src/a.ts"]));
+    await writeMeta("p1", { traceSeq: 1 });
+    commit("a second line, with the tip left where the pack put it");
+    const r = await run();
+    expect(r.exitCode).toBe(1);
+    expect(text(r)).toMatch(
+      /cover exists but is not anchored: run hexagen evidence pack/,
+    );
   });
 });
 

@@ -18,7 +18,11 @@ import { promises as fs } from "node:fs";
 import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { createHash } from "node:crypto";
-import { appendChainedLine } from "@hexagen/shared/node/trace-chain";
+import {
+  appendChainedLine,
+  lineHash,
+  signTip,
+} from "@hexagen/shared/node/trace-chain";
 import {
   assertBuiltArtifactsPresent,
   cleanupFixture,
@@ -147,8 +151,46 @@ beforeEach(async () => {
       createdAt: CALL_TIME,
     }),
   );
-  since = commit("base: evidence staged at last");
+  // The pack step: only a line an anchored tip covers can cover a change.
+  await anchorHead("base: evidence staged at last");
+  since = git(fix.root, "rev-parse", "HEAD");
 });
+
+/** Appends a chained line and its proposal, and returns the new seq. */
+async function accountFor(paths: readonly string[]): Promise<number> {
+  await appendChainedLine(traceFile, (next) => ({
+    ...proposeLine("p1", paths),
+    ...next,
+  }));
+  await put(
+    ".hexagen/proposals/p1.json",
+    JSON.stringify({
+      id: "p1",
+      grantId: "grant-1",
+      sliceId: "eng-1",
+      tool: "hexagen_propose_patch",
+      paths,
+      traceSeq: 1,
+      createdAt: CALL_TIME,
+    }),
+  );
+  return 1;
+}
+
+/** The pack step for the current head: anchor it and commit the tip. */
+async function anchorHead(message: string): Promise<void> {
+  const raw = await fs.readFile(traceFile, "utf8");
+  const lines = raw.trimEnd().split("\n");
+  const seq = lines.length - 1;
+  const hash = lineHash(
+    JSON.parse(lines[seq] as string) as Record<string, unknown>,
+  );
+  await put(
+    ".hexagen/evidence/tip.json",
+    JSON.stringify({ seq, hash, hmac: signTip(seq, hash, KEY) }),
+  );
+  commit(message);
+}
 
 afterEach(async () => {
   await cleanupFixture(fix.root);
@@ -180,26 +222,45 @@ describe("hexagen evidence verify (built dist, published layout)", () => {
 
   it("exits 0 when a line appended after --since covers the change", async () => {
     await put("src/a.ts", "const a = 2;\n");
-    await appendChainedLine(traceFile, (next) => ({
-      ...proposeLine("p1", ["src/a.ts"]),
-      ...next,
-    }));
-    await put(
-      ".hexagen/proposals/p1.json",
-      JSON.stringify({
-        id: "p1",
-        grantId: "grant-1",
-        sliceId: "eng-1",
-        tool: "hexagen_propose_patch",
-        paths: ["src/a.ts"],
-        traceSeq: 1,
-        createdAt: CALL_TIME,
-      }),
-    );
+    await accountFor(["src/a.ts"]);
     commit("change, accounted");
+    await anchorHead("pack: anchor the head");
     const r = await verify();
     assert.equal(r.code, 0, describeResult(r));
     assert.match(r.stderr, /evidence verify ok/, describeResult(r));
+  });
+
+  it("exits 1 while the covering line is not anchored by a pack", async () => {
+    await put("src/a.ts", "const a = 2;\n");
+    await accountFor(["src/a.ts"]);
+    commit("change, accounted but not yet packed");
+    const r = await verify();
+    assert.equal(r.code, 1, describeResult(r));
+    assert.match(
+      r.stderr,
+      /cover exists but is not anchored: run hexagen evidence pack/,
+      describeResult(r),
+    );
+  });
+
+  it("exits 2 on an unsound trace, naming the line that fails", async () => {
+    await put("src/a.ts", "const a = 2;\n");
+    await accountFor(["src/a.ts"]);
+    commit("change, accounted");
+    await anchorHead("pack: anchor the head");
+    // Edit the first line in place: the second line's prev_hash no longer
+    // matches, so the chain says nothing about the range.
+    const raw = await fs.readFile(traceFile, "utf8");
+    const lines = raw.trimEnd().split("\n");
+    lines[0] = (lines[0] as string).replace(
+      '"goal_id":"eng-1"',
+      '"goal_id":"EDIT"',
+    );
+    await fs.writeFile(traceFile, `${lines.join("\n")}\n`, "utf8");
+    commit("an interior line edited in place");
+    const r = await verify();
+    assert.equal(r.code, 2, describeResult(r));
+    assert.match(r.stderr, /prev_hash does not match/, describeResult(r));
   });
 
   it("exits 2 naming the staging command when .hexagen/ is not in the checkout", async () => {
@@ -210,6 +271,7 @@ describe("hexagen evidence verify (built dist, published layout)", () => {
       recursive: true,
       force: true,
     });
+    commit("evidence unstaged from the tree");
     const r = await verify();
     assert.equal(r.code, 2, describeResult(r));
     assert.match(
@@ -217,6 +279,20 @@ describe("hexagen evidence verify (built dist, published layout)", () => {
       /hexagen workbook export --stage/,
       describeResult(r),
     );
+  });
+
+  it("exits 2 naming the packing command when no tip anchors the evidence", async () => {
+    await put("src/a.ts", "const a = 2;\n");
+    await accountFor(["src/a.ts"]);
+    commit("change, accounted");
+    git(fix.root, "rm", "-q", ".hexagen/evidence/tip.json");
+    await fs.rm(path.join(fix.root, ".hexagen", "evidence", "tip.json"), {
+      force: true,
+    });
+    commit("tip removed");
+    const r = await verify();
+    assert.equal(r.code, 2, describeResult(r));
+    assert.match(r.stderr, /hexagen evidence pack/, describeResult(r));
   });
 
   it("exits 2 on an empty range, and 0 with --allow-empty", async () => {
