@@ -177,9 +177,9 @@ it. A pass also advances `.hexagen/evidence/tip.json` in that workspace; nothing
 is pushed, so the repository's tip is untouched.
 
 **Step 4b** verifies the range and writes nothing at all: no bundle, no tip, no
-lock. It is the only step that narrows to what this PR changed, and the only one
-that carries a per-PR signal — a file inside the slice or inside a supplied
-grant's paths that no anchored trace line covers is unaccounted, and exits 1.
+lock. Step 3 judges the tree this PR checks out; step 4b judges the **diff**, and
+so it is the only step that can say _this file, changed by this PR, has no line
+covering it_ — a per-PR signal no whole-tree check gives.
 
 **Verify needs the anchored tip, and it reads the one the client committed.**
 `evidence verify` judges the `<since>..<until>` range against the trace, the tip
