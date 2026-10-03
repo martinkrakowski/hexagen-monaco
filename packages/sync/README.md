@@ -447,9 +447,13 @@ npx hexagen contract check --base <base-sha> --allow-growth --reason "<why>"
   root-package target (`.`), a target an `excludes` entry denies, or a target
   spelled as a directory — is reported as `not proposed:` with the advice that
   would accept it, because a rule naming one would still fail, or would accept
-  far more than the crossing observed. With `--closed`, the printed `add-rule`
-  line is shell-quoted, so it can be pasted as it stands; the plain
-  cross-prefix `add-rule` line is printed unquoted. With `--closed`, an
+  far more than the crossing observed. Both printed `add-rule` lines — the
+  cross-prefix one and the `--closed` one — are quoted for a POSIX shell, so
+  `sh`, `bash` or `zsh` can run either as it stands; `cmd.exe` does not read
+  those quotes, so do not paste one there. The cross-prefix line names the
+  slice's own prefixes in `--from`/`--to`, and a prefix is a repo path, so a
+  space or a `;` in one would otherwise split the command or run what follows.
+  With `--closed`, an
   `observed.json` whose edges were not collected refuses (exit 2) and prints no
   command at all: nothing is known about the crossings, so "no edge leaves the
   slice" would be a claim the report cannot make. An incomplete edge list is a
@@ -714,30 +718,65 @@ hexagen workbook export --stage .hexagen/slice.json \
 
 ---
 
-### The brownfield CI gate (a recipe)
+### The brownfield CI gate
 
 A client repo holds only `.hexagen/` and no manifest, so the generated
 conformance gate has nothing to run there. Copy
-[`.github/workflows/brownfield-gate.yml`](../../docs/ci/brownfield-gate.yml) from
-this repo's `docs/ci/` into the client repo and edit its two `EDIT SPOT` values:
-the `hexagen` version pin, and `USE_EVIDENCE_VERIFY`.
+[`docs/ci/brownfield-gate.yml`](../../docs/ci/brownfield-gate.yml) into the client
+repo's `.github/workflows/` and edit its one `EDIT SPOT`: the
+`HEXAGEN_VERSION` pin. `contract check --base` (step 3) and `evidence verify`
+(step 4b) first ship in 0.14.0, so that is the **minimum** the gate needs rather
+than a published release — release tags are the owner's to cut. Set it to a
+version you can install and bump it deliberately; `hexagen --help` is the check
+that the pin exists, because an older CLI's command parser refuses those two
+flags and the job then fails at step 3 for a reason that has nothing to do with
+the change under review.
 
-The recipe it implements, with every step's exit code and the engagement-key
-story, is
+`evidence pack` and `evidence verify` are the two halves of the gate, and the
+recipe is a document rather than a template:
 [`docs/ci/brownfield-gate-recipe.md`](../../docs/ci/brownfield-gate-recipe.md).
-In short, fail-fast and in order: check the staged `.hexagen/` paths are tracked
+Every step's `run:` script is read out of that workflow and executed against the
+built CLI on a fixture client repo by
+`__tests__/contract/brownfield-gate.contract.test.ts`, so the recipe cannot drift
+from what the job does. The one exception is `Install the hexagen CLI`: the
+fixture already holds the artifact that install fetches — the built dist, copied
+into the consumer's `node_modules/@hexagen-monaco/sync` — so the install is the
+only step the suite does not run. Every kit command, and every step that can
+decide the job, does run.
+
+- `evidence pack <trace> --grant <file>... --out <zip>` checks the whole trace and
+  writes an HMAC'd bundle: 0 packed, 1 the evidence is invalid and nothing was
+  written, 2 usage or a failed precondition (no key, `--out` outside `.hexagen/`,
+  an `--out` that already exists). It is step 4, and it is also the only command
+  that anchors a line — so it runs even where nothing needs the bundle, because
+  step 4b counts only what a `pack` anchored.
+- `evidence verify --since <ref> --grant <file>...` is step 4b and writes
+  nothing. It is documented under
+  [`hexagen evidence verify`](#hexagen-evidence-verify) above.
+
+Fail-fast and in order, every step printing `step <n> exit <code>` — 1 is a
+violation, 2 is bad input or stale state — and step 2 the one non-blocking
+drift report. The steps are: the staged `.hexagen/` paths are tracked
 (`git ls-files --error-unmatch`, exit 2 otherwise), `observe --out … --yes`,
-`slice check --strict` as a **non-blocking** drift report, `contract check
---base` against the pinned PR base SHA, and `evidence pack` into a disposable
-path. Every step prints `step <n> exit <code>`; 1 is a violation, 2 is bad input
-or stale state. The key is injected from a CI secret into `$RUNNER_TEMP` at mode
-0600 and read through `HEXAGEN_GRANT_KEY_FILE` — never from the checkout. The
-bundle is an HMAC'd bundle
-that refuses a tampered blob: the HMAC is symmetric, so the CI secret can forge,
-and the FDE and CI cannot be told apart. Flipping `USE_EVIDENCE_VERIFY` swaps the
-pack step for `hexagen evidence verify`, which is the one of the two that writes
-nothing; note that `verify` only counts a line a `pack` has anchored, so a head
-nothing has packed has nothing to cover with.
+`slice check --strict`, `contract check --base` against the pinned PR base SHA,
+`evidence pack` into a disposable path under `.hexagen/`, then `evidence verify`
+against the same base. Step 3 asks what the base holds and there are three
+answers, not two: both sidecar files (compare, and let violations and growth
+fail), neither (the PR that first stages them, judged on violations alone), or
+exactly one — which it refuses with exit 2 rather than compare half a baseline.
+Step 4b is skipped on exactly one PR, the bootstrap whose base carries no slice;
+a base with a slice but no trace runs it and lets it exit 2.
+
+The gate needs no manifest, no `apps/web` and no workbench package: the published
+CLI is the only dependency. The engagement key is injected from a CI secret into
+`$RUNNER_TEMP` at mode 0600 and read through `HEXAGEN_GRANT_KEY_FILE`, never
+from the checkout. A missing or weak key is a denial, never a skip — and
+because the job is fail-fast, only the first step that reads the key reports
+it: the injection step exits 2 on an empty secret, while a non-empty but weak
+key is caught by `evidence pack` in step 4, which exits 2 too.
+`evidence verify` never runs in either case, because the job stopped first. The
+bundle's HMAC is symmetric, so the CI secret can forge it and the FDE and CI
+cannot be told apart.
 
 ---
 
@@ -905,6 +944,7 @@ The source `packages/sync/package.json` is never mutated by this process.
 - **HexaGen Monaco repository:** https://github.com/martinkrakowski/hexagen-monaco
 - **Architecture Decision Record:** [`ADR-0068`](../../.architecture/decisions/ADR-0068-published-cli-bundling.md) — CLI Bundling Strategy
 - **Manifest schema:** `@hexagen/project-configuration`
+- **Brownfield CI gate recipe:** [`docs/ci/brownfield-gate-recipe.md`](../../docs/ci/brownfield-gate-recipe.md) — the gate a client repo runs when the workbench is gone
 - **Issue tracker:** https://github.com/martinkrakowski/hexagen-monaco/issues
 
 ---
