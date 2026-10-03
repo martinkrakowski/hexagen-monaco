@@ -78,6 +78,10 @@ commit, and it never skips.
 | 3   | `hexagen contract check --base <pinned PR base SHA>`                         | yes                    | a rule crossed that is not in the baseline, or the gate weakened | bad input at the base          |
 | 4   | `hexagen evidence pack <trace> --grant <each staged grant> --out <temp>.zip` | yes                    | the evidence is invalid; no bundle written                       | usage or a failed precondition |
 
+Step 3 runs the plain `hexagen contract check` instead when the base predates the
+sidecar files — the bootstrap PR — and says so in the log; see
+[The first PR](#the-first-pr-no-base-to-compare-against) below.
+
 Every step prints its own `step <n> exit <code>` line, so a reader of the log can
 tell a **violation** (1) from **bad input or stale state** (2) without reading
 the command's prose. The job stops at the first non-zero step except step 2.
@@ -118,6 +122,31 @@ Growth the FDE meant to accept is a review decision, not a workflow flag:
 re-run locally with `--allow-growth --reason "<why>"` and commit the reason. The
 reason is printed into the CI log, so the record of the acceptance lives with the
 commit.
+
+### The first PR: no base to compare against
+
+The guard reads `.hexagen/contract.json` **and** `.hexagen/slice.json` at the
+base commit, and exits 2 when either is absent there. Since every writer of
+`.hexagen/` excludes it, the PR that **first stages** the sidecars has a base
+that predates them — so `--base` would fail that PR with "absent at base because
+it was never staged", which is true of the base and has nothing to do with the
+change under review. Failing the PR that sets the gate up is not a gate.
+
+Step 3 therefore probes first, with `git cat-file -e "<base>:<path>"` on both
+files:
+
+- **base carries them** — the normal case: `hexagen contract check --base <sha>`,
+  and both violations and growth fail the PR.
+- **base carries neither** — the bootstrap PR: it logs
+  `::notice::bootstrap: no contract at base <sha>; growth guard starts on the next PR`,
+  names which sidecar files were absent, and runs the plain `hexagen contract
+check`. Violations still fail the job. Only the growth comparison is skipped.
+
+**The growth guard protects from the second PR onward**, once the base carries the
+contract. The bootstrap PR is judged on violations alone, and the log says so
+rather than leaving a reader to infer a pass. If the base has the contract and
+the PR deletes it, that is not the bootstrap: step 0 has already failed the PR by
+name, so step 3's probe cannot be reached with a deleted contract.
 
 ### Step 4 writes a bundle and throws it away
 
@@ -215,12 +244,15 @@ jobs:
         run: |
           # From npm at the pinned version, into RUNNER_TEMP: not the workspace
           # (which is the tree the PR controls) and not a global npm prefix (which
-          # wants sudo on a runner). The bin lands in <prefix>/node_modules/.bin,
-          # which the next step puts on PATH.
+          # wants sudo on a runner). The bin lands in <prefix>/node_modules/.bin.
           prefix="${RUNNER_TEMP}/hexagen-cli"
           npm install --prefix "${prefix}" "@hexagen-monaco/sync@${HEXAGEN_VERSION}"
+          # GITHUB_PATH is read when the NEXT step starts, so it cannot put the
+          # bin on PATH in this one: every later step gets it, this step has to
+          # call the binary by its full path.
           echo "${prefix}/node_modules/.bin" >> "${GITHUB_PATH}"
-          hexagen --help
+          # The smoke check that the pin exists, run the only way this step can.
+          "${prefix}/node_modules/.bin/hexagen" --help
 
       - name: "Resolve the base commit"
         id: base
@@ -338,15 +370,48 @@ jobs:
         run: |
           # stale observed.json is not on this list: step 1 rewrote it at HEAD, and this
           # step does not pass --strict, so it could only warn.
-          set +e
-          hexagen contract check --base "${{ steps.base.outputs.base }}"
+          set -uo pipefail
+          base="${{ steps.base.outputs.base }}"
+          # The growth guard reads BOTH sidecar files AT the base commit and exits
+          # 2 when either is absent there — with `.hexagen/` in the exclude file,
+          # "never staged" and "the commit that adds it" look the same to `git
+          # show`, so there is no first-commit pass inside the command. The PR
+          # that first stages `.hexagen/` therefore has a base that predates the
+          # contract, and `--base` would fail that PR for a reason that has
+          # nothing to do with the change. So probe first: when the base holds no
+          # contract, run the plain check, which still fails on any violation.
+          # That PR is judged on violations only; growth is guarded from the next
+          # PR onward, once the base carries the contract.
+          #
+          # A base that DOES hold them, and a PR that deletes them, is a different
+          # thing and step 0 has already failed that PR by name — so this branch
+          # is only reachable on the PR that introduces the sidecars.
+          absent=""
+          for sidecar in .hexagen/contract.json .hexagen/slice.json; do
+            if ! git cat-file -e "${base}:${sidecar}" 2>/dev/null; then
+              absent="${absent} ${sidecar}"
+            fi
+          done
+          if [ -n "${absent}" ]; then
+            echo "::notice::bootstrap: no contract at base ${base}; growth guard starts on the next PR"
+            echo "::notice::absent at the base commit:${absent} — nothing to compare against, so this run judges violations only"
+            set +e
+            hexagen contract check
+          else
+            set +e
+            hexagen contract check --base "${base}"
+          fi
           code=$?
           set -e
           echo "step 3 exit ${code}"
           if [ "${code}" -eq 1 ]; then
-            echo "::error::contract check exit 1: a rule was crossed that is not in the baseline, or the gate was weakened against the base (a rule dropped or downgraded, a suppression added or extended, a slice exclude added). Both are refusals, not warnings."
+            if [ -n "${absent}" ]; then
+              echo "::error::contract check exit 1: a rule was crossed that is not in the baseline. This is the bootstrap PR, so there is no base to compare growth against."
+            else
+              echo "::error::contract check exit 1: a rule was crossed that is not in the baseline, or the gate was weakened against the base (a rule dropped or downgraded, a suppression added or extended, a slice exclude added). Both are refusals, not warnings."
+            fi
           elif [ "${code}" -eq 2 ]; then
-            echo "::error::contract check exit 2: bad input — an unresolvable base, a sidecar file never staged at the base, or a slice/contract file that does not parse."
+            echo "::error::contract check exit 2: bad input — an unresolvable base, a sidecar file that cannot be read at the base, or a slice/contract file that does not parse."
           fi
           exit "${code}"
 
@@ -552,6 +617,9 @@ refuses a tampered blob**.
   leaves no path list for a future `verify` to join.
 - It does not re-open a saved bundle; no command takes a zip and checks its index
   HMAC yet.
+- On the one PR that first stages `.hexagen/`, it checks violations but not
+  growth — there is no contract at that PR's base to compare against. From the
+  next PR on, both.
 
 Each of those is named in [kit plan 5](../planning/2026-10-03_kit-05-evidence-pack-and-ci-leave-behind.md)
 §7 rather than papered over here, because the recipe is what a client reads when

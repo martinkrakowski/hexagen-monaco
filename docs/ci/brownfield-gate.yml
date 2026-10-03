@@ -71,12 +71,15 @@ jobs:
         run: |
           # From npm at the pinned version, into RUNNER_TEMP: not the workspace
           # (which is the tree the PR controls) and not a global npm prefix (which
-          # wants sudo on a runner). The bin lands in <prefix>/node_modules/.bin,
-          # which the next step puts on PATH.
+          # wants sudo on a runner). The bin lands in <prefix>/node_modules/.bin.
           prefix="${RUNNER_TEMP}/hexagen-cli"
           npm install --prefix "${prefix}" "@hexagen-monaco/sync@${HEXAGEN_VERSION}"
+          # GITHUB_PATH is read when the NEXT step starts, so it cannot put the
+          # bin on PATH in this one: every later step gets it, this step has to
+          # call the binary by its full path.
           echo "${prefix}/node_modules/.bin" >> "${GITHUB_PATH}"
-          hexagen --help
+          # The smoke check that the pin exists, run the only way this step can.
+          "${prefix}/node_modules/.bin/hexagen" --help
 
       - name: "Resolve the base commit"
         id: base
@@ -194,15 +197,48 @@ jobs:
         run: |
           # stale observed.json is not on this list: step 1 rewrote it at HEAD, and this
           # step does not pass --strict, so it could only warn.
-          set +e
-          hexagen contract check --base "${{ steps.base.outputs.base }}"
+          set -uo pipefail
+          base="${{ steps.base.outputs.base }}"
+          # The growth guard reads BOTH sidecar files AT the base commit and exits
+          # 2 when either is absent there — with `.hexagen/` in the exclude file,
+          # "never staged" and "the commit that adds it" look the same to `git
+          # show`, so there is no first-commit pass inside the command. The PR
+          # that first stages `.hexagen/` therefore has a base that predates the
+          # contract, and `--base` would fail that PR for a reason that has
+          # nothing to do with the change. So probe first: when the base holds no
+          # contract, run the plain check, which still fails on any violation.
+          # That PR is judged on violations only; growth is guarded from the next
+          # PR onward, once the base carries the contract.
+          #
+          # A base that DOES hold them, and a PR that deletes them, is a different
+          # thing and step 0 has already failed that PR by name — so this branch
+          # is only reachable on the PR that introduces the sidecars.
+          absent=""
+          for sidecar in .hexagen/contract.json .hexagen/slice.json; do
+            if ! git cat-file -e "${base}:${sidecar}" 2>/dev/null; then
+              absent="${absent} ${sidecar}"
+            fi
+          done
+          if [ -n "${absent}" ]; then
+            echo "::notice::bootstrap: no contract at base ${base}; growth guard starts on the next PR"
+            echo "::notice::absent at the base commit:${absent} — nothing to compare against, so this run judges violations only"
+            set +e
+            hexagen contract check
+          else
+            set +e
+            hexagen contract check --base "${base}"
+          fi
           code=$?
           set -e
           echo "step 3 exit ${code}"
           if [ "${code}" -eq 1 ]; then
-            echo "::error::contract check exit 1: a rule was crossed that is not in the baseline, or the gate was weakened against the base (a rule dropped or downgraded, a suppression added or extended, a slice exclude added). Both are refusals, not warnings."
+            if [ -n "${absent}" ]; then
+              echo "::error::contract check exit 1: a rule was crossed that is not in the baseline. This is the bootstrap PR, so there is no base to compare growth against."
+            else
+              echo "::error::contract check exit 1: a rule was crossed that is not in the baseline, or the gate was weakened against the base (a rule dropped or downgraded, a suppression added or extended, a slice exclude added). Both are refusals, not warnings."
+            fi
           elif [ "${code}" -eq 2 ]; then
-            echo "::error::contract check exit 2: bad input — an unresolvable base, a sidecar file never staged at the base, or a slice/contract file that does not parse."
+            echo "::error::contract check exit 2: bad input — an unresolvable base, a sidecar file that cannot be read at the base, or a slice/contract file that does not parse."
           fi
           exit "${code}"
 
