@@ -146,10 +146,24 @@ write, or the trace, as valid evidence) rather than warns:
    definition has no grant to cite and must not carry a `grant_id`. This spec does **not** invent a second
    identity for a trace to carry independent of its grant; `grant_id` is
    the only identity a Trace has an opinion about.
+4. **A line whose own timestamps contradict each other is invalid.**
+   `started_at` and `ended_at` are checked against each other and against
+   the line's `tool_calls`: `ended_at` is not before `started_at`, every
+   `tool_calls[].time` is at or after `started_at` and at or before
+   `ended_at` (a call exactly at either bound is inside it), and the calls
+   are in time order — a later call with an earlier `time` is invalid,
+   equal times are in order. A missing `started_at` or `ended_at`, or one
+   that does not parse as a timestamp, is a reason and not a skip: a
+   `completed` line without them is invalid, and so is a denial line's.
+   This rule has no exemption for denial lines, unlike the allowlist and
+   window checks in Rule 2: it compares values inside one line, written by
+   one process, where a grant's window says nothing. A `grant_missing`
+   record is not an evidence line — a single `time`, no window and no
+   `tool_calls` — so the rule does not apply to it.
 
 Rules 1–2 are checks a future _write_-side enforcement point makes (the
 same accept-transaction choke point `GRANT.md` describes, extended to also
-refuse an unattributed or out-of-window write); rule 3 is a check a
+refuse an unattributed or out-of-window write); rules 3 and 4 are checks a
 _reader_ of a trace file makes (a `hexagen evidence pack` run, or a CI
 gate) before trusting what it finds. Both directions matter: a producer
 that never emits an invalid trace, and a consumer that never trusts one it
@@ -293,10 +307,11 @@ the one file the tip anchors; one Trace per line, per "Storage") and checks:
    the hash of the previous line, the first line starts at genesis. An edited,
    reordered or deleted interior line breaks it; an unchained line fails;
 2. a **torn last line** (invalid JSON, or no trailing newline) fails the pack;
-3. the three Rules above on every `completed` line, with denials skipping the
-   allowlist and window checks (see "Denials"). Each `--grant` file's
-   signature is verified with the engagement key; a line citing a grant that
-   does not verify cites no known grant;
+3. the four Rules above on every line, with denials skipping only the
+   allowlist and window checks — the timeline rule (Rule 4) applies to them
+   too (see "Denials"). Each `--grant` file's signature is verified with the
+   engagement key; a line citing a grant that does not verify cites no known
+   grant;
 4. the anchored tip: when `tip.json` exists, its HMAC must verify and the line
    at `tip.seq` must exist with that hash. Otherwise the pack fails.
 
@@ -321,13 +336,16 @@ check` are specified in `GRANT.md`; nothing here redefines them.
 `docs/kernel/spike/trace.acceptance.test.ts` exercises a standalone
 reference module (`docs/kernel/spike/trace.ts`) — pure, dependency-free,
 no `fs`, no wiring into any running tool or the CLI. It covers exactly the
-three Rules above as a retrospective validator (the logic
+first three Rules above as a retrospective validator (the logic
 `hexagen evidence pack` would run): a trace matching a live grant is
 valid; a trace with no `grant_id` is invalid; a trace whose `grant_id`
 matches no supplied grant is invalid; a trace with a call timestamped at or
 after `revoked_at` is invalid; a trace with a call timestamped strictly
 after `expires_at` is invalid (exactly at `expires_at` is still in-window
-and valid). Both files live under `docs/kernel/spike/`, matching where
+and valid). Rule 4 is not in the spike: it lives in `traceRuleReasons`
+(`packages/shared/src/types/trace-rules.ts`), the one implementation the
+pack and the MCP server's `checkTrace` both call. Both files live under
+`docs/kernel/spike/`, matching where
 `grant.ts` and its tests were moved in `GRANT.md` — deliberately outside
 `packages/mcp-server/src` and its barrel; `mcp-server` does not import
 them.

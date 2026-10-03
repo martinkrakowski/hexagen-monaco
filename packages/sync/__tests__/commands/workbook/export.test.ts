@@ -22,6 +22,7 @@ import { ensureExcluded } from "../../../src/commands/shared/git-exclude.js";
 import { readZipStore } from "../../../src/commands/workbook/zip-read.js";
 import { writeZipStore } from "../../../src/commands/report/zip-store.js";
 import { runWorkbookExport } from "../../../src/commands/workbook/export.js";
+import { runEvidencePack } from "../../../src/commands/evidence/pack.js";
 import { canonicalGrantPayload } from "../../../src/commands/grant/canonical.js";
 import { signGrantPayload } from "../../../src/commands/grant/sign.js";
 import {
@@ -248,6 +249,58 @@ describe("workbook export, the bundle", () => {
     const r = await run();
     expect(r.exitCode).toBe(2);
     expect(await exists(bundle())).toBe(false);
+  });
+});
+
+describe("workbook export and evidence pack, one set of rules", () => {
+  const traceFile = (): string =>
+    path.join(root, ".hexagen", "evidence", "trace.jsonl");
+
+  /** `hexagen evidence pack` over this repo's own trace and grant. */
+  const pack = () =>
+    runEvidencePack({
+      root,
+      trace: traceFile(),
+      grantFiles: [path.join(root, ".hexagen", "grants", "grant-1.json")],
+      out: ".hexagen/parity.zip",
+      keyFile,
+      homeDir: home,
+      now: NOW,
+    });
+
+  /** Widens nothing: moves the line's window off its own call (Rule 4). */
+  const callOutsideOwnWindow = async (): Promise<void> => {
+    const [only] = (await readFile(traceFile(), "utf8")).trimEnd().split("\n");
+    const line = JSON.parse(only as string) as Record<string, unknown>;
+    await put(
+      root,
+      ".hexagen/evidence/trace.jsonl",
+      `${JSON.stringify({
+        ...line,
+        started_at: "2026-10-01T10:00:00.001Z",
+        ended_at: "2026-10-01T10:00:01.000Z",
+      })}\n`,
+    );
+  };
+
+  it("the two live readers return the same reasons for the same line", async () => {
+    await callOutsideOwnWindow();
+    const direct = await pack();
+    const viaExport = await run();
+    expect(direct.exitCode).toBe(1);
+    expect(viaExport.exitCode).toBe(1);
+    expect(viaExport.messages).toEqual([
+      "workbook export FAILED; no bundle written:",
+      ...direct.messages,
+    ]);
+    expect(direct.messages.join("\n")).toMatch(
+      /seq 0: Tool call 'hexagen_propose_patch' at 2026-10-01T10:00:00\.000Z is before started_at \(2026-10-01T10:00:00\.001Z\)/,
+    );
+    expect(await exists(bundle())).toBe(false);
+    expect(await exists(path.join(root, ".hexagen", "parity.zip"))).toBe(false);
+    expect(
+      await exists(path.join(root, ".hexagen", "evidence", "tip.json")),
+    ).toBe(false);
   });
 });
 

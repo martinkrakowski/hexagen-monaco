@@ -85,12 +85,12 @@
         "started_at": {
           "type": "string",
           "format": "date-time",
-          "description": "ISO 8601. Should be at or before every tool_calls[].time and at or before ended_at."
+          "description": "ISO 8601. Must be at or before every tool_calls[].time and at or before ended_at. Checked by Rule 4 of TRACE.md: a line that breaks this, or that omits this field, is invalid evidence, denial lines included."
         },
         "ended_at": {
           "type": "string",
           "format": "date-time",
-          "description": "ISO 8601. Should be at or after every tool_calls[].time and at or after started_at."
+          "description": "ISO 8601. Must be at or after every tool_calls[].time and at or after started_at. Checked by Rule 4 of TRACE.md: a line that breaks this, or that omits this field, is invalid evidence, denial lines included."
         }
       },
       "description": "Greenfield line: unchanged from before the brownfield bump. No seq, no prev_hash."
@@ -167,12 +167,12 @@
         "started_at": {
           "type": "string",
           "format": "date-time",
-          "description": "ISO 8601. Should be at or before every tool_calls[].time and at or before ended_at."
+          "description": "ISO 8601. Must be at or before every tool_calls[].time and at or before ended_at. Checked by Rule 4 of TRACE.md: a line that breaks this, or that omits this field, is invalid evidence, denial lines included."
         },
         "ended_at": {
           "type": "string",
           "format": "date-time",
-          "description": "ISO 8601. Should be at or after every tool_calls[].time and at or after started_at."
+          "description": "ISO 8601. Must be at or after every tool_calls[].time and at or after started_at. Checked by Rule 4 of TRACE.md: a line that breaks this, or that omits this field, is invalid evidence, denial lines included."
         },
         "seq": {
           "type": "integer",
