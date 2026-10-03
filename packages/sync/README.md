@@ -210,7 +210,7 @@ without opening JSON by hand. Two lines come first, the directory it read and th
 time the window was judged at, then the resolved key by path and fingerprint
 (never the key), then the table and its summary:
 
-```
+```text
 file                   status   id         principal  agent   mode     expires_at            revoked_at            signature
 grants/g-live.json     live     g-live     martin     lane-1  propose  2026-10-01T18:00:00Z  -                     verified
 grants/g-revoked.json  revoked  g-revoked  martin     lane-1  propose  2026-10-01T18:00:00Z  2026-10-01T10:00:00Z  verified
@@ -647,12 +647,15 @@ path outside `.hexagen/`, a symlink) refuses the whole call and stages nothing.
 
 ### `hexagen evidence verify`
 
-```bash
+```text
 hexagen evidence verify --since <git-ref> [--until <git-ref>]
                         --grant <file>... [--root <dir>]
                         [--key-file <path>] [--engagement <id>]
                         [--allow-empty]
 ```
+
+A synopsis, not a runnable line: `[…]` marks an optional flag and `<…>` a value you
+supply.
 
 Names every changed file the kit governs — inside the slice (minus its excludes)
 or inside any `--grant`'s `paths` — that no trace line appended after `--since`
