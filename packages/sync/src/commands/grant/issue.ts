@@ -31,6 +31,7 @@ import {
   writeFileExclusive as writeGrantFileExclusive,
 } from "../shared/sidecar-write.js";
 import { grantKeyCommander } from "./key-init.js";
+import { grantListCommander } from "./list.js";
 import { signGrantPayload } from "./sign.js";
 import { loadOrCreateSigningKey } from "./signing-key.js";
 import { discoverWorkspaceRoot, loadSlice } from "./workspace.js";
@@ -583,3 +584,5 @@ grantCommander
       await grantRevokeCommand({ ...options, grantFile });
     },
   );
+
+grantCommander.addCommand(grantListCommander);

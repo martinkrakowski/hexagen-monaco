@@ -6,6 +6,7 @@ import {
   BUILTIN_RULE_IDS,
   Contract,
   edgesComplete,
+  findContractGrowth,
   normalizeSlicePath,
   type ObservedReport,
   type Slice,
@@ -30,6 +31,7 @@ import {
   type CommandResult,
 } from "../shared/brownfield-sidecar.js";
 import { type SliceRootOptions } from "../slice/index.js";
+import { readContractBase } from "./growth.js";
 import {
   closedRuleCoverageWarning,
   evaluateContract,
@@ -336,18 +338,60 @@ async function coverageMessage(
 
 export interface ContractCheckOptions extends SliceRootOptions {
   baseline?: boolean;
+  /** Git ref holding the contract and slice this check is compared against. */
+  base?: string;
+  allowGrowth?: boolean;
+  reason?: string;
   yes?: boolean;
   strict?: boolean;
+}
+
+/**
+ * The `--base` flag combination, refused before anything is read or locked:
+ * `--baseline` writes the very list the guard compares, so pairing them would
+ * be a silent no-op on a command that writes, and a waived growth with no
+ * reason would leave the CI log with no record of the review.
+ */
+function checkGrowthFlags(options: ContractCheckOptions): void {
+  if (options.base !== undefined && options.baseline === true) {
+    throw new UsageError(
+      "--base cannot be combined with --baseline: --baseline rewrites knownViolations, so there is nothing left to compare",
+    );
+  }
+  if (options.allowGrowth === true && options.base === undefined) {
+    throw new UsageError(
+      "--allow-growth needs --base <ref>: without a base there is no growth to allow",
+    );
+  }
+  if (options.allowGrowth === true && (options.reason ?? "").trim() === "") {
+    throw new UsageError(
+      "--allow-growth needs --reason <text>: the reason is printed into the CI log and is the only record of the review",
+    );
+  }
 }
 
 export function runContractCheck(
   options: ContractCheckOptions,
 ): Promise<CommandResult> {
+  try {
+    checkGrowthFlags(options);
+  } catch (e) {
+    return Promise.resolve(asResult(e, []));
+  }
   return locked(
     options.root,
     options.baseline === true && options.yes === true,
     () => check(options),
   );
+}
+
+/** stdout for a result: the growth findings that preceded it, then the lines. */
+function report(
+  prefix: readonly string[],
+  lines: readonly string[],
+): string | undefined {
+  const all = [...prefix, ...lines];
+  return all.length === 0 ? undefined : `${all.join("\n")}\n`;
 }
 
 async function check(options: ContractCheckOptions): Promise<CommandResult> {
@@ -360,6 +404,46 @@ async function check(options: ContractCheckOptions): Promise<CommandResult> {
       throw new UsageError(
         `contract.json is for slice "${contract.sliceId}", but slice.json is "${slice.id}"`,
       );
+    }
+    // Before observed.json is loaded: the guard reads the two sidecar files and
+    // no observations, so a client that staged them but not observed.json still
+    // hears about growth instead of a stale-input exit 2.
+    const growthLines: string[] = [];
+    if (options.base !== undefined) {
+      const base = readContractBase(root, options.base);
+      // The base must be a contract for the slice it is compared against, or the
+      // comparison pairs one slice's rules with another's excludes and reports
+      // the difference as growth.
+      if (base.contract.sliceId !== base.slice.id) {
+        throw new UsageError(
+          `inconsistent base: contract.json at ${base.hash} is for slice "${base.contract.sliceId}", but slice.json there is "${base.slice.id}"`,
+        );
+      }
+      const growth = findContractGrowth({
+        contract: base.contract,
+        slice: base.slice,
+        tree: { contract, slice },
+      });
+      if (growth.length > 0) {
+        messages.push(
+          `${growth.length} growth finding(s) against ${base.hash}`,
+        );
+        growthLines.push(
+          `growth vs ${base.hash} (--base ${options.base}): the slice gate was weakened`,
+          ...growth.map((g) => `  growth: ${g.detail}`),
+        );
+        if (options.allowGrowth === true) {
+          growthLines.push(`  accepted with reason: ${options.reason}`);
+          messages.push(`growth accepted: ${options.reason}`);
+        } else {
+          growthLines.push(
+            '  re-run with --allow-growth --reason "<why>" to accept this, or revert it',
+          );
+          return { exitCode: 1, messages, stdout: report(growthLines, []) };
+        }
+      } else {
+        messages.push(`no growth against ${base.hash}`);
+      }
     }
     const observed = await loadObserved(root);
     const stale = staleInputs(root, slice, observed, options.strict === true);
@@ -442,16 +526,12 @@ async function check(options: ContractCheckOptions): Promise<CommandResult> {
     if (known > 0) messages.push(`${known} known violation(s) in the baseline`);
     if (failing === 0) {
       messages.push(`contract for slice ${slice.id}: clean`);
-      return {
-        exitCode: 0,
-        messages,
-        ...(lines.length > 0 ? { stdout: `${lines.join("\n")}\n` } : {}),
-      };
+      return { exitCode: 0, messages, stdout: report(growthLines, lines) };
     }
     return {
       exitCode: 1,
       messages,
-      stdout: `${lines.join("\n")}\n`,
+      stdout: report(growthLines, lines),
     };
   } catch (e) {
     return asResult(e, messages);
@@ -574,6 +654,18 @@ contractCommander
     "--baseline",
     "Write the current violations to knownViolations (requires --yes)",
   )
+  .option(
+    "--base <ref>",
+    "Compare contract.json and slice.json against this git ref; growth exits 1",
+  )
+  .option(
+    "--allow-growth",
+    "Accept growth reported by --base (requires --reason)",
+  )
+  .option(
+    "--reason <text>",
+    "Why the growth is accepted; printed into the CI log",
+  )
   .option("--yes", "Confirm the writes listed by the `will write:` lines")
   .option("--strict", STRICT_DESC)
   .option(ROOT_FLAG, ROOT_DESC)
@@ -581,6 +673,9 @@ contractCommander
     async (opts: {
       root?: string;
       baseline?: boolean;
+      base?: string;
+      allowGrowth?: boolean;
+      reason?: string;
       yes?: boolean;
       strict?: boolean;
     }) => {
@@ -588,6 +683,9 @@ contractCommander
         await runContractCheck({
           root: opts.root ?? process.cwd(),
           baseline: opts.baseline,
+          base: opts.base,
+          allowGrowth: opts.allowGrowth,
+          reason: opts.reason,
           yes: opts.yes,
           strict: opts.strict,
         }),
