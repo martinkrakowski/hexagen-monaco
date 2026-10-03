@@ -333,8 +333,82 @@ the tip unchanged; a bundle that exists is a bundle that passed. It exits 2 for
 usage or precondition problems (a missing or weak key, `--out` outside
 `.hexagen/`, a trace the tip does not anchor, an empty trace).
 
-Only this one subcommand is specified here. `hexagen grant issue|show|
-check` are specified in `GRANT.md`; nothing here redefines them.
+```
+hexagen evidence verify --since <git-ref> [--until <git-ref>]
+                         --grant <file>... [--root <dir>]
+                         [--key-file <path>] [--engagement <id>]
+                         [--allow-empty]
+```
+
+Reads the trace at `<root>/.hexagen/evidence/trace.jsonl` under the writer's
+lock and judges a git range against it. It reads only: it never writes
+`.hexagen/`, and it never stops a write — it finds an unaccounted one after the
+fact.
+
+1. **The range.** The changed files in `<since>..<until>` (default `HEAD`) come
+   from `git diff --name-status -M -z`, never `--name-only`, which prints one
+   name per side of a rename and loses which side moved. Every `R` and `C`
+   record is expanded into both paths and each is judged on its own. Squash
+   merges and rebases need nothing special: the test is the age of a line, not
+   the shape of the commit graph. A shallow clone that cannot resolve
+   `<since>` exits 2 rather than passing.
+2. **The trace** is checked exactly as `pack` checks it — the same chain,
+   line-shape and Rules pass, and the same anchored tip. An absent `tip.json`
+   is not a failure. A broken chain, a torn line or a tip that does not anchor
+   exits 2 **before any coverage is judged**, because a trace that is not sound
+   evidence cannot say what covers what.
+3. **Only a line appended after `<since>` is a candidate.** A line qualifies
+   when its `seq` is above the last `seq` in the trace as of `<since>`, read
+   with `git show <since>:.hexagen/evidence/trace.jsonl`. If the trace was not
+   tracked at `<since>`, the command exits 2: neither `tool_calls[].time` (the
+   server's clock) nor a commit's committer date proves a line was appended
+   after `<since>`, and clock skew or an adjusted date could make a stale line
+   look fresh. An old covering line therefore never covers a new change, even
+   though it still covers that file's earlier state.
+4. **Coverage, by join, not by a new field.** A candidate covers a file when it
+   is `completed` and joins a proposal: some `.hexagen/proposals/<id>.json`
+   whose `traceSeq` is the line's `seq`, whose `grantId` equals the line's
+   `grant_id`, and whose `result_digest` recomputes correctly. The digest is
+   rebuilt as `{ halt_reason, proposal_id, paths }` in that key order over the
+   proposal's `paths` as the writer recorded them, and compared to the line's
+   own `result_digest`; insertion order is the writer's, so the reader must not
+   canonicalise it. A `paths` entry edited after the line was written breaks
+   that digest instead of being believed, which is why no Trace field was added
+   to carry the paths. `traceSeq: null` means the trace was unchained when the
+   proposal was written, so there is no line to join and nothing is covered.
+   The covering call is the one that carries the proposal's digest: the path and
+   the time always come from the same record, never one from a record and one
+   from another in the same line, and that call's `time` must be inside the
+   grant's window (`checkGrantWindow`, the same function the accept path and
+   `grant check` call). A read-only call may omit the paths, and then covers
+   nothing.
+5. **Scope.** A file is judged when it is inside the slice (minus its excludes)
+   or inside any supplied grant's `paths`. Coverage itself is scoped to one
+   grant: a file must sit inside the paths of _the_ grant whose line covers it,
+   so another supplied grant's paths never widen coverage. Changes outside both
+   are intentionally not judged — the kit has no say there — and the command
+   prints how many it skipped.
+6. **Exit codes.** 0 when nothing is unaccounted. 1 when a changed in-scope file
+   has no covering line, naming each one with the nearest candidate line. 2 for
+   bad input or bad state: an unreadable, unsigned or duplicated `--grant`, a
+   missing or unusable engagement key, an unresolvable `<since>`, a trace that
+   was not tracked at `<since>`, a trace that is absent or not sound, a proposal
+   that does not reproduce its line's `result_digest`, and an empty diff without
+   `--allow-empty` (which prints `empty diff: nothing was checked` and exits 0
+   with it). A clean result never means "nothing was looked at" by default.
+
+Two of its limits are worth stating plainly. It proves that an authorized line
+covering a path exists; it cannot prove the line is true, only that the agent
+reported its paths honestly. And it does not stop a write — a line appended
+after the fact still covers, so the only barrier against a forgery is the
+engagement key behind the tip. Until Trace carries paths itself, a change
+applied through `hexagen_accept_transaction` is unaccounted here, because that
+writer leaves no path list anywhere: this command is narrower than "every
+change the kit governs".
+
+Both subcommands of `hexagen evidence` are specified here. `hexagen grant
+issue|show|check|revoke` are specified in `GRANT.md`; nothing here redefines
+them.
 
 ## Acceptance tests
 

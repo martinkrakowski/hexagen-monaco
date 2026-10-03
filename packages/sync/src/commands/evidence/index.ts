@@ -1,6 +1,7 @@
 /* eslint-disable no-console */
 import { Command } from "commander";
 import { runEvidencePack } from "./pack.js";
+import { runEvidenceVerify } from "./verify.js";
 
 export const evidenceCommander = new Command("evidence").description(
   "Verify and pack trace evidence (docs/kernel/TRACE.md)",
@@ -41,6 +42,52 @@ evidenceCommander
         keyFile: opts.keyFile,
         engagement: opts.engagement,
       });
+      for (const line of result.messages) console.error(line);
+      process.exitCode = result.exitCode;
+    },
+  );
+
+evidenceCommander
+  .command("verify")
+  .description(
+    "Name every changed file in the slice or a grant's paths that no trace line appended after --since covers. Found after the fact, not enforced: it reads only and never stops a write",
+  )
+  .requiredOption(
+    "--since <git-ref>",
+    "Lower end of the range; only lines appended after it can cover a change",
+  )
+  .requiredOption(
+    "--grant <file...>",
+    "Grant file(s) the trace's lines cite, and whose paths widen scope (repeatable)",
+  )
+  .option("--until <git-ref>", "Upper end of the range (defaults to HEAD)")
+  .option("--root <dir>", "Repo root (defaults to cwd; never searched upward)")
+  .option("--key-file <path>", "Engagement key file")
+  .option("--engagement <id>", "Engagement id (defaults to the slice id)")
+  .option(
+    "--allow-empty",
+    "Exit 0 on an empty range instead of 2 (nothing was checked)",
+  )
+  .action(
+    async (opts: {
+      since: string;
+      until?: string;
+      grant: string[];
+      root?: string;
+      keyFile?: string;
+      engagement?: string;
+      allowEmpty?: boolean;
+    }) => {
+      const result = await runEvidenceVerify({
+        root: opts.root ?? process.cwd(),
+        since: opts.since,
+        until: opts.until,
+        grantFiles: opts.grant,
+        keyFile: opts.keyFile,
+        engagement: opts.engagement,
+        allowEmpty: opts.allowEmpty,
+      });
+      if (result.stdout) console.log(result.stdout);
       for (const line of result.messages) console.error(line);
       process.exitCode = result.exitCode;
     },

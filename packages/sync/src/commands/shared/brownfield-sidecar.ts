@@ -128,6 +128,60 @@ export function changedSince(
   ]);
 }
 
+/** One `git diff --name-status -M -z` record. */
+export interface ChangedPath {
+  /** The record's status field: `A`, `M`, `D`, `R100`, `C075`, ... */
+  readonly status: string;
+  /** The new side: the only path for every status but a rename or copy. */
+  readonly path: string;
+  /** The old side of a rename or copy, which is a path that moved too. */
+  readonly oldPath?: string;
+}
+
+/**
+ * Files changed in `from..to`, renames and copies expanded into both of their
+ * paths. The sibling of `changedSince`, not a replacement: that one answers
+ * "which files under these pathspecs changed" for `slice check` and keeps
+ * `--name-only`, while this one has to know which side of a rename moved —
+ * `--name-only` prints one name per side and loses the pairing. Both go through
+ * the module-private `gitZ`, so NUL splitting is written once.
+ *
+ * Both refs may be any rev; the caller resolves them. Null means git failed,
+ * which for a range ref is how a shallow clone that cannot reach `from` answers:
+ * never treat that as "nothing changed".
+ */
+export function changedPaths(
+  root: string,
+  from: string,
+  to: string,
+): ChangedPath[] | null {
+  const fields = gitZ(root, [
+    "diff",
+    "--name-status",
+    "-M",
+    "-z",
+    `${from}..${to}`,
+  ]);
+  if (fields === null) return null;
+  const out: ChangedPath[] = [];
+  for (let i = 0; i < fields.length; ) {
+    const status = fields[i] as string;
+    const first = fields[i + 1];
+    // A truncated record cannot be read honestly; stop rather than guess a path.
+    if (first === undefined) break;
+    const paired = status.startsWith("R") || status.startsWith("C");
+    const second = paired ? fields[i + 2] : undefined;
+    if (paired && second === undefined) break;
+    out.push(
+      paired && second !== undefined
+        ? { status, path: second, oldPath: first }
+        : { status, path: first },
+    );
+    i += paired ? 3 : 2;
+  }
+  return out;
+}
+
 async function readJson(file: string, label: string): Promise<unknown> {
   let raw: string;
   try {
