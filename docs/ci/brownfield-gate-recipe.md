@@ -444,17 +444,30 @@ jobs:
 
       - name: "Key fingerprint (report only)"
         if: always()
+        # Non-blocking by declaration, not by swallowing: this step's exit code
+        # is whatever `hexagen grant show` returns — 1 when a signature does not
+        # verify — and `continue-on-error` is what keeps that from deciding the
+        # job. `set -e` stays on, so a failure inside the step is still a failure
+        # the log shows; nothing here rescues an exit code it does not re-raise.
+        continue-on-error: true
         run: |
           # Diagnostic, never a gate: names the key the job resolved, by path and
           # fingerprint, so a mismatch is visible in the log. The key itself is
           # never printed. `hexagen grant check <grant> --tool <tool> --path
           # <path>` is the enforcing form and needs a tool and a path.
-          set +e
-          first="$(git ls-files -- ".hexagen/grants/*.json" | head -n 1)"
-          if [ -n "${first}" ]; then
-            hexagen grant show "${first}" || echo "::notice::grant show exit $? — the fingerprint above, if any, is what the job resolved"
+          set -uo pipefail
+          shopt -s nullglob
+          # A glob into an array, not `git ls-files | head -n 1`: a pipeline here
+          # would need its own failure handling, and `head` closing the pipe early
+          # is SIGPIPE on a status nobody reads. The glob reads the workspace,
+          # which on a fresh checkout is exactly the tracked set, and it sorts, so
+          # the same grant is named on every run.
+          grants=(.hexagen/grants/*.json)
+          if [ "${#grants[@]}" -gt 0 ]; then
+            hexagen grant show "${grants[0]}"
+          else
+            echo "::notice::no grant under .hexagen/grants/, so there is no signature to report a fingerprint for"
           fi
-          exit 0
 ```
 
 ## The engagement key in CI
@@ -481,6 +494,14 @@ SHA-256 of the key bytes, never the key. `hexagen grant check <grant> --tool
 <tool> --path <path>` is the enforcing form and needs a tool and a path. If the
 fingerprint in CI differs from the FDE's, every grant signature fails and step 4
 exits 1 — which is the correct answer, not a bug to work around.
+
+The example reports the fingerprint in its own step, and that step is
+non-blocking **by declaration, not by swallowing**: it carries
+`continue-on-error: true`, keeps `set -e` on, and returns whatever `grant show`
+returned. A signature that does not verify makes that one step report a failure
+in the log while the job's verdict stays with the gate steps — which is the
+honest shape. `set +e`, a `|| echo`, or a trailing `exit 0` in a report-only step
+would produce the same green job and a log that says nothing went wrong.
 
 **A missing or weak key is a denial, not a skip.** With no key at all, `evidence
 pack` exits 2 with `cannot locate the engagement key`. The example's key step
