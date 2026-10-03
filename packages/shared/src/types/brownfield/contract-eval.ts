@@ -145,6 +145,7 @@ export function isKnown(
 /** What kind of weakening a finding is. */
 export type ContractGrowthKind =
   | "known-violation-added"
+  | "entry-identity-changed"
   | "expires-extended"
   | "expires-dropped"
   | "rule-removed"
@@ -181,6 +182,12 @@ function entryLabel(entry: Contract["knownViolations"][number]): string {
 const RULE_FIELDS = ["kind", "from", "to", "severity"] as const;
 
 /**
+ * The fields of a baseline entry that make it cover what it covers: the triple
+ * the check matches on. Any difference is growth, whichever way it points.
+ */
+const IDENTITY_FIELDS = ["file", "specifier"] as const;
+
+/**
  * Everything the working tree has weakened relative to `base`.
  *
  * Not growth, deliberately: a removed entry, a shortened `expires`, an added
@@ -200,18 +207,37 @@ export function findContractGrowth(input: {
   const baseRules = base.rules;
   // No contract in the tree is every rule gone, not a pass.
   const treeRules = tree.contract?.rules ?? [];
+  const treeEntries = tree.contract?.knownViolations ?? [];
   const found: ContractGrowth[] = [];
 
-  for (const entry of tree.contract?.knownViolations ?? []) {
-    // Identity only — the same rule+file+specifier triple the check matches on,
-    // expiry deliberately ignored: an entry that has expired is still the entry
-    // the guard must compare against.
-    const prior = base.knownViolations.find(
-      (k) =>
-        k.rule === entry.rule &&
-        k.file === entry.file &&
-        k.specifier === entry.specifier,
-    );
+  // The base's entries grouped by rule, so a re-pointed entry can still be found
+  // (below) without giving every entry the same rule the same identity.
+  const baseByRule = new Map<string, Contract["knownViolations"][number][]>();
+  for (const known of base.knownViolations) {
+    const same = baseByRule.get(known.rule);
+    if (same) same.push(known);
+    else baseByRule.set(known.rule, [known]);
+  }
+  const treePerRule = new Map<string, number>();
+  for (const known of treeEntries) {
+    treePerRule.set(known.rule, (treePerRule.get(known.rule) ?? 0) + 1);
+  }
+
+  for (const entry of treeEntries) {
+    // Which base entry is this one? The same triple is the same entry, expiry
+    // deliberately ignored: an entry that has expired is still the entry the
+    // guard must compare against. Failing that, it can only be a re-pointed
+    // entry when neither side holds a second entry for that rule — with several,
+    // an edit cannot be attributed to one, and the honest report is a new entry,
+    // which is growth all the same.
+    const sameRule = baseByRule.get(entry.rule) ?? [];
+    const prior =
+      sameRule.find(
+        (k) => k.file === entry.file && k.specifier === entry.specifier,
+      ) ??
+      (sameRule.length === 1 && treePerRule.get(entry.rule) === 1
+        ? sameRule[0]
+        : undefined);
     if (!prior) {
       found.push({
         kind: "known-violation-added",
@@ -219,20 +245,35 @@ export function findContractGrowth(input: {
       });
       continue;
     }
+    // `rule` + `file` + `specifier` IS the entry's coverage key, so an edit to it
+    // is reviewed like a rule's `from`/`to` (see RULE_FIELDS): the guard matches
+    // the two entries by exact equality, but a wider key — a directory where a
+    // file was, a glob where an import was — is the shape that hides more than
+    // the base recorded, and nothing here can compare the two coverages. `reason`
+    // is a note on the entry, not its coverage, so it is not growth.
+    for (const field of IDENTITY_FIELDS) {
+      if (entry[field] === prior[field]) continue;
+      found.push({
+        kind: "entry-identity-changed",
+        detail:
+          `knownViolations entry ${entryLabel(prior)} ` +
+          `${field} changed to ${entry[field]}`,
+      });
+    }
     const was = expiresInstant(prior.expires);
     const now = expiresInstant(entry.expires);
     if (now !== undefined && now > (was ?? Number.NEGATIVE_INFINITY)) {
       found.push({
         kind: "expires-extended",
         detail:
-          `knownViolations entry ${entryLabel(entry)} expires extended ` +
+          `knownViolations entry ${entryLabel(prior)} expires extended ` +
           `${prior.expires ?? "never"} -> ${entry.expires ?? "never"}`,
       });
     } else if (now === undefined && was !== undefined) {
       found.push({
         kind: "expires-dropped",
         detail:
-          `knownViolations entry ${entryLabel(entry)} expires dropped ` +
+          `knownViolations entry ${entryLabel(prior)} expires dropped ` +
           `(was ${prior.expires ?? "never"})`,
       });
     }

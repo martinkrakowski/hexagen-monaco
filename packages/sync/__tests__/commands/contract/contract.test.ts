@@ -688,11 +688,14 @@ async function editTreeSlice(
 /**
  * Every row of the growth table: what the base holds, how the tree changes it,
  * and the exit `check --base` must give. `exit: 0` rows are the ones a guard
- * that only ever fails would get wrong.
+ * that only ever fails would get wrong. `finding` is set where the exit code
+ * alone cannot tell two rows apart — the same tree is reachable through a
+ * different guard, so only the message says which one fired.
  */
 const GROWTH_ROWS: Array<{
   name: string;
   exit: 0 | 1;
+  finding?: string;
   base?: BaseFixture;
   weaken: (root: string) => Promise<void>;
 }> = [
@@ -773,6 +776,20 @@ const GROWTH_ROWS: Array<{
     exit: 0,
     weaken: (root) =>
       editTreeSlice(root, { paths: ["src/", "ui/", "api/", "lib/"] }),
+  },
+  {
+    name: "a baselined entry re-pointed at a directory",
+    exit: 1,
+    finding: "file changed to src",
+    base: { knownViolations: [{ ...ENTRY }] },
+    weaken: async (root) => {
+      const c = await readTreeContract(root);
+      // The one file becomes a whole directory. The triple is the entry's
+      // coverage key, so the guard cannot tell what that now hides -- and a
+      // new-entry report would be the wrong cause.
+      c.knownViolations[0]!.file = "src";
+      await writeTreeContract(root, c);
+    },
   },
 ];
 
@@ -978,7 +995,7 @@ describe("contract check --base: the growth guard", () => {
 
   it.each(GROWTH_ROWS)(
     "14. --base gives $exit for $name, and --allow-growth --reason accepts the growth",
-    async ({ name, exit, base, weaken }) => {
+    async ({ name, exit, finding, base, weaken }) => {
       const root = await staged(base);
       await weaken(root);
       const refused = await runContractCheck({ root, base: "HEAD" });
@@ -987,6 +1004,9 @@ describe("contract check --base: the growth guard", () => {
         // Not growth: the guard must say so and change nothing.
         expect(all(refused), name).not.toContain("growth vs");
         return;
+      }
+      if (finding !== undefined) {
+        expect(all(refused), name).toContain(finding);
       }
       const reason = `reviewed: ${name}`;
       const r = await runContractCheck({

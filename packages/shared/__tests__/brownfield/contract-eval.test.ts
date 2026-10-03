@@ -151,6 +151,58 @@ describe("findContractGrowth", () => {
     expect(dated[0]!.detail).toContain("2026-12-01");
   });
 
+  it("an edit to the identity of an entry the base had is growth", () => {
+    const base = contract({ knownViolations: [entry()] });
+    const found = (tree: Pick<Contract, "rules" | "knownViolations">) =>
+      findContractGrowth(sides(base, tree)).map((g) => [g.kind, g.detail]);
+    // rule+file+specifier IS the entry's coverage key, so any edit to it is
+    // reviewed like a rule's from/to: the guard cannot compare what a changed
+    // key would cover, and a wider key hides violations the base did not hide.
+    expect(
+      found(contract({ knownViolations: [entry({ file: "src" })] })),
+    ).toEqual([
+      [
+        "entry-identity-changed",
+        "knownViolations entry r1  a.ts  x file changed to src",
+      ],
+    ]);
+    expect(
+      found(contract({ knownViolations: [entry({ specifier: "@app/*" })] })),
+    ).toEqual([
+      [
+        "entry-identity-changed",
+        "knownViolations entry r1  a.ts  x specifier changed to @app/*",
+      ],
+    ]);
+    // A reason is a note on the entry, not its coverage: not growth.
+    expect(
+      found(contract({ knownViolations: [entry({ reason: "why" })] })),
+    ).toEqual([]);
+    // With a second entry for the same rule on both sides the edit cannot be
+    // attributed to one of them, so it is reported as the new entry it looks
+    // like — still growth, never a pass.
+    const two = contract({
+      knownViolations: [entry(), entry({ file: "b.ts" })],
+    });
+    expect(
+      findContractGrowth(
+        sides(two, {
+          ...contract({}),
+          knownViolations: [entry({ file: "src" }), entry({ file: "b.ts" })],
+        }),
+      ).map((g) => g.kind),
+    ).toEqual(["known-violation-added"]);
+    // An expires edit is still judged on its own terms, naming the base entry.
+    expect(
+      found(contract({ knownViolations: [entry({ expires: "2026-12-01" })] })),
+    ).toEqual([
+      [
+        "expires-extended",
+        "knownViolations entry r1  a.ts  x expires extended never -> 2026-12-01",
+      ],
+    ]);
+  });
+
   it("an expiry pushed later is growth and one shortened is not, but a dropped one is", () => {
     const base = contract({
       knownViolations: [entry({ expires: "2026-12-01" })],
