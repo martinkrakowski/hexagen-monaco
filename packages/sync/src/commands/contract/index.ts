@@ -45,10 +45,11 @@ const pretty = (value: unknown): string =>
 /**
  * The candidate `closed` rule, as `propose --closed` prints it: the crossing
  * targets as one `except` list, the `add-rule` line that would write it, and any
- * crossing no except can accept. Writes nothing either way.
+ * crossing that gets no entry, with the advice that would accept it. Writes
+ * nothing either way.
  */
 function closedProposal(slice: Slice, observed: ObservedReport): string {
-  const { excepts, unexceptable } = proposeClosedExcepts(slice, observed);
+  const { excepts, notProposed } = proposeClosedExcepts(slice, observed);
   // `--except` with no prefixes at all is a legal rule (it accepts none), so
   // the empty case prints the bare flag rather than dropping it.
   const flags = excepts.length === 0 ? "" : `${excepts.join(" ")} `;
@@ -60,9 +61,7 @@ function closedProposal(slice: Slice, observed: ObservedReport): string {
           "no observed edge leaves the slice, so this rule accepts no crossing at all",
         ]
       : []),
-    ...unexceptable.map(
-      (u) => `this crossing no except can accept: "${u.to}" (${u.reason})`,
-    ),
+    ...notProposed.map((n) => `not proposed: "${n.to}" — ${n.advice}`),
     `    hexagen contract add-rule --kind closed --except ${flags}--yes`,
   ];
   return `candidate rules for slice ${slice.id} (nothing written):\n${lines.join("\n")}\n`;

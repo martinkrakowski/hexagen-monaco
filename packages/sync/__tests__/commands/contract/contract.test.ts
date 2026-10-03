@@ -89,11 +89,24 @@ describe("contract propose --closed", () => {
     return JSON.parse(line!.slice("except: ".length)) as string[];
   }
 
-  /** The `--except` flags of the `add-rule` line the proposal printed. */
+  /** The `add-rule` line the proposal printed. */
   function printedFlags(out: string): string {
     const line = out.split("\n").find((l) => l.includes("contract add-rule"));
     expect(line, out).toBeDefined();
     return line!.trim();
+  }
+
+  /**
+   * The arguments the printed `add-rule` line passes to `--except`, so a test
+   * runs the command as printed instead of re-deriving the list from the JSON.
+   */
+  function printedExceptArgs(out: string): string[] {
+    const tokens = printedFlags(out).split(" ").slice(3);
+    const start = tokens.indexOf("--except");
+    expect(start, printedFlags(out)).toBeGreaterThanOrEqual(0);
+    const rest = tokens.slice(start + 1);
+    const end = rest.findIndex((t) => t.startsWith("-"));
+    return end === -1 ? rest : rest.slice(0, end);
   }
 
   it("emits one closed rule excepting every crossing, and writes nothing", async () => {
@@ -159,9 +172,9 @@ describe("contract propose --closed", () => {
     expect(r.exitCode).toBe(0);
     const out = all(r);
     expect(proposedExcepts(out)).toEqual(["outside/o.ts"]);
-    expect(out).toContain('"." (the root package is never inside a prefix)');
+    expect(out).toContain('"." — the root package is never inside a prefix');
     expect(out).toContain(
-      '"lib/gen/x.ts" (an excludes entry wins over any except)',
+      '"lib/gen/x.ts" — an excludes entry wins over any except',
     );
     expect(printedFlags(out)).not.toContain("--except .");
   });
@@ -173,6 +186,102 @@ describe("contract propose --closed", () => {
     expect(r.exitCode).toBe(0);
     expect(all(r)).toContain("the edge list is incomplete");
     expect(proposedExcepts(all(r))).toEqual([]);
+  });
+
+  it("names a directory-spelled target instead of proposing a prefix that widens it", async () => {
+    // `observed.json` types `to` as a slice path, so a hand-edited report may
+    // spell a package root as a directory. Emitted verbatim, `outside/pkg/` is an
+    // except entry that accepts every edge under it; emitted without the slash it
+    // is an exact entry that does not match the target as spelled at all. Neither
+    // is the one crossing that was observed, so the proposal names the crossing
+    // and the exact flag that would accept it.
+    const root = await setup();
+    await writeObserved(root, {
+      edges: [
+        {
+          from: "src/a.ts",
+          to: "outside/pkg/",
+          specifier: "@repo/outside-pkg",
+        },
+        { from: "src/a.ts", to: "lib/c.ts", specifier: "../lib/c" },
+      ],
+    });
+    const r = await runContractPropose({ root, closed: true });
+    expect(r.exitCode).toBe(0);
+    const out = all(r);
+    expect(proposedExcepts(out)).toEqual(["lib/c.ts"]);
+    expect(printedExceptArgs(out)).toEqual(["lib/c.ts"]);
+    // Nothing is proposed as a directory prefix: no entry ends in `/`.
+    expect(proposedExcepts(out).some((e) => e.endsWith("/"))).toBe(false);
+    expect(out).toContain('not proposed: "outside/pkg/"');
+    expect(out).toContain("--except outside/pkg/");
+
+    // The rule the proposal writes accepts what it listed and still refuses the
+    // crossing it named, which is why it named it rather than guessing: the
+    // exact entry `outside/pkg` does not match a target spelled `outside/pkg/`.
+    await runContractAddRule({
+      root,
+      kind: "closed",
+      except: printedExceptArgs(out),
+      id: "c1",
+      yes: true,
+    });
+    const after = await runContractCheck({ root });
+    expect(after.exitCode).toBe(1);
+    expect(all(after)).toContain("violation: c1  src/a.ts  @repo/outside-pkg");
+  });
+
+  it("keeps the two spellings of one package root apart", async () => {
+    const root = await setup();
+    await writeObserved(root, {
+      edges: [
+        { from: "src/a.ts", to: "outside/pkg", specifier: "@repo/outside-pkg" },
+        { from: "api/y.ts", to: "outside/pkg/", specifier: "../outside/pkg" },
+      ],
+    });
+    const out = all(await runContractPropose({ root, closed: true }));
+    // The exact spelling is proposed as it stands; the directory spelling is
+    // never folded into it, which would turn one crossing into a prefix.
+    expect(proposedExcepts(out)).toEqual(["outside/pkg"]);
+    expect(out).toContain('not proposed: "outside/pkg/"');
+  });
+
+  it("the printed flags write a rule that holds, and a crossing it never saw still fails", async () => {
+    const root = await setup();
+    const edges = [
+      { from: "src/a.ts", to: "lib/c.ts", specifier: "../lib/c" },
+      { from: "api/y.ts", to: "outside/pkg", specifier: "@repo/outside-pkg" },
+      { from: "src/a.ts", to: "src/b.ts", specifier: "./b" },
+    ];
+    await writeObserved(root, { edges });
+
+    const proposal = all(await runContractPropose({ root, closed: true }));
+    const added = await runContractAddRule({
+      root,
+      kind: "closed",
+      except: printedExceptArgs(proposal),
+      id: "c1",
+      yes: true,
+    });
+    expect(added.exitCode).toBe(0);
+    expect((await readContract(root)).rules[0]).toEqual({
+      id: "c1",
+      kind: "closed",
+      except: ["lib/c.ts", "outside/pkg"],
+      severity: "error",
+    });
+    // Every crossing the proposal listed is now accepted: the gate is green.
+    expect((await runContractCheck({ root })).exitCode).toBe(0);
+
+    await writeObserved(root, {
+      edges: [
+        ...edges,
+        { from: "src/a.ts", to: "other/d.ts", specifier: "../other/d" },
+      ],
+    });
+    const after = await runContractCheck({ root });
+    expect(after.exitCode).toBe(1);
+    expect(all(after)).toContain("violation: c1  src/a.ts  ../other/d");
   });
 });
 

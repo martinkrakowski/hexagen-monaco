@@ -149,8 +149,8 @@ export function proposeCrossPrefixEdges(
 export interface ClosedProposal {
   /** Except entries, in the order `observed.json` lists them. */
   excepts: string[];
-  /** Crossings no except entry can accept, each with the reason. */
-  unexceptable: { to: string; reason: string }[];
+  /** Crossings that get no entry, each with the advice that would accept it. */
+  notProposed: { to: string; advice: string }[];
 }
 
 /**
@@ -158,22 +158,25 @@ export interface ClosedProposal {
  * observed edges already make: every edge target that leaves the slice, emitted
  * exactly as `slice check` prints it, deduplicated.
  *
- * The target is never widened to a directory. An except entry without a
- * trailing `/` is an exact file (`underPrefix`), so `lib` would except nothing
- * while reading as if it excepted the directory; a file target is emitted whole
- * and a package root as the package root, and the human widens either by hand.
+ * A target is never turned into a directory. `observed.json` types `to` as a
+ * slice path, so a hand-edited report may spell a package root as a directory
+ * (`outside/pkg/`); emitting that verbatim gives an except entry which accepts
+ * every edge under it, and dropping the slash gives an exact entry which does
+ * not match the target at all (`underPrefix` compares equality without a
+ * trailing `/`). Neither names the one crossing that was observed, so such a
+ * target is reported with the flag that would accept it instead.
  *
- * A crossing no except can accept is reported rather than proposed, because a
- * rule naming one would still fail: `.` is never inside a prefix, and an
- * `excludes` entry beats any except.
+ * A crossing no `except` can accept is reported the same way, because a rule
+ * naming one would still fail: `.` is never inside a prefix, and an `excludes`
+ * entry beats any except.
  */
 export function proposeClosedExcepts(
   slice: Slice,
   observed: ObservedReport,
 ): ClosedProposal {
   const excepts: string[] = [];
-  const unexceptable: ClosedProposal["unexceptable"] = [];
-  if (!observed.edges.collected) return { excepts, unexceptable };
+  const notProposed: ClosedProposal["notProposed"] = [];
+  if (!observed.edges.collected) return { excepts, notProposed };
   const seen = new Set<string>();
   for (const e of observed.edges.items) {
     if (!isPathInSlice(slice, e.from)) continue;
@@ -181,20 +184,25 @@ export function proposeClosedExcepts(
     if (seen.has(e.to)) continue;
     seen.add(e.to);
     if (e.to === ".") {
-      unexceptable.push({
+      notProposed.push({
         to: e.to,
-        reason: "the root package is never inside a prefix",
+        advice: "the root package is never inside a prefix",
       });
     } else if (targetExcluded(slice, e.to)) {
-      unexceptable.push({
+      notProposed.push({
         to: e.to,
-        reason: "an excludes entry wins over any except",
+        advice: "an excludes entry wins over any except",
+      });
+    } else if (e.to.endsWith("/")) {
+      notProposed.push({
+        to: e.to,
+        advice: `a directory target: an exact entry would not match it, and --except ${e.to} accepts every edge under it, so name it yourself`,
       });
     } else {
       excepts.push(e.to);
     }
   }
-  return { excepts, unexceptable };
+  return { excepts, notProposed };
 }
 
 /**
