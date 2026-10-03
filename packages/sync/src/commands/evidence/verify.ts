@@ -107,9 +107,11 @@ export interface UnaccountedFile {
   readonly path: string;
   /**
    * Lines that would cover `path` but that no `evidence pack` has anchored.
-   * Present only when the run failed because the cover exists on paper only.
+   * Always present, and empty when no such line exists — an empty list means
+   * nothing was written at all, a non-empty one means the cover exists on paper
+   * only.
    */
-  readonly unanchoredCover?: readonly number[];
+  readonly unanchoredCover: readonly number[];
   readonly nearestSeq?: number;
   readonly nearestGrantId?: string;
   readonly nearestPaths?: readonly string[];
@@ -276,13 +278,33 @@ function nearestTo(
 }
 
 /**
+ * The `traceSeq` of a proposal file, read leniently: only an integer is a
+ * `traceSeq`, and only an integer at or below `lastSeqAtSince` proves the file
+ * is stale. Anything else — unparsable JSON, no `traceSeq`, a `traceSeq` that is
+ * not an integer, `null` — reads as "not provably stale", and the file is then
+ * held to the full schema.
+ */
+function traceSeqOf(text: string): number | null {
+  try {
+    const value = asRecord(JSON.parse(text) as unknown);
+    const seq = value?.traceSeq;
+    return typeof seq === "number" && Number.isInteger(seq) ? seq : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Every proposal under `.hexagen/proposals/` **in the `<until>` tree**, joined
  * to its line. A proposal that is only in the working tree is not evidence for
  * the range, so it is invisible here and its line covers nothing.
  *
  * Only a proposal naming a line above `lastSeqAtSince` can be a candidate, so
- * only those are read strictly: an older one — schema or digest — covers
- * nothing and is ignored, rather than refusing every later run forever.
+ * staleness is settled before anything else: a file that names such a line is
+ * skipped, however little of it is a proposal. A file with no readable
+ * `traceSeq` — unparsable JSON, no `traceSeq`, a `traceSeq` that is not an
+ * integer — cannot be shown to be stale, so it is read strictly and fails the
+ * run closed; only the stale ones are ever ignored.
  */
 async function joinProposals(
   root: string,
@@ -296,9 +318,12 @@ async function joinProposals(
   readonly problem?: string;
 }> {
   const joined = new Map<number, CandidateLine>();
+  // `-z`, never `--name-only`: without it git C-quotes a name holding a quote,
+  // a tab or a newline, and the quoted spelling names nothing the tree holds.
   const listed = git(root, [
     "ls-tree",
     "-r",
+    "-z",
     "--name-only",
     until,
     "--",
@@ -312,12 +337,22 @@ async function joinProposals(
   }
   const reader = createGitReader(root);
   const names = listed
-    .split("\n")
-    .map((n) => n.trim())
-    .filter((n) => n.endsWith(".json"));
-  for (const file of names.sort()) {
+    .split("\0")
+    .filter((n) => n.endsWith(".json"))
+    .sort();
+  for (const file of names) {
     const text = reader.show(until, file);
-    if (text === null) continue;
+    if (text === null) {
+      // The tree listed it and the reader cannot have it: a gitlink, or a
+      // repository that stopped answering. Refuse rather than judge the range
+      // without it.
+      return {
+        joined,
+        problem: `${file} is listed in ${until} but cannot be read from it; the evidence in that tree cannot be judged.`,
+      };
+    }
+    const seq = traceSeqOf(text);
+    if (seq !== null && seq <= lastSeqAtSince) continue;
     let json: unknown;
     try {
       json = JSON.parse(text);
@@ -336,8 +371,8 @@ async function joinProposals(
       };
     }
     const meta = parsed.data;
-    // A proposal from before `<since>`, and one written while the trace was
-    // unchained, can never join a line that can cover this range.
+    // The trace was unchained when the proposal was written, so there is no line
+    // to join and nothing is covered.
     if (meta.traceSeq === null || meta.traceSeq <= lastSeqAtSince) continue;
     const verdict = verdicts.find((v) => (v.seq ?? v.index) === meta.traceSeq);
     const line = asRecord(lines[meta.traceSeq]?.value);
@@ -640,7 +675,7 @@ export async function runEvidenceVerify(
 
   const nearestNote = (entry: UnaccountedFile): string => {
     const unanchored =
-      entry.unanchoredCover !== undefined && entry.unanchoredCover.length > 0
+      entry.unanchoredCover.length > 0
         ? `cover exists but is not anchored: run hexagen evidence pack (seq ${entry.unanchoredCover.join(", ")}); `
         : "";
     if (entry.nearestSeq === undefined) {

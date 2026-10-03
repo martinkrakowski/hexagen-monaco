@@ -293,6 +293,7 @@ describe("evidence verify, a covered change", () => {
       /cover exists but is not anchored: run hexagen evidence pack/,
     );
     expect(pathsOf(unanchored)).toEqual(["src/a.ts"]);
+    expect(unanchored.unaccounted?.[0]?.unanchoredCover).toEqual([1]);
 
     // A key-holder packs: the tip now anchors the line, and it covers.
     await anchorHead("pack: anchor the late line");
@@ -340,6 +341,9 @@ describe("evidence verify, an unaccounted change", () => {
     expect(r.exitCode).toBe(1);
     expect(pathsOf(r)).toEqual(["src/a.ts"]);
     expect(text(r)).toMatch(/unaccounted: src\/a\.ts/);
+    // Always present on an unaccounted file, and empty when no unanchored line
+    // would cover it: nothing was written but not anchored.
+    expect(r.unaccounted?.[0]?.unanchoredCover).toEqual([]);
   });
 
   it("names every unaccounted file, with the nearest covering line", async () => {
@@ -553,17 +557,58 @@ describe("evidence verify, tampering and forged evidence", () => {
     expect(text(partial)).toMatch(/is not a proposal/);
   });
 
-  it("a stale proposal is ignored, not a permanent exit 2", async () => {
-    await put(root, "src/a.ts", "changed\n");
+  it("a stale proposal is ignored whatever shape it is in", async () => {
+    await put(root, "src/a.ts", "changed with no line\n");
+    commit("silent change");
     await appendLine(proposeLine("p1", ["src/a.ts"]));
-    // Its digest no longer matches, but it names a line from before `<since>`,
-    // so it can never be a candidate: it is ignored, not refused.
+    // It reads as JSON and names a line from before `<since>`, so it is stale
+    // and can never be a candidate — however little of it is a proposal.
     await writeMeta("p1", { paths: ["src/a.ts", "src/b.ts"], traceSeq: 0 });
     commit("a stale proposal that does not reproduce its line");
+    const mismatched = await run();
+    expect(mismatched.exitCode).toBe(1);
+    expect(pathsOf(mismatched)).toEqual(["src/a.ts"]);
+    expect(text(mismatched)).not.toMatch(/result_digest/);
+
+    // The same file, stale because its `traceSeq` is a number below the last one
+    // at `<since>`, and not even a proposal: still ignored, not a hard failure.
+    await put(
+      root,
+      ".hexagen/proposals/stale.json",
+      JSON.stringify({ id: "stale", traceSeq: 0 }),
+    );
+    commit("a stale file that is not a proposal at all");
+    const malformed = await run();
+    expect(malformed.exitCode).toBe(1);
+    expect(pathsOf(malformed)).toEqual(["src/a.ts"]);
+    expect(text(malformed)).not.toMatch(/is not a proposal/);
+
+    // One `traceSeq` higher and the same file is fresh, so it is read strictly
+    // and fails closed: no readable `traceSeq` of its own means nothing proves
+    // it stale.
+    await put(
+      root,
+      ".hexagen/proposals/stale.json",
+      JSON.stringify({ id: "stale", traceSeq: 1 }),
+    );
+    commit("the same file, claiming a fresh line");
+    const fresh = await run();
+    expect(fresh.exitCode).toBe(2);
+    expect(text(fresh)).toMatch(/is not a proposal/);
+  });
+
+  it("reads a proposal whose name git would C-quote", async () => {
+    // `git ls-tree --name-only` prints this name quoted and escaped, so only a
+    // NUL-delimited listing hands back the name the tree actually holds.
+    const id = 'p"1';
+    await put(root, "src/a.ts", "changed\n");
+    await appendLine(proposeLine(id, ["src/a.ts"]));
+    await writeMeta(id, { paths: ["src/a.ts"], traceSeq: 1 });
+    commit("a proposal whose name needs quoting");
+    await anchorHead();
     const r = await run();
-    expect(r.exitCode).toBe(1);
-    expect(pathsOf(r)).toEqual(["src/a.ts"]);
-    expect(text(r)).not.toMatch(/result_digest/);
+    expect(r.exitCode).toBe(0);
+    expect(r.covered).toEqual(["src/a.ts"]);
   });
 
   it("14a. a proposal whose grantId differs from its line's grant_id covers nothing", async () => {

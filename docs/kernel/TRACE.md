@@ -354,13 +354,17 @@ one after the fact.
    ancestor of `<until>` — read backwards, the range would judge a change against
    evidence that predates it.
 2. **The evidence is the tree, not the checkout.** The trace, the tip and the
-   proposals are read with `git show <until>:<path>` (the proposals enumerated
-   with `git ls-tree -r <until>`), so only evidence committed at `<until>` counts
-   and a committed blob cannot change under the command — no writer lock is
-   taken, because there is nothing to lock. The slice is the one file read from
-   the working tree, since it is the kit's own configuration. A trace or a
-   proposal that is only in the working copy is not evidence for the range, and
-   the line it would have covered stays unaccounted.
+   proposals are read with `git show <until>:<path>`, the proposals enumerated
+   with `git ls-tree -r -z --name-only <until>` — `-z`, never a newline-split
+   listing, because git C-quotes a name holding a quote, a tab or a newline and
+   the quoted spelling names nothing the tree holds. A proposal the tree lists
+   but that cannot be read from it is exit 2, never a silent skip. So only
+   evidence committed at `<until>` counts, and a committed blob cannot change
+   under the command — no writer lock is taken, because there is nothing to
+   lock. The slice is the one file read from the working tree, since it is the
+   kit's own configuration. A trace or a proposal that is only in the working
+   copy is not evidence for the range, and the line it would have covered stays
+   unaccounted.
 3. **The trace** is checked exactly as `pack` checks it — the same chain,
    line-shape and Rules pass — and the anchored tip is **required**, not
    optional. A broken chain, a torn line, a tip that does not anchor, a tip whose
@@ -395,10 +399,15 @@ anchored: run hexagen evidence pack`. **Pack before you verify** — a
    canonicalise it. A `paths` entry edited after the line was written breaks
    that digest instead of being believed, which is why no Trace field was added
    to carry the paths. Only a proposal naming a line above `lastSeqAtSince` can
-   be a candidate, so only those are read strictly: an older one covers nothing
-   and is ignored however it is shaped. `traceSeq: null` means the trace was
-   unchained when the proposal was written, so there is no line to join and
-   nothing is covered. Changed paths and proposal paths are compared NFC-folded,
+   be a candidate, so staleness is settled first and leniently: `traceSeq` is
+   read on its own, and a file whose `traceSeq` is an integer at or below
+   `lastSeqAtSince` is stale, so it is skipped before the strict parse and
+   ignored however little of it is a proposal. A file with no readable
+   `traceSeq` — unparsable JSON, no `traceSeq`, one that is not an integer —
+   cannot be shown to be stale, so it is read strictly and fails the run closed
+   (exit 2). `traceSeq: null` means the trace was unchained when the proposal
+   was written, so there is no line to join and nothing is covered. Changed
+   paths and proposal paths are compared NFC-folded,
    so two spellings of one name are one file. The covering call is the one that
    carries the proposal's digest: the path and the time always come from the
    same record, never one from a record and one from another in the same line,
@@ -412,13 +421,16 @@ anchored: run hexagen evidence pack`. **Pack before you verify** — a
    are intentionally not judged — the kit has no say there — and the command
    prints how many it skipped.
 8. **Exit codes.** 0 when nothing is unaccounted. 1 when a changed in-scope file
-   has no covering line, naming each one with the nearest candidate line. 2 for
+   has no covering line, naming each one with the nearest candidate line and, when
+   one exists, listing the lines that would cover it if a pack anchored them.
+   2 for
    bad input or bad state: an unreadable, unsigned or duplicated `--grant`, a
    missing or unusable engagement key, an unresolvable `<since>`, a `<since>`
    that is not an ancestor of `<until>`, a trace that is absent at `<until>` or
    not sound, a missing tip, a trace that was not tracked at `<since>`, a trace
-   rewritten since `<since>`, a proposal that does not reproduce its line's
-   `result_digest`, and an empty diff without `--allow-empty` (which prints
+   rewritten since `<since>`, a proposal listed in the tree that cannot be read
+   from it, a fresh proposal that is not a proposal or does not reproduce its
+   line's `result_digest`, and an empty diff without `--allow-empty` (which prints
    `empty diff: nothing was checked` and exits 0 with it). A clean result never
    means "nothing was looked at" by default.
 
