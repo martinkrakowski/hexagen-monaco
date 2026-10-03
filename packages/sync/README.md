@@ -196,6 +196,66 @@ print the workspace root, the key path and its fingerprint, never the key.
   auto-broken), and `--key-file`/`--engagement` pointing at a key other than the
   server default produces a warning naming both keys.
 
+### `hexagen grant list`
+
+```bash
+npx hexagen grant list                # every grant under .hexagen/grants/, as a table
+npx hexagen grant list --status live  # only the live rows
+npx hexagen grant list --json         # the same rows as a JSON array on stdout
+```
+
+A read-only listing of every `*.json` under `.hexagen/grants/` — there is no
+`--dir` and no other directory — so you can see what is live, expired or revoked
+without opening JSON by hand. Two lines come first, the directory it read and the
+time the window was judged at, then the resolved key by path and fingerprint
+(never the key), then the table and its summary:
+
+```
+file                   status   id         principal  agent   mode     expires_at            revoked_at            signature
+grants/g-live.json     live     g-live     martin     lane-1  propose  2026-10-01T18:00:00Z  -                     verified
+grants/g-revoked.json  revoked  g-revoked  martin     lane-1  propose  2026-10-01T18:00:00Z  2026-10-01T10:00:00Z  verified
+grants/g-expired.json  expired  g-expired  martin     lane-1  propose  2026-10-01T11:00:00Z  -                     verified
+3 entries: 1 live, 1 expired, 1 revoked, 0 invalid
+```
+
+The columns are file, status, id, principal, agent, mode, `expires_at`,
+`revoked_at` and the signature verdict; rows are sorted by `expires_at`
+descending, then id. The status is the shared `checkGrantWindow` answer, never a
+second implementation of the window, and it is computed at call time and printed
+with that time. The verification key is resolved once for the whole listing and
+named exactly as `grant issue`, `show` and `check` resolve it. It works in a repo
+with a manifest too, reading the in-repo key.
+
+- Every entry in the directory becomes a row, including every refusal and every
+  error one raises: a symlink is `invalid: symlink` and is never read, and so are
+  an off-allow-list name, a name the key/env pattern forbids, unparseable JSON, a
+  JSON value that is not a grant, a file over the 32 MiB per-file cap, and an
+  entry that vanishes mid-read (`invalid: vanished before it could be read`). One
+  unreadable grant never hides the others — the deliberate difference from
+  `workbook export`, which fails the whole call instead. The reads go through the
+  same sidecar guards the export uses, so `.hexagen/grants/` has one enumerator,
+  not three.
+- Exit 0 only if at least one grant was read, every grant read verifies and no
+  row is invalid. Exit 1 if no grant was read, any row is invalid, or any grant
+  read fails its signature — including one `--status` filtered out of the printed
+  rows. Exit 2 for bad input (an unknown `--status`, an unresolvable workspace
+  root, an unreadable directory) or a missing `.hexagen/` or `.hexagen/grants/`.
+  A fresh checkout has no `grants/` directory at all, so stage the grant files
+  first with `hexagen workbook export --stage .hexagen/grants/<id>.json --yes`.
+- `--status live|expired|revoked|invalid|all` (default `all`) filters the printed
+  rows and nothing else. The summary always totals the whole directory, so an
+  invalid entry, or a signature failure the filter dropped, is still on screen
+  next to the exit code it caused — with `--status live` over a directory that
+  also holds one invalid entry, one row is printed and the summary reads:
+  `1 shown (--status live); all 4 entries: 1 live, 1 expired, 1 revoked, 1 invalid`.
+  `--json` prints the array of rows on stdout, with the key line, the summary and
+  the note on stderr.
+- A `revoked_at` edited by hand breaks the signature, so the row reads `revoked`
+  and `not verified` — the same split `grant check` reports. `live` is the window
+  alone, at the timestamp printed beside it: read the signature column before
+  trusting a row. A listing is a snapshot, and a grant can be revoked a second
+  later.
+
 ### `hexagen observe`
 
 A read-only scan of a repo you do not control. It reports what is already
@@ -344,9 +404,13 @@ npx hexagen observe --out .hexagen/observed.json --yes
 npx hexagen slice init --path src/billing/ --exclude src/billing/generated/ --yes
 npx hexagen slice check                      # drift report
 npx hexagen contract propose                 # candidate rules; writes nothing
+npx hexagen contract propose --closed        # one candidate `closed` rule instead
 npx hexagen contract add-rule --kind forbid --from src/billing/ --to src/auth/ --yes
+npx hexagen contract add-rule --kind closed --except src/auth/ --yes  # close the slice, except one crossing
 npx hexagen contract check                   # gate; exit 1 on a new violation
 npx hexagen contract check --baseline --yes  # record today's violations
+npx hexagen contract check --base <base-sha>  # pinned PR base; exit 1 on growth
+npx hexagen contract check --base <base-sha> --allow-growth --reason "<why>"
 ```
 
 **`slice`** writes `.hexagen/slice.json`.
@@ -371,15 +435,51 @@ npx hexagen contract check --baseline --yes  # record today's violations
 **`contract`** writes `.hexagen/contract.json`, whose `sliceId` comes from
 `slice.json`.
 
-- `contract propose` prints each pair of slice `paths` entries joined by an
-  in-slice edge (both ends inside the slice, different entries) as a candidate
-  `forbid` rule. It writes nothing.
+- `contract propose [--closed]` prints each pair of slice `paths` entries joined by
+  an in-slice edge (both ends inside the slice, different entries) as a candidate
+  `forbid` rule. With `--closed` it prints one candidate `closed` rule instead,
+  whose `except` list names every crossing `observed.json` already makes, each
+  target emitted exactly as `slice check` prints it: the file path for a file
+  target, the package root for a package root, deduplicated, never widened to a
+  bare directory name (an `except` entry without a trailing `/` is an exact file,
+  so `lib` excepts nothing). Delete the entries you do not accept, and widen a
+  file to its directory by hand. A crossing no `except` can accept — a
+  root-package target (`.`), a target an `excludes` entry denies, or a target
+  spelled as a directory — is reported as `not proposed:` with the advice that
+  would accept it, because a rule naming one would still fail, or would accept
+  far more than the crossing observed. The printed `add-rule` line is
+  shell-quoted, so it can be pasted as it stands. With `--closed`, an
+  `observed.json` whose edges were not collected refuses (exit 2) and prints no
+  command at all: nothing is known about the crossings, so "no edge leaves the
+  slice" would be a claim the report cannot make. An incomplete edge list is a
+  `note:` line, not a refusal. It writes nothing and takes no write flag.
 - `contract add-rule --kind forbid|allow-only --from <prefix> --to <prefix>
-[--severity error|warn] [--id <id>]` appends a rule (`error` by default). The
-  built-in id `unresolved-import` and duplicate ids are refused.
-- `contract show` prints the contract.
-- `contract check [--baseline]` evaluates the rules against the observed edges
-  whose `from` is inside the slice. A `forbid` rule fails on an edge from its
+[--severity error|warn] [--id <id>]` appends a rule (`error` by default). A
+  `closed` rule takes `--except <prefix>…` and neither `--from` nor `--to`: the
+  slice is the `from` side and `except[]` is the only escape hatch, so several
+  accepted crossings out of one source are one rule. `--except` may be given with
+  no prefixes at all, which accepts no crossing. Each kind refuses the other
+  kinds' flags by name, and every `--from`, `--to` and `--except` entry must
+  pass the slice-path rules, so a bare directory name (`libs/shared`) is an exact
+  path and excepts nothing — write `libs/shared/`. The built-in id
+  `unresolved-import`, an id outside `A-Za-z0-9._-` (1-64 chars, no `..`), a
+  duplicate id, and a missing `--kind` are refused, the last as exit 2 like every
+  other usage error.
+- `contract show` prints the contract, and warns when **one** `closed` rule's
+  `except` list covers every observed package root outside the slice: that rule
+  then accepts every crossing it could have refused, so the slice is not closed.
+  Rules are not pooled — two rules that between them cover the whole repo leave
+  each edge one rule still to fail, which is what a closed slice wants. Coverage
+  is asked per package root, so `--except apps/` covers `apps/web` and
+  `apps/admin`, while `--except apps/web/ui/` covers neither the rest of its own
+  package nor any sibling; a bare `apps` covers nothing. A package the slice
+  occupies and one an `excludes` entry denies are not units to cover, and the
+  root package (`.`) never is. A contract with no `closed` rule reads no scan at
+  all, and a missing `slice.json`/`observed.json` is a `note:` line, not a
+  refusal.
+- `contract check [--baseline] [--base <ref>] [--allow-growth --reason <text>]`
+  evaluates the rules against the observed edges whose `from` is inside the slice.
+  A `forbid` rule fails on an edge from its
   `from` prefix to its `to` prefix. An `allow-only` rule fails on an edge from
   its `from` prefix to anywhere that is neither its `to` prefix nor its own
   `from` prefix. A `warn` rule is printed but does not fail the check. The
@@ -396,6 +496,67 @@ npx hexagen contract check --baseline --yes  # record today's violations
   specifier, and an entry whose `expires` date has passed (inclusive to the end
   of that UTC day) no longer hides its violation. A root-package target (`.`)
   is never inside a `to` prefix, so it always violates an `allow-only` rule.
+
+  A `closed` rule fails on any edge from inside the slice to a target that is
+  neither inside the slice nor under one of its `except` prefixes, so one rule
+  holds every accepted crossing out of the slice: the prefix kinds admit exactly
+  one. A package root is judged under both spellings, so
+  `--except libs/shared/` covers `libs/shared` and `libs/shared/x.ts`, and an
+  entry with no trailing `/` is an exact path. A root-package target (`.`) is
+  never inside an `except` prefix, so it always violates a `closed` rule, exactly
+  as it always violates an `allow-only` one. An edge whose source is inside an
+  `excludes` entry is not judged at all, and under a `closed` rule an `excludes`
+  entry creates violations instead of suppressing them: an except cannot re-open
+  an excluded target, so an edge into one still fails even under an `except` that
+  covers it. `--except src/` accepts every crossing out of `src/`, so read the
+  list before you commit it.
+
+**The `--base` ratchet.** `contract check --base <ref>` also reads
+`.hexagen/contract.json` and `.hexagen/slice.json` **at** `<ref>` with `git show`,
+and fails when the working tree has made the slice's gate weaker than the
+contract there. It is a detection, not a write-time refusal: the change is already
+committed, and each finding is printed as `growth: …` with the hash the base was
+read at. Growth is:
+
+- a `knownViolations` entry the base never had for that rule + file + specifier;
+  an edit to the `file` or `specifier` of an entry the base did have;
+- an `expires` pushed later from another `expires`, or dropped;
+- a rule gone from the tree; a rule's `kind`, `from` or `to` changed, in either
+  direction; a `closed` rule's `except` prefix added or widened; a rule's
+  `severity` moved `error` → `warn`;
+- a `slice.json` `excludes` entry the base did not have; a `paths` entry removed;
+  a `paths` entry replaced by a strictly longer prefix.
+
+**Not** growth: an entry removed, an `expires` shortened, an `expires` added where
+the base had none, a `reason` added, a rule added, an exclude removed, a `paths`
+entry added or widened, a duplicate baseline entry, two rules that share an id
+swapped, an `except` prefix removed or narrowed, and a `severity` raised from
+`warn` to `error`. Rules are matched by value, so two rules sharing an id are
+compared as a multiset, and entries are matched on rule + file + specifier,
+strongest cover first, so a duplicate that already carries no `expires` is not
+reported as a dropped date.
+
+`--allow-growth --reason <text>` accepts the growth, prints the reason beside the
+finding and into the log, and the check then continues — so its exit code is
+still the plain check's, not automatically 0. `--reason` on its own does nothing.
+
+Both files must be staged for a base to exist: every writer of `.hexagen/` adds
+it to the exclude file, so `git show` cannot tell "never staged" from "the commit
+that first added it", and the command reports the absence instead of passing.
+Stage them with `hexagen workbook export --stage` on
+`.hexagen/slice.json` and `.hexagen/contract.json`, plus `--yes` (or plain
+`git add -f`). Pass the pinned PR base, never a
+PR-supplied ref: `--base` is client-supplied, so a workflow that lets a PR pick
+its own base compares the head with itself and passes. The one PR that first
+stages the sidecars has a base that predates them — that is the bootstrap case,
+judged on violations alone, and the
+[CI recipe](../../docs/ci/brownfield-gate-recipe.md) runs the plain check for it.
+The guard runs after the slice-id and contract parse and **before**
+`observed.json` is loaded, so growth is still reported when `observed.json` is
+missing or stale. One gap it cannot close: `contract check --baseline --yes`
+rewrites `knownViolations` with no base in sight, so it can drop an `expires` the
+guard would otherwise have reported — `--base` and `--baseline` are refused
+together.
 
 **Concurrent edits.** `add-rule` and `check --baseline` (with `--yes`) hold
 `.hexagen/contract.json.lock`, created exclusively with the process id inside,
@@ -419,11 +580,11 @@ than `HEAD` the commands warn, and with `--strict` fail.
 
 **Exit codes** (`slice check`, `contract check`, `contract propose`):
 
-| Code | Meaning                                                                                                                                                                                            |
-| ---- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 0    | Clean (`slice check`, `contract check`), or the command succeeded                                                                                                                                  |
-| 1    | Drift (`slice check`) or a violation not in the baseline, or incomplete edges (`contract check`)                                                                                                   |
-| 2    | Bad input or refused: a missing or invalid file, a bad path or id, a refused overwrite, no `--yes`, a slice commit not in the repository, a stale `observed.json`, `--strict` and a different HEAD |
+| Code | Meaning                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0    | Clean (`slice check`, `contract check`), growth accepted with `--allow-growth`, or the command succeeded                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| 1    | Drift (`slice check`), or a violation not in the baseline, or incomplete edges, or growth against `--base` (`contract check`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| 2    | Bad input or refused: a missing or invalid file, a bad path or id, a refused overwrite, no `--yes`, a slice commit not in the repository, a stale `observed.json`, `--strict` and a different HEAD, an unresolvable `--base` (a shallow clone that never fetched it), a `.hexagen/` file absent at `--base` because it was never staged, a `.hexagen/` file at `--base` that exists but cannot be read, a base file that is not valid JSON or does not match its schema, an inconsistent base (the contract at `--base` names another slice than the slice there), `--allow-growth` without `--reason`, `--allow-growth` without `--base`, `--base` with `--baseline` |
 
 `init`, `add-rule`, `show` and `--baseline` return 0 on success and 2 otherwise.
 
@@ -480,6 +641,99 @@ path outside `.hexagen/`, a symlink) refuses the whole call and stages nothing.
 | 0    | Bundle written, or the stage diff printed / files staged                                     |
 | 1    | A grant signature, the trace chain or the anchored tip is invalid; nothing written           |
 | 2    | Bad input or refused: a bad `--out`, an existing file, a key or off-list path, no slice, ... |
+
+---
+
+### `hexagen evidence verify`
+
+```bash
+hexagen evidence verify --since <git-ref> [--until <git-ref>]
+                        --grant <file>... [--root <dir>]
+                        [--key-file <path>] [--engagement <id>]
+                        [--allow-empty]
+```
+
+Names every changed file the kit governs — inside the slice (minus its excludes)
+or inside any `--grant`'s `paths` — that no trace line appended after `--since`
+covers. It is found after the fact, not refused: it reads only, never writes
+`.hexagen/`, and never stops a write.
+
+It reads the range `<since>..<until>` (default `HEAD`) with `git diff`, taking
+the slice at **`<since>`** and the trace, the tip and the proposals at
+**`<until>`**, so a range cannot widen its own scope or its own evidence.
+`<since>` must be an ancestor of `<until>`. It then verifies the trace exactly as
+`evidence pack` does — chain, line shape, the four Rules of
+`docs/kernel/TRACE.md`, and the anchored tip — and joins each changed file to the
+line that claims it. `tip.json` is **required** here, and only a line at or below
+`tip.seq` covers anything: the chain binds each line to the one above it, but only
+a key-holder's `pack` binds the head to the engagement key. A change that a line
+would have covered on paper alone is still reported unaccounted, naming the seq to
+pack. Every grant the trace cites must be supplied as a `--grant`, and the
+engagement key comes from `--key-file`, then `HEXAGEN_GRANT_KEY_FILE`, then the
+engagement — in CI that is a secret written outside the checkout, never a key in
+the tree.
+
+No Trace field carries the paths: the join reads them back from
+`.hexagen/proposals/<id>.json` by its `traceSeq` and `grantId`, and recomputes
+`result_digest` over `JSON.stringify({halt_reason, proposal_id, paths})`, so a
+`paths` entry edited after the line was written breaks the digest instead of being
+believed. Only a line whose `seq` is above the last `seq` in the trace as of
+`<since>` can cover anything, read with `git show`; a checkout where the trace was
+not tracked at `--since>`, or where that line is not the one the trace held there,
+exits 2 rather than trusting a clock.
+
+It prints the unaccounted paths on stdout and, on stderr, each one with the
+nearest candidate line plus how many changes it skipped as outside the slice and
+every grant. Exit 0 when nothing is unaccounted, 1 when something is, 2 for bad
+input or bad state: an unresolvable `--since` or `--until` (a shallow clone that
+never fetched it says so), a `--since` that is not an ancestor of `--until`, a
+missing or unreadable slice at `<since>`, a missing or empty trace at `<until>`, a
+missing or unverified `tip.json`, an unsound trace, a proposal that does not
+reproduce its line's `result_digest`, a grant that does not verify, a trace not
+tracked at `<since>`, a `--root` that is not the repo top level, and an empty
+diff without `--allow-empty`.
+
+Two limits worth stating: it proves an authorized line covering a path exists, not
+that the line is true; and until Trace carries paths itself, a change applied
+through `hexagen_accept_transaction` is unaccounted here, because that writer
+leaves no path list behind. Coverage needs the `.hexagen/` evidence committed, so
+stage it first — and in CI, pack before verify:
+
+```bash
+hexagen workbook export --stage .hexagen/slice.json \
+  .hexagen/evidence/trace.jsonl \
+  .hexagen/evidence/tip.json \
+  .hexagen/grants/<id>.json \
+  .hexagen/proposals/<id>.json \
+  --yes
+```
+
+---
+
+### The brownfield CI gate (a recipe)
+
+A client repo holds only `.hexagen/` and no manifest, so the generated
+conformance gate has nothing to run there. Copy
+[`.github/workflows/brownfield-gate.yml`](../../docs/ci/brownfield-gate.yml) from
+this repo's `docs/ci/` into the client repo and edit its two `EDIT SPOT` values:
+the `hexagen` version pin, and `USE_EVIDENCE_VERIFY`.
+
+The recipe it implements, with every step's exit code and the engagement-key
+story, is
+[`docs/ci/brownfield-gate-recipe.md`](../../docs/ci/brownfield-gate-recipe.md).
+In short, fail-fast and in order: check the staged `.hexagen/` paths are tracked
+(`git ls-files --error-unmatch`, exit 2 otherwise), `observe --out … --yes`,
+`slice check --strict` as a **non-blocking** drift report, `contract check
+--base` against the pinned PR base SHA, and `evidence pack` into a disposable
+path. Every step prints `step <n> exit <code>`; 1 is a violation, 2 is bad input
+or stale state. The key is injected from a CI secret into `$RUNNER_TEMP` at mode
+0600 and read through `HEXAGEN_GRANT_KEY_FILE` — never from the checkout. The
+bundle is an HMAC'd bundle
+that refuses a tampered blob: the HMAC is symmetric, so the CI secret can forge,
+and the FDE and CI cannot be told apart. Flipping `USE_EVIDENCE_VERIFY` swaps the
+pack step for `hexagen evidence verify`, which is the one of the two that writes
+nothing; note that `verify` only counts a line a `pack` has anchored, so a head
+nothing has packed has nothing to cover with.
 
 ---
 
