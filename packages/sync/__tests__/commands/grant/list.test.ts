@@ -207,10 +207,48 @@ describe("grant list (acceptance test 1: live, expired, revoked)", () => {
     expect(everything()).toMatch(/fingerprint [0-9a-f]{16}/);
   });
 
-  it("says the listing is a snapshot, not a statement about what the agent did", async () => {
+  it("says the listing is a snapshot, and that 'live' speaks about the window only", async () => {
     const f = await fixture();
     await list(f);
-    expect(everything()).toMatch(/snapshot/i);
+    const t = text();
+    expect(t).toMatch(/snapshot/i);
+    // The status column is the window alone: the signature has its own column,
+    // and the footer must not read as though the status covered it.
+    expect(t).toMatch(/"live" says only that the window/);
+    expect(t).toMatch(/signature column/);
+    expect(t).not.toMatch(/"live" says only that the signature/);
+  });
+
+  it("prints how many rows --status showed and what it hid", async () => {
+    const f = await fixture();
+    await writeFile(
+      path.join(f.grants, "shape.json"),
+      JSON.stringify({ id: "x" }),
+    );
+    await list(f, { status: "live" });
+    // One row is printed, but the invalid entry and the failures it hides are
+    // always visible in the summary.
+    expect(text()).toContain(
+      "1 shown (--status live); all 4 entries: 1 live, 1 expired, 1 revoked, 1 invalid",
+    );
+    expect(process.exitCode).toBe(1);
+  });
+
+  it("says 0 shown when the filter matches nothing, and still totals every row", async () => {
+    const f = await fixture();
+    await list(f, { status: "invalid" });
+    expect(text()).toContain(
+      "0 shown (--status invalid); all 3 entries: 1 live, 1 expired, 1 revoked, 0 invalid",
+    );
+  });
+
+  it("prints the plain tally when no filter is given", async () => {
+    const f = await fixture();
+    await list(f);
+    expect(text()).toContain(
+      "3 entries: 1 live, 1 expired, 1 revoked, 0 invalid",
+    );
+    expect(text()).not.toContain("shown (--status");
   });
 
   it("shows mode, principal, agent and both timestamps", async () => {
@@ -222,6 +260,9 @@ describe("grant list (acceptance test 1: live, expired, revoked)", () => {
     expect(t).toContain("propose");
     expect(t).toContain("2026-10-01T18:00:00Z");
     expect(t).toContain("2026-10-01T10:00:00Z");
+    // The table mode names the key too, and only as a fingerprint.
+    expect(t).toMatch(/fingerprint [0-9a-f]{16}/);
+    expect(t).not.toContain(f.keyHex);
   });
 });
 
@@ -276,9 +317,14 @@ describe("grant list (acceptance test 3: a file that is not a grant)", () => {
       path.join(f.grants, "shape.json"),
       JSON.stringify({ id: "x" }),
     );
-    await list(f);
-    expect(process.exitCode).toBe(1);
-    expect(text()).toMatch(/invalid: .*is not a grant/);
+    await list(f, { json: true });
+    const row = rows().find((r) => r.file === "grants/shape.json");
+    // The parse verdict verbatim: a shape failure is not a read failure, so it
+    // must not be laundered into a generic "cannot be read" by the catch that
+    // turns a raised fs error into a row.
+    expect(row?.reason).toBe(
+      "grants/shape.json is not a grant: principal: Required",
+    );
   });
 
   it("lists a name the allow-list does not carry as invalid, not silently", async () => {
@@ -398,7 +444,8 @@ describe("grant list (acceptance test 5: nothing to list is exit 2)", () => {
     await list(f, { json: true });
     const row = rows().find((r) => r.file === "grants/huge.json");
     expect(row?.status).toBe("invalid");
-    expect(row?.reason).toMatch(/larger than/);
+    // The enumerator's own refusal, verbatim: no prefix, no rewording.
+    expect(row?.reason).toBe("grants/huge.json: larger than 33554432 bytes");
     expect(rows().filter((r) => r.status !== "invalid")).toHaveLength(3);
     expect(process.exitCode).toBe(1);
   });
@@ -425,24 +472,12 @@ describe("grant list (acceptance test 5: nothing to list is exit 2)", () => {
     expect(process.exitCode).toBe(1);
   });
 
-  it("--dir that climbs out of the sidecar is bad input: exit 2", async () => {
-    const f = await fixture();
-    await list(f, { dir: "../proposals" });
-    expect(process.exitCode).toBe(2);
-    expect(errors()).toMatch(/--dir/);
-    expect(text()).not.toContain("g-live");
-  });
-
-  it("a --dir of a nested path is refused too", async () => {
-    const f = await fixture();
-    await list(f, { dir: "grants/../grants" });
-    expect(process.exitCode).toBe(2);
-    expect(errors()).toMatch(/--dir/);
-  });
-
-  // Mode 000 does not stop root, so the case is skipped there.
+  // Mode 000 does not stop root, so the case is skipped there. It is also skipped
+  // on Windows, where the mode bits are not enforced on a directory: readdir
+  // succeeds there and the call lists every grant instead of failing, which is
+  // the platform's answer, not a defect in the command.
   const runsAsRoot = process.platform !== "win32" && process.getuid?.() === 0;
-  it.skipIf(runsAsRoot)(
+  it.skipIf(runsAsRoot || process.platform === "win32")(
     "an unreadable grants directory exits 2 rather than throwing",
     async () => {
       const f = await fixture();
@@ -649,6 +684,125 @@ describe("grant list: --json", () => {
     await list(f, { json: true });
     expect(() => rows()).not.toThrow();
   });
+
+  it("writes the key line and the summary to stderr, so stdout stays the array", async () => {
+    const f = await fixture();
+    await list(f, { json: true, status: "revoked" });
+    expect(rows()).toHaveLength(1);
+    expect(errors()).toContain("1 shown (--status revoked)");
+  });
+});
+
+describe("grant list: one entry that cannot be read does not stop the listing", () => {
+  // `afterValidate` is the enumerator's own seam: it runs inside the guarded
+  // read, after every check and before the bytes are read, so an error raised
+  // there escapes `readAllowed` uncaught — which is exactly the shape of the
+  // ENOENT a read can hit when an entry vanishes between its lstat and its
+  // realpath. That race cannot be staged from a static fixture, so the seam
+  // raises the same error codes instead.
+  const failOn = (
+    f: Fixture,
+    name: string,
+    code: string,
+  ): ((file: string) => Promise<void>) => {
+    const target = path.join(f.grants, name);
+    return async (file) => {
+      if (file !== target) return;
+      throw Object.assign(new Error(`${code}: injected, simulated`), {
+        code,
+      });
+    };
+  };
+
+  it.each(["ENOENT", "EACCES"])(
+    "a %s raised while reading one entry becomes a row, and the rest still list",
+    async (code) => {
+      const f = await fixture();
+      await list(f, {
+        json: true,
+        afterValidate: failOn(f, "g-live.json", code),
+      });
+      const listed = rows();
+      expect(listed).toHaveLength(3);
+      const broken = listed.find((r) => r.file === "grants/g-live.json");
+      expect(broken?.status).toBe("invalid");
+      expect(broken?.signature).toBe("invalid");
+      expect(broken?.reason).toMatch(
+        new RegExp(
+          code === "ENOENT"
+            ? "vanished before it could be read"
+            : "permission denied",
+        ),
+      );
+      expect(listed.filter((r) => r.status !== "invalid")).toHaveLength(2);
+      expect(process.exitCode).toBe(1);
+    },
+  );
+
+  it("never lets the error escape the call", async () => {
+    const f = await fixture();
+    await expect(
+      list(f, {
+        afterValidate: async () => {
+          throw Object.assign(new Error("ELOOP: too many links"), {
+            code: "ELOOP",
+          });
+        },
+      }),
+    ).resolves.toBeUndefined();
+    expect(process.exitCode).toBe(1);
+  });
+});
+
+describe("grant list: the key is resolved once per listing", () => {
+  it("resolves the key once for the listing, and reads it once per row", async () => {
+    const f = await fixture();
+    // `resolveGrantKey` and `readGrantKey` are both wrapped rather than spied
+    // on: the shared module calls its own `readGrantKey` from inside
+    // `resolveGrantKey`, so a wrapper on the export sees the resolutions and the
+    // per-row reads and nothing in between. Resolving per row would make
+    // `resolutions` 3.
+    let resolutions = 0;
+    let reads = 0;
+    vi.resetModules();
+    vi.doMock("@hexagen/shared/node/grant-key", async (importOriginal) => {
+      const actual =
+        await importOriginal<typeof import("@hexagen/shared/node/grant-key")>();
+      return {
+        ...actual,
+        resolveGrantKey: (
+          ...args: Parameters<typeof actual.resolveGrantKey>
+        ): ReturnType<typeof actual.resolveGrantKey> => {
+          resolutions += 1;
+          return actual.resolveGrantKey(...args);
+        },
+        readGrantKey: (keyPath: string) => {
+          reads += 1;
+          return actual.readGrantKey(keyPath);
+        },
+      };
+    });
+    try {
+      const fresh = await import("../../../src/commands/grant/list.js");
+      await fresh.grantListCommand({
+        workspaceRoot: f.root,
+        homeDir: f.home,
+        env: {},
+        now: NOW,
+        json: true,
+      });
+    } finally {
+      vi.doUnmock("@hexagen/shared/node/grant-key");
+      vi.resetModules();
+    }
+    expect(resolutions).toBe(1);
+    // One read per row for the HMAC it verifies: verify never caches key
+    // material, so one per row is the floor, not a defect.
+    expect(reads).toBe(3);
+    expect(rows()).toHaveLength(3);
+    expect(rows().every((r) => r.signature === "verified")).toBe(true);
+    expect(process.exitCode).toBe(0);
+  });
 });
 
 describe("grant list: repo mode", () => {
@@ -682,17 +836,22 @@ describe("grant list: repo mode", () => {
 describe("grant list: the command line", () => {
   it("is registered on `hexagen grant` and reaches the command", async () => {
     const f = await fixture();
-    process.env.HEXAGEN_GRANT_KEY_FILE = f.keyPath;
-    out.length = 0;
-    vi.resetModules();
-    const { grantCommander } =
-      await import("../../../src/commands/grant/index.js");
-    await grantCommander.parseAsync(
-      ["list", "--workspace-root", f.root, "--status", "revoked", "--json"],
-      { from: "user" },
-    );
-    expect(process.exitCode).toBe(0);
-    expect(rows().map((r) => r.id)).toEqual(["g-revoked"]);
-    delete process.env.HEXAGEN_GRANT_KEY_FILE;
+    // A failed assertion must not leave the key file in the environment for the
+    // next test in this file.
+    try {
+      process.env.HEXAGEN_GRANT_KEY_FILE = f.keyPath;
+      out.length = 0;
+      vi.resetModules();
+      const { grantCommander } =
+        await import("../../../src/commands/grant/index.js");
+      await grantCommander.parseAsync(
+        ["list", "--workspace-root", f.root, "--status", "revoked", "--json"],
+        { from: "user" },
+      );
+      expect(process.exitCode).toBe(0);
+      expect(rows().map((r) => r.id)).toEqual(["g-revoked"]);
+    } finally {
+      delete process.env.HEXAGEN_GRANT_KEY_FILE;
+    }
   });
 });

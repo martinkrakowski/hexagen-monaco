@@ -137,12 +137,19 @@ function overrideMismatch(ctx: VerifyContext, key: ResolvedGrantKey): string {
  * a missing or weak key, or a mismatch. When the operator overrode the key
  * (`--key-file` / `--engagement`) and it fails, the message also names the key
  * the MCP server would use without the override, with both fingerprints.
+ *
+ * `resolved` is the key already resolved from this same `ctx` — `hexagen grant
+ * list` resolves once for the whole listing instead of once per row. Callers
+ * that omit it are unaffected. It changes nothing about what is trusted: the
+ * key is still read and checked on every call (verify never caches key
+ * material), and only the resolution is skipped.
  */
 export function verifyGrantSignature(
   grant: Grant,
   ctx: VerifyContext,
+  resolved?: ResolvedGrantKey,
 ): GrantVerification {
-  const key = resolveVerifyKey(ctx);
+  const key = resolved ?? resolveVerifyKey(ctx);
   const fail = (reason: string): GrantVerification => ({
     verified: false,
     reason: reason + overrideMismatch(ctx, key),

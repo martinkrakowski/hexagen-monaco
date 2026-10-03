@@ -276,31 +276,38 @@ built too, and so are `revoke` and `list`. All five live in `@hexagen/sync`
 (`packages/sync/src/commands/grant/`).
 
 ```
-hexagen grant list [--dir <name>] [--status live|expired|revoked|invalid|all]
+hexagen grant list [--status live|expired|revoked|invalid|all]
                    [--workspace-root <path>] [--key-file <path>] [--engagement <id>]
                    [--json]
-    A read-only listing of every *.json under <root>/.hexagen/<dir> (default
-    <dir> is `grants`). It reads through the same sidecar guards as
+    A read-only listing of every *.json under <root>/.hexagen/grants/. It reads
+    through the same sidecar guards as
     `hexagen workbook export` — the allow-list, the realpath containment, the
     per-file cap and an O_NOFOLLOW read — so it never becomes a third
     enumerator of that directory, and it never searches upward or follows a
     symlink out. Shape comes from `parseGrant`, the signature verdict from
-    `verifyGrantSignature`, and each row's status from `checkGrantWindow`
-    (never re-derived here), so a listing cannot disagree with `check`.
+    `verifyGrantSignature` (which is handed the key resolved once for the whole
+    listing), and each row's status from `checkGrantWindow` (never re-derived
+    here), so a listing cannot disagree with `check`.
     A file that cannot be read as a grant becomes a row, not a failed call:
     a symlink is `invalid: symlink` and is never read, and so are an
     off-allow-list name, a name the key/env pattern forbids, unparseable JSON,
-    a JSON value that is not a grant, and any refusal the guards return.
-    One unreadable grant never hides the others. Rows are sorted by expires_at
-    descending, then id. Prints the workspace root, the key path and the key
-    fingerprint, never the key, and a footer saying the listing is a snapshot.
+    a JSON value that is not a grant, a file over the per-file cap, and any
+    filesystem error an entry raises (an entry that vanishes mid-read is
+    `invalid: vanished before it could be read`). One unreadable grant never
+    hides the others. Rows are sorted by expires_at descending, then id. Prints
+    the workspace root, the key path and the key fingerprint, never the key, the
+    time the window was evaluated at, and a footer saying the listing is a
+    snapshot and that `live` speaks about the window only. --status filters the
+    printed rows and nothing else: the summary always totals every row
+    (`<n> shown (--status <s>); all <every row>`), so a failure the filter
+    dropped stays on screen.
     Exit 0 only if at least one grant was read, every grant read verifies and
     no row is invalid; 1 if no grant was read, any row is invalid, or any grant
     read fails its signature — including one --status filtered out of the
-    printed rows; 2 bad input (an unknown --status, a --dir that is not one
-    directory name, an unresolvable workspace root, an unreadable directory) or
-    a missing .hexagen/ or .hexagen/<dir>. --json prints an array of the same
-    rows on stdout, with the key line and the footer on stderr.
+    printed rows; 2 bad input (an unknown --status, an unresolvable workspace
+    root, an unreadable directory) or a missing .hexagen/ or .hexagen/grants/.
+    --json prints an array of the same rows on stdout, with the key line and
+    the footer on stderr.
 
 hexagen grant show <grant-file>
     [--workspace-root <path>] [--key-file <path>] [--engagement <id>]

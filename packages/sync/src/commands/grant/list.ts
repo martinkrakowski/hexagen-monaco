@@ -4,7 +4,10 @@ import os from "node:os";
 import path from "node:path";
 import { Command } from "commander";
 import { checkGrantWindow, type GrantCheck } from "@hexagen/shared";
-import { describeResolvedKey } from "@hexagen/shared/node/grant-key";
+import {
+  describeResolvedKey,
+  type ResolvedGrantKey,
+} from "@hexagen/shared/node/grant-key";
 import { allowListEntry, isForbiddenPath } from "../workbook/allow-list.js";
 import {
   listDir,
@@ -33,9 +36,10 @@ import { discoverWorkspaceRoot } from "./workspace.js";
  *   its signature verdict from `verifyGrantSignature` (the same two the
  *   workbook export uses), so a listing cannot disagree with enforcement.
  * - Every entry in the directory becomes a row, including every refusal the
- *   shared enumerator returns. That is the one deliberate difference from
- *   `workbook export`, which fails the whole call instead: a listing is
- *   diagnostic, and one unreadable grant must not hide the others.
+ *   shared enumerator returns and every error one raises. That is the one
+ *   deliberate difference from `workbook export`, which fails the whole call
+ *   instead: a listing is diagnostic, and one unreadable grant must not hide
+ *   the others.
  * - A symlink is classified from its own `lstat` and never read, so it prints
  *   as `invalid: symlink` rather than as the enumerator's refusal wording.
  *   `readAllowed` still runs its own lstat and its `O_NOFOLLOW` read below that
@@ -74,8 +78,6 @@ export interface GrantListRow {
 }
 
 export interface GrantListOptions {
-  /** One directory name under `.hexagen/`; default `grants`. */
-  dir?: string;
   /** A `GRANT_LIST_STATUSES` member; anything else is bad input. */
   status?: string;
   json?: boolean;
@@ -86,16 +88,21 @@ export interface GrantListOptions {
   homeDir?: string;
   env?: Readonly<Record<string, string | undefined>>;
   now?: Date;
+  /**
+   * Test seam: runs inside every guarded read, after the enumerator's checks
+   * and before the bytes are read (the hook `openSidecar` already takes).
+   */
+  afterValidate?: (file: string) => Promise<void>;
 }
+
+/** The one directory a Grant listing reads: the allow-list names no other. */
+const GRANTS_DIR = "grants";
 
 /** Bad input and a missing precondition are exit 2 (never a refusal to look). */
 function fail(message: string): void {
   console.error(message);
   process.exitCode = 2;
 }
-
-/** One directory name, never a path: the listing never searches upward. */
-const DIR_NAME = /^[A-Za-z0-9._-]+$/;
 
 /** The row's window status, read off the shared check rather than recomputed. */
 function rowStatus(check: GrantCheck): GrantRowStatus {
@@ -105,14 +112,35 @@ function rowStatus(check: GrantCheck): GrantRowStatus {
 
 const DASH = "-";
 
+/**
+ * The row an entry that raised instead of returning gets. `readAllowed` refuses
+ * the cases it knows about and its wording is kept verbatim. Anything else it
+ * raises is an fs error (ENOENT when an entry vanishes between its lstat and its
+ * realpath, EACCES, ELOOP, ENOTDIR) or a parse verdict that escaped: all of them
+ * are the same kind of finding about the same file, so they become the same kind
+ * of row rather than stopping the listing and hiding every other grant.
+ */
+export function unreadableRow(file: string, error: unknown): GrantListRow {
+  const code = (error as NodeJS.ErrnoException | null)?.code;
+  const reason =
+    error instanceof Refusal
+      ? error.message
+      : code === "ENOENT"
+        ? "vanished before it could be read"
+        : code === "EACCES" || code === "EPERM"
+          ? "cannot be read: permission denied"
+          : `cannot be read: ${(error as Error | null)?.message ?? String(error)}`;
+  return { file, status: "invalid", signature: "invalid", reason };
+}
+
 async function rowFor(
   sc: Sidecar,
-  dir: string,
   name: string,
   verify: VerifyContext,
   now: Date,
+  key: ResolvedGrantKey,
 ): Promise<GrantListRow> {
-  const rel = `${dir}/${name}`;
+  const rel = `${GRANTS_DIR}/${name}`;
   const invalid = (reason: string): GrantListRow => ({
     file: rel,
     status: "invalid",
@@ -126,29 +154,22 @@ async function rowFor(
 
   // Classification only (see the file header): readAllowed does the refusing,
   // and it also reports an entry that vanishes between readdir and here.
-  const st = await lstat(path.join(sc.dir, dir, name)).catch(() => null);
+  const st = await lstat(path.join(sc.dir, GRANTS_DIR, name)).catch(() => null);
   if (st !== null && !st.isFile()) {
     return invalid(st.isSymbolicLink() ? "symlink" : "not a regular file");
   }
 
-  let text: Buffer;
-  try {
-    ({ text } = await readAllowed(sc, entry));
-  } catch (error) {
-    if (error instanceof Refusal) return invalid(error.message);
-    throw error;
-  }
-
+  const read = await readAllowed(sc, entry);
   let json: unknown;
   try {
-    json = JSON.parse(text.toString("utf8"));
+    json = JSON.parse(read.text.toString("utf8"));
   } catch {
     return invalid("not valid JSON");
   }
   const checked = parseGrant(json, rel);
   if (!checked.ok) return invalid(checked.problem);
   const grant = checked.grant;
-  const signature = verifyGrantSignature(grant, verify);
+  const signature = verifyGrantSignature(grant, verify, key);
   return {
     file: rel,
     id: grant.id,
@@ -239,13 +260,6 @@ export async function grantListCommand(
     );
     return;
   }
-  const dir = options.dir ?? "grants";
-  if (!DIR_NAME.test(dir) || dir === "." || dir === "..") {
-    fail(
-      `--dir must be one directory name under .hexagen/ (letters, digits, dot, underscore, hyphen); got '${dir}'`,
-    );
-    return;
-  }
 
   let root: string;
   try {
@@ -258,7 +272,7 @@ export async function grantListCommand(
   const home = options.homeDir ?? os.homedir();
   let sc: Sidecar;
   try {
-    sc = await openSidecar(root, home);
+    sc = await openSidecar(root, home, options.afterValidate);
   } catch (error) {
     if (error instanceof Refusal) {
       fail(error.message);
@@ -270,11 +284,11 @@ export async function grantListCommand(
   // A grants directory that is absent, or that is not a plain directory, is a
   // precondition failure (exit 2), not an empty listing: it means nothing was
   // staged, and a symlink here would read outside the sidecar.
-  const dirPath = path.join(sc.dir, dir);
+  const dirPath = path.join(sc.dir, GRANTS_DIR);
   const dirStat = await lstat(dirPath).catch(() => null);
   if (dirStat === null) {
     fail(
-      `${dirPath} does not exist; nothing is staged there. Stage the grants first: hexagen workbook export --stage .hexagen/${dir}/<id>.json --yes`,
+      `${dirPath} does not exist; nothing is staged there. Stage the grants first: hexagen workbook export --stage .hexagen/${GRANTS_DIR}/<id>.json --yes`,
     );
     return;
   }
@@ -291,10 +305,14 @@ export async function grantListCommand(
     homeDir: options.homeDir,
   };
   const now = options.now ?? new Date();
+  // One resolution for the whole listing: every row verifies under the same key,
+  // and the header names that key. `verifyGrantSignature` still reads and checks
+  // the key on each call — only the lookup is hoisted.
+  const key = resolveVerifyKey(verify);
 
   let names: string[];
   try {
-    names = await listDir(sc, dir);
+    names = await listDir(sc, GRANTS_DIR);
   } catch (error) {
     fail(`cannot list ${dirPath}: ${(error as Error).message}`);
     return;
@@ -302,29 +320,42 @@ export async function grantListCommand(
 
   const rows: GrantListRow[] = [];
   for (const name of names) {
-    rows.push(await rowFor(sc, dir, name, verify, now));
+    try {
+      rows.push(await rowFor(sc, name, verify, now, key));
+    } catch (error) {
+      rows.push(unreadableRow(`${GRANTS_DIR}/${name}`, error));
+    }
   }
   rows.sort(compareRows);
 
   const shown =
     filter === "all" ? rows : rows.filter((row) => row.status === filter);
-  const key = describeResolvedKey(root, resolveVerifyKey(verify));
   // The window was evaluated at `now`, so the time is printed with it (plan §4.2).
   const at = `as of ${now.toISOString()}`;
+  // A filter hides rows, never their failures: the summary always totals every
+  // row in the directory, so a signature failure the filter dropped is still on
+  // screen next to the exit code it caused.
+  const summary =
+    filter === "all"
+      ? tally(rows)
+      : `${shown.length} shown (--status ${filter}); all ${tally(rows)}`;
+  // `rowStatus` reads the window alone, so the footer must not read as though
+  // the status covered the signature too.
   const footer =
-    `note: a listing is a snapshot ${at}; "live" says only that the signature and the ` +
-    `window are good now, not what the agent did, and a grant can be revoked a second later.`;
+    `note: a listing is a snapshot ${at}; "live" says only that the window is open at ` +
+    `that moment — read the signature column before trusting a row — not what the ` +
+    `agent did, and a grant can be revoked a second later.`;
 
   if (options.json) {
     console.log(JSON.stringify(shown, null, 2));
-    console.error(`${dirPath} (${at}; ${tally(rows)})`);
-    console.error(key);
+    console.error(`${dirPath} (${at}; ${summary})`);
+    console.error(describeResolvedKey(root, key));
     console.error(footer);
   } else {
     console.log(`${dirPath} (${at})`);
-    console.log(key);
+    console.log(describeResolvedKey(root, key));
     console.log(renderTable(shown).join("\n"));
-    console.log(tally(shown));
+    console.log(summary);
     console.log(footer);
   }
 
@@ -343,11 +374,6 @@ export const grantListCommander = new Command("list").description(
 );
 
 grantListCommander
-  .option(
-    "--dir <name>",
-    "One directory name under .hexagen/ to list",
-    "grants",
-  )
   .option(
     "--status <filter>",
     "Which rows to print: live, expired, revoked, invalid or all (a failure filtered out of the output still decides the exit code)",
