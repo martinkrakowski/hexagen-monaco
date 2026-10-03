@@ -51,6 +51,12 @@ export interface Unresolved {
   specifier: string;
   reason: string;
 }
+export interface Package {
+  name: string;
+  /** "." for the repo root, else a directory path; the package root. */
+  root: string;
+  manifestFile: string;
+}
 
 /** Hand-written synthetic observed report at the repo's HEAD. */
 export async function writeObserved(
@@ -58,6 +64,7 @@ export async function writeObserved(
   opts: {
     edges?: Edge[];
     unresolved?: Unresolved[];
+    packages?: Package[];
     unreadLanguages?: string[];
     edgesCollected?: boolean;
     commit?: string;
@@ -69,7 +76,7 @@ export async function writeObserved(
     schemaVersion: "1.0.0",
     repo: { commit },
     generatedAt: "2026-10-01T00:00:00Z",
-    packages: empty,
+    packages: { collected: true, items: opts.packages ?? [] },
     languages: empty,
     build: empty,
     generated: empty,

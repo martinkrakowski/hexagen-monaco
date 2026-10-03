@@ -3,6 +3,9 @@ import {
   edgeViolatesRule,
   edgesComplete,
   isPathInSlice,
+  targetExcluded,
+  targetInSlice,
+  underPrefix,
   type Contract,
   type ObservedReport,
   type Slice,
@@ -141,4 +144,111 @@ export function proposeCrossPrefixEdges(
     }
   }
   return [...pairs.values()];
+}
+
+export interface ClosedProposal {
+  /** Except entries, in the order `observed.json` lists them. */
+  excepts: string[];
+  /** Crossings no except entry can accept, each with the reason. */
+  unexceptable: { to: string; reason: string }[];
+}
+
+/**
+ * The `except` list a `closed` rule would need to accept the crossings the
+ * observed edges already make: every edge target that leaves the slice, emitted
+ * exactly as `slice check` prints it, deduplicated.
+ *
+ * The target is never widened to a directory. An except entry without a
+ * trailing `/` is an exact file (`underPrefix`), so `lib` would except nothing
+ * while reading as if it excepted the directory; a file target is emitted whole
+ * and a package root as the package root, and the human widens either by hand.
+ *
+ * A crossing no except can accept is reported rather than proposed, because a
+ * rule naming one would still fail: `.` is never inside a prefix, and an
+ * `excludes` entry beats any except.
+ */
+export function proposeClosedExcepts(
+  slice: Slice,
+  observed: ObservedReport,
+): ClosedProposal {
+  const excepts: string[] = [];
+  const unexceptable: ClosedProposal["unexceptable"] = [];
+  if (!observed.edges.collected) return { excepts, unexceptable };
+  const seen = new Set<string>();
+  for (const e of observed.edges.items) {
+    if (!isPathInSlice(slice, e.from)) continue;
+    if (targetInSlice(slice, e.to)) continue;
+    if (seen.has(e.to)) continue;
+    seen.add(e.to);
+    if (e.to === ".") {
+      unexceptable.push({
+        to: e.to,
+        reason: "the root package is never inside a prefix",
+      });
+    } else if (targetExcluded(slice, e.to)) {
+      unexceptable.push({
+        to: e.to,
+        reason: "an excludes entry wins over any except",
+      });
+    } else {
+      excepts.push(e.to);
+    }
+  }
+  return { excepts, unexceptable };
+}
+
+/**
+ * The warning a `closed` rule earns when the `except` lists together cover every
+ * top-level directory outside the slice: the rule then accepts every crossing it
+ * could have refused, so the slice is not closed. `null` when there is nothing
+ * to say — no `closed` rule, no collected package list, no directory outside
+ * the slice, or one directory no except covers.
+ *
+ * Coverage is asked of the whole directory (`apps/`, not `apps`): an except entry
+ * without a trailing `/` is an exact file, so a bare name covers nothing. A
+ * directory the slice occupies, and one an `excludes` entry denies, are not
+ * counted: an except opens neither, so no crossing through them could be
+ * accepted either.
+ */
+export function closedRuleCoverageWarning(
+  slice: Slice,
+  observed: ObservedReport,
+  rules: readonly Contract["rules"][number][],
+): string | null {
+  const ids: string[] = [];
+  const excepts: string[] = [];
+  for (const r of rules) {
+    if (r.kind !== "closed") continue;
+    ids.push(`"${r.id}"`);
+    excepts.push(...r.except);
+  }
+  // Nothing to accept, so nothing to be too broad about.
+  if (ids.length === 0) return null;
+  const outside = topLevelDirsOutsideSlice(slice, observed);
+  if (outside.length === 0) return null;
+  if (outside.some((dir) => !excepts.some((e) => underPrefix(e, `${dir}/`)))) {
+    return null;
+  }
+  const one = ids.length === 1;
+  const dirs = outside.map((dir) => `${dir}/`).join(", ");
+  return `warning: closed rule${one ? "" : "s"} ${ids.join(", ")} except${one ? "s" : ""} every top-level directory outside the slice (${dirs}), so ${one ? "it" : "they"} accept${one ? "s" : ""} every crossing: the slice is not closed`;
+}
+
+/** Sorted top-level directories holding a package that is neither in the slice nor excluded. */
+function topLevelDirsOutsideSlice(
+  slice: Slice,
+  observed: ObservedReport,
+): string[] {
+  if (!observed.packages.collected) return [];
+  const dirs = new Set<string>();
+  for (const pkg of observed.packages.items) {
+    // The root package is the repo, not a directory to cover.
+    if (pkg.root === ".") continue;
+    const top = pkg.root.split("/")[0];
+    if (top === undefined || top === "") continue;
+    if (slice.paths.some((p) => p.startsWith(`${top}/`))) continue;
+    if (targetExcluded(slice, `${top}/`)) continue;
+    dirs.add(top);
+  }
+  return [...dirs].sort();
 }
