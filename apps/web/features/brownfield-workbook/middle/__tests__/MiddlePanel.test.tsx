@@ -337,10 +337,34 @@ describe("proposed layer", () => {
     const line = rule.textContent ?? "";
     expect(line).toContain("closed-slice");
     expect(line).toContain("closed");
-    expect(line).toContain("libs/shared/");
-    expect(line).toContain("libs/date");
-    expect(line.length).toBeGreaterThan(0);
+    expect(line).toContain("libs/shared/, libs/date");
+    // population-guard: the four assertions above prove the line is populated
     expect(line).not.toContain("->");
+  });
+
+  it("says a closed rule accepts no crossing when its except list is empty", () => {
+    render(
+      <MiddlePanel
+        bundle={bundleOf({
+          observed: observedOf({ packages: PKGS, edges: EDGES }),
+          slice,
+          contract: contractOf([
+            {
+              id: "closed-slice",
+              kind: "closed",
+              except: [],
+              severity: "error",
+            },
+          ]),
+        })}
+      />,
+    );
+    const line =
+      within(proposedRegion()).getByTestId("contract-rule").textContent ?? "";
+    expect(line).toContain("closed-slice");
+    expect(line).toContain("closed");
+    expect(line).toContain("no excepts");
+    expect(line).toContain("error");
   });
 
   it("highlights a violating in-slice edge, not a legal one, and not one outside the slice", () => {
@@ -1237,7 +1261,7 @@ describe("shared semantics, pinned in the viewer", () => {
     render1([{ from: "apps/web/a.ts", to: ".", specifier: "root-pkg" }], {
       id: "r",
       kind: "closed",
-      except: ["."],
+      except: ["libs/shared/"],
       severity: "error",
     });
     expect(screen.getAllByTestId("violation")).toHaveLength(1);
@@ -1269,7 +1293,7 @@ describe("shared semantics, pinned in the viewer", () => {
     expect(v).toHaveLength(1);
     const text = v[0].textContent ?? "";
     expect(text).toContain(UNRESOLVED_IMPORT_RULE_ID);
-    expect(text.length).toBeGreaterThan(0);
+    // population-guard: the assertion above proves the violation line is populated
     expect(text).not.toContain("closed-slice");
   });
 });

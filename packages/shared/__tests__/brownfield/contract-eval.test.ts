@@ -165,9 +165,11 @@ describe("edgeViolatesRule: the closed kind", () => {
   });
 
   it("the root package target (.) is never inside an except prefix", () => {
-    expect(edgeViolatesRule(slice, closed(["."]), edge("app/a.ts", "."))).toBe(
-      true,
-    );
+    // No legal except entry is `.` (the schema refuses it), so every entry leaves
+    // the root package outside: it always violates.
+    expect(
+      edgeViolatesRule(slice, closed(["lib/", "app/"]), edge("app/a.ts", ".")),
+    ).toBe(true);
     expect(
       edgeViolatesRule(slice, closed(["lib/"]), edge("app/a.ts", ".")),
     ).toBe(true);

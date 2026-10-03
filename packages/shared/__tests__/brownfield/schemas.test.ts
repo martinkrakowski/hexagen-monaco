@@ -280,6 +280,11 @@ const cases: Case[] = [
         (v) => set(v, "rules.2.id", UNRESOLVED_IMPORT_RULE_ID),
       ],
       ["except is not an array", (v) => set(v, "rules.2.except", "libs/")],
+      ["except entry is the repo root", (v) => set(v, "rules.2.except", ["."])],
+      [
+        "except entry is a dot segment",
+        (v) => set(v, "rules.2.except", ["a/../b/"]),
+      ],
       ...withBad("except entry", "rules.2.except", BAD_REL, (x) => [x]),
       ...withBad("except entry", "rules.2.except", TERMINATORS, (x) => [x]),
       [

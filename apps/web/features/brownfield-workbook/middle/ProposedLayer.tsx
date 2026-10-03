@@ -205,9 +205,13 @@ export function ProposedLayer({
                       <Badge>{clean(r.kind)}</Badge>{" "}
                       {/* `closed` carries no from/to: its excepts are the rule. */}
                       {r.kind === "closed" ? (
-                        r.except.length > 0 && (
+                        r.except.length > 0 ? (
                           <span className="font-mono">
                             {r.except.map(clean).join(", ")}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">
+                            no excepts
                           </span>
                         )
                       ) : (
