@@ -16,7 +16,7 @@ A Trace line whose own timestamps contradict each other is invalid evidence, and
 - `traceRuleReasons` in `packages/shared/src/types/trace-rules.ts:44` is the one implementation of the reader rules, and it has exactly two live callers: `hexagen evidence pack` (`packages/sync/src/commands/evidence/check.ts:131`, reached from `evidence/pack.ts:239`) and `hexagen workbook export`, which calls `runEvidencePack` (`packages/sync/src/commands/workbook/export.ts:423`). It checks grant presence (Rule 3), the tool allowlist, and each call's `time` against `revoked_at` and `expires_at`. It never reads `started_at` or `ended_at`. The MCP server's `checkTrace` (`packages/mcp-server/src/application/kernel/trace.ts:100`) is a one-line wrapper over it, and the only importer in the repo is its own test (`packages/mcp-server/__tests__/application/kernel/trace.test.ts:8`), so it is not a live reader. The copy in `docs/kernel/spike/trace.ts:63` is a separate reference implementation that no runner executes: each workspace's Vitest root is its own package directory (`vitest.shared.ts`), so nothing under `docs/` is collected.
 - `TraceRuleLine` (`packages/shared/src/types/trace-rules.ts:16-23`) carries `grant_id`, `halt_reason` and `tool_calls` only, and the pack casts a raw parsed record into it (`check.ts:131`). A `started_at` or `ended_at` that is absent or unparsable is therefore ignored today. The type has to be widened before the rule can see them.
 - `evidenceShapeReasons` in `packages/sync/src/commands/evidence/check.ts:89` (the `started_at`/`ended_at` pair is checked at lines 94-98) only requires them to parse as ISO timestamps. It is a separate step from the rules: `checkLines` calls `ruleReasons` only when the shape is clean (`check.ts:192-196`).
-- `docs/kernel/TRACE.md` says `tool_calls` are "in the order it made them" (line 59) and gives `started_at` and `ended_at` nothing but "ISO 8601" (lines 67-69), so it states no rule tying them together. `docs/kernel/trace.schema.json` already states it in prose — `started_at` "should be at or before every tool_calls[].time and at or before ended_at" (line 88), `ended_at` the mirror (line 93) — but that file is JSON Schema draft-07, which cannot compare sibling values, so nothing enforces it. This plan makes a reader enforce what the schema already says.
+- `docs/kernel/TRACE.md` says `tool_calls` are "in the order it made them" (line 59) and gives `started_at` and `ended_at` nothing but "ISO 8601" (lines 67-69), so it states no rule tying them together. `docs/kernel/trace.schema.json` already states it in prose — `started_at` "should be at or before every tool_calls[].time and at or before ended_at" (line 88), `ended_at` the mirror (line 93) — but that file is JSON Schema draft-07, which cannot compare sibling values, so nothing checks it. This plan makes a reader check what the schema already says.
 - Every writer is compatible with the rule, checked rather than assumed. Each `appendLine` site binds one timestamp and passes it as the call's `time`, `started_at` and `ended_at`: `accept-transaction-tool.use-case.ts:269` then `282-283`; `propose-patch-tool.use-case.ts:198` then `210-211`, `266` then `274-275`, `295` then `309-310`. `TraceWriteAdapter.appendLine` writes exactly one `tool_calls` entry and copies the three values through (`packages/mcp-server/src/infrastructure/adapters/trace-write.adapter.ts:81-96`), so every line the repo writes today satisfies the rule with `started_at == ended_at == call.time`. The existing fixtures agree: `trace-write.adapter.test.ts:44-45`, `trace-write.child.ts:37-38`, `apps/tui/__tests__/brownfield/harness.ts:128-129` (and its denial line at 154-155), `apps/web/features/brownfield-workbook/__tests__/right-fixtures.ts:37-38`, `packages/sync/__tests__/commands/evidence/pack.test.ts:82-83`, `packages/sync/__tests__/commands/workbook/export.test.ts:156-157`, `packages/shared/__tests__/brownfield/trace-schema.test.ts:31-32`, and the `checkTrace` fixture, whose window 09:59:00-10:00:05 contains its 10:00:00 call (`packages/mcp-server/__tests__/application/kernel/trace.test.ts:46-47`), denial cases included.
 - The only fixtures that do not satisfy the rule are in `packages/shared/__tests__/trace-rules.test.ts`: the `line()` helper (lines 9-13) emits no `started_at`/`ended_at` at all, so every case there has to gain them.
 
@@ -40,7 +40,7 @@ Tightening the doc text belongs to this lane rather than to a follow-on: add the
 
 ### Decision for the owner
 
-**Decided (owner, 2026-10-02): enforce now, and exempt nothing, denial lines included.**
+**Decided (owner, 2026-10-02): check from now on, and exempt nothing, denial lines included.**
 
 The reason: every writer binds one timestamp and passes it as the call's `time`, `started_at` and `ended_at` (verified above), so no line this repo writes can fail the rule, and the failure the alternative guards against — two clock reads a millisecond apart — cannot occur while that holds. A writer that later diverges should fail loudly rather than be grandfathered.
 
@@ -48,7 +48,7 @@ Rejected alternatives, one line each:
 
 - A recorded cutover `seq`, with the rule applying only above it: it needs a cutover value no artifact carries today, and buys nothing while every writer emits one value.
 - Exempting denial lines: the comparison is internal to one line, so a denial's grant-window violation is irrelevant to it, and the exemption would leave the least trustworthy lines unchecked.
-- Enforcing in `hexagen evidence pack` only: two implementations, the exact drift the shared function exists to prevent.
+- Checking in `hexagen evidence pack` only: two implementations, the exact drift the shared function exists to prevent.
 
 ### Acceptance tests
 
@@ -85,7 +85,7 @@ Out: any new Trace field, changing the chain format, `grant_missing` records, th
 
 ## 5. Risks
 
-- A rule that rejects existing traces silently changes what `evidence pack` accepts. Mitigated by test 7, the fixture survey above, and the enforce-now decision: the writers bind one value, so no line written today can fail.
+- A rule that rejects existing traces silently changes what `evidence pack` accepts. Mitigated by test 7, the fixture survey above, and the check-from-now-on decision: the writers bind one value, so no line written today can fail.
 - Denial lines now carry a reason they never carried. Every denial path today binds its timestamp once (`propose-patch-tool.use-case.ts:266,295`; the accept denial that reaches `appendLine` reuses the same `now` at line 269, and the `appendGrantMissing` denial at line 260 is not an evidence line), so no denial the repo writes is affected either.
 - Clock skew across machines is not handled; the rule compares timestamps inside one line, written by one process, which is why it is safe to be strict.
 - Widening `TraceRuleLine` touches a shared type, but its only consumer is the pack's cast (`check.ts:131`), so the blast radius is one file.
