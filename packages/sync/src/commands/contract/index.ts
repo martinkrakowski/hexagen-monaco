@@ -8,6 +8,8 @@ import {
   edgesComplete,
   findContractGrowth,
   normalizeSlicePath,
+  type ObservedReport,
+  type Slice,
 } from "@hexagen/shared";
 import { isValidEngagementId } from "@hexagen/shared/node/grant-key";
 import { ensureExcluded } from "../shared/git-exclude.js";
@@ -31,17 +33,56 @@ import {
 import { type SliceRootOptions } from "../slice/index.js";
 import { readContractBase } from "./growth.js";
 import {
+  closedRuleCoverageWarning,
   evaluateContract,
   isKnown,
   isSuppressionExpired,
+  proposeClosedExcepts,
   proposeCrossPrefixEdges,
 } from "./evaluate.js";
 
 const pretty = (value: unknown): string =>
   `${JSON.stringify(value, null, 2)}\n`;
 
+/**
+ * POSIX single-quoting: one shell word per value, with an embedded single quote
+ * written as the shell's `'\''` idiom. An observed target is a repo path, so it
+ * may hold a space (which would arrive as two `--except` entries) or a shell
+ * metacharacter (which would run whatever follows it); the printed line is meant
+ * to be pasted, so every target is quoted. The fixed arguments carry nothing a
+ * shell would read, so they are left as they are.
+ */
+const shellWord = (value: string): string =>
+  `'${value.split("'").join(`'\\''`)}'`;
+
+/**
+ * The candidate `closed` rule, as `propose --closed` prints it: the crossing
+ * targets as one `except` list, the `add-rule` line that would write it, and any
+ * crossing that gets no entry, with the advice that would accept it. Writes
+ * nothing either way.
+ */
+function closedProposal(slice: Slice, observed: ObservedReport): string {
+  const { excepts, notProposed } = proposeClosedExcepts(slice, observed);
+  // `--except` with no prefixes at all is a legal rule (it accepts none), so
+  // the empty case prints the bare flag rather than dropping it.
+  const flags =
+    excepts.length === 0 ? "" : `${excepts.map(shellWord).join(" ")} `;
+  const lines = [
+    "closed: except the crossings observed.json already makes, and delete the ones you do not accept",
+    `except: ${JSON.stringify(excepts)}`,
+    ...(excepts.length === 0
+      ? [
+          "no observed edge leaves the slice, so this rule accepts no crossing at all",
+        ]
+      : []),
+    ...notProposed.map((n) => `not proposed: "${n.to}" — ${n.advice}`),
+    `    hexagen contract add-rule --kind closed --except ${flags}--yes`,
+  ];
+  return `candidate rules for slice ${slice.id} (nothing written):\n${lines.join("\n")}\n`;
+}
+
 export async function runContractPropose(
-  options: SliceRootOptions & { strict?: boolean },
+  options: SliceRootOptions & { strict?: boolean; closed?: boolean },
 ): Promise<CommandResult> {
   const messages: string[] = [];
   try {
@@ -53,6 +94,26 @@ export async function runContractPropose(
     if (stale.problems.length > 0) {
       messages.push(...stale.problems);
       return { exitCode: 2, messages };
+    }
+    if (options.closed === true) {
+      // Nothing is known about the crossings, so "no edge leaves the slice"
+      // would be a claim the report cannot make, and the empty rule would be
+      // offered as ready to run. Same refusal `contract check` makes, so exit 2.
+      if (!observed.edges.collected) {
+        throw new UsageError(
+          `cannot propose a closed rule: edges were not collected in .hexagen/observed.json (${observed.edges.reason}); re-run \`hexagen observe\``,
+        );
+      }
+      if (!edgesComplete(observed.edges)) {
+        messages.push(
+          "note: the edge list is incomplete (see `hexagen slice check`); these candidates are not the whole picture",
+        );
+      }
+      return {
+        exitCode: 0,
+        messages,
+        stdout: closedProposal(slice, observed),
+      };
     }
     if (!edgesComplete(observed.edges)) {
       messages.push(
@@ -237,14 +298,41 @@ export async function runContractShow(
 ): Promise<CommandResult> {
   const messages: string[] = [];
   try {
-    const contract = await loadContract(path.resolve(options.root));
+    const root = path.resolve(options.root);
+    const contract = await loadContract(root);
     if (!contract)
       throw new UsageError(
         "contract does not exist: run `hexagen contract add-rule`",
       );
+    // Only a `closed` rule can accept a crossing, so only then is the scan read.
+    if (contract.rules.some((r) => r.kind === "closed")) {
+      const said = await coverageMessage(root, contract);
+      if (said !== null) messages.push(said);
+    }
     return { exitCode: 0, messages, stdout: pretty(contract) };
   } catch (e) {
     return asResult(e, messages);
+  }
+}
+
+/**
+ * The coverage warning for the contract's `closed` rules, or a note saying the
+ * check could not run. Best-effort: `show` prints the contract whether or not a
+ * scan was staged, so an unreadable `slice.json`/`observed.json` is a note, not
+ * a refusal.
+ */
+async function coverageMessage(
+  root: string,
+  contract: Contract,
+): Promise<string | null> {
+  try {
+    return closedRuleCoverageWarning(
+      await loadSlice(root),
+      await loadObserved(root),
+      contract.rules,
+    );
+  } catch {
+    return "note: no readable .hexagen/slice.json and .hexagen/observed.json, so the excepts were not checked against the repo's packages";
   }
 }
 
@@ -464,21 +552,40 @@ export const contractCommander = new Command("contract").description(
   "Rules for a slice, checked against observed import edges: .hexagen/contract.json",
 );
 
+// Commander exits 1 for its own usage errors (a missing required option, an
+// unknown flag), which reads as a failed gate rather than a refused command.
+// Every other refusal in these commands is exit 2, so a missing `--kind` must be
+// too. Scoped to this command tree — set before the subcommands are created, so
+// `copyInheritedSettings` hands the callback to each of them — and every other
+// command keeps its own exit codes. `--help` and `--version` exit 0 and are left
+// alone.
+contractCommander.exitOverride((err) => {
+  if (err.exitCode === 0) return;
+  process.exit(2);
+});
+
 contractCommander
   .command("propose")
   .description(
-    "List cross-prefix edges inside the slice as candidate rules (writes nothing)",
+    "List candidate rules for the slice from the observed edges (writes nothing)",
+  )
+  .option(
+    "--closed",
+    "Emit one candidate closed rule instead, whose --except list names every crossing observed.json already makes",
   )
   .option("--strict", STRICT_DESC)
   .option(ROOT_FLAG, ROOT_DESC)
-  .action(async (opts: { root?: string; strict?: boolean }) => {
-    emit(
-      await runContractPropose({
-        root: opts.root ?? process.cwd(),
-        strict: opts.strict,
-      }),
-    );
-  });
+  .action(
+    async (opts: { root?: string; strict?: boolean; closed?: boolean }) => {
+      emit(
+        await runContractPropose({
+          root: opts.root ?? process.cwd(),
+          strict: opts.strict,
+          closed: opts.closed,
+        }),
+      );
+    },
+  );
 
 const addRuleCommander = contractCommander
   .command("add-rule")
