@@ -9,10 +9,18 @@
  * of `JSON.stringify({ halt_reason, proposal_id, paths })`, which is what the
  * verifier recomputes to prove the paths are bound into the chain.
  */
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import {
+  chmod,
+  mkdtemp,
+  readdir,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { Grant } from "@hexagen/shared";
@@ -29,6 +37,7 @@ import {
 } from "../../../src/commands/evidence/verify.js";
 import { canonicalGrantPayload } from "../../../src/commands/grant/canonical.js";
 import { signGrantPayload } from "../../../src/commands/grant/sign.js";
+import { parseChangedPaths } from "../../../src/commands/shared/brownfield-sidecar.js";
 import { cleanup, dirs, git, makeRepo, put } from "../slice/fixture.js";
 
 const KEY = "ab".repeat(32);
@@ -134,7 +143,10 @@ async function writeMeta(
   );
 }
 
-async function writeSlice(paths: string[] = ["src/"]): Promise<void> {
+async function writeSlice(
+  paths: string[] = ["src/"],
+  excludes: string[] = [],
+): Promise<void> {
   await put(
     root,
     ".hexagen/slice.json",
@@ -143,7 +155,7 @@ async function writeSlice(paths: string[] = ["src/"]): Promise<void> {
       id: "eng-1",
       repo: { commit: git(root, "rev-parse", "HEAD") },
       paths,
-      excludes: [],
+      excludes,
       createdBy: "t@example.test",
       createdAt: CALL_TIME,
     }),
@@ -447,6 +459,11 @@ describe("evidence verify, scope", () => {
     const r = await run();
     expect(r.exitCode).toBe(0);
     expect(r.skipped).toBe(1);
+    // Says plainly that nothing was in scope, so a slice that no longer
+    // describes this layout is visible rather than silently passing.
+    expect(text(r)).toMatch(
+      /0 of 1 changed path is in scope \(slice \+ grants\)/,
+    );
     expect(text(r)).toMatch(/skipped 1 change/);
     expect(text(r)).not.toContain("other/d.go");
     expect(pathsOf(r) ?? []).toEqual([]);
@@ -598,14 +615,28 @@ describe("evidence verify, tampering and forged evidence", () => {
   });
 
   it("reads a proposal whose name git would C-quote", async () => {
-    // `git ls-tree --name-only` prints this name quoted and escaped, so only a
-    // NUL-delimited listing hands back the name the tree actually holds.
-    const id = 'p"1';
+    // `git ls-tree --name-only` prints a non-ASCII name octal-escaped inside
+    // quotes (core.quotePath defaults to true), so only a NUL-delimited listing
+    // hands back the name the tree actually holds. A quote or a tab in a name is
+    // the same class of escaping, but no such name can be created on Windows.
+    const id = "pré";
     await put(root, "src/a.ts", "changed\n");
     await appendLine(proposeLine(id, ["src/a.ts"]));
     await writeMeta(id, { paths: ["src/a.ts"], traceSeq: 1 });
     commit("a proposal whose name needs quoting");
     await anchorHead();
+    // Canary: the listing this command must not trust really does escape it.
+    expect(
+      git(
+        root,
+        "ls-tree",
+        "-r",
+        "--name-only",
+        "HEAD",
+        "--",
+        ".hexagen/proposals",
+      ),
+    ).toMatch(/\\303\\251/);
     const r = await run();
     expect(r.exitCode).toBe(0);
     expect(r.covered).toEqual(["src/a.ts"]);
@@ -866,6 +897,26 @@ describe("evidence verify, renames", () => {
   });
 });
 
+describe("the changed-path record parser", () => {
+  it("expands a rename into both sides and refuses a truncated record", () => {
+    // What `--name-status -M -z` prints, NUL-split: a status, then its path(s).
+    expect(parseChangedPaths(["M", "src/a.ts", "A", "src/b.ts"])).toEqual([
+      { status: "M", path: "src/a.ts" },
+      { status: "A", path: "src/b.ts" },
+    ]);
+    expect(parseChangedPaths(["R100", "src/old.ts", "src/new.ts"])).toEqual([
+      { status: "R100", path: "src/new.ts", oldPath: "src/old.ts" },
+    ]);
+    // A status with no path, and a rename with only one side: neither can be
+    // read honestly, and a partial list would judge half a range.
+    expect(parseChangedPaths(["M", "src/a.ts", "A"])).toBeNull();
+    expect(
+      parseChangedPaths(["M", "src/a.ts", "R100", "src/old.ts"]),
+    ).toBeNull();
+    expect(parseChangedPaths([])).toEqual([]);
+  });
+});
+
 describe("evidence verify, the range", () => {
   it("11a. an empty range exits 2 and says nothing was checked", async () => {
     const r = await run({ until: since });
@@ -886,6 +937,7 @@ describe("evidence verify, the range", () => {
     expect(r.exitCode).toBe(0);
     expect(r.skipped).toBe(1);
     expect(text(r)).not.toMatch(/empty diff/);
+    expect(text(r)).toMatch(/0 of 1 changed path is in scope/);
   });
 
   it("a rewrite of the evidence since <since> exits 2", async () => {
@@ -1009,6 +1061,25 @@ describe("evidence verify, the range", () => {
 });
 
 describe("evidence verify, preconditions", () => {
+  it("a range that edits the slice cannot shrink its own scope", async () => {
+    // The attack a working-tree read allows: change an in-scope file, add an
+    // `excludes` entry over it in the same range, and the slice that judged the
+    // range has quietly stopped governing that file. grant-1 names `src/b.ts`
+    // only, so the slice is the sole reason src/a.ts is judged at all.
+    await put(
+      root,
+      GRANT_REL,
+      JSON.stringify(signedGrant({ paths: ["src/b.ts"] })),
+    );
+    await put(root, "src/a.ts", "changed with no line\n");
+    await writeSlice(["src/"], ["src/a.ts"]);
+    commit("change, and a slice that excludes it");
+    const r = await run();
+    expect(r.exitCode).toBe(1);
+    expect(pathsOf(r)).toEqual(["src/a.ts"]);
+    expect(text(r)).not.toMatch(/evidence verify ok/);
+  });
+
   it("a checkout with no staged .hexagen/ exits 2 naming the staging command", async () => {
     const bare = await mkdtemp(path.join(tmpdir(), "verify-bare-"));
     dirs.push(bare);
@@ -1039,6 +1110,27 @@ describe("evidence verify, preconditions", () => {
     expect(pathsOf(r)).toBeUndefined();
   });
 
+  it("opens nothing under .hexagen/ for writing, lock or not", async () => {
+    await put(root, "src/a.ts", "changed with no line\n");
+    commit("silent change");
+    const dir = path.join(root, ".hexagen", "evidence");
+    const before = await readdir(dir);
+    const r = await run();
+    expect(r.exitCode).toBe(1);
+    // No lock, no break file, nothing else: the evidence is a committed blob, so
+    // there is nothing to serialise against.
+    expect(await readdir(dir)).toEqual(before);
+    expect(existsSync(`${traceFile}.lock`)).toBe(false);
+    expect(existsSync(`${traceFile}.lock.break`)).toBe(false);
+    // And it still reaches its verdict when the directory cannot be written to.
+    await chmod(dir, 0o500);
+    try {
+      expect((await run()).exitCode).toBe(1);
+    } finally {
+      await chmod(dir, 0o700);
+    }
+  });
+
   it("a grant whose signature does not verify is bad input (2)", async () => {
     await put(root, "src/a.ts", "changed\n");
     commit("silent change");
@@ -1059,8 +1151,8 @@ describe("evidence verify, preconditions", () => {
     const named = await run({ keyFile: path.join(root, "nope.key") });
     expect(named.exitCode).toBe(2);
     expect(text(named)).toMatch(/no key file/);
-    // No key location at all: no --key-file, no env, and a slice whose id cannot
-    // name an engagement key file.
+    // No key location at all: no --key-file, no env, and a slice — the one read
+    // at `<since>` — whose id cannot name an engagement key file.
     const home = await mkdtemp(path.join(tmpdir(), "verify-home-"));
     dirs.push(home);
     await put(
@@ -1076,7 +1168,13 @@ describe("evidence verify, preconditions", () => {
         createdAt: CALL_TIME,
       }),
     );
-    const nowhere = await run({ keyFile: undefined, env: {}, homeDir: home });
+    const bad = commit("a slice whose id cannot name an engagement key file");
+    const nowhere = await run({
+      since: bad,
+      keyFile: undefined,
+      env: {},
+      homeDir: home,
+    });
     expect(nowhere.exitCode).toBe(2);
     expect(text(nowhere)).toMatch(/cannot locate the engagement key/);
   });
@@ -1130,11 +1228,22 @@ describe("evidence verify, preconditions", () => {
 });
 
 describe("evidence verify (CLI wiring)", () => {
-  it("parses --since and --until and sets the exit code", async () => {
+  it("parses --since and --until, sets the exit code, and writes no trailing blank line", async () => {
     await put(root, "src/a.ts", "changed with no line\n");
     commit("silent change");
     const { evidenceCommander } =
       await import("../../../src/commands/evidence/index.js");
+    const written: string[] = [];
+    // `console.log` would add a second newline; the unaccounted list is machine
+    // output and must end at the path it names.
+    const spy = vi.spyOn(process.stdout, "write").mockImplementation(((
+      chunk: string | Uint8Array,
+    ) => {
+      written.push(
+        typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf8"),
+      );
+      return true;
+    }) as typeof process.stdout.write);
     const saved = process.exitCode;
     try {
       await evidenceCommander.parseAsync(
@@ -1155,7 +1264,9 @@ describe("evidence verify (CLI wiring)", () => {
       );
       expect(process.exitCode ?? 0).toBe(1);
     } finally {
+      spy.mockRestore();
       process.exitCode = saved;
     }
+    expect(written.join("")).toBe("src/a.ts\n");
   });
 });

@@ -340,9 +340,12 @@ hexagen evidence verify --since <git-ref> [--until <git-ref>]
                          [--allow-empty]
 ```
 
-Judges a git range against the trace in the `<until>` tree. It reads only: it
-never writes `.hexagen/`, and it never stops a write — it finds an unaccounted
-one after the fact.
+Judges a git range against the trace in the `<until>` tree. It opens no file
+under `.hexagen/` for writing: the evidence it reads is committed, so there is
+nothing to append and no lock to take (an earlier revision read the working copy
+under `withTraceLock`, which created `.hexagen/evidence/trace.jsonl.lock` and
+exited 2 on a read-only mount; both went with the read). It never stops a write
+— it finds an unaccounted one after the fact.
 
 1. **The range.** The changed files in `<since>..<until>` (default `HEAD`) come
    from `git diff --name-status -M -z`, never `--name-only`, which prints one

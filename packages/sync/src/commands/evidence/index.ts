@@ -87,7 +87,7 @@ evidenceCommander
         engagement: opts.engagement,
         allowEmpty: opts.allowEmpty,
       });
-      if (result.stdout) console.log(result.stdout);
+      if (result.stdout) process.stdout.write(result.stdout);
       for (const line of result.messages) console.error(line);
       process.exitCode = result.exitCode;
     },

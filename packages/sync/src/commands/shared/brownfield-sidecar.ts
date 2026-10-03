@@ -163,15 +163,27 @@ export function changedPaths(
     `${from}..${to}`,
   ]);
   if (fields === null) return null;
+  return parseChangedPaths(fields);
+}
+
+/**
+ * The NUL-split fields of one `git diff --name-status -M -z` run, read as
+ * records. A truncated record — a status with no path, or a rename missing its
+ * second path — cannot be read honestly, and returning the records before the
+ * cut would judge a partial range as if it were the whole one. Null refuses the
+ * whole diff instead, so the caller cannot pass a range it only half read.
+ */
+export function parseChangedPaths(
+  fields: readonly string[],
+): ChangedPath[] | null {
   const out: ChangedPath[] = [];
   for (let i = 0; i < fields.length; ) {
     const status = fields[i] as string;
     const first = fields[i + 1];
-    // A truncated record cannot be read honestly; stop rather than guess a path.
-    if (first === undefined) break;
+    if (first === undefined) return null;
     const paired = status.startsWith("R") || status.startsWith("C");
     const second = paired ? fields[i + 2] : undefined;
-    if (paired && second === undefined) break;
+    if (paired && second === undefined) return null;
     out.push(
       paired && second !== undefined
         ? { status, path: second, oldPath: first }

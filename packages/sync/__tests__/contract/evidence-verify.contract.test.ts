@@ -219,14 +219,14 @@ afterAll(async () => {
   await cleanupFixture(fix.root);
 });
 
-const verify = (extra: string[] = []) =>
+const verify = (extra: string[] = [], grant = grantFile) =>
   runHexagen(fix, [
     "evidence",
     "verify",
     "--since",
     since,
     "--grant",
-    grantFile,
+    grant,
     "--key-file",
     keyFile,
     ...extra,
@@ -286,16 +286,20 @@ describe("hexagen evidence verify (built dist, published layout)", () => {
     assert.match(r.stderr, /prev_hash does not match/, describeResult(r));
   });
 
-  it("exits 2 naming the staging command when .hexagen/ is not in the checkout", async () => {
+  it("exits 2 naming the staging command when .hexagen/ is not in the tree", async () => {
     await put("src/a.ts", "const a = 2;\n");
-    commit("hand edit");
+    // A grant outside `.hexagen/`, so the run reaches the evidence checks
+    // instead of stopping on a missing grant file: this is the CI shape, where
+    // the client never staged the kit and the checkout holds no evidence.
+    await fs.copyFile(grantFile, path.join(fix.root, "grant-1.json"));
+    commit("a grant kept outside the sidecar");
     git(fix.root, "rm", "-q", "-r", "--cached", ".hexagen");
     await fs.rm(path.join(fix.root, ".hexagen"), {
       recursive: true,
       force: true,
     });
     commit("evidence unstaged from the tree");
-    const r = await verify();
+    const r = await verify([], "grant-1.json");
     assert.equal(r.code, 2, describeResult(r));
     assert.match(
       r.stderr,

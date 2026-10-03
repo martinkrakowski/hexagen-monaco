@@ -1,20 +1,15 @@
 import { createHash } from "node:crypto";
-import { promises as fs } from "node:fs";
 import path from "node:path";
 import {
   ProposalMeta,
+  Slice,
   Tip,
   checkGrantWindow,
   isPathInSlice,
   nfc,
   type Grant,
-  type Slice,
 } from "@hexagen/shared";
-import {
-  readGrantKey,
-  readSliceEngagementId,
-  resolveGrantKey,
-} from "@hexagen/shared/node/grant-key";
+import { readGrantKey, resolveGrantKey } from "@hexagen/shared/node/grant-key";
 import {
   lineHash,
   splitTrace,
@@ -26,7 +21,7 @@ import {
   changedPaths,
   git,
   isAncestor,
-  loadSlice,
+  assertTopLevel,
 } from "../shared/brownfield-sidecar.js";
 import { checkLines, describeVerdict, type LineVerdict } from "./check.js";
 
@@ -68,6 +63,7 @@ import { checkLines, describeVerdict, type LineVerdict } from "./check.js";
 const TRACE_RELATIVE = [".hexagen", "evidence", "trace.jsonl"];
 const TIP_RELATIVE = [".hexagen", "evidence", "tip.json"];
 const PROPOSALS_RELATIVE = ".hexagen/proposals";
+const SLICE_RELATIVE = ".hexagen/slice.json";
 
 /** Named verbatim: without staged evidence there is nothing to judge. */
 const STAGE_HINT = [
@@ -157,6 +153,27 @@ const usage = (messages: readonly string[]): EvidenceVerifyResult => ({
   exitCode: 2,
   messages,
 });
+
+/** The one slice schema, checked against a blob rather than a file on disk. */
+function parseSlice(text: string, label: string): Slice {
+  let json: unknown;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    throw new SliceError(`${label} is not valid JSON`);
+  }
+  const parsed = Slice.safeParse(json);
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    throw new SliceError(
+      `${label} does not match its schema: ${issue?.path.join(".") || "(root)"}: ${issue?.message}`,
+    );
+  }
+  return parsed.data;
+}
+
+/** A slice that cannot be read is bad input (exit 2), never a default scope. */
+class SliceError extends Error {}
 
 const sha256Hex = (data: string): string =>
   createHash("sha256").update(data).digest("hex");
@@ -426,21 +443,26 @@ export async function runEvidenceVerify(
     ]);
   }
 
-  // The staging precondition: without the slice there is nothing to judge, and
-  // naming every file unaccounted would be a false alarm.
-  const sliceFile = path.join(root, ".hexagen", "slice.json");
-  if (
-    !(await fs.lstat(sliceFile).then(
-      () => true,
-      () => false,
-    ))
-  ) {
-    return usage([`no slice at ${sliceFile}; nothing was judged.`, STAGE_HINT]);
+  // The slice is read from the `<since>` tree, never the working copy: it is the
+  // governance this range is judged against, and a range that edits the slice
+  // could otherwise add an `excludes` entry over its own unaccounted change and
+  // pass. `--root` is still checked against the git top level.
+  try {
+    assertTopLevel(root);
+  } catch (error) {
+    return usage([(error as Error).message]);
   }
-
+  const reader = createGitReader(root);
+  const sliceText = reader.show(since, SLICE_RELATIVE);
+  if (sliceText === null) {
+    return usage([
+      `no slice at ${SLICE_RELATIVE} in ${options.since}; the range has no base governance to be judged against, so nothing was judged.`,
+      STAGE_HINT,
+    ]);
+  }
   let slice: Slice;
   try {
-    slice = await loadSlice(root);
+    slice = parseSlice(sliceText, `${SLICE_RELATIVE} at ${options.since}`);
   } catch (error) {
     return usage([(error as Error).message]);
   }
@@ -449,11 +471,12 @@ export async function runEvidenceVerify(
     return usage(["at least one --grant <file> is required"]);
   }
   // The engagement key first, as `evidence pack` does: without it no grant can
-  // be trusted and no tip can be checked.
+  // be trusted and no tip can be checked. The engagement id is the slice's own,
+  // read from the same bytes as the scope, so the two cannot disagree.
   const resolved = resolveGrantKey({
     keyFile: options.keyFile,
     env,
-    engagementId: options.engagement ?? readSliceEngagementId(root),
+    engagementId: options.engagement ?? slice.id,
     workspaceRoot: root,
     homeDir: options.homeDir,
   });
@@ -517,7 +540,6 @@ export async function runEvidenceVerify(
   // The evidence is read from the `<until>` tree, so it cannot change under the
   // command and no trace lock is taken: a committed blob is either there or it
   // is not, and what the working copy holds is none of this command's business.
-  const reader = createGitReader(root);
   const traceRel = TRACE_RELATIVE.join("/");
   const tipRel = TIP_RELATIVE.join("/");
   const traceText = reader.show(until, traceRel);
@@ -683,10 +705,16 @@ export async function runEvidenceVerify(
     }
     return `${unanchored}nearest line appended after --since: seq ${entry.nearestSeq} under grant ${entry.nearestGrantId}, which named ${(entry.nearestPaths ?? []).join(", ")}`;
   };
-  const summary = `${plural(covered.length + unaccounted.length, "in-scope change")} judged, ${plural(covered.length, "change")} covered by a line appended after ${options.since}; ${skipNote}`;
+  // A clean run says how much it looked at. When nothing in the range is in
+  // scope, "nothing unaccounted" is true but says nothing about whether the
+  // slice still describes this layout, so that case is spelled out.
+  const scopeNote =
+    kept.length === 0
+      ? `0 of ${plural(changed.length, "changed path")} ${changed.length === 1 ? "is" : "are"} in scope (slice + grants)`
+      : `${plural(kept.length, "in-scope change")} judged, ${plural(covered.length, "change")} covered by a line appended after ${options.since}`;
   const messages =
     unaccounted.length === 0
-      ? [`evidence verify ok: ${summary}`]
+      ? [`evidence verify ok: ${scopeNote}; ${skipNote}`]
       : [
           `evidence verify FAILED: ${plural(unaccounted.length, "change")} found after the fact in ${range} with no covering line`,
           ...unaccounted.map(
