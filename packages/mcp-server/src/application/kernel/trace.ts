@@ -87,15 +87,17 @@ export type TraceCheck =
 
 /**
  * Retrospective validator for a Trace against the Grant(s) it names.
- * Checks that the grant_id resolves to a known Grant, and — only for a
- * record whose `halt_reason` is "completed" — that each call falls within
- * that grant's expiry/revocation window (docs/kernel/TRACE.md Rules 2 and
- * 3) and names a tool the grant allows (docs/kernel/GRANT.md `tools`). A
- * record with any other halt_reason documents a refused attempt, not an
- * authorized write — the mutation's tool being outside `grant.tools`, or
- * the grant being expired or revoked, is exactly why it was refused, so
- * those two checks would otherwise reject the evidence of every denial
- * they are supposed to explain.
+ * Checks that the grant_id resolves to a known Grant, that each record's own
+ * timeline holds — `started_at`, `ended_at` and the order of its
+ * `tool_calls`, under docs/kernel/TRACE.md Rule 4, for every record and
+ * denial lines included — and — only for a record whose `halt_reason` is
+ * "completed" — that each call falls within that grant's expiry/revocation
+ * window (docs/kernel/TRACE.md Rules 2 and 3) and names a tool the grant
+ * allows (docs/kernel/GRANT.md `tools`). A record with any other halt_reason
+ * documents a refused attempt, not an authorized write — the mutation's tool
+ * being outside `grant.tools`, or the grant being expired or revoked, is
+ * exactly why it was refused, so those two checks would otherwise reject the
+ * evidence of every denial they are supposed to explain.
  */
 export function checkTrace(
   trace: TraceRecord,

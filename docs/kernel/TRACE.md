@@ -155,9 +155,9 @@ write, or the trace, as valid evidence) rather than warns:
    equal times are in order. A missing `started_at` or `ended_at`, or one
    that does not parse as a timestamp, is a reason and not a skip: a
    `completed` line without them is invalid, and so is a denial line's.
-   This rule has no exemption for denial lines, unlike the allowlist and
-   window checks in Rule 2: it compares values inside one line, written by
-   one process, where a grant's window says nothing. A `grant_missing`
+   This rule has no exemption for denial lines, unlike Rule 2 and the
+   `tools` check: it compares values inside one line, written by one process,
+   where a grant's window says nothing. A `grant_missing`
    record is not an evidence line — a single `time`, no window and no
    `tool_calls` — so the rule does not apply to it.
 
