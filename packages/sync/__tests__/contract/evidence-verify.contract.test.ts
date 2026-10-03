@@ -13,7 +13,7 @@
  * 2 rather than calling every changed file unaccounted.
  */
 import assert from "node:assert/strict";
-import { describe, it, beforeAll, beforeEach, afterEach } from "vitest";
+import { describe, it, beforeAll, beforeEach, afterAll } from "vitest";
 import { promises as fs } from "node:fs";
 import { execFileSync } from "node:child_process";
 import path from "node:path";
@@ -74,6 +74,8 @@ let keyFile: string;
 let grantFile: string;
 let traceFile: string;
 let since: string;
+/** The base commit every test starts from; the per-test hook restores it. */
+let pristine: string;
 
 const put = async (rel: string, text: string): Promise<void> => {
   const file = path.join(fix.root, rel);
@@ -109,9 +111,18 @@ function proposeLine(
   };
 }
 
-beforeAll(assertBuiltArtifactsPresent);
-
-beforeEach(async () => {
+/**
+ * One fixture for the whole suite, built once: `createPublishedLayoutFixture`
+ * copies the built `dist` (megabytes, thousands of files) and links its
+ * externals, which is far too much work to repeat per test — on a Windows CI
+ * leg it blew the 30 s hook timeout before the first assertion ran. Nothing a
+ * test writes is invisible to `git reset --hard`: every artefact is committed,
+ * and the two tests that remove evidence use `git rm`, so restoring the base
+ * commit restores the working tree too. The per-test hook is therefore a reset,
+ * not a rebuild.
+ */
+beforeAll(async () => {
+  await assertBuiltArtifactsPresent();
   fix = await createPublishedLayoutFixture(
     VALID_MANIFEST,
     "hexagen-verify-contract-",
@@ -120,6 +131,9 @@ beforeEach(async () => {
   grantFile = path.join(fix.root, ".hexagen", "grants", "grant-1.json");
   traceFile = path.join(fix.root, ".hexagen", "evidence", "trace.jsonl");
   git(fix.root, "init", "-q");
+  // The consumer copy of dist is fixture, not evidence: keeping it out of the
+  // tree keeps every `git add -A` in this file off thousands of bundled files.
+  await put(".gitignore", "node_modules/\n");
   await fs.writeFile(keyFile, `${KEY}\n`, "utf8");
   await put("src/a.ts", "const a = 1;\n");
   await put(
@@ -154,6 +168,15 @@ beforeEach(async () => {
   // The pack step: only a line an anchored tip covers can cover a change.
   await anchorHead("base: evidence staged at last");
   since = git(fix.root, "rev-parse", "HEAD");
+  pristine = since;
+}, 180_000);
+
+beforeEach(() => {
+  // Only the git state a test changed: the index, the working tree and any file
+  // it left untracked. The fixture itself — the copied dist and its symlinks —
+  // is ignored, so it is never cleaned and never re-copied.
+  git(fix.root, "reset", "--hard", "-q", pristine);
+  git(fix.root, "clean", "-fdq");
 });
 
 /** Appends a chained line and its proposal, and returns the new seq. */
@@ -192,7 +215,7 @@ async function anchorHead(message: string): Promise<void> {
   commit(message);
 }
 
-afterEach(async () => {
+afterAll(async () => {
   await cleanupFixture(fix.root);
 });
 
