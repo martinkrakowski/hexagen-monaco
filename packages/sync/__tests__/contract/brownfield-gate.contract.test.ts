@@ -54,6 +54,8 @@ import {
   assertBuiltArtifactsPresent,
   cleanupFixture,
   createPublishedLayoutFixture,
+  describeResult,
+  runHexagen,
   runProcess,
   writeBinStub,
   type ContractFixture,
@@ -95,7 +97,8 @@ interface WorkflowStep {
   readonly uses?: string;
   readonly if?: string;
   readonly run?: string;
-  readonly continueOnError?: boolean;
+  /** Dashed, as GitHub spells it — and as the only place a step opts out. */
+  readonly "continue-on-error"?: boolean;
   readonly env?: Readonly<Record<string, string>>;
 }
 
@@ -197,11 +200,13 @@ function substitute(
 }
 
 /**
- * The step conditions this suite evaluates: `always()`, and the two `env`
- * comparisons. An unrecognised form throws rather than defaulting to "run it" —
- * a step the harness believed it ran (or skipped) is a step nobody tested.
+ * The step conditions this suite evaluates: `always()`, and `==` / `!=` against
+ * a job env value or a step output. An unrecognised form throws rather than
+ * defaulting to "run it" — a step the harness believed it ran (or skipped) is a
+ * step nobody tested.
  */
-const IF_ENV_COMPARE = /^env\.([A-Za-z_][A-Za-z0-9_]*)\s*(==|!=)\s*'([^']*)'$/;
+const IF_COMPARE =
+  /^(?:env\.([A-Za-z_][A-Za-z0-9_]*)|steps\.([A-Za-z_][A-Za-z0-9_-]*)\.outputs\.([A-Za-z_][A-Za-z0-9_-]*))\s*(==|!=)\s*'([^']*)'$/;
 
 function stepIsEnabled(
   step: WorkflowStep,
@@ -210,14 +215,17 @@ function stepIsEnabled(
   if (step.if === undefined) return true;
   const expr = step.if.trim();
   if (expr === "always()") return true;
-  const match = IF_ENV_COMPARE.exec(expr);
+  const match = IF_COMPARE.exec(expr);
   if (match === null) {
     throw new Error(
       `the gate harness cannot evaluate the step condition \`if: ${expr}\`; extend it rather than guessing`,
     );
   }
-  const actual = values[match[1] as string];
-  return match[2] === "==" ? actual === match[3] : actual !== match[3];
+  const actual =
+    match[1] !== undefined
+      ? values[match[1]]
+      : values[`steps.${match[2]}.outputs.${match[3]}`];
+  return match[4] === "==" ? actual === match[5] : actual !== match[5];
 }
 
 /** A `GITHUB_OUTPUT` / `GITHUB_ENV` file: one `name=value` per line. */
@@ -373,7 +381,7 @@ async function runGate(opts: GateOptions): Promise<GateResult> {
     Object.assign(env, readRunnerEnvFile(runner.GITHUB_ENV as string));
     if (
       r.code !== 0 &&
-      step.continueOnError !== true &&
+      step["continue-on-error"] !== true &&
       stoppedAt === undefined
     ) {
       jobExit = r.code;
@@ -389,15 +397,18 @@ async function runGate(opts: GateOptions): Promise<GateResult> {
 }
 
 /**
- * One step of the workflow, on its own, with the outputs the
- * "Resolve the base commit" step would have written. For the cases that must
- * assert about a step the fail-fast chain never reached.
+ * One step of the workflow, on its own. Any earlier step that publishes an
+ * output (`id:`) is run first, so the values this step's `if` and its
+ * `${{ }}` expressions read are the ones the workflow would have produced —
+ * seeded by hand, they would be the harness's opinion of the base rather than
+ * the probe's.
  */
 async function runStep(name: string, opts: GateOptions): Promise<StepResult> {
   const wf = readWorkflow();
   assertWorkflowShape(wf);
-  const step = wf.steps.find((s) => s.name === name);
-  assert.ok(step !== undefined, `the workflow has no step named ${name}`);
+  const target = wf.steps.findIndex((s) => s.name === name);
+  assert.notEqual(target, -1, `the workflow has no step named ${name}`);
+  const step = wf.steps[target] as WorkflowStep;
   assert.ok(step.run !== undefined, `${name} has no run:`);
   const runner = await runnerEnv("hexagen-gate-step-");
   const values: Record<string, string> = {
@@ -405,8 +416,6 @@ async function runStep(name: string, opts: GateOptions): Promise<StepResult> {
     "github.event_name": "pull_request",
     "github.event.pull_request.base.sha": opts.base,
     "secrets.HEXAGEN_GRANT_KEY": opts.secret ?? KEY,
-    // What the resolve step wrote, so a step that reads its output runs alone.
-    "steps.base.outputs.base": opts.base,
   };
   const env: Record<string, string> = { ...runner };
   if (opts.noKey !== true) {
@@ -415,8 +424,30 @@ async function runStep(name: string, opts: GateOptions): Promise<StepResult> {
     await fs.writeFile(keyFile, `${KEY}\n`, { mode: 0o600 });
     env.HEXAGEN_GRANT_KEY_FILE = keyFile;
   }
+
   for (const [key, value] of Object.entries(step.env ?? {})) {
     env[key] = substitute(value, values);
+  }
+  // The publish-output steps that come before this one.
+  for (const before of wf.steps.slice(0, target)) {
+    if (before.id === undefined || before.run === undefined) continue;
+    const r = await runProcess(
+      "bash",
+      ["-e", "-c", substitute(before.run, values)],
+      fix.root,
+      env,
+    );
+    assert.equal(
+      r.code,
+      0,
+      `${before.name} exited ${r.code}, so ${name} would never run:\n${r.stdout}${r.stderr}`,
+    );
+    for (const [key, value] of Object.entries(
+      readRunnerEnvFile(runner.GITHUB_OUTPUT as string),
+    )) {
+      values[`steps.${before.id}.outputs.${key}`] = value;
+    }
+    Object.assign(env, readRunnerEnvFile(runner.GITHUB_ENV as string));
   }
   // A disabled step does not run, so its output never becomes a result here.
   if (!stepIsEnabled(step, values)) {
@@ -939,7 +970,41 @@ describe(
       );
     });
 
+    it("the fingerprint step fails without deciding the job (non-blocking by declaration)", async () => {
+      // A grant file the report-only step reads and the gate steps never see:
+      // steps 4 and 4b derive their grants from `git ls-files`, so an untracked
+      // one is invisible to them, while the fingerprint step globs the workspace
+      // and takes the first match. `grant show` cannot read it, so that step
+      // exits 2 — and `continue-on-error: true` is what keeps that from deciding
+      // the job. Non-blocking by declaration, not by swallowing.
+      await put(".hexagen/grants/0-not-a-grant.json", "not json\n");
+      try {
+        await put(
+          "README.md",
+          "# acme-client\n\nA repo holding only `.hexagen/`.\n",
+        );
+        commit("docs: a note the slice does not cover", ["README.md"]);
+        const run = await runGate({ base: pristine });
+
+        const fingerprint = ran(run, FINGERPRINT);
+        assert.equal(fingerprint.code, 2, dump(run));
+        assert.match(fingerprint.out, /grants\/0-not-a-grant\.json/, dump(run));
+        // Every gate step passed, and so does the job.
+        assert.equal(run.jobExit, 0, dump(run));
+        assert.equal(run.stoppedAt, undefined, dump(run));
+        assert.equal(reportedExit(ran(run, STEP_4B)), 0, dump(run));
+      } finally {
+        await fs.rm(abs(".hexagen/grants/0-not-a-grant.json"), { force: true });
+      }
+    });
+
     it("case 9: the whole gate runs with no apps/web and no workbench package installed", async () => {
+      await put(
+        "README.md",
+        "# acme-client\n\nA repo holding only `.hexagen/`.\n",
+      );
+      commit("docs: a note the slice does not cover", ["README.md"]);
+
       const run = await runGate({ base: pristine });
 
       assert.equal(run.jobExit, 0, dump(run));
@@ -985,6 +1050,32 @@ describe(
       assert.match(step3.out, /judges violations only/, dump(run));
       skipped(run, STEP_4B);
       assert.equal(reportedExit(ran(run, STEP_4)), 0, dump(run));
+
+      // Step 4b's `if` skips it, and the reason is the command's own
+      // precondition: it reads the slice from the `<since>` tree.
+      const skippedVerify = await runStep(STEP_4B, { base: treeOnly });
+      assert.equal(skippedVerify.code, null, dump(skippedVerify));
+      const keyFile = path.join(
+        await tempDir("hexagen-gate-key-"),
+        "engagement.key",
+      );
+      await fs.writeFile(keyFile, `${KEY}\n`, { mode: 0o600 });
+      const direct = await runHexagen(fix, [
+        "evidence",
+        "verify",
+        "--since",
+        treeOnly,
+        "--grant",
+        ".hexagen/grants/grant-1.json",
+        "--key-file",
+        keyFile,
+      ]);
+      assert.equal(direct.code, 2, describeResult(direct));
+      assert.match(
+        direct.stderr,
+        new RegExp(`no slice at .hexagen/slice.json in ${treeOnly}`),
+        describeResult(direct),
+      );
     });
 
     it("the recipe's workflow block is the workflow file, byte for byte", async () => {

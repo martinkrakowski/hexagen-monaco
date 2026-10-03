@@ -1,6 +1,7 @@
 # The brownfield CI gate: a recipe, and the key story
 
-**Lane 5A of [kit plan 5](../planning/2026-10-03_kit-05-evidence-pack-and-ci-leave-behind.md).**
+**Lane 5A of [kit plan 5](../planning/2026-10-03_kit-05-evidence-pack-and-ci-leave-behind.md),
+with `hexagen evidence verify` switched on as the real step 4b in lane 5B.**
 The example workflow is [`brownfield-gate.yml`](./brownfield-gate.yml). It is an
 **example**: it is not wired into this repository's CI and must not be, because a
 client repo holds only `.hexagen/` and no `.architecture/manifest.yaml`.
@@ -11,22 +12,28 @@ read, and an HMAC'd evidence bundle that refuses a tampered blob. It runs with
 the workbench deleted: the published CLI is the only dependency, and nothing
 here reads a manifest or a web app.
 
+Every claim below is executed by
+`packages/sync/__tests__/contract/brownfield-gate.contract.test.ts`, which runs
+this workflow's own step scripts against the built CLI on a fixture client repo —
+so the recipe cannot drift from what the job does.
+
 ## What a green run says, and what it does not
 
 A green run says: **the checks this recipe names passed, on the edges
 `hexagen observe` could see, at this commit.** That is the whole claim.
 
 It does not say the agent was well behaved. It does not say the trace is true,
-only that its chain and its cited grants hold. It does not say a write happened
-— until `hexagen evidence verify` lands (kit plan 1, lane 1A, step 4b below), no
-step here asks whether every changed file has a line covering it. Say this to a
-client in those words.
+only that its chain and its cited grants hold, and that every file this PR
+changed inside the slice or inside a grant's paths has an anchored trace line
+covering it (step 4b). That last one is found **after the fact**: nothing here
+stops the write, and a change applied through a path no line records is reported,
+not prevented. Say this to a client in those words.
 
 Nor can the CLI re-open a saved bundle yet: the bundle index's HMAC verifier
 exists as a library function, called by `hexagen workbook export` and its tests,
 and no command takes a zip and checks it. What the client can do today is re-run
 `hexagen evidence pack` against the committed trace with the engagement key,
-which is the same judgement the CI step makes.
+which is the same judgement step 4 makes.
 
 ## Step 0: the `.hexagen/` inputs must be committed
 
@@ -77,9 +84,12 @@ commit, and it never skips.
 | 2   | `hexagen slice check --strict`                                               | **no** (exit 2 only)   | drift — logged, not gated                                        | bad input or stale state       |
 | 3   | `hexagen contract check --base <pinned PR base SHA>`                         | yes                    | a rule crossed that is not in the baseline, or the gate weakened | bad input at the base          |
 | 4   | `hexagen evidence pack <trace> --grant <each staged grant> --out <temp>.zip` | yes                    | the evidence is invalid; no bundle written                       | usage or a failed precondition |
+| 4b  | `hexagen evidence verify --since <pinned PR base SHA> --grant <each grant>`  | yes                    | a changed file no anchored line covers                           | bad input or stale state       |
 
 Step 3 runs the plain `hexagen contract check` instead when the base predates the
-sidecar files — the bootstrap PR — and says so in the log; see
+sidecar files — the bootstrap PR — and says so in the log; step 4b does not run
+there at all, because it reads the slice from the `<since>` tree and that PR's
+base has none. See
 [The first PR](#the-first-pr-no-base-to-compare-against) below.
 
 Every step prints its own `step <n> exit <code>` line, so a reader of the log can
@@ -132,47 +142,69 @@ that predates them — so `--base` would fail that PR with "absent at base becau
 it was never staged", which is true of the base and has nothing to do with the
 change under review. Failing the PR that sets the gate up is not a gate.
 
-Step 3 therefore probes first, with `git cat-file -e "<base>:<path>"` on both
-files:
+The **"Resolve the base commit"** step therefore probes once, with
+`git cat-file -e "<base>:<path>"` on both files, and publishes what it found as
+`absent_at_base`. Steps 3 and 4b both read that one output, because a probe
+written twice is a probe that can disagree with itself:
 
 - **base carries them** — the normal case: `hexagen contract check --base <sha>`,
-  and both violations and growth fail the PR.
-- **base carries neither** — the bootstrap PR: it logs
+  and both violations and growth fail the PR; and step 4b judges the range.
+- **base carries neither** — the bootstrap PR: step 3 logs
   `::notice::bootstrap: no contract at base <sha>; growth guard starts on the next PR`,
   names which sidecar files were absent, and runs the plain `hexagen contract
 check`. Violations still fail the job. Only the growth comparison is skipped.
+  **Step 4b does not run at all**: `evidence verify` reads the slice from the
+  `<since>` tree, and there is no slice there, so it would exit 2 for a
+  precondition that has nothing to do with the change.
 
-**The growth guard protects from the second PR onward**, once the base carries the
-contract. The bootstrap PR is judged on violations alone, and the log says so
-rather than leaving a reader to infer a pass. If the base has the contract and
-the PR deletes it, that is not the bootstrap: step 0 has already failed the PR by
-name, so step 3's probe cannot be reached with a deleted contract.
+**The growth guard, and step 4b's coverage check, protect from the second PR
+onward**, once the base carries the contract. The bootstrap PR is judged on
+violations alone, and the log says so rather than leaving a reader to infer a
+pass. If the base has the contract and the PR deletes it, that is not the
+bootstrap: step 0 has already failed the PR by name, so the probe cannot be
+reached with a deleted contract.
 
-### Step 4 writes a bundle and throws it away
+### Steps 4 and 4b: the whole trace, then this PR
 
-`evidence pack`'s contract is that it either writes a bundle that passed or writes
-nothing at all, so a CI step that only wants a yes/no has to write somewhere
-disposable. The example writes `.hexagen/ci-evidence-bundle.zip` in the CI
-workspace and lets the runner delete it. A pass also advances
-`.hexagen/evidence/tip.json` in that workspace; nothing is pushed, so the
-repository's tip is untouched.
+They are two checks, not one check in two costumes, and the example runs both.
 
-This is also the argument for `hexagen evidence verify` as the CI step: it reads,
-judges a range, and writes nothing at all. **Step 4b in the example is that step,
-written out and linted but disabled.** It turns on by flipping one value —
-`USE_EVIDENCE_VERIFY: "true"` — which swaps step 4 out for step 4b. Do it when
-`hexagen evidence verify` is merged (kit plan 1, lane 1A), and expect its first
-run to be new: nothing has executed it yet.
+**Step 4** packs. `evidence pack`'s contract is that it either writes a bundle
+that passed or writes nothing at all, so it is the whole-trace gate: every line
+of the committed trace is checked — chain, line shape, Rules 1 to 4, the cited
+grants — and a bundle is written for the job to throw away. The example writes
+`.hexagen/ci-evidence-bundle.zip` in the CI workspace and lets the runner delete
+it. A pass also advances `.hexagen/evidence/tip.json` in that workspace; nothing
+is pushed, so the repository's tip is untouched.
+
+**Step 4b** verifies the range and writes nothing at all: no bundle, no tip, no
+lock. It is the only step that narrows to what this PR changed, and the only one
+that carries a per-PR signal — a file inside the slice or inside a supplied
+grant's paths that no anchored trace line covers is unaccounted, and exits 1.
+
+**Verify needs the anchored tip, and it reads the one the client committed.**
+`evidence verify` judges the `<since>..<until>` range against the trace, the tip
+and the proposals **as committed at the PR head**, never the working copy: only
+evidence in that tree is evidence for the range. So the tip step 4 advances here
+cannot stand in for it — that write lives in the runner's workspace and is thrown
+away. A client who appends a line, does not `hexagen evidence pack` before
+committing, and opens the PR gets exit 1 and the command that fixes it:
+
+```
+::error::evidence verify exit 1: a changed file inside the slice or a grant has no covering trace line.
+cover exists but is not anchored: run hexagen evidence pack
+```
+
+which is the answer to give a client who asks why their first PR is red.
 
 ## The workflow
 
 Copy this into the client repo's `.github/workflows/`. It is byte-for-byte
 [`brownfield-gate.yml`](./brownfield-gate.yml); keep the two identical, and edit
-only the two `EDIT SPOT` values.
+only the `EDIT SPOT` value.
 
 ```yaml
-# EXAMPLE — copy this into the CLIENT repo's .github/workflows/ and edit the two
-# spots marked EDIT SPOT below.
+# EXAMPLE — copy this into the CLIENT repo's .github/workflows/ and edit the
+# spot marked EDIT SPOT below.
 #
 # It is not wired into this repository's CI and must not be: a client repo holds
 # only `.hexagen/` and no `.architecture/manifest.yaml`, so the generated
@@ -207,12 +239,6 @@ env:
   # EDIT SPOT 1 — the CLI pin. Pin it to the version the FDE ran locally, and
   # bump it deliberately: `hexagen --help` is the check that the pin exists.
   HEXAGEN_VERSION: "0.13.0"
-  # EDIT SPOT 2 — flip to "true" when `hexagen evidence verify` ships (kit plan 1,
-  # lane 1A), then commit. It swaps step 4 for step 4b: the pack step stops
-  # running and the read-only verify step takes its place. Both are written out
-  # here so both are linted today; the disabled one has never been executed by
-  # this job, so treat its first run as new.
-  USE_EVIDENCE_VERIFY: "false"
 
 jobs:
   brownfield-gate:
@@ -268,8 +294,26 @@ jobs:
             echo "::error::base commit '${base}' is not in this checkout; a pull_request run needs fetch-depth: 0. Refusing to gate against an unknown base."
             exit 2
           fi
+          # What the base holds, resolved once for both of the steps that care.
+          # Every writer of `.hexagen/` adds it to `.git/info/exclude`
+          # (`slice init`, `contract add-rule`, `contract check --baseline`,
+          # `observe`, `grant issue`), so the PR that FIRST stages the sidecar
+          # files has a base that predates them: `git show` cannot tell "never
+          # staged" from "the commit that adds them", and there is nothing at
+          # that base to compare growth against or to judge a range against. Both
+          # steps below need to know when that is the case, and a probe written
+          # twice is a probe that can disagree with itself, so it is written here
+          # once and published as a step output.
+          absent=""
+          for sidecar in .hexagen/contract.json .hexagen/slice.json; do
+            if ! git cat-file -e "${base}:${sidecar}" 2>/dev/null; then
+              absent="${absent} ${sidecar}"
+            fi
+          done
           echo "base=${base}" >> "${GITHUB_OUTPUT}"
+          echo "absent_at_base=${absent}" >> "${GITHUB_OUTPUT}"
           echo "gating against base ${base}"
+          echo "absent at the base commit:${absent:- none}"
 
       - name: "step 0: the .hexagen/ inputs must be tracked"
         run: |
@@ -372,26 +416,14 @@ jobs:
           # step does not pass --strict, so it could only warn.
           set -uo pipefail
           base="${{ steps.base.outputs.base }}"
-          # The growth guard reads BOTH sidecar files AT the base commit and exits
-          # 2 when either is absent there — with `.hexagen/` in the exclude file,
-          # "never staged" and "the commit that adds it" look the same to `git
-          # show`, so there is no first-commit pass inside the command. The PR
-          # that first stages `.hexagen/` therefore has a base that predates the
-          # contract, and `--base` would fail that PR for a reason that has
-          # nothing to do with the change. So probe first: when the base holds no
-          # contract, run the plain check, which still fails on any violation.
-          # That PR is judged on violations only; growth is guarded from the next
-          # PR onward, once the base carries the contract.
+          absent="${{ steps.base.outputs.absent_at_base }}"
+          # When the base holds no contract, run the plain check, which still
+          # fails on any violation. That PR is judged on violations only; growth
+          # is guarded from the next PR onward, once the base carries the contract.
           #
           # A base that DOES hold them, and a PR that deletes them, is a different
           # thing and step 0 has already failed that PR by name — so this branch
           # is only reachable on the PR that introduces the sidecars.
-          absent=""
-          for sidecar in .hexagen/contract.json .hexagen/slice.json; do
-            if ! git cat-file -e "${base}:${sidecar}" 2>/dev/null; then
-              absent="${absent} ${sidecar}"
-            fi
-          done
           if [ -n "${absent}" ]; then
             echo "::notice::bootstrap: no contract at base ${base}; growth guard starts on the next PR"
             echo "::notice::absent at the base commit:${absent} — nothing to compare against, so this run judges violations only"
@@ -440,14 +472,18 @@ jobs:
           echo "wrote the engagement key to ${key_file} (mode 600, outside the checkout)"
 
       - name: "step 4: evidence pack"
-        if: env.USE_EVIDENCE_VERIFY != 'true'
         run: |
-          # Reads the whole trace and writes a bundle the job throws away. That is
-          # deliberate: `evidence pack`'s contract is that it either writes a
-          # bundle that passed or writes nothing, so a CI step that only wants a
-          # yes/no has to write somewhere disposable. A pass also advances
+          # The whole-trace gate: every line of the committed trace is checked —
+          # chain, line shape, Rules 1 to 4, the cited grants — and a bundle that
+          # passed is written for the job to throw away. `evidence pack`'s
+          # contract is that it either writes a bundle that passed or writes
+          # nothing at all, so a CI step that only wants a yes/no has to write
+          # somewhere disposable; step 4b is the step that only wants a yes/no,
+          # and it is not a replacement for this one. A pass also advances
           # `.hexagen/evidence/tip.json` in this workspace; nothing is pushed, so
-          # the repository's tip is untouched.
+          # the repository's tip is untouched — and step 4b reads the tip at the
+          # PR head, not this one, so it is judged against what the client
+          # committed rather than against what this job just anchored.
           set -uo pipefail
           grants=()
           while IFS= read -r grant; do
@@ -474,15 +510,27 @@ jobs:
           exit "${code}"
 
       - name: "step 4b: evidence verify --since <base>"
-        if: env.USE_EVIDENCE_VERIFY == 'true'
+        # Skipped on the one PR that first stages `.hexagen/`: `evidence verify`
+        # reads the slice from the `<since>` tree, and that PR's base predates the
+        # slice, so it would exit 2 for a precondition that has nothing to do
+        # with the change under review. Step 3 already judges that PR on
+        # violations alone. From the next PR on the base carries the slice, and
+        # this step judges the range. The probe is in the "Resolve the base
+        # commit" step above; step 3 reads the same output.
+        if: steps.base.outputs.absent_at_base == ''
         run: |
-          # The read-only replacement for step 4, once `hexagen evidence verify`
-          # ships (kit plan 1, lane 1A). It never writes: no bundle, no tip. It
-          # also narrows to what the PR changed — a file inside the slice or
-          # inside a supplied grant with no trace line covering it is unaccounted
-          # and exits 1, which is a per-PR signal the whole-trace pack cannot
-          # give. Exit 1 = an unaccounted change; 2 = bad input or stale state
-          # (an unresolvable --since, a missing trace, an empty diff).
+          # The per-PR gate, and the only step that narrows to what this PR
+          # changed: a file inside the slice or inside a supplied grant with no
+          # trace line covering it is unaccounted, and exits 1. It never writes —
+          # no bundle, no tip — and it does not need the bundle step 4 writes.
+          #
+          # It does need the anchored tip, and it reads the one the client
+          # committed at the PR head: only a line a key-holder's `evidence pack`
+          # anchored can cover a change, so a client who appends a line and does
+          # not pack before committing gets exit 1 and the command that fixes it.
+          # Exit 1 = an unaccounted change; 2 = bad input or stale state (an
+          # unresolvable --since, a trace that is not sound evidence, a missing
+          # tip, an empty diff).
           set -uo pipefail
           grants=()
           while IFS= read -r grant; do
@@ -609,17 +657,16 @@ refuses a tampered blob**.
 
 - It does not gate on drift between commits, because `hexagen slice check --since
   <base>` does not exist yet.
-- It does not ask whether every changed file has a trace line covering it. That
-  is `hexagen evidence verify` (step 4b), pending lane 1A.
-- It does not stop a write. It finds evidence that does not hold after the fact.
+- It does not stop a write. Step 4b finds an unaccounted one after the fact.
 - It does not commit anything back, and it does not advance the repository's tip.
 - It does not cover a change applied through `hexagen_accept_transaction`, which
-  leaves no path list for a future `verify` to join.
+  leaves no path list for `evidence verify` to join.
 - It does not re-open a saved bundle; no command takes a zip and checks its index
   HMAC yet.
-- On the one PR that first stages `.hexagen/`, it checks violations but not
-  growth — there is no contract at that PR's base to compare against. From the
-  next PR on, both.
+- On the one PR that first stages `.hexagen/`, it checks violations but neither
+  growth (there is no contract at that PR's base to compare against) nor coverage
+  (there is no slice at that base for `evidence verify` to judge the range
+  against). From the next PR on, all three.
 
 Each of those is named in [kit plan 5](../planning/2026-10-03_kit-05-evidence-pack-and-ci-leave-behind.md)
 §7 rather than papered over here, because the recipe is what a client reads when
@@ -640,9 +687,13 @@ the FDE is gone.
   the staging precondition and the step order.
 - [Plan 1 §5 and §11](../planning/2026-10-03_kit-01-unaccounted-mutation-check.md) —
   `evidence verify`, its exit codes, and the same precondition.
-- [`docs/kernel/TRACE.md`](../kernel/TRACE.md) — what the pack checks, and what
-  the tip anchors.
+- [`docs/kernel/TRACE.md`](../kernel/TRACE.md) — what the pack checks, that the
+  evidence is read from the tree rather than the checkout, and what the tip
+  anchors.
 - [`docs/kernel/GRANT.md`](../kernel/GRANT.md) — key resolution, the fingerprint,
   and deleting the key as an emergency stop.
+- `packages/sync/__tests__/contract/brownfield-gate.contract.test.ts` — runs
+  this workflow's steps against the built CLI on a fixture client repo, and
+  pins this file's workflow block to `brownfield-gate.yml`.
 - [`packages/sync/README.md`](../../packages/sync/README.md) — the command
   surfaces and their exit codes.
