@@ -95,6 +95,15 @@ export function runProcess(
   file: string,
   args: string[],
   cwd: string,
+  /**
+   * Replaces the inherited environment when given. The contract suites that
+   * only spawn the CLI leave it unset; the brownfield-gate suite runs the
+   * example workflow's own shell, which resolves `hexagen` from PATH and
+   * reads RUNNER_TEMP, HOME and the GITHUB_* files, so it builds the
+   * environment a runner would hand the step instead of inheriting this
+   * process's.
+   */
+  env?: NodeJS.ProcessEnv,
 ): Promise<RunResult> {
   return new Promise((resolve, reject) => {
     execFile(
@@ -102,6 +111,7 @@ export function runProcess(
       args,
       {
         cwd,
+        ...(env === undefined ? {} : { env }),
         timeout: 120_000,
         maxBuffer: 10 * 1024 * 1024,
         // Node >= 18.20 refuses to spawn .cmd/.bat directly (EINVAL, the
@@ -149,19 +159,39 @@ export interface ContractFixture {
   lintBin: string;
 }
 
+export interface ContractFixtureOptions {
+  /**
+   * Build the consumer side of a BROWNFIELD repo: no
+   * `.architecture/manifest.yaml` and no `packages/`. A client repo holds
+   * `.hexagen/` and nothing else, and the difference is load-bearing for the
+   * CLI itself — `isRepoMode` (packages/shared/src/node/grant-key.ts) reads
+   * the manifest to choose key resolution, so a fixture that keeps one would
+   * make the commands under test look for a repo-mode key a client cannot have.
+   */
+  clientRepo?: boolean;
+}
+
 export async function createPublishedLayoutFixture(
   manifestYaml: string,
   prefix = "hexagen-contract-",
+  opts: ContractFixtureOptions = {},
 ): Promise<ContractFixture> {
   const root = await createFixture([], prefix);
 
-  await fs.mkdir(path.join(root, "packages"), { recursive: true });
-  await fs.mkdir(path.join(root, ".architecture"), { recursive: true });
-  await fs.writeFile(
-    path.join(root, ".architecture", "manifest.yaml"),
-    manifestYaml,
-    "utf8",
-  );
+  if (opts.clientRepo === true) {
+    // createFixture makes an empty `packages/` for bounded contexts; a client
+    // repo has no workspaces, and an empty one would be walked as a package
+    // root by `hexagen observe`.
+    await fs.rm(path.join(root, "packages"), { recursive: true, force: true });
+  } else {
+    await fs.mkdir(path.join(root, "packages"), { recursive: true });
+    await fs.mkdir(path.join(root, ".architecture"), { recursive: true });
+    await fs.writeFile(
+      path.join(root, ".architecture", "manifest.yaml"),
+      manifestYaml,
+      "utf8",
+    );
+  }
 
   const pkgDir = path.join(root, "node_modules", "@hexagen-monaco", "sync");
   await fs.mkdir(pkgDir, { recursive: true });
