@@ -134,6 +134,10 @@ vi.stubGlobal("fetch", fetchMock);
 // terminal "done" event so generation completes and parks. The manufactured
 // system name ("test-system") doubles as the AI-derived workspace name the
 // bypassed-name hand-off asserts on.
+//
+// `mockStageDone(ndjson?)` additionally hands back the stream's own
+// "terminal frame processed" signal (see stagedNdjsonResponse / awaitParkedRun)
+// so callers wait on the run, never on a deadline (#723).
 const STAGE_ENDPOINT = "/api/manifest/generate/stage";
 const DONE_MANIFEST_YAML = [
   "system: test-system",
@@ -151,13 +155,148 @@ const stageDoneEvent = `${JSON.stringify({
   portCount: 0,
   adapterCount: 0,
 })}\n`;
-const mockStageDone = () => {
-  fetchMock.mockImplementation((input: RequestInfo | URL) =>
-    String(input) === STAGE_ENDPOINT
-      ? Promise.resolve(new Response(stageDoneEvent, { status: 200 }))
-      : pendingForever(),
+/** The staged call in flight — resolved once ITS read loop has processed the
+ *  terminal `done` frame. Minted per call inside the mock (a test can drive two
+ *  runs, e.g. the bypassed-flow round trip), so awaitParkedRun never latches
+ *  onto an earlier run's already-settled signal. Reset in beforeEach so no
+ *  stale signal can survive into the next test. */
+let terminalFrameProcessed: Promise<void> = Promise.resolve();
+
+/**
+ * The staged endpoint's NDJSON body as a real `ReadableStream`, plus the
+ * signal the test waits on.
+ *
+ * Why not a plain `new Response(ndjson)`: that resolves the fetch promise but
+ * tells the test nothing about WHEN the run finished, so "has the parked
+ * footer appeared?" could only be answered by polling the DOM against a clock.
+ * That is what #723 was: the whole terminal-frame → parked-footer chain is a
+ * settled promise chain (one resolved fetch, one frame, React renders) and
+ * settles in tens of milliseconds — measured here at 32–74 ms for the settle
+ * below — yet the old `waitFor` spent 658–731 ms of RTL's default 1000 ms
+ * budget discovering it on an IDLE host. A runner sharing CPUs with the rest of
+ * CI's suite blew the deadline with the run long since finished.
+ *
+ * The stream deliberately never closes. Two spec details make that load-bearing:
+ *
+ *   - The read loop treats a terminal `done`/`error` frame as final and calls
+ *     `reader.cancel()` on the spot (useStagedGenerationStream's
+ *     `applyTerminalFrame` arm). Cancelling a READABLE stream invokes the
+ *     underlying source's `cancel` synchronously, i.e. inside the very block
+ *     that applied the frame — the only boundary the mock owns there.
+ *   - A stream that has already closed cannot report that at all: `cancel()` on
+ *     a closed stream is a no-op per spec. Draining the enqueued chunk makes
+ *     the controller `pull` again (desiredSize > 0), so a `pull` that closed
+ *     the stream on its second call would silently disarm the signal.
+ *
+ * So `pull` delivers the frames once and then holds the connection open, the
+ * way a server that has not yet hung up would. Resolving from `cancel` means
+ * every terminal-frame setState has already been issued; the rest of the chain
+ * is microtasks + renders that `awaitParkedRun`'s act scope flushes. No clock
+ * is involved on either side.
+ *
+ * `signal` is the request's own AbortSignal, which a held-open mock body would
+ * otherwise ignore: an unmounted page aborts its run, and a body that never
+ * errors on that abort leaves `reader.read()` pending forever — a live handle
+ * on a test that has already moved on. Erroring the controller mirrors what a
+ * real aborted fetch body does, so the run's own abort handling is what runs.
+ *
+ * `markProcessed` is passed per call rather than read from module scope: a
+ * stream leaked by an earlier test (its page unmounted before the terminal
+ * frame arrived) would otherwise cancel into whatever deferred the CURRENT test
+ * is waiting on, settling it for the wrong run.
+ */
+const stagedNdjsonResponse = (
+  ndjson: string,
+  markProcessed: () => void,
+  signal?: AbortSignal | null,
+): Response => {
+  const encoder = new TextEncoder();
+  let delivered = false;
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      if (!signal) return;
+      const abortBody = () => {
+        controller.error(new DOMException("aborted", "AbortError"));
+      };
+      if (signal.aborted) {
+        abortBody();
+        return;
+      }
+      signal.addEventListener("abort", abortBody, { once: true });
+    },
+    pull(controller) {
+      if (delivered) return; // held open; the read loop's cancel() ends it
+      delivered = true;
+      controller.enqueue(encoder.encode(ndjson));
+    },
+    cancel() {
+      markProcessed();
+    },
+  });
+  return new Response(body, { status: 200 });
+};
+
+const mockStageDone = (ndjson: string = stageDoneEvent) => {
+  fetchMock.mockImplementation(
+    (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) !== STAGE_ENDPOINT) return pendingForever();
+      let markProcessed!: () => void;
+      terminalFrameProcessed = new Promise<void>((resolve) => {
+        markProcessed = resolve;
+      });
+      return Promise.resolve(
+        stagedNdjsonResponse(ndjson, markProcessed, init?.signal),
+      );
+    },
   );
 };
+
+/**
+ * Drive a mocked staged run to its parked-completed state, deterministically.
+ *
+ * `mockStageDone()` first, then submit the composer, then await this instead
+ * of `waitFor`ing the footer: the run's terminal-frame signal is awaited INSIDE
+ * one act scope, so the run's remaining promise continuations and the renders
+ * they schedule are flushed before it returns.
+ *
+ * This settles the RUN, not the footer. `useStagedManifestGeneration` still has
+ * to `await cloudStream.generate()` — one more microtask hop — before it sets
+ * phase "complete", and only then does GenerateWithAi's effect publish the
+ * footer's Next. Assertions that read the parked UI therefore wait with
+ * `findByRole`/`findByText` at their default timeout: a bounded safety net over
+ * that effect hop, not the clock-bound race #723 was.
+ *
+ * Safe against a stale signal because the submit's act scope reaches the
+ * staged `fetch` synchronously (the flow transition, the generation effect and
+ * the request itself all run inside `fireEvent.submit`'s scope), so the pending
+ * signal when this is called always belongs to the run just submitted.
+ */
+const awaitParkedRun = async () => {
+  await act(async () => {
+    await terminalFrameProcessed;
+  });
+};
+
+/**
+ * The waits deliberately left in place, and why none of them is the #723 race.
+ *
+ * Every remaining `waitFor` in this file gates a transition the MOCKED STREAM
+ * does not drive, so there is no server, no stream and no frame delivery on the
+ * other side of the clock — only local React state that lands in the act scope
+ * of the interaction that started it:
+ *
+ *   - "Generating Manifest" (in-flight tests, and the auto-start one): the
+ *     flow-state machine's transition to "generating", entered from a submit or
+ *     from the mount effect. The run stays in flight there by design — the
+ *     default fetch is `pendingForever` — so no frame can gate the view.
+ *   - the local warning dialog and the /models push that follows it: a click
+ *     handler plus a router mock, with no generation involved.
+ *   - `stageCalls().length` (the wired-controls test): the staged fetch is
+ *     invoked synchronously inside `fireEvent.submit`'s act scope, so the count
+ *     is already 1 on the next line.
+ *   - the Section A store mirror (the abandoned-attempt test): a synchronous
+ *     store write from the change handler.
+ */
 /** fetch calls that hit the staged endpoint — the capability probe and other
  * consumers stay on the pending-forever default and must not count. */
 const stageCalls = () =>
@@ -238,6 +377,9 @@ beforeEach(() => {
   fetchMock.mockClear();
   fetchMock.mockImplementation(pendingForever);
   flowStateOverride.current = null;
+  // No staged run in flight for the next test: an already-settled signal, so
+  // awaitParkedRun can never be satisfied by a PREVIOUS test's stream.
+  terminalFrameProcessed = Promise.resolve();
 });
 
 describe("AIGenerationPage — Plan Workbench C1", () => {
@@ -361,13 +503,17 @@ describe("AIGenerationPage — Plan Workbench C1", () => {
 
     // The stream's terminal "done" event completes the run: the flow stays
     // parked on the telemetry view and the shell footer swaps Cancel for
-    // Go Back plus the explicit Next.
-    await waitFor(() =>
-      assert.ok(screen.getByRole("button", { name: "Next" })),
-    );
-    assert.ok(screen.getByRole("button", { name: "Go Back" }));
+    // Go Back plus the explicit Next. awaitParkedRun settles the RUN off the
+    // stream's own terminal-frame signal (#723); the footer assertions then
+    // read it with findByRole, because publishing the footer actions is one
+    // more hop behind the frame (see awaitParkedRun).
+    await awaitParkedRun();
+    assert.ok(await screen.findByRole("button", { name: "Next" }));
+    assert.ok(await screen.findByRole("button", { name: "Go Back" }));
+    // Negative half of the swap: a findBy would have to WAIT out its timeout
+    // to prove the absence, so it stays a queryBy behind the two positives.
     assert.equal(screen.queryByRole("button", { name: "Cancel" }), null);
-    assert.ok(screen.getByText("Generating Manifest"));
+    assert.ok(await screen.findByText("Generating Manifest"));
 
     // Parked means parked: the success arm must NEVER router.push — the
     // hand-off to /ai/accept happens only through the footer's explicit
@@ -410,11 +556,7 @@ describe("AIGenerationPage — Plan Workbench C1", () => {
         passed: false,
       },
     })}\n`;
-    fetchMock.mockImplementation((input: RequestInfo | URL) =>
-      String(input) === STAGE_ENDPOINT
-        ? Promise.resolve(new Response(doneWithValidation, { status: 200 }))
-        : pendingForever(),
-    );
+    mockStageDone(doneWithValidation);
     render(<AIGenerationPage llmContext={makeLlmContext()} />);
 
     fireEvent.change(composerTextarea(), {
@@ -423,26 +565,31 @@ describe("AIGenerationPage — Plan Workbench C1", () => {
     submitComposer();
 
     // Run completes and parks (footer Next present) — the findings panel
-    // renders alongside the telemetry log.
-    await waitFor(() =>
-      assert.ok(screen.getByRole("button", { name: "Next" })),
-    );
+    // renders alongside the telemetry log. Both are consequences of the same
+    // terminal frame, so one deterministic settle covers them (#723); each
+    // parked-view read then waits for the effect hop behind the frame.
+    await awaitParkedRun();
+    assert.ok(await screen.findByRole("button", { name: "Next" }));
     // 1 error + 1 reviewer warning → "1 finding and 1 suggestion"; the R03
     // advisory is NOT counted here (it's an adjustment).
     assert.ok(
-      screen.getByText(/1 finding and 1 suggestion from the review/, {
+      await screen.findByText(/1 finding and 1 suggestion from the review/, {
         exact: false,
       }),
     );
     assert.ok(
-      screen.getByText(/1 adjustment was.*applied automatically/, {
+      await screen.findByText(/1 adjustment was.*applied automatically/, {
         // summary text is broken across inline nodes
         exact: false,
       }),
     );
     // The adjustment notice's remedy must be route-appropriate: /stage has no
     // source spec to re-import, so the panel's /spec default may not leak in.
-    assert.ok(screen.getByText(/adjust your prompt and generate again/i));
+    assert.ok(
+      await screen.findByText(/adjust your prompt and generate again/i),
+    );
+    // Absence is asserted with queryBy behind those positives — a findBy would
+    // have to burn its whole timeout to prove it.
     assert.equal(screen.queryByText(/re-import/i), null);
     // Still parked — surfacing findings must not introduce auto-navigation.
     assert.equal(nav.push.mock.calls.length, 0);
@@ -465,11 +612,7 @@ describe("AIGenerationPage — Plan Workbench C1", () => {
       adapterCount: 0,
       validation: report,
     })}\n`;
-    fetchMock.mockImplementation((input: RequestInfo | URL) =>
-      String(input) === STAGE_ENDPOINT
-        ? Promise.resolve(new Response(doneWithValidation, { status: 200 }))
-        : pendingForever(),
-    );
+    mockStageDone(doneWithValidation);
     render(<AIGenerationPage llmContext={makeLlmContext()} />);
 
     fireEvent.change(composerTextarea(), {
@@ -477,9 +620,10 @@ describe("AIGenerationPage — Plan Workbench C1", () => {
     });
     submitComposer();
 
-    const nextButton = await waitFor(() =>
-      screen.getByRole("button", { name: "Next" }),
-    );
+    // Parked on completion (deterministically settled — #723), then the
+    // hand-off through the footer's explicit Next.
+    await awaitParkedRun();
+    const nextButton = await screen.findByRole("button", { name: "Next" });
     fireEvent.click(nextButton);
 
     assert.deepEqual(nav.push.mock.calls, [["/projects/new/ai/accept"]]);
@@ -562,10 +706,11 @@ describe("AIGenerationPage — Plan Workbench C1", () => {
     submitComposer();
 
     // Generation completes (the stream's done event) and parks on telemetry;
-    // the footer's explicit Next performs the hand-off.
-    const nextButton = await waitFor(() =>
-      screen.getByRole("button", { name: "Next" }),
-    );
+    // the footer's explicit Next performs the hand-off. The completion is
+    // awaited off the stream's terminal-frame signal, not a deadline (#723),
+    // and the footer itself is read with findByRole (one effect hop later).
+    await awaitParkedRun();
+    const nextButton = await screen.findByRole("button", { name: "Next" });
     fireEvent.click(nextButton);
 
     // The manufactured name is the manifest's AI-derived workspace name.
@@ -663,15 +808,16 @@ describe("AIGenerationPage — Plan Workbench C2", () => {
 
   /** Drive a full run to the parked telemetry view and click the footer's
    * explicit Next — the hand-off that fills usePendingManifest. Callers must
-   * mockStageDone() first. */
+   * mockStageDone() first; the run is settled off the stream's terminal-frame
+   * signal rather than a `waitFor` deadline (#723), and the footer is read with
+   * findByRole because publishing it is one effect hop behind that signal. */
   const generateAndHandOff = async () => {
     fireEvent.change(composerTextarea(), {
       target: { value: VALID_DESCRIPTION },
     });
     submitComposer();
-    const nextButton = await waitFor(() =>
-      screen.getByRole("button", { name: "Next" }),
-    );
+    await awaitParkedRun();
+    const nextButton = await screen.findByRole("button", { name: "Next" });
     fireEvent.click(nextButton);
   };
 
@@ -754,7 +900,10 @@ describe("AIGenerationPage — Plan Workbench C2", () => {
       target: { value: VALID_DESCRIPTION },
     });
     submitComposer();
-    await waitFor(() => assert.equal(stageCalls().length, 1));
+    // No wait: the submit's act scope invokes the staged fetch synchronously
+    // (verified by deleting this wait — the assertion still held), so there is
+    // nothing here to race against.
+    assert.equal(stageCalls().length, 1);
     const [, init] = stageCalls()[0];
     const body = JSON.parse(String((init as RequestInit).body));
     assert.equal(body.deployment, "AWS Lambda");
