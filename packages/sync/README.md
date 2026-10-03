@@ -447,8 +447,9 @@ npx hexagen contract check --base <base-sha> --allow-growth --reason "<why>"
   root-package target (`.`), a target an `excludes` entry denies, or a target
   spelled as a directory — is reported as `not proposed:` with the advice that
   would accept it, because a rule naming one would still fail, or would accept
-  far more than the crossing observed. The printed `add-rule` line is
-  shell-quoted, so it can be pasted as it stands. With `--closed`, an
+  far more than the crossing observed. With `--closed`, the printed `add-rule`
+  line is shell-quoted, so it can be pasted as it stands; the plain
+  cross-prefix `add-rule` line is printed unquoted. With `--closed`, an
   `observed.json` whose edges were not collected refuses (exit 2) and prints no
   command at all: nothing is known about the crossings, so "no edge leaves the
   slice" would be a claim the report cannot make. An incomplete edge list is a
@@ -582,7 +583,7 @@ than `HEAD` the commands warn, and with `--strict` fail.
 
 | Code | Meaning                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 0    | Clean (`slice check`, `contract check`), growth accepted with `--allow-growth`, or the command succeeded                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| 0    | Clean (`slice check`, `contract check`), or growth accepted with `--allow-growth` **and** the plain check clean, or the command succeeded                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | 1    | Drift (`slice check`), or a violation not in the baseline, or incomplete edges, or growth against `--base` (`contract check`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | 2    | Bad input or refused: a missing or invalid file, a bad path or id, a refused overwrite, no `--yes`, a slice commit not in the repository, a stale `observed.json`, `--strict` and a different HEAD, an unresolvable `--base` (a shallow clone that never fetched it), a `.hexagen/` file absent at `--base` because it was never staged, a `.hexagen/` file at `--base` that exists but cannot be read, a base file that is not valid JSON or does not match its schema, an inconsistent base (the contract at `--base` names another slice than the slice there), `--allow-growth` without `--reason`, `--allow-growth` without `--base`, `--base` with `--baseline` |
 
@@ -679,7 +680,7 @@ No Trace field carries the paths: the join reads them back from
 `paths` entry edited after the line was written breaks the digest instead of being
 believed. Only a line whose `seq` is above the last `seq` in the trace as of
 `<since>` can cover anything, read with `git show`; a checkout where the trace was
-not tracked at `--since>`, or where that line is not the one the trace held there,
+not tracked at `<since>`, or where that line is not the one the trace held there,
 exits 2 rather than trusting a clock.
 
 It prints the unaccounted paths on stdout and, on stderr, each one with the
