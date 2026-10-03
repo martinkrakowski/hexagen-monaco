@@ -830,6 +830,97 @@ test("attempts reconnection on reader error", async () => {
   }
 });
 
+test("an abort mid-stream never reconnects — no backoff timers outlive unmount (#723)", async () => {
+  // The counterpart to "attempts reconnection on reader error": that one proves
+  // a genuinely lost connection is retried, this one proves an ABORT is not.
+  // An aborted body errors the pending read(), which used to land in the same
+  // catch and start a reconnect — so unmounting mid-stream refetched a run
+  // nobody was watching and left the 1s/2s/4s backoff timers running with it.
+  vi.useFakeTimers();
+  let fetchCount = 0;
+  const encoder = new TextEncoder();
+  let streamController!: ReadableStreamDefaultController<Uint8Array>;
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      streamController = controller;
+      controller.enqueue(
+        encoder.encode(
+          '{"type":"stage-start","stage":6,"label":"Validation Review"}\n',
+        ),
+      );
+      // Held open: the run is parked on the next read() when the abort lands.
+    },
+  });
+
+  global.fetch = (async (_input: unknown, init?: RequestInit) => {
+    fetchCount++;
+    const signal = init?.signal ?? undefined;
+    if (signal) {
+      // What a real aborted fetch body does: the pending read() rejects.
+      const abortBody = () => {
+        streamController.error(new DOMException("aborted", "AbortError"));
+      };
+      if (signal.aborted) {
+        abortBody();
+      } else {
+        signal.addEventListener("abort", abortBody, { once: true });
+      }
+    }
+    if (fetchCount > 1) {
+      // A reconnect attempt must never get this far; if it does, fail loudly
+      // rather than letting the run "succeed" and hide the extra request.
+      return {
+        ok: false,
+        status: 500,
+        text: async () => "reconnected after abort",
+      } as unknown as Response;
+    }
+    return { ok: true, body: stream } as unknown as Response;
+  }) as typeof fetch;
+
+  try {
+    const { result, unmount } = renderHook(() =>
+      useStagedGenerationStream({ endpoint: "/api/test", stageLabels: {} }),
+    );
+
+    let generatePromise!: ReturnType<typeof result.current.generate>;
+    await act(async () => {
+      generatePromise = result.current.generate({ description: "test" });
+      // Let the fetch resolve and Stage 6 start; generate() stays parked on the
+      // next read() because the stream is held open.
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    assert.strictEqual(fetchCount, 1, "the run issued exactly one request");
+    assert.strictEqual(result.current.phase, "stage-6");
+
+    // Unmount mid-stream: the cleanup aborts the request, which errors the
+    // parked read.
+    unmount();
+
+    let generateResult!: Awaited<typeof generatePromise>;
+    await act(async () => {
+      // Far enough to fire every reconnect backoff (1s, 2s, 4s) if one were
+      // still being started.
+      await vi.advanceTimersByTimeAsync(30_000);
+      generateResult = await generatePromise;
+    });
+
+    assert.strictEqual(
+      fetchCount,
+      1,
+      "an aborted stream must not reconnect — no request may outlive the abort",
+    );
+    // The aborted run resolves on its idle contract, not as a failure. Its
+    // REACT state is deliberately not asserted: an unmounted hook never
+    // re-renders, so `result.current` is frozen at its last committed render
+    // and says nothing about how the run ended.
+    assert.strictEqual(generateResult.phase, "idle");
+  } finally {
+    vi.useRealTimers();
+    global.fetch = originalFetch;
+  }
+});
+
 test("unmounting mid-stream aborts the in-flight request (review fix)", async () => {
   // Early-enable makes unmount-mid-stream a routine path: the user can
   // navigate away on the `manifest` frame while Stage 6/7 still stream.

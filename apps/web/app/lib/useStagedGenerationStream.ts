@@ -486,7 +486,23 @@ export function useStagedGenerationStream(
                   });
                 }
               }
-            } catch {
+            } catch (readError) {
+              // A failed read is only a LOST CONNECTION when the run is still
+              // wanted. If the request was aborted, the read is the ABORT
+              // surfacing (an aborted body errors the pending read), and
+              // reconnecting refetched a run nobody is watching — leaving the
+              // 1s/2s/4s backoff timers running after the consumer unmounted.
+              //
+              // `controller` is this run's own AbortController — the same object
+              // the unmount cleanup reaches through `abortRef` — so this stays
+              // correct even once a later generate() has re-pointed
+              // `abortRef.current` at a different run. Rethrowing hands the
+              // outcome to the aborted-run branch of the outer catch, which is
+              // the same path a cancel during the fetch takes.
+              if (controller.signal.aborted) {
+                logger.info("[SSE] Stream aborted, not reconnecting");
+                throw readError;
+              }
               logger.warn("[SSE] Connection lost, attempting reconnect...");
               const newReader = await attemptReconnect(0);
               if (!newReader) {

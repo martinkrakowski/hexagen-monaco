@@ -161,7 +161,6 @@ const stageDoneEvent = `${JSON.stringify({
  *  onto an earlier run's already-settled signal. Reset in beforeEach so no
  *  stale signal can survive into the next test. */
 let terminalFrameProcessed: Promise<void> = Promise.resolve();
-let markTerminalFrameProcessed: () => void = () => {};
 
 /**
  * The staged endpoint's NDJSON body as a real `ReadableStream`, plus the
@@ -194,31 +193,62 @@ let markTerminalFrameProcessed: () => void = () => {};
  * every terminal-frame setState has already been issued; the rest of the chain
  * is microtasks + renders that `awaitParkedRun`'s act scope flushes. No clock
  * is involved on either side.
+ *
+ * `signal` is the request's own AbortSignal, which a held-open mock body would
+ * otherwise ignore: an unmounted page aborts its run, and a body that never
+ * errors on that abort leaves `reader.read()` pending forever — a live handle
+ * on a test that has already moved on. Erroring the controller mirrors what a
+ * real aborted fetch body does, so the run's own abort handling is what runs.
+ *
+ * `markProcessed` is passed per call rather than read from module scope: a
+ * stream leaked by an earlier test (its page unmounted before the terminal
+ * frame arrived) would otherwise cancel into whatever deferred the CURRENT test
+ * is waiting on, settling it for the wrong run.
  */
-const stagedNdjsonResponse = (ndjson: string): Response => {
+const stagedNdjsonResponse = (
+  ndjson: string,
+  markProcessed: () => void,
+  signal?: AbortSignal | null,
+): Response => {
   const encoder = new TextEncoder();
   let delivered = false;
   const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      if (!signal) return;
+      const abortBody = () => {
+        controller.error(new DOMException("aborted", "AbortError"));
+      };
+      if (signal.aborted) {
+        abortBody();
+        return;
+      }
+      signal.addEventListener("abort", abortBody, { once: true });
+    },
     pull(controller) {
       if (delivered) return; // held open; the read loop's cancel() ends it
       delivered = true;
       controller.enqueue(encoder.encode(ndjson));
     },
     cancel() {
-      markTerminalFrameProcessed();
+      markProcessed();
     },
   });
   return new Response(body, { status: 200 });
 };
 
 const mockStageDone = (ndjson: string = stageDoneEvent) => {
-  fetchMock.mockImplementation((input: RequestInfo | URL) => {
-    if (String(input) !== STAGE_ENDPOINT) return pendingForever();
-    terminalFrameProcessed = new Promise<void>((resolve) => {
-      markTerminalFrameProcessed = resolve;
-    });
-    return Promise.resolve(stagedNdjsonResponse(ndjson));
-  });
+  fetchMock.mockImplementation(
+    (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) !== STAGE_ENDPOINT) return pendingForever();
+      let markProcessed!: () => void;
+      terminalFrameProcessed = new Promise<void>((resolve) => {
+        markProcessed = resolve;
+      });
+      return Promise.resolve(
+        stagedNdjsonResponse(ndjson, markProcessed, init?.signal),
+      );
+    },
+  );
 };
 
 /**
@@ -226,10 +256,15 @@ const mockStageDone = (ndjson: string = stageDoneEvent) => {
  *
  * `mockStageDone()` first, then submit the composer, then await this instead
  * of `waitFor`ing the footer: the run's terminal-frame signal is awaited INSIDE
- * one act scope, so the run's remaining promise continuations, the renders they
- * schedule, and the effects that publish the footer's Next are all flushed
- * before it returns. The assertions after it are plain `getByRole` — no timeout
- * to lose (#723).
+ * one act scope, so the run's remaining promise continuations and the renders
+ * they schedule are flushed before it returns.
+ *
+ * This settles the RUN, not the footer. `useStagedManifestGeneration` still has
+ * to `await cloudStream.generate()` — one more microtask hop — before it sets
+ * phase "complete", and only then does GenerateWithAi's effect publish the
+ * footer's Next. Assertions that read the parked UI therefore wait with
+ * `findByRole`/`findByText` at their default timeout: a bounded safety net over
+ * that effect hop, not the clock-bound race #723 was.
  *
  * Safe against a stale signal because the submit's act scope reaches the
  * staged `fetch` synchronously (the flow transition, the generation effect and
@@ -345,7 +380,6 @@ beforeEach(() => {
   // No staged run in flight for the next test: an already-settled signal, so
   // awaitParkedRun can never be satisfied by a PREVIOUS test's stream.
   terminalFrameProcessed = Promise.resolve();
-  markTerminalFrameProcessed = () => {};
 });
 
 describe("AIGenerationPage — Plan Workbench C1", () => {
@@ -469,13 +503,17 @@ describe("AIGenerationPage — Plan Workbench C1", () => {
 
     // The stream's terminal "done" event completes the run: the flow stays
     // parked on the telemetry view and the shell footer swaps Cancel for
-    // Go Back plus the explicit Next. Awaited off the stream's own
-    // terminal-frame signal, not off a `waitFor` deadline (#723).
+    // Go Back plus the explicit Next. awaitParkedRun settles the RUN off the
+    // stream's own terminal-frame signal (#723); the footer assertions then
+    // read it with findByRole, because publishing the footer actions is one
+    // more hop behind the frame (see awaitParkedRun).
     await awaitParkedRun();
-    assert.ok(screen.getByRole("button", { name: "Next" }));
-    assert.ok(screen.getByRole("button", { name: "Go Back" }));
+    assert.ok(await screen.findByRole("button", { name: "Next" }));
+    assert.ok(await screen.findByRole("button", { name: "Go Back" }));
+    // Negative half of the swap: a findBy would have to WAIT out its timeout
+    // to prove the absence, so it stays a queryBy behind the two positives.
     assert.equal(screen.queryByRole("button", { name: "Cancel" }), null);
-    assert.ok(screen.getByText("Generating Manifest"));
+    assert.ok(await screen.findByText("Generating Manifest"));
 
     // Parked means parked: the success arm must NEVER router.push — the
     // hand-off to /ai/accept happens only through the footer's explicit
@@ -528,25 +566,30 @@ describe("AIGenerationPage — Plan Workbench C1", () => {
 
     // Run completes and parks (footer Next present) — the findings panel
     // renders alongside the telemetry log. Both are consequences of the same
-    // terminal frame, so one deterministic settle covers them (#723).
+    // terminal frame, so one deterministic settle covers them (#723); each
+    // parked-view read then waits for the effect hop behind the frame.
     await awaitParkedRun();
-    assert.ok(screen.getByRole("button", { name: "Next" }));
+    assert.ok(await screen.findByRole("button", { name: "Next" }));
     // 1 error + 1 reviewer warning → "1 finding and 1 suggestion"; the R03
     // advisory is NOT counted here (it's an adjustment).
     assert.ok(
-      screen.getByText(/1 finding and 1 suggestion from the review/, {
+      await screen.findByText(/1 finding and 1 suggestion from the review/, {
         exact: false,
       }),
     );
     assert.ok(
-      screen.getByText(/1 adjustment was.*applied automatically/, {
+      await screen.findByText(/1 adjustment was.*applied automatically/, {
         // summary text is broken across inline nodes
         exact: false,
       }),
     );
     // The adjustment notice's remedy must be route-appropriate: /stage has no
     // source spec to re-import, so the panel's /spec default may not leak in.
-    assert.ok(screen.getByText(/adjust your prompt and generate again/i));
+    assert.ok(
+      await screen.findByText(/adjust your prompt and generate again/i),
+    );
+    // Absence is asserted with queryBy behind those positives — a findBy would
+    // have to burn its whole timeout to prove it.
     assert.equal(screen.queryByText(/re-import/i), null);
     // Still parked — surfacing findings must not introduce auto-navigation.
     assert.equal(nav.push.mock.calls.length, 0);
@@ -580,7 +623,7 @@ describe("AIGenerationPage — Plan Workbench C1", () => {
     // Parked on completion (deterministically settled — #723), then the
     // hand-off through the footer's explicit Next.
     await awaitParkedRun();
-    const nextButton = screen.getByRole("button", { name: "Next" });
+    const nextButton = await screen.findByRole("button", { name: "Next" });
     fireEvent.click(nextButton);
 
     assert.deepEqual(nav.push.mock.calls, [["/projects/new/ai/accept"]]);
@@ -664,9 +707,10 @@ describe("AIGenerationPage — Plan Workbench C1", () => {
 
     // Generation completes (the stream's done event) and parks on telemetry;
     // the footer's explicit Next performs the hand-off. The completion is
-    // awaited off the stream's terminal-frame signal, not a deadline (#723).
+    // awaited off the stream's terminal-frame signal, not a deadline (#723),
+    // and the footer itself is read with findByRole (one effect hop later).
     await awaitParkedRun();
-    const nextButton = screen.getByRole("button", { name: "Next" });
+    const nextButton = await screen.findByRole("button", { name: "Next" });
     fireEvent.click(nextButton);
 
     // The manufactured name is the manifest's AI-derived workspace name.
@@ -765,14 +809,15 @@ describe("AIGenerationPage — Plan Workbench C2", () => {
   /** Drive a full run to the parked telemetry view and click the footer's
    * explicit Next — the hand-off that fills usePendingManifest. Callers must
    * mockStageDone() first; the run is settled off the stream's terminal-frame
-   * signal rather than a `waitFor` deadline (#723). */
+   * signal rather than a `waitFor` deadline (#723), and the footer is read with
+   * findByRole because publishing it is one effect hop behind that signal. */
   const generateAndHandOff = async () => {
     fireEvent.change(composerTextarea(), {
       target: { value: VALID_DESCRIPTION },
     });
     submitComposer();
     await awaitParkedRun();
-    const nextButton = screen.getByRole("button", { name: "Next" });
+    const nextButton = await screen.findByRole("button", { name: "Next" });
     fireEvent.click(nextButton);
   };
 
