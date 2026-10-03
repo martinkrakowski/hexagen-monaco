@@ -31,7 +31,7 @@ Also not built: the `extraPaths` review listing. `docs/kernel/GRANT.md` line 91 
 
 ### Preconditions this plan inherits
 
-Every writer adds `.hexagen/` to `.git/info/exclude` — `ensureExcluded(root, ".hexagen/")` runs in `slice init` (`packages/sync/src/commands/slice/index.ts:112`), `contract add-rule` and `contract --baseline` (`contract/index.ts:98`), `observe` (`observe/index.ts:739`) and `grant issue` (`grant/issue.ts:384`). So `.hexagen/` is never tracked, and a fresh checkout has no `grants/` at all, which `list` reports as exit 2 rather than as "no grants".
+Every writer calls `ensureExcluded(root, ".hexagen/")` to add `.hexagen/` to `.git/info/exclude` when needed: `slice init` (`packages/sync/src/commands/slice/index.ts:112`), `contract add-rule` and `contract --baseline` (`contract/index.ts:98`), `observe` (`observe/index.ts:739`) and `grant issue` (`grant/issue.ts:384`). This excludes untracked files but does not untrack existing ones: `.hexagen/evidence/.gitkeep`, `.hexagen/grant.schema.json` and `.hexagen/trace.schema.json` are tracked on main (`git ls-tree -r --name-only origin/main -- .hexagen`). Nothing under `.hexagen/grants/` is tracked, so a fresh checkout has no `grants/` at all, which `list` reports as exit 2 rather than as "no grants".
 
 - Every test mints its own grants in a fixture. No lane in this plan reads a committed `.hexagen/`.
 - To reproduce a listing in a client checkout, the client stages the grant files first: `hexagen workbook export --stage .hexagen/grants/<id>.json --yes`. `grants/*.json` is allow-listed (`workbook/allow-list.ts:18`, and the `--stage` list in `packages/sync/README.md`). That is the only staged file plan 4 needs: `list` reads `.hexagen/grants/` and nothing else.
@@ -54,7 +54,7 @@ hexagen grant list [--dir <path>] [--status live|expired|revoked|invalid|all]
 2. For each: id, principal, agent, mode, `expires_at`, `revoked_at`, status, and whether the signature verifies under the resolved key, via `parseGrant`, `verifyGrantSignature` and `checkGrantWindow`. Status is computed at call time and printed with that time. `list` does not re-derive the window itself.
 3. A file that cannot be read as a grant — unparseable, no `id`, off the allow-list, a symlink, or a name the key/env pattern forbids — is listed as `invalid` with the reason, a symlink as `invalid: symlink`, and is never read. Nothing is skipped silently: every refusal the enumerator returns becomes a row.
 4. Default `--status` is all. Sort by `expires_at` descending, then id.
-5. Exit 0 if every grant read verifies. Exit 1 if any grant read fails its signature, including one that `--status` filtered out of the printed rows. Exit 2 for bad input or a missing grants directory.
+5. Exit 2 for bad input or a missing grants directory. Otherwise exit 0 only if at least one grant is read, every grant read verifies, and no entry is invalid. Exit 1 if no grant is read, any entry is invalid, or any grant read fails its signature, including one that `--status` filtered out of the printed rows. Invalid entries are still printed as rows.
 6. Key resolution is the shared resolver `show` and `check` use. Prints the key path and fingerprint, never the key.
 7. `--json` prints an array, one object per grant, same fields.
 
@@ -76,7 +76,7 @@ Out: grant renewal, a grant registry or database, remote issuance, any UI, and t
 7. A call exactly at `expires_at` lists as live; one millisecond after lists as expired; exactly at `revoked_at` lists as revoked. These match the expiry decision of record and the two branches in `checkGrantWindow` (`grant-checks.ts:77,85`).
 8. With a missing or weak key, every grant reports signature not verified and the key is never printed.
 9. `--status live` over a directory that also holds a hand-edited grant prints only the live rows and still exits 1.
-10. The extracted enumerator keeps the export's verdicts: an off-allow-list name, a symlink, a path resolving outside `.hexagen` and a key or env file name are all refused, and the export's own grant cases stay green.
+10. The extracted enumerator keeps the export's verdicts: an off-allow-list name is noted and skipped (`export.ts:349-352`), a symlink, a path resolving outside `.hexagen` and a key or env file name are refused, and the export's own grant cases stay green.
 
 ## 7. Risks
 
@@ -86,7 +86,7 @@ Out: grant renewal, a grant registry or database, remote issuance, any UI, and t
 
 ## 8. Liveness proof (Step Zero)
 
-The PR body shows the command run against a fixture directory with the three grant states, and its test run. The fixture is minted by the test run rather than read from a committed `.hexagen/`, because `grant issue` excludes that directory (`grant/issue.ts:384`); see §2.
+The implementation PR body must show the command run against a fixture directory with the three grant states, and its test run. The fixture must be minted by the test run rather than read from a committed `.hexagen/`, because `grant issue` excludes that directory (`grant/issue.ts:384`); see §2.
 
 ## 9. Order
 
