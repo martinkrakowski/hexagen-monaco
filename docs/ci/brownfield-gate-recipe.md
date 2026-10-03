@@ -202,6 +202,14 @@ Copy this into the client repo's `.github/workflows/`. It is byte-for-byte
 [`brownfield-gate.yml`](./brownfield-gate.yml); keep the two identical, and edit
 only the `EDIT SPOT` value.
 
+**The pin is a floor, not a formality.** The install step fetches
+`@hexagen-monaco/sync@${HEXAGEN_VERSION}`, and the gate needs **0.14.0 or later**:
+`contract check --base` (step 3) and `evidence verify` (step 4b) first ship there,
+so an older pin installs a CLI that refuses both commands and the job goes red at
+step 3 for a reason that has nothing to do with the change. Release tags are cut
+by the owner, so treat the pin as the minimum the gate needs and set it to a
+version you can actually install; `hexagen --help` is the check that it exists.
+
 ```yaml
 # EXAMPLE — copy this into the CLIENT repo's .github/workflows/ and edit the
 # spot marked EDIT SPOT below.
@@ -236,9 +244,15 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # EDIT SPOT 1 — the CLI pin. Pin it to the version the FDE ran locally, and
-  # bump it deliberately: `hexagen --help` is the check that the pin exists.
-  HEXAGEN_VERSION: "0.13.0"
+  # EDIT SPOT 1 — the CLI pin. Pin it to a version that exists AND carries every
+  # command this job runs: `contract check --base` (step 3) and `evidence verify`
+  # (step 4b) first ship in 0.14.0, so the gate needs 0.14.0 or later. An older
+  # pin installs a CLI whose command parser refuses those two, and the job then
+  # fails at step 3 for a reason that has nothing to do with the change under
+  # review. Release tags are the owner's to cut, so this line names the minimum
+  # the gate needs, not a published release — set it to a version you can install
+  # and bump it deliberately. `hexagen --help` is the check that the pin exists.
+  HEXAGEN_VERSION: "0.14.0"
 
 jobs:
   brownfield-gate:
@@ -674,12 +688,12 @@ the FDE is gone.
 
 ## Exit codes, per command
 
-| Command           | 0                                   | 1                                                             | 2                                                                    |
-| ----------------- | ----------------------------------- | ------------------------------------------------------------- | -------------------------------------------------------------------- |
-| `slice check`     | no drift                            | drift (an in-slice file changed, or the edges are incomplete) | bad input, or `--strict` with a report read at another commit        |
-| `contract check`  | clean                               | a violation not in the baseline, incomplete edges, or growth  | bad input, an unresolvable `--base`, a file never staged at the base |
-| `evidence pack`   | packed                              | the evidence is invalid; nothing written                      | usage or a failed precondition                                       |
-| `evidence verify` | every changed file is accounted for | a changed file has no covering line                           | bad input, a missing trace, an unresolvable `--since`, an empty diff |
+| Command           | 0                                   | 1                                                             | 2                                                                                   |
+| ----------------- | ----------------------------------- | ------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `slice check`     | no drift                            | drift (an in-slice file changed, or the edges are incomplete) | bad input, or `--strict` with a report read at another commit                       |
+| `contract check`  | clean                               | a violation not in the baseline, incomplete edges, or growth  | bad input, an unresolvable `--base`, a file never staged at the base                |
+| `evidence pack`   | packed                              | the evidence is invalid; nothing written                      | usage or a failed precondition                                                      |
+| `evidence verify` | every changed file is accounted for | a changed file has no covering line                           | bad input, a missing trace, a missing tip, an unresolvable `--since`, an empty diff |
 
 ## Where this came from
 

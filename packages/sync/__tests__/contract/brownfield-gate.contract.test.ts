@@ -111,6 +111,7 @@ function readWorkflow(): Workflow {
   const doc = yaml.load(readFileSync(WORKFLOW_FILE, "utf8")) as {
     jobs?: Record<string, { steps?: unknown }>;
     env?: Record<string, string>;
+    permissions?: unknown;
   };
   const jobs = Object.keys(doc.jobs ?? {});
   assert.deepEqual(jobs, ["brownfield-gate"], `${WORKFLOW_FILE} job list`);
@@ -119,7 +120,55 @@ function readWorkflow(): Workflow {
     Array.isArray(steps) && steps.length > 0,
     `${WORKFLOW_FILE} has no steps to run`,
   );
-  return { env: doc.env ?? {}, steps: steps as readonly WorkflowStep[] };
+  const env = doc.env ?? {};
+  // The job reads the checkout and publishes nothing: plan 5 acceptance test 10.
+  // Nothing here needs more, and a widened `permissions:` block would grant a
+  // client repo's CI more than this recipe says it uses.
+  assert.deepEqual(
+    doc.permissions,
+    { contents: "read" },
+    `${WORKFLOW_FILE} permissions must be exactly contents: read`,
+  );
+  assertCliPinCarriesEveryCommand(env);
+  return { env, steps: steps as readonly WorkflowStep[] };
+}
+
+/**
+ * The CLI version the install step pins has to carry every command the job runs.
+ *
+ * `contract check --base` (the growth guard, step 3) and `evidence verify` (the
+ * coverage check, step 4b) first appear in 0.14.0; a pin below that installs a
+ * CLI that exits at its own command parser, so steps 3 and 4b fail for a reason
+ * that has nothing to do with the change under review — the gate would be red
+ * and saying nothing. The assertion is on the pin, not on what is installed:
+ * the fixture runs the dist built from this repository, which is what makes the
+ * steps testable at all.
+ */
+const MINIMUM_CLI_VERSION = [0, 14, 0] as const;
+
+function assertCliPinCarriesEveryCommand(
+  env: Readonly<Record<string, string>>,
+): void {
+  const pin = env.HEXAGEN_VERSION;
+  assert.ok(
+    typeof pin === "string",
+    `${WORKFLOW_FILE} has no HEXAGEN_VERSION pin; the install step needs one`,
+  );
+  const parsed = /^(\d+)\.(\d+)\.(\d+)/.exec(pin as string);
+  assert.ok(
+    parsed !== null,
+    `HEXAGEN_VERSION "${pin}" is not a version this check can read`,
+  );
+  const at = [Number(parsed[1]), Number(parsed[2]), Number(parsed[3])];
+  const floor = MINIMUM_CLI_VERSION;
+  const below =
+    at[0] < floor[0] ||
+    (at[0] === floor[0] && at[1] < floor[1]) ||
+    (at[0] === floor[0] && at[1] === floor[1] && at[2] < floor[2]);
+  assert.ok(
+    !below,
+    `HEXAGEN_VERSION is pinned to "${pin}", below ${floor.join(".")}: steps 3 and 4b call \`contract check --base\` and \`evidence verify\`, which first ship in ${floor.join(".")}, so the installed CLI would exit at its command parser instead of judging anything`,
+  );
 }
 
 /**
@@ -940,6 +989,32 @@ describe(
       assert.equal(verify.code, 2, dump(verify));
       assert.match(verify.out, /step 4b exit 2/, dump(verify));
       assert.match(verify.out, /the trace is not sound evidence/, dump(verify));
+    });
+
+    it("case 7: a run that starts at step 2 with a stale observed.json exits 2", async () => {
+      // Step 1 rewrites `.hexagen/observed.json` at HEAD on every run, so a full
+      // gate never reaches this state — cases 1 and 2 prove that, committing
+      // past `observed.repo.commit` and getting 0 and 1, never 2, at step 2. What
+      // this pins is the run that does NOT start at step 1: a stale report under
+      // `--strict` is bad input, and the job must stop rather than judge a tree
+      // the report never described.
+      await put(
+        "README.md",
+        "# acme-client\n\nA repo holding only `.hexagen/`.\n",
+      );
+      commit("docs: a note the slice does not cover", ["README.md"]);
+
+      const step2 = await runStep(STEP_2, { base: pristine });
+
+      assert.equal(step2.code, 2, dump(step2));
+      // Exit 2 is fatal for this step, so it leaves the chain: the reported code
+      // is 2, not the 1 a drift report would print.
+      assert.match(step2.out, /step 2 exit 2/, dump(step2));
+      assert.match(
+        step2.out,
+        /observed\.json was read at \w+ but HEAD is \w+; re-run `hexagen observe` \(--strict\)/,
+        dump(step2),
+      );
     });
 
     it("case 8: no key — the job fails closed at the key step and both evidence commands exit 2", async () => {

@@ -31,9 +31,15 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # EDIT SPOT 1 — the CLI pin. Pin it to the version the FDE ran locally, and
-  # bump it deliberately: `hexagen --help` is the check that the pin exists.
-  HEXAGEN_VERSION: "0.13.0"
+  # EDIT SPOT 1 — the CLI pin. Pin it to a version that exists AND carries every
+  # command this job runs: `contract check --base` (step 3) and `evidence verify`
+  # (step 4b) first ship in 0.14.0, so the gate needs 0.14.0 or later. An older
+  # pin installs a CLI whose command parser refuses those two, and the job then
+  # fails at step 3 for a reason that has nothing to do with the change under
+  # review. Release tags are the owner's to cut, so this line names the minimum
+  # the gate needs, not a published release — set it to a version you can install
+  # and bump it deliberately. `hexagen --help` is the check that the pin exists.
+  HEXAGEN_VERSION: "0.14.0"
 
 jobs:
   brownfield-gate:
