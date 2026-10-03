@@ -169,13 +169,28 @@ check`. Violations still fail the job. Only the growth comparison is skipped.
   compare against, and skipping the growth guard would drop it on a PR that has a
   contract to be compared to. It is not a base to compare against either: the
   guard reads both files, so comparing half a baseline would judge the other half
-  as growth — or as a violation — on no evidence at all. The log says what to
-  stage:
+  as growth — or as a violation — on no evidence at all.
 
-  ```
-  ::error::a half-staged base: <sha> carries one of .hexagen/contract.json and .hexagen/slice.json and not the other. … absent at the base commit: .hexagen/contract.json. Stage the missing file from the engagement machine, commit it on the branch, then re-run:
-  hexagen workbook export --stage .hexagen/contract.json --yes
-  ```
+**The PR cannot repair a partial base.** Step 3 reads the **base** commit, so a
+file staged on this branch leaves the base exactly as partial as it was, and an
+error that says "commit it on the branch" sends the author in a circle: the run
+they re-trigger fails the same way. The repair is sidecar-only and it lands on
+the **target** branch, by someone who can push there, after which the PR is
+updated from it:
+
+```
+::error::a half-staged base: <sha> carries one of .hexagen/contract.json and .hexagen/slice.json and not the other; absent at the base commit: .hexagen/contract.json. … This PR cannot repair that — step 3 reads the base commit, and staging the file on this branch leaves it partial. Repair the TARGET branch: a maintainer pushes .hexagen/contract.json there, sidecar only, from the engagement machine with
+hexagen workbook export --stage .hexagen/contract.json --yes
+::error::then update this PR from the target branch and re-run. …
+```
+
+Until the base carries both files, **every** PR on that base is refused the same
+way — which is the point: the gate has no honest reading of a half-staged base,
+so it says so on each run instead of guessing on one of them.
+::error::a half-staged base: <sha> carries one of .hexagen/contract.json and .hexagen/slice.json and not the other. … absent at the base commit: .hexagen/contract.json. Stage the missing file from the engagement machine, commit it on the branch, then re-run:
+hexagen workbook export --stage .hexagen/contract.json --yes
+
+```
 
 **The growth guard protects from the second PR onward**, once the base carries the
 contract. The bootstrap PR is judged on violations alone, and the log says so
@@ -194,14 +209,20 @@ Step 4b's condition is the base **slice** and nothing else, because that is all
 the base, step 4b runs, and it exits **2**:
 
 ```
+
 the trace is not tracked at <since>; only lines appended after it could cover a change, and this checkout cannot tell which those are. Refusing to guess.
+
 ```
 
 Skipping it would be a second bootstrap, and it would skip the only coverage
 check on the PR that starts the evidence — a PR that may carry an in-slice edit.
-So the gate refuses instead, and names the reason twice: once in the resolve
-step's warning, before the symptom, and once from the command. The next PR, whose
-base carries the trace, is judged normally.
+So the gate refuses instead, and names the reason twice: a `::warning::` from
+step 4b immediately before it runs the command — not from the resolve step, which
+would also print it on the bootstrap, where step 4b never runs, and after an
+earlier step failed — and then the command's own exit 2. Either way the repair is
+the same as a partial base: the evidence is committed to the **target** branch by
+a maintainer, and the PR is updated from it. The next PR, whose base carries the
+trace, is judged normally.
 
 ### Steps 4 and 4b: the whole trace, then this PR
 
@@ -229,9 +250,11 @@ away. A client who appends a line, does not `hexagen evidence pack` before
 committing, and opens the PR gets exit 1 and the command that fixes it:
 
 ```
+
 ::error::evidence verify exit 1: a changed file inside the slice or a grant has no covering trace line.
 cover exists but is not anchored: run hexagen evidence pack
-```
+
+````
 
 which is the answer to give a client who asks why their first PR is red.
 
@@ -382,7 +405,11 @@ jobs:
           # `evidence verify` reads the base SLICE and the base TRACE, and never
           # the contract — so it gets its own probe rather than the pair above.
           # Only the slice decides whether step 4b runs; the trace is published
-          # so the log can name, before the symptom, why step 4b will refuse.
+          # for step 4b to read, which warns about it where the warning can
+          # happen. Printing it here would warn on runs where step 4b is skipped
+          # (the bootstrap) or never reached (step 3 failed first), and a warning
+          # about a step that did not run is noise that trains the reader to skip
+          # warnings.
           TRACE_REL=".hexagen/evidence/trace.jsonl"
           slice_at_base=true
           trace_at_base=true
@@ -407,9 +434,6 @@ jobs:
               echo "::warning::a half-staged base; absent at the base commit:${absent}"
               ;;
           esac
-          if [ "${trace_at_base}" = "false" ]; then
-            echo "::warning::the base carries no ${TRACE_REL}; step 4b will exit 2 until the evidence is committed at the base, because a trace that was never tracked there cannot say which lines are new enough to cover a change"
-          fi
 
       - name: "step 0: the .hexagen/ inputs must be tracked"
         run: |
@@ -535,8 +559,15 @@ jobs:
           # thing and step 0 has already failed that PR by name — so the `both`
           # branch is only reachable on the PR that introduces the sidecars.
           if [ "${base_state}" = "partial" ]; then
-            echo "::error::a half-staged base: ${base} carries one of .hexagen/contract.json and .hexagen/slice.json and not the other. The growth guard reads both, so it refuses rather than judge half a baseline; absent at the base commit:${absent}. Stage the missing file from the engagement machine, commit it on the branch, then re-run:"
+            # This PR cannot fix a partial base: step 3 reads the BASE commit, and
+            # a file staged on this branch leaves the base exactly as partial as
+            # it was. Telling the author to commit it on the branch would send
+            # them in a circle — the repair is sidecar-only and it lands on the
+            # TARGET branch, by someone who can push there, after which this PR
+            # is updated from it and re-run.
+            echo "::error::a half-staged base: ${base} carries one of .hexagen/contract.json and .hexagen/slice.json and not the other; absent at the base commit:${absent}. The growth guard reads both, so it refuses rather than judge half a baseline. This PR cannot repair that — step 3 reads the base commit, and staging the file on this branch leaves it partial. Repair the TARGET branch: a maintainer pushes ${absent} there, sidecar only, from the engagement machine with"
             echo "hexagen workbook export --stage${absent} --yes"
+            echo "::error::then update this PR from the target branch and re-run. The guard is armed as soon as the base carries both files; until then every PR on this base is refused the same way."
             echo "step 3 exit 2"
             exit 2
           fi
@@ -636,10 +667,10 @@ jobs:
         # evidence, it may carry an in-slice edit, and skipping the only coverage
         # check on it would let that edit through. `evidence verify` runs and
         # exits 2, naming a trace that was never tracked at the base — which is
-        # the truth, and the probe in the resolve step above says so in the log
-        # before the symptom. A second bootstrap here would only ever be right
-        # about a base with no trace, which is not the same thing as no
-        # governance, so it is refused instead.
+        # the truth, and this step warns about it immediately before it runs the
+        # command, so the cause is named before the symptom. A second bootstrap
+        # here would only ever be right about a base with no trace, which is not
+        # the same thing as no governance, so it is refused instead.
         if: steps.base.outputs.slice_at_base == 'true'
         run: |
           # The per-PR gate, and the only step that narrows to what this PR
@@ -664,6 +695,15 @@ jobs:
             echo "::error::no tracked grant under .hexagen/grants/; --grant is required, and every grant the trace cites must be supplied."
             echo "step 4b exit 2"
             exit 2
+          fi
+          # The base carries no trace, so `evidence verify` is about to exit 2
+          # saying so. Warn here, where it is true: this step is running, its
+          # grants are read, and the command is next. The same warning from the
+          # resolve step would also print on the bootstrap (where this step never
+          # runs) and after an earlier step failed, and a warning about a step
+          # that did not run is noise.
+          if [ "${{ steps.base.outputs.trace_at_base }}" = "false" ]; then
+            echo "::warning::the base ${{ steps.base.outputs.base }} carries no .hexagen/evidence/trace.jsonl; this run will exit 2, because a trace that was never tracked at the base cannot say which lines are new enough to cover a change. Commit the evidence to the TARGET branch — a maintainer lands it with \`hexagen workbook export --stage .hexagen/evidence/trace.jsonl .hexagen/evidence/tip.json --yes\` — then update this PR from it and re-run."
           fi
           set +e
           hexagen evidence verify --since "${{ steps.base.outputs.base }}" \
@@ -707,7 +747,7 @@ jobs:
           else
             echo "::notice::no grant under .hexagen/grants/, so there is no signature to report a fingerprint for"
           fi
-```
+````
 
 ## The engagement key in CI
 

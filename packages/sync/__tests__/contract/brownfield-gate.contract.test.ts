@@ -80,6 +80,7 @@ const TRACE = ".hexagen/evidence/trace.jsonl";
 /** Where the workflow's step 4 writes its bundle; the runner throws it away. */
 const BUNDLE = ".hexagen/ci-evidence-bundle.zip";
 
+const RESOLVE = "Resolve the base commit";
 const STEP_0 = "step 0: the .hexagen/ inputs must be tracked";
 const STEP_1 = "step 1: observe";
 const STEP_2 = "step 2: slice check (drift report, not a gate)";
@@ -545,6 +546,9 @@ function skipped(run: GateResult, name: string): StepResult {
   );
   return step;
 }
+
+/** The warning about a base that carries no trace, wherever it is printed. */
+const MISSING_TRACE_WARNING = /carries no \.hexagen\/evidence\/trace\.jsonl/;
 
 /**
  * The code a step REPORTED, read from its own `step <n> exit <code>` line —
@@ -1183,6 +1187,19 @@ describe(
         dump(step3),
       );
       assert.match(step3.out, /hexagen workbook export --stage/, dump(step3));
+      // The repair cannot be "commit it on this branch": step 3 reads the BASE
+      // commit, so a file staged here leaves the base partial and the re-run
+      // fails identically. The message has to name the target branch.
+      assert.match(step3.out, /Repair the TARGET branch/, dump(step3));
+      assert.match(
+        step3.out,
+        /update this PR from the target branch/,
+        dump(step3),
+      );
+      assert.ok(
+        !/commit it on the branch/.test(step3.out),
+        `the recovery still tells the author to fix the PR branch: ${step3.out}`,
+      );
       // Neither the growth guard nor the coverage check was skipped over it.
       skipped(run, STEP_4);
       skipped(run, STEP_4B);
@@ -1228,6 +1245,20 @@ describe(
       assert.equal(step4b.code, 2, dump(run));
       assert.match(step4b.out, /step 4b exit 2/, dump(step4b));
       assert.match(step4b.out, /the trace is not tracked at/, dump(step4b));
+      // The warning belongs to the step that can act on it: printed by the
+      // resolve step it would also appear on the bootstrap, where step 4b never
+      // runs, and after an earlier step failed — and a warning about a step that
+      // did not run is noise.
+      assert.ok(
+        !MISSING_TRACE_WARNING.test(ran(run, RESOLVE).out),
+        `the resolve step warns about a trace for a step that may never run:\n${dump(run)}`,
+      );
+      assert.match(step4b.out, MISSING_TRACE_WARNING, dump(step4b));
+      assert.ok(
+        step4b.out.search(MISSING_TRACE_WARNING) <
+          step4b.out.indexOf("step 4b exit"),
+        `the warning must come before the exit line it explains: ${dump(step4b)}`,
+      );
       // The exit-2 annotation has to name the causes a reader cannot see: the
       // command's own reasons are in the log, not in a one-line annotation, and
       // "exit 2" alone does not say whether to fix the pin, the trace or the key.
@@ -1260,6 +1291,12 @@ describe(
       assert.match(step3.out, /judges violations only/, dump(run));
       skipped(run, STEP_4B);
       assert.equal(reportedExit(ran(run, STEP_4)), 0, dump(run));
+      // This base carries no trace either, and nothing warns about it: step 4b
+      // is not running, so a warning would be about a step that did not run.
+      assert.ok(
+        !MISSING_TRACE_WARNING.test(ran(run, RESOLVE).out),
+        `the bootstrap run warns about a trace for a step it skipped:\n${dump(run)}`,
+      );
 
       // Step 4b's `if` skips it, and the reason is the command's own
       // precondition: it reads the slice from the `<since>` tree.
