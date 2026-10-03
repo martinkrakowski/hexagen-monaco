@@ -722,8 +722,13 @@ A client repo holds only `.hexagen/` and no manifest, so the generated
 conformance gate has nothing to run there. Copy
 [`docs/ci/brownfield-gate.yml`](../../docs/ci/brownfield-gate.yml) into the client
 repo's `.github/workflows/` and edit its one `EDIT SPOT`: the
-`HEXAGEN_VERSION` pin, which needs 0.14.0 or later, because
-`contract check --base` and `evidence verify` first ship in it.
+`HEXAGEN_VERSION` pin. `contract check --base` (step 3) and `evidence verify`
+(step 4b) first ship in 0.14.0, so that is the **minimum** the gate needs rather
+than a published release — release tags are the owner's to cut. Set it to a
+version you can install and bump it deliberately; `hexagen --help` is the check
+that the pin exists, because an older CLI's command parser refuses those two
+flags and the job then fails at step 3 for a reason that has nothing to do with
+the change under review.
 
 `evidence pack` and `evidence verify` are the two halves of the gate, and the
 recipe is a document rather than a template:
@@ -744,8 +749,8 @@ from what the job does.
   [`hexagen evidence verify`](#hexagen-evidence-verify) above.
 
 Fail-fast and in order, every step printing `step <n> exit <code>` — 1 is a
-violation, 2 is bad input or stale state — with step 2 the one non-blocking
-drift report: the staged `.hexagen/` paths are tracked
+violation, 2 is bad input or stale state — and step 2 the one non-blocking
+drift report. The steps are: the staged `.hexagen/` paths are tracked
 (`git ls-files --error-unmatch`, exit 2 otherwise), `observe --out … --yes`,
 `slice check --strict`, `contract check --base` against the pinned PR base SHA,
 `evidence pack` into a disposable path under `.hexagen/`, then `evidence verify`
