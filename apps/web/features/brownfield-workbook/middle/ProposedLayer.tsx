@@ -203,10 +203,21 @@ export function ProposedLayer({
                     >
                       <span className="font-mono">{clean(r.id)}</span>{" "}
                       <Badge>{clean(r.kind)}</Badge>{" "}
-                      <span className="font-mono">{clean(r.from)}</span>
-                      {" -> "}
-                      <span className="font-mono">{clean(r.to)}</span> (
-                      {clean(r.severity)})
+                      {/* `closed` carries no from/to: its excepts are the rule. */}
+                      {r.kind === "closed" ? (
+                        r.except.length > 0 && (
+                          <span className="font-mono">
+                            {r.except.map(clean).join(", ")}
+                          </span>
+                        )
+                      ) : (
+                        <>
+                          <span className="font-mono">{clean(r.from)}</span>
+                          {" -> "}
+                          <span className="font-mono">{clean(r.to)}</span>
+                        </>
+                      )}{" "}
+                      ({clean(r.severity)})
                     </li>
                   ))}
                 </ul>

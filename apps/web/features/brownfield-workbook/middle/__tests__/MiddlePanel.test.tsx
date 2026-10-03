@@ -2,6 +2,7 @@ import React from "react";
 import { describe, it, expect } from "vitest";
 import { render, screen, fireEvent, within } from "@testing-library/react";
 import type { Contract, ObservedReport, Slice } from "@hexagen/shared";
+import { UNRESOLVED_IMPORT_RULE_ID } from "@hexagen/shared";
 import { MiddlePanel } from "../MiddlePanel";
 import { packageEdges } from "../derive";
 import type { LoadedBundle } from "../../bundle/read-bundle";
@@ -313,6 +314,33 @@ describe("proposed layer", () => {
     expect(rule.textContent).toContain("no-shared");
     expect(rule.textContent).toContain("forbid");
     expect(rule.textContent).toContain("libs/shared/");
+  });
+
+  it("shows a closed rule's excepts, with no from -> to pair it does not carry", () => {
+    render(
+      <MiddlePanel
+        bundle={bundleOf({
+          observed: observedOf({ packages: PKGS, edges: EDGES }),
+          slice,
+          contract: contractOf([
+            {
+              id: "closed-slice",
+              kind: "closed",
+              except: ["libs/shared/", "libs/date"],
+              severity: "error",
+            },
+          ]),
+        })}
+      />,
+    );
+    const rule = within(proposedRegion()).getByTestId("contract-rule");
+    const line = rule.textContent ?? "";
+    expect(line).toContain("closed-slice");
+    expect(line).toContain("closed");
+    expect(line).toContain("libs/shared/");
+    expect(line).toContain("libs/date");
+    expect(line.length).toBeGreaterThan(0);
+    expect(line).not.toContain("->");
   });
 
   it("highlights a violating in-slice edge, not a legal one, and not one outside the slice", () => {
@@ -654,6 +682,7 @@ describe("no invented vocabulary", () => {
     "code",
     "forbid",
     "allow-only",
+    "closed",
     "expand files",
     "collapse files",
     "hide proposed",
@@ -1180,6 +1209,68 @@ describe("shared semantics, pinned in the viewer", () => {
       1,
     );
     expect(screen.queryAllByTestId("violation")).toHaveLength(0);
+  });
+
+  it("a closed rule excepts two accepted crossings and still fails the rest", () => {
+    render1(
+      [
+        { from: "apps/web/a.ts", to: "libs/shared/x.ts", specifier: "ok" },
+        { from: "apps/web/b.ts", to: "libs/date/d.ts", specifier: "ok" },
+        { from: "apps/web/c.ts", to: "other/o.ts", specifier: "bad" },
+        { from: "apps/web/d.ts", to: "apps/web/e.ts", specifier: "in" },
+      ],
+      {
+        id: "r",
+        kind: "closed",
+        except: ["libs/shared/", "libs/date/"],
+        severity: "error",
+      },
+    );
+    const v = within(proposedRegion()).getAllByTestId("violation");
+    expect(v).toHaveLength(1);
+    expect(v[0].closest("[data-testid=slice-edge]")?.textContent).toContain(
+      "apps/web/c.ts",
+    );
+  });
+
+  it("a root-package target (.) always violates a closed rule", () => {
+    render1([{ from: "apps/web/a.ts", to: ".", specifier: "root-pkg" }], {
+      id: "r",
+      kind: "closed",
+      except: ["."],
+      severity: "error",
+    });
+    expect(screen.getAllByTestId("violation")).toHaveLength(1);
+  });
+
+  it("an unresolved import is never reported under a closed rule's id", () => {
+    render(
+      <MiddlePanel
+        bundle={bundleOf({
+          observed: observedOf({
+            packages: PKGS,
+            unresolved: [
+              { from: "apps/web/a.ts", specifier: "ghost", reason: "r" },
+            ],
+          }),
+          slice: sliceOf(["apps/web/"]),
+          contract: contractOf([
+            {
+              id: "closed-slice",
+              kind: "closed",
+              except: ["libs/shared/"],
+              severity: "error",
+            },
+          ]),
+        })}
+      />,
+    );
+    const v = within(proposedRegion()).getAllByTestId("violation");
+    expect(v).toHaveLength(1);
+    const text = v[0].textContent ?? "";
+    expect(text).toContain(UNRESOLVED_IMPORT_RULE_ID);
+    expect(text.length).toBeGreaterThan(0);
+    expect(text).not.toContain("closed-slice");
   });
 });
 

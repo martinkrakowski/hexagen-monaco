@@ -82,6 +82,12 @@ const contract = {
       to: "libs/",
       severity: "warn",
     },
+    {
+      id: "closed-slice",
+      kind: "closed",
+      except: ["libs/shared/", "libs/date"],
+      severity: "error",
+    },
   ],
   knownViolations: [
     {
@@ -255,6 +261,27 @@ const cases: Case[] = [
       ["bad severity", (v) => set(v, "rules.0.severity", "fatal")],
       ["dotdot prefix", (v) => set(v, "rules.0.from", "../x/")],
       ["rule missing to", (v) => set(v, "rules.0.to", undefined)],
+      ["forbid rule with except", (v) => set(v, "rules.0.except", ["libs/"])],
+      [
+        "allow-only rule with except",
+        (v) => set(v, "rules.1.except", ["libs/"]),
+      ],
+      [
+        "closed rule with from",
+        (v) => set(v, "rules.2.from", "packages/bill/"),
+      ],
+      ["closed rule with to", (v) => set(v, "rules.2.to", "apps/ui/")],
+      [
+        "closed rule missing except",
+        (v) => set(v, "rules.2.except", undefined),
+      ],
+      [
+        "closed rule with a reserved id",
+        (v) => set(v, "rules.2.id", UNRESOLVED_IMPORT_RULE_ID),
+      ],
+      ["except is not an array", (v) => set(v, "rules.2.except", "libs/")],
+      ...withBad("except entry", "rules.2.except", BAD_REL, (x) => [x]),
+      ...withBad("except entry", "rules.2.except", TERMINATORS, (x) => [x]),
       [
         "violation missing specifier",
         (v) => set(v, "knownViolations.0.specifier", undefined),
@@ -416,6 +443,50 @@ describe("observed report invariants", () => {
 describe("contract reserved rule id", () => {
   it("the built-in id is unresolved-import", () => {
     expect(UNRESOLVED_IMPORT_RULE_ID).toBe("unresolved-import");
+  });
+});
+
+describe("contract closed rule", () => {
+  const ajv = new Ajv({ strict: false, validateFormats: false });
+  const validate = ajv.compile(loadSchema("contract.schema.json"));
+  const withRule = (rule: unknown): Record<string, unknown> => ({
+    ...contract,
+    rules: [rule],
+  });
+  const closed = {
+    id: "closed-slice",
+    kind: "closed",
+    except: ["libs/shared/"],
+    severity: "error",
+  };
+
+  it("accepts an empty except list in both (a slice that accepts no crossing)", () => {
+    const v = withRule({ ...closed, except: [] });
+    expect(Contract.safeParse(v).success).toBe(true);
+    expect(validate(v)).toBe(true);
+  });
+
+  it("refuses a from or a to on a closed rule in both", () => {
+    for (const extra of [{ from: "packages/bill/" }, { to: "apps/ui/" }]) {
+      const v = withRule({ ...closed, ...extra });
+      expect(Contract.safeParse(v).success).toBe(false);
+      expect(validate(v)).toBe(false);
+    }
+  });
+
+  it("refuses an except on the two prefix kinds in both", () => {
+    for (const kind of ["forbid", "allow-only"]) {
+      const v = withRule({
+        id: "r",
+        kind,
+        from: "packages/bill/",
+        to: "apps/ui/",
+        except: ["libs/"],
+        severity: "error",
+      });
+      expect(Contract.safeParse(v).success).toBe(false);
+      expect(validate(v)).toBe(false);
+    }
   });
 });
 
