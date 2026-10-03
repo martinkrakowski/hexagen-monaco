@@ -28,6 +28,44 @@ afterEach(cleanup);
 const all = (r: { messages: string[]; stdout?: string }): string =>
   [...r.messages, r.stdout ?? ""].join("\n");
 
+/**
+ * Split a command line into shell words: single quotes quote, and an embedded
+ * single quote is the `'\''` idiom. Enough of the shell to read back the line
+ * `propose --closed` prints, so a test can run the command as printed.
+ */
+function shellWords(line: string): string[] {
+  const words: string[] = [];
+  let word = "";
+  let started = false;
+  let quoted = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (quoted) {
+      if (line.startsWith("'\\''", i)) {
+        word += "'";
+        i += 3;
+      } else if (c === "'") quoted = false;
+      else word += c;
+      continue;
+    }
+    if (c === "'") {
+      quoted = true;
+      started = true;
+      continue;
+    }
+    if (c === " ") {
+      if (started) words.push(word);
+      word = "";
+      started = false;
+      continue;
+    }
+    word += c;
+    started = true;
+  }
+  if (started) words.push(word);
+  return words;
+}
+
 async function readContract(root: string): Promise<{
   rules: unknown[];
   knownViolations: Record<string, string>[];
@@ -99,9 +137,14 @@ describe("contract propose --closed", () => {
   /**
    * The arguments the printed `add-rule` line passes to `--except`, so a test
    * runs the command as printed instead of re-deriving the list from the JSON.
+   *
+   * The line is shell-quoted (a repo path may hold a space or a `;`), so the
+   * words are read the way a shell reads them: `'…'` quotes and the `'\''`
+   * idiom come off, and what the test hands to `add-rule` is what the shell
+   * would hand it.
    */
   function printedExceptArgs(out: string): string[] {
-    const tokens = printedFlags(out).split(" ").slice(3);
+    const tokens = shellWords(printedFlags(out)).slice(3);
     const start = tokens.indexOf("--except");
     expect(start, printedFlags(out)).toBeGreaterThanOrEqual(0);
     const rest = tokens.slice(start + 1);
@@ -130,8 +173,9 @@ describe("contract propose --closed", () => {
     // never a bare directory name (`lib` would match no target at all, since an
     // except entry without a trailing `/` is an exact file).
     expect(proposedExcepts(out)).toEqual(["lib/c.ts", "outside/pkg"]);
+    // Quoted for a shell: the line is meant to be pasted.
     expect(printedFlags(out)).toBe(
-      "hexagen contract add-rule --kind closed --except lib/c.ts outside/pkg --yes",
+      "hexagen contract add-rule --kind closed --except 'lib/c.ts' 'outside/pkg' --yes",
     );
     // The crossing that stays inside the slice is not proposed, and neither is
     // the one entering it or the one between two paths outside it: none of them
@@ -180,12 +224,65 @@ describe("contract propose --closed", () => {
   });
 
   it("says the edge list is incomplete, so the rule it proposes is not the whole picture", async () => {
+    // Collected, but a language went unread: the crossings listed are the ones
+    // the pass could see, and the note says so.
     const root = await setup();
-    await writeObserved(root, { edgesCollected: false });
+    await writeObserved(root, { unreadLanguages: ["go"] });
     const r = await runContractPropose({ root, closed: true });
     expect(r.exitCode).toBe(0);
     expect(all(r)).toContain("the edge list is incomplete");
     expect(proposedExcepts(all(r))).toEqual([]);
+  });
+
+  it("refuses when the edges were not collected, and prints no command", async () => {
+    // Nothing is known about the crossings, so "no edge leaves the slice" would
+    // be a claim the report cannot make, and an empty rule would be offered as
+    // ready to run. This is the same refusal `contract check` makes, so it is
+    // exit 2.
+    const root = await setup();
+    await writeObserved(root, { edgesCollected: false });
+    const r = await runContractPropose({ root, closed: true });
+    expect(r.exitCode).toBe(2);
+    expect(all(r)).toContain("edges were not collected");
+    expect(all(r)).toContain("re-run `hexagen observe`");
+    expect(r.stdout).toBeUndefined();
+    expect(all(r)).not.toContain("contract add-rule");
+    expect(all(r)).not.toContain("no observed edge leaves the slice");
+  });
+
+  it("quotes a target holding a space or a shell metacharacter", async () => {
+    // The line is pasted into a shell: an unquoted `a b.ts` would arrive as two
+    // `--except` entries, and an unquoted `;` would run what follows it.
+    const root = await setup();
+    await writeObserved(root, {
+      edges: [
+        { from: "src/a.ts", to: "lib/c.ts", specifier: "../lib/c" },
+        {
+          from: "src/a.ts",
+          to: "lib/my dir/a;b.ts",
+          specifier: "../lib/my dir/a;b",
+        },
+      ],
+    });
+    const out = all(await runContractPropose({ root, closed: true }));
+    expect(proposedExcepts(out)).toEqual(["lib/c.ts", "lib/my dir/a;b.ts"]);
+    expect(printedFlags(out)).toBe(
+      "hexagen contract add-rule --kind closed --except 'lib/c.ts' 'lib/my dir/a;b.ts' --yes",
+    );
+    // Read back the way a shell would: one word per target, no metacharacter run.
+    expect(printedExceptArgs(out)).toEqual(["lib/c.ts", "lib/my dir/a;b.ts"]);
+  });
+
+  it("escapes an embedded single quote as the shell's '\\'' idiom", async () => {
+    const root = await setup();
+    await writeObserved(root, {
+      edges: [
+        { from: "src/a.ts", to: "lib/it's/c.ts", specifier: "../lib/it's/c" },
+      ],
+    });
+    const out = all(await runContractPropose({ root, closed: true }));
+    expect(printedFlags(out)).toContain("'lib/it'\\''s/c.ts'");
+    expect(printedExceptArgs(out)).toEqual(["lib/it's/c.ts"]);
   });
 
   it("names a directory-spelled target instead of proposing a prefix that widens it", async () => {
@@ -252,6 +349,13 @@ describe("contract propose --closed", () => {
       { from: "src/a.ts", to: "lib/c.ts", specifier: "../lib/c" },
       { from: "api/y.ts", to: "outside/pkg", specifier: "@repo/outside-pkg" },
       { from: "src/a.ts", to: "src/b.ts", specifier: "./b" },
+      // The awkward one travels the whole way: a space and a `;` in a path, in a
+      // quoted command, into the rule that is written.
+      {
+        from: "ui/x.ts",
+        to: "lib/my dir/a;b.ts",
+        specifier: "../../lib/my dir/a;b",
+      },
     ];
     await writeObserved(root, { edges });
 
@@ -267,7 +371,7 @@ describe("contract propose --closed", () => {
     expect((await readContract(root)).rules[0]).toEqual({
       id: "c1",
       kind: "closed",
-      except: ["lib/c.ts", "outside/pkg"],
+      except: ["lib/c.ts", "outside/pkg", "lib/my dir/a;b.ts"],
       severity: "error",
     });
     // Every crossing the proposal listed is now accepted: the gate is green.
@@ -484,7 +588,11 @@ describe("contract show: a closed rule that accepts every crossing", () => {
     },
   ];
 
-  /** A repo whose slice is `src/`, with the three packages observed. */
+  /**
+   * The warning is about one rule's `except` list covering every observed package
+   * outside the slice: rules are ANDed, so an edge must pass each of them, and a
+   * rule that covers them all is the one rule that would accept any crossing.
+   */
   async function withPackages(
     opts: { paths?: string[]; exclude?: string[]; pkgs?: typeof PKGS } = {},
   ): Promise<string> {
@@ -493,7 +601,7 @@ describe("contract show: a closed rule that accepts every crossing", () => {
     return root;
   }
 
-  it("warns when the excepts cover every top-level directory outside the slice", async () => {
+  it("warns when one rule's excepts cover every package outside the slice", async () => {
     const root = await withPackages();
     await runContractAddRule({
       root,
@@ -507,13 +615,78 @@ describe("contract show: a closed rule that accepts every crossing", () => {
     const said = all(r);
     expect(said).toContain("warning:");
     expect(said).toContain('closed rule "c1"');
-    expect(said).toContain("apps/, libs/, packages/");
+    // It names the packages it judged, one per unit.
+    expect(said).toContain("(apps/web, libs/ui, packages/core)");
     expect(said).toContain("accepts every crossing");
     // the contract itself still prints, in full
     expect(r.stdout).toContain('"kind": "closed"');
   });
 
-  it("says nothing while one top-level directory is uncovered", async () => {
+  it("warns for a sibling of the slice's own package, which shares its top-level directory", async () => {
+    // `apps` holds the slice's tree AND two packages outside it. Dropping the
+    // whole top-level directory because the slice starts inside it would hide
+    // both siblings, so the units are package roots.
+    const root = await withPackages({
+      paths: ["src/", "apps/web/"],
+      pkgs: [
+        {
+          name: "@repo/web",
+          root: "apps/web",
+          manifestFile: "apps/web/package.json",
+        },
+        {
+          name: "@repo/admin",
+          root: "apps/admin",
+          manifestFile: "apps/admin/package.json",
+        },
+        {
+          name: "@repo/api",
+          root: "apps/api",
+          manifestFile: "apps/api/package.json",
+        },
+      ],
+    });
+    await runContractAddRule({
+      root,
+      kind: "closed",
+      except: ["apps/"],
+      id: "c1",
+      yes: true,
+    });
+    const said = all(await runContractShow({ root }));
+    expect(said).toContain('closed rule "c1"');
+    expect(said).toContain("(apps/admin, apps/api)");
+  });
+
+  it("an except narrower than a package root does not cover it", async () => {
+    // `apps/web/ui/` accepts crossings into that directory only, so a crossing
+    // into the rest of `apps/web` still fails: the rule is not wide open.
+    const root = await withPackages();
+    await runContractAddRule({
+      root,
+      kind: "closed",
+      except: ["apps/web/ui/", "libs/ui", "packages/core"],
+      id: "c1",
+      yes: true,
+    });
+    const said = all(await runContractShow({ root }));
+    expect(said).not.toContain("every crossing");
+
+    // Widen that one entry to the package root and the rule does cover the repo.
+    const wider = await withPackages();
+    await runContractAddRule({
+      root: wider,
+      kind: "closed",
+      except: ["apps/web/", "libs/ui", "packages/core"],
+      id: "c1",
+      yes: true,
+    });
+    expect(all(await runContractShow({ root: wider }))).toContain(
+      "every crossing",
+    );
+  });
+
+  it("says nothing while one package outside the slice is uncovered", async () => {
     const root = await withPackages();
     await runContractAddRule({
       root,
@@ -527,7 +700,7 @@ describe("contract show: a closed rule that accepts every crossing", () => {
     expect(said).not.toContain("every crossing");
   });
 
-  it("a bare directory name is not coverage: an except entry is an exact file without a trailing /", async () => {
+  it("a bare name is not coverage: an except entry without a trailing / is an exact file", async () => {
     const root = await withPackages();
     await runContractAddRule({
       root,
@@ -540,10 +713,10 @@ describe("contract show: a closed rule that accepts every crossing", () => {
     expect(said).not.toContain("every crossing");
   });
 
-  it("needs no except for a directory the slice occupies or one it excludes", async () => {
-    // `apps` holds the slice's own tree and `packages` is denied by an
+  it("needs no except for the package the slice occupies or one it excludes", async () => {
+    // `apps/web` is the slice's own tree and `packages/core` is denied by an
     // excludes entry, so neither is a crossing an except could accept: only
-    // `libs` has to be excepted for the rule to cover the repo.
+    // `libs/ui` has to be excepted for the rule to cover the repo.
     const root = await withPackages({
       paths: ["src/", "apps/web/"],
       exclude: ["packages/"],
@@ -558,9 +731,9 @@ describe("contract show: a closed rule that accepts every crossing", () => {
     const covered = all(await runContractShow({ root }));
     expect(covered).toContain('closed rule "c1"');
     expect(covered).toContain("accepts every crossing");
-    // It names only the directory it judged, not the two it skipped.
-    expect(covered).toContain("(libs/)");
-    expect(covered).not.toContain("apps/");
+    // It names only the package it judged, not the two it skipped.
+    expect(covered).toContain("(libs/ui)");
+    expect(covered).not.toContain("apps/web");
 
     // Drop that one except and the warning goes with it.
     const root2 = await withPackages({
@@ -578,7 +751,10 @@ describe("contract show: a closed rule that accepts every crossing", () => {
     expect(uncovered).not.toContain("every crossing");
   });
 
-  it("adds the coverage of two closed rules before warning", async () => {
+  it("two rules that between them cover everything do not warn: rules are ANDed", async () => {
+    // An edge has to pass EVERY closed rule, so `c1` alone still refuses a
+    // crossing into `packages/core` and `c2` alone refuses `apps/`. Together
+    // they cover the repo, but neither one does, so the slice is still closed.
     const root = await withPackages();
     for (const [id, except] of [
       ["c1", ["apps/", "libs/"]],
@@ -593,8 +769,8 @@ describe("contract show: a closed rule that accepts every crossing", () => {
       });
     }
     const said = all(await runContractShow({ root }));
-    expect(said).toContain('closed rules "c1", "c2"');
-    expect(said).toContain("accept every crossing");
+    expect(said).not.toContain("every crossing");
+    expect(said).not.toContain("warning:");
   });
 
   it("has nothing to say when the repo lists no package", async () => {
@@ -611,9 +787,9 @@ describe("contract show: a closed rule that accepts every crossing", () => {
     );
   });
 
-  it("the root package is not a directory to cover", async () => {
-    // `.` is the whole repo, not a directory the excepts could name, so it must
-    // not stand in for one: only the two real directories are judged.
+  it("the root package is not a unit to cover", async () => {
+    // `.` is the whole repo, not a package an except could name, so it must not
+    // stand in for one: only the two real packages are judged.
     const root = await withPackages({
       pkgs: [
         { name: "root", root: ".", manifestFile: "package.json" },
@@ -629,7 +805,7 @@ describe("contract show: a closed rule that accepts every crossing", () => {
     });
     const said = all(await runContractShow({ root }));
     expect(said).toContain("accepts every crossing");
-    expect(said).toContain("(apps/, libs/)");
+    expect(said).toContain("(apps/web, libs/ui)");
 
     const rootOnly = await withPackages({
       pkgs: [{ name: "root", root: ".", manifestFile: "package.json" }],

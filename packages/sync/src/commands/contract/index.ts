@@ -43,6 +43,17 @@ const pretty = (value: unknown): string =>
   `${JSON.stringify(value, null, 2)}\n`;
 
 /**
+ * POSIX single-quoting: one shell word per value, with an embedded single quote
+ * written as the shell's `'\''` idiom. An observed target is a repo path, so it
+ * may hold a space (which would arrive as two `--except` entries) or a shell
+ * metacharacter (which would run whatever follows it); the printed line is meant
+ * to be pasted, so every target is quoted. The fixed arguments carry nothing a
+ * shell would read, so they are left as they are.
+ */
+const shellWord = (value: string): string =>
+  `'${value.split("'").join(`'\\''`)}'`;
+
+/**
  * The candidate `closed` rule, as `propose --closed` prints it: the crossing
  * targets as one `except` list, the `add-rule` line that would write it, and any
  * crossing that gets no entry, with the advice that would accept it. Writes
@@ -52,7 +63,8 @@ function closedProposal(slice: Slice, observed: ObservedReport): string {
   const { excepts, notProposed } = proposeClosedExcepts(slice, observed);
   // `--except` with no prefixes at all is a legal rule (it accepts none), so
   // the empty case prints the bare flag rather than dropping it.
-  const flags = excepts.length === 0 ? "" : `${excepts.join(" ")} `;
+  const flags =
+    excepts.length === 0 ? "" : `${excepts.map(shellWord).join(" ")} `;
   const lines = [
     "closed: except the crossings observed.json already makes, and delete the ones you do not accept",
     `except: ${JSON.stringify(excepts)}`,
@@ -81,17 +93,30 @@ export async function runContractPropose(
       messages.push(...stale.problems);
       return { exitCode: 2, messages };
     }
-    if (!edgesComplete(observed.edges)) {
-      messages.push(
-        "note: the edge list is incomplete (see `hexagen slice check`); these candidates are not the whole picture",
-      );
-    }
     if (options.closed === true) {
+      // Nothing is known about the crossings, so "no edge leaves the slice"
+      // would be a claim the report cannot make, and the empty rule would be
+      // offered as ready to run. Same refusal `contract check` makes, so exit 2.
+      if (!observed.edges.collected) {
+        throw new UsageError(
+          `cannot propose a closed rule: edges were not collected in .hexagen/observed.json (${observed.edges.reason}); re-run \`hexagen observe\``,
+        );
+      }
+      if (!edgesComplete(observed.edges)) {
+        messages.push(
+          "note: the edge list is incomplete (see `hexagen slice check`); these candidates are not the whole picture",
+        );
+      }
       return {
         exitCode: 0,
         messages,
         stdout: closedProposal(slice, observed),
       };
+    }
+    if (!edgesComplete(observed.edges)) {
+      messages.push(
+        "note: the edge list is incomplete (see `hexagen slice check`); these candidates are not the whole picture",
+      );
     }
     const found = proposeCrossPrefixEdges(slice, observed);
     const lines =

@@ -3,9 +3,9 @@ import {
   edgeViolatesRule,
   edgesComplete,
   isPathInSlice,
+  prefixHasTarget,
   targetExcluded,
   targetInSlice,
-  underPrefix,
   type Contract,
   type ObservedReport,
   type Slice,
@@ -206,57 +206,65 @@ export function proposeClosedExcepts(
 }
 
 /**
- * The warning a `closed` rule earns when the `except` lists together cover every
- * top-level directory outside the slice: the rule then accepts every crossing it
- * could have refused, so the slice is not closed. `null` when there is nothing
- * to say — no `closed` rule, no collected package list, no directory outside
- * the slice, or one directory no except covers.
+ * The warning a `closed` rule earns when ITS OWN `except` list covers every
+ * observed package outside the slice: that rule then accepts every crossing it
+ * could have refused, so the slice is not closed.
  *
- * Coverage is asked of the whole directory (`apps/`, not `apps`): an except entry
- * without a trailing `/` is an exact file, so a bare name covers nothing. A
- * directory the slice occupies, and one an `excludes` entry denies, are not
- * counted: an except opens neither, so no crossing through them could be
- * accepted either.
+ * One rule, never a pool. Rules are ANDed (`edgeViolatesRule` answers one
+ * boolean per rule, and `evaluateContract` raises a violation for each rule an
+ * edge breaks), so an edge has to pass every one of them. Two rules that between
+ * them cover the whole repo leave each edge with one rule still to fail, which
+ * is exactly what a closed slice wants; pooling their lists would warn about a
+ * slice that is still shut.
+ *
+ * Coverage is asked per package root, and it means the root lies UNDER an entry:
+ * `--except apps/` covers `apps/web` and `apps/admin`, while `--except apps/web/ui/`
+ * covers neither the rest of its own package nor any sibling. An entry without a
+ * trailing `/` is an exact file (`underPrefix`), so a bare name covers nothing
+ * below it.
+ *
+ * A package the slice occupies, and one an `excludes` entry denies, are not
+ * units to cover: an except opens neither, so no crossing through them could be
+ * accepted either. The root package (`.`) is the repo, not a package an except
+ * can name.
  */
 export function closedRuleCoverageWarning(
   slice: Slice,
   observed: ObservedReport,
   rules: readonly Contract["rules"][number][],
 ): string | null {
-  const ids: string[] = [];
-  const excepts: string[] = [];
-  for (const r of rules) {
-    if (r.kind !== "closed") continue;
-    ids.push(`"${r.id}"`);
-    excepts.push(...r.except);
-  }
-  // Nothing to accept, so nothing to be too broad about.
-  if (ids.length === 0) return null;
-  const outside = topLevelDirsOutsideSlice(slice, observed);
+  const outside = packageRootsOutsideSlice(slice, observed);
   if (outside.length === 0) return null;
-  if (outside.some((dir) => !excepts.some((e) => underPrefix(e, `${dir}/`)))) {
-    return null;
+  let offender: string | undefined;
+  for (const rule of rules) {
+    if (rule.kind !== "closed") continue;
+    if (
+      outside.every((root) => rule.except.some((e) => prefixHasTarget(e, root)))
+    ) {
+      offender = rule.id;
+      break;
+    }
   }
-  const one = ids.length === 1;
-  const dirs = outside.map((dir) => `${dir}/`).join(", ");
-  return `warning: closed rule${one ? "" : "s"} ${ids.join(", ")} except${one ? "s" : ""} every top-level directory outside the slice (${dirs}), so ${one ? "it" : "they"} accept${one ? "s" : ""} every crossing: the slice is not closed`;
+  if (offender === undefined) return null;
+  return `warning: closed rule "${offender}" excepts every package outside the slice (${outside.join(", ")}), so it accepts every crossing: the slice is not closed`;
 }
 
-/** Sorted top-level directories holding a package that is neither in the slice nor excluded. */
-function topLevelDirsOutsideSlice(
+/** Sorted observed package roots that are neither inside the slice nor excluded. */
+function packageRootsOutsideSlice(
   slice: Slice,
   observed: ObservedReport,
 ): string[] {
   if (!observed.packages.collected) return [];
-  const dirs = new Set<string>();
+  const roots = new Set<string>();
   for (const pkg of observed.packages.items) {
-    // The root package is the repo, not a directory to cover.
     if (pkg.root === ".") continue;
-    const top = pkg.root.split("/")[0];
-    if (top === undefined || top === "") continue;
-    if (slice.paths.some((p) => p.startsWith(`${top}/`))) continue;
-    if (targetExcluded(slice, `${top}/`)) continue;
-    dirs.add(top);
+    // Package level, not top-level directory: `apps/web` and `apps/admin` share
+    // a top-level directory, and a slice that starts inside `apps` must not hide
+    // the siblings outside it.
+    if (targetInSlice(slice, pkg.root) || targetExcluded(slice, pkg.root)) {
+      continue;
+    }
+    roots.add(pkg.root);
   }
-  return [...dirs].sort();
+  return [...roots].sort();
 }
