@@ -1135,6 +1135,34 @@ describe("contract check --base: the growth guard", () => {
     ).toThrow("absent at base because it was never staged");
   });
 
+  it("22. two rules sharing an id are matched by value, so a reorder is not a downgrade", async () => {
+    // The schema allows a duplicate id (only `add-rule` refuses one), so a
+    // hand-edited contract can hold an error and a warn rule under one id.
+    const root = await staged({
+      rules: [RULE, { ...RULE, severity: "warn" }],
+    });
+    const swap = async (): Promise<void> => {
+      const c = await readTreeContract(root);
+      [c.rules[0], c.rules[1]] = [c.rules[1]!, c.rules[0]!];
+      await writeTreeContract(root, c);
+    };
+    await swap();
+    const reordered = await runContractCheck({ root, base: "HEAD" });
+    expect(reordered.exitCode).toBe(0);
+    expect(all(reordered)).not.toContain("growth vs");
+
+    // The genuine loss is still caught: the error rule became a warn rule.
+    const downgraded = await staged({
+      rules: [RULE, { ...RULE, severity: "warn" }],
+    });
+    const c = await readTreeContract(downgraded);
+    c.rules = c.rules.map((r) => ({ ...r, severity: "warn" }));
+    await writeTreeContract(downgraded, c);
+    const r = await runContractCheck({ root: downgraded, base: "HEAD" });
+    expect(r.exitCode).toBe(1);
+    expect(all(r)).toContain("severity changed (error -> warn)");
+  });
+
   it("21. a base whose contract names another slice exits 2", async () => {
     const root = await staged();
     const consistent: TreeContract = {

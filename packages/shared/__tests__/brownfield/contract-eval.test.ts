@@ -129,6 +129,41 @@ describe("findContractGrowth", () => {
     return { contract: base, slice, tree: { contract: tree, slice } };
   };
 
+  it("rules are paired as a multiset, so a reordered duplicate id is not a downgrade", () => {
+    const error = rule();
+    const warn = rule({ severity: "warn" });
+    const swap = contract({ rules: [error, warn] });
+    const swapped = contract({ rules: [warn, error] });
+    // Same two rules, opposite order. Pairing on the first id match paired the
+    // base's error rule with the tree's warn rule and called it a downgrade.
+    expect(findContractGrowth(sides(swap, swapped))).toEqual([]);
+
+    // A multiset comparison still catches the real loss: the error became a warn.
+    const lost = findContractGrowth(
+      sides(swap, contract({ rules: [warn, warn] })),
+    );
+    expect(lost.map((g) => [g.kind, g.detail])).toEqual([
+      ["rule-field-changed", "rule no-ui-api severity changed (error -> warn)"],
+    ]);
+
+    // An identical duplicate on each side cancels out; an extra strict rule does
+    // not make the tree weaker.
+    expect(
+      findContractGrowth(
+        sides(swap, contract({ rules: [error, warn, error] })),
+      ),
+    ).toEqual([]);
+
+    // A tree rule can only cancel ONE base rule: dropping the warn instance
+    // takes its warnings with it, even though the id is still present.
+    expect(
+      findContractGrowth(sides(swap, contract({ rules: [error] }))).map((g) => [
+        g.kind,
+        g.detail,
+      ]),
+    ).toEqual([["rule-removed", "rule no-ui-api removed"]]);
+  });
+
   it("an entry or an expiry the base did not have is growth", () => {
     const base = contract({ knownViolations: [entry()] });
     expect(findContractGrowth(sides(base, base))).toEqual([]);

@@ -188,6 +188,21 @@ const RULE_FIELDS = ["kind", "from", "to", "severity"] as const;
 const IDENTITY_FIELDS = ["file", "specifier"] as const;
 
 /**
+ * True when `tree` judges at least as much as `base` under the same rule id:
+ * `kind`, `from` and `to` must be identical — those are compared bluntly, the
+ * guard cannot compare two prefixes — and `severity` may not have been lowered
+ * from `error` to `warn`.
+ */
+function judgesAtLeastAsMuch(base: ContractRule, tree: ContractRule): boolean {
+  return (
+    base.kind === tree.kind &&
+    base.from === tree.from &&
+    base.to === tree.to &&
+    (base.severity === "warn" || tree.severity === "error")
+  );
+}
+
+/**
  * Everything the working tree has weakened relative to `base`.
  *
  * Not growth, deliberately: a removed entry, a shortened `expires`, an added
@@ -279,16 +294,35 @@ export function findContractGrowth(input: {
     }
   }
 
+  // The tree's rules, each usable once. The schema allows two rules to share an
+  // id, so a rule is paired with a tree rule it can be matched against rather
+  // than with the first one that happens to carry its id.
+  const matched = new Set<number>();
   for (const rule of baseRules) {
-    const now = treeRules.find((r) => r.id === rule.id);
-    if (!now) {
+    let asStrict = -1;
+    let sameId = -1;
+    for (let i = 0; i < treeRules.length; i++) {
+      if (matched.has(i) || treeRules[i]!.id !== rule.id) continue;
+      if (sameId === -1) sameId = i;
+      if (judgesAtLeastAsMuch(rule, treeRules[i]!)) {
+        asStrict = i;
+        break;
+      }
+    }
+    // A tree rule that judges at least as much cancels this one out, whichever
+    // of two rules sharing an id it happens to be.
+    if (asStrict !== -1) {
+      matched.add(asStrict);
+      continue;
+    }
+    if (sameId === -1) {
       found.push({ kind: "rule-removed", detail: `rule ${rule.id} removed` });
       continue;
     }
+    matched.add(sameId);
+    const now = treeRules[sameId]!;
     for (const field of RULE_FIELDS) {
       if (now[field] === rule[field]) continue;
-      // warn -> error is a stricter rule, not a weaker one.
-      if (field === "severity" && rule.severity === "warn") continue;
       found.push({
         kind: "rule-field-changed",
         detail: `rule ${rule.id} ${field} changed (${rule[field]} -> ${now[field]})`,
