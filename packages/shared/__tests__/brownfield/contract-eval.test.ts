@@ -242,6 +242,60 @@ describe("findContractGrowth", () => {
     ).toEqual([]);
   });
 
+  it("a removed or narrowed slice paths entry is growth, and an added one is not", () => {
+    const c = contract({});
+    const at = (paths: string[]) => {
+      const slice = { paths, excludes: [] as string[] };
+      return { contract: c, slice, tree: { contract: c, slice } };
+    };
+    expect(findContractGrowth(at(["ui/", "api/"]))).toEqual([]);
+
+    expect(
+      findContractGrowth({
+        ...at(["ui/", "api/"]),
+        tree: { contract: c, slice: { paths: ["ui/"], excludes: [] } },
+      }),
+    ).toEqual([
+      {
+        kind: "paths-entry-removed",
+        detail: "slice paths entry api/ removed",
+      },
+    ]);
+
+    // A longer prefix covers less, so it is growth even when the entry is kept.
+    expect(
+      findContractGrowth({
+        ...at(["ui/", "api/"]),
+        tree: {
+          contract: c,
+          slice: { paths: ["ui/", "api/v1/"], excludes: [] },
+        },
+      }),
+    ).toEqual([
+      {
+        kind: "paths-entry-narrowed",
+        detail: "slice paths entry api/ narrowed (now api/v1/)",
+      },
+    ]);
+    expect(
+      findContractGrowth({
+        ...at(["api/"]),
+        tree: {
+          contract: c,
+          slice: { paths: ["api/", "api/v1/"], excludes: [] },
+        },
+      }).map((g) => g.kind),
+    ).toEqual(["paths-entry-narrowed"]);
+
+    // Adding a prefix widens what is judged: not growth.
+    expect(
+      findContractGrowth({
+        ...at(["ui/"]),
+        tree: { contract: c, slice: { paths: ["ui/", "lib/"], excludes: [] } },
+      }),
+    ).toEqual([]);
+  });
+
   it("a contract absent from the tree reads as every rule removed", () => {
     const found = findContractGrowth({
       contract: contract({}),

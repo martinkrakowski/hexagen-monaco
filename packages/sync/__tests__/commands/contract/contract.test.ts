@@ -661,26 +661,44 @@ async function staged(opts: BaseFixture = {}): Promise<string> {
   return root;
 }
 
-async function addTreeExclude(root: string, entry: string): Promise<void> {
-  const file = path.join(root, ".hexagen", "slice.json");
-  const slice = JSON.parse(await readFile(file, "utf8")) as {
-    excludes: string[];
-  };
+async function editTreeSlice(
+  root: string,
+  over: { paths?: string[]; excludes?: string[] },
+): Promise<void> {
+  const slice = JSON.parse(
+    await readFile(path.join(root, ".hexagen", "slice.json"), "utf8"),
+  ) as { paths: string[]; excludes: string[] };
   await put(
     root,
     ".hexagen/slice.json",
-    `${JSON.stringify({ ...slice, excludes: [...slice.excludes, entry] }, null, 2)}\n`,
+    `${JSON.stringify(
+      {
+        ...slice,
+        ...(over.paths ? { paths: over.paths } : {}),
+        ...(over.excludes
+          ? { excludes: [...slice.excludes, ...over.excludes] }
+          : {}),
+      },
+      null,
+      2,
+    )}\n`,
   );
 }
 
-/** Each row of the growth table: what the base holds, and how the tree weakens it. */
+/**
+ * Every row of the growth table: what the base holds, how the tree changes it,
+ * and the exit `check --base` must give. `exit: 0` rows are the ones a guard
+ * that only ever fails would get wrong.
+ */
 const GROWTH_ROWS: Array<{
   name: string;
+  exit: 0 | 1;
   base?: BaseFixture;
   weaken: (root: string) => Promise<void>;
 }> = [
   {
     name: "a new knownViolations entry",
+    exit: 1,
     weaken: async (root) => {
       const c = await readTreeContract(root);
       c.knownViolations.push({ ...ENTRY });
@@ -689,6 +707,7 @@ const GROWTH_ROWS: Array<{
   },
   {
     name: "an expires pushed later",
+    exit: 1,
     base: { knownViolations: [{ ...ENTRY, expires: "2026-12-01" }] },
     weaken: async (root) => {
       const c = await readTreeContract(root);
@@ -698,6 +717,7 @@ const GROWTH_ROWS: Array<{
   },
   {
     name: "an expires dropped",
+    exit: 1,
     base: { knownViolations: [{ ...ENTRY, expires: "2026-12-01" }] },
     weaken: async (root) => {
       const c = await readTreeContract(root);
@@ -707,6 +727,7 @@ const GROWTH_ROWS: Array<{
   },
   {
     name: "a removed rule",
+    exit: 1,
     base: { rules: [RULE, { ...RULE, id: "no-ui-lib" }] },
     weaken: async (root) => {
       const c = await readTreeContract(root);
@@ -716,6 +737,7 @@ const GROWTH_ROWS: Array<{
   },
   {
     name: "a severity downgraded to warn",
+    exit: 1,
     weaken: async (root) => {
       const c = await readTreeContract(root);
       c.rules[0]!.severity = "warn";
@@ -724,6 +746,7 @@ const GROWTH_ROWS: Array<{
   },
   {
     name: "a rule field edited",
+    exit: 1,
     weaken: async (root) => {
       const c = await readTreeContract(root);
       c.rules[0]!.to = "api/legacy/";
@@ -732,7 +755,24 @@ const GROWTH_ROWS: Array<{
   },
   {
     name: "a new slice exclude",
-    weaken: (root) => addTreeExclude(root, "api/legacy/"),
+    exit: 1,
+    weaken: (root) => editTreeSlice(root, { excludes: ["api/legacy/"] }),
+  },
+  {
+    name: "a slice paths entry removed",
+    exit: 1,
+    weaken: (root) => editTreeSlice(root, { paths: ["src/", "ui/"] }),
+  },
+  {
+    name: "a slice paths entry narrowed",
+    exit: 1,
+    weaken: (root) => editTreeSlice(root, { paths: ["src/", "ui/", "ui/ui/"] }),
+  },
+  {
+    name: "a slice paths entry added",
+    exit: 0,
+    weaken: (root) =>
+      editTreeSlice(root, { paths: ["src/", "ui/", "api/", "lib/"] }),
   },
 ];
 
@@ -862,13 +902,27 @@ describe("contract check --base: the growth guard", () => {
     }
   });
 
-  it("11. a new slice exclude fails as growth", async () => {
-    const root = await staged();
-    await addTreeExclude(root, "api/legacy/");
-    const r = await runContractCheck({ root, base: "HEAD" });
+  it("11. a new slice exclude fails as growth, and a removed or narrowed paths entry too", async () => {
+    const excluded = await staged();
+    await editTreeSlice(excluded, { excludes: ["api/legacy/"] });
+    const r = await runContractCheck({ root: excluded, base: "HEAD" });
     expect(r.exitCode).toBe(1);
     expect(all(r)).toContain("api/legacy/");
     expect(all(r)).toContain("exclude");
+
+    // A paths entry removed shrinks the slice: the files under it stop being
+    // judged, which is worse than an exclude because nothing is ever reported.
+    const removed = await staged();
+    await editTreeSlice(removed, { paths: ["src/", "ui/"] });
+    const gone = await runContractCheck({ root: removed, base: "HEAD" });
+    expect(gone.exitCode).toBe(1);
+    expect(all(gone)).toContain("api/ removed");
+
+    const narrowed = await staged();
+    await editTreeSlice(narrowed, { paths: ["src/", "ui/", "ui/ui/"] });
+    const less = await runContractCheck({ root: narrowed, base: "HEAD" });
+    expect(less.exitCode).toBe(1);
+    expect(all(less)).toContain("ui/ narrowed");
   });
 
   it("12. an expires dropped in the tree fails as growth, including the --baseline drop", async () => {
@@ -923,11 +977,17 @@ describe("contract check --base: the growth guard", () => {
   });
 
   it.each(GROWTH_ROWS)(
-    "14. --allow-growth --reason accepts $name at exit 0",
-    async ({ name, base, weaken }) => {
+    "14. --base gives $exit for $name, and --allow-growth --reason accepts the growth",
+    async ({ name, exit, base, weaken }) => {
       const root = await staged(base);
       await weaken(root);
-      expect((await runContractCheck({ root, base: "HEAD" })).exitCode).toBe(1);
+      const refused = await runContractCheck({ root, base: "HEAD" });
+      expect(refused.exitCode, name).toBe(exit);
+      if (exit === 0) {
+        // Not growth: the guard must say so and change nothing.
+        expect(all(refused), name).not.toContain("growth vs");
+        return;
+      }
       const reason = `reviewed: ${name}`;
       const r = await runContractCheck({
         root,

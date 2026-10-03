@@ -149,7 +149,9 @@ export type ContractGrowthKind =
   | "expires-dropped"
   | "rule-removed"
   | "rule-field-changed"
-  | "exclude-added";
+  | "exclude-added"
+  | "paths-entry-removed"
+  | "paths-entry-narrowed";
 
 export interface ContractGrowth {
   kind: ContractGrowthKind;
@@ -182,9 +184,9 @@ const RULE_FIELDS = ["kind", "from", "to", "severity"] as const;
  * Everything the working tree has weakened relative to `base`.
  *
  * Not growth, deliberately: a removed entry, a shortened `expires`, an added
- * rule and a removed exclude. Those are the ratchet moving in the right
- * direction. A `severity` raised from `warn` to `error` is likewise not growth,
- * so it is reported only when it weakens.
+ * rule, a removed exclude, and an added or widened slice `paths` entry. Those
+ * are the ratchet moving in the right direction. A `severity` raised from `warn`
+ * to `error` is likewise not growth, so it is reported only when it weakens.
  */
 export function findContractGrowth(input: {
   contract: Pick<Contract, "rules" | "knownViolations">;
@@ -259,6 +261,34 @@ export function findContractGrowth(input: {
       kind: "exclude-added",
       detail: `new slice exclude ${exclude}`,
     });
+  }
+
+  // A `paths` entry is the slice's reach, so losing one is worse than a new
+  // exclude: a file under a removed prefix is not judged at all, so nothing is
+  // ever reported for it, while an exclude at least leaves the rest of the
+  // prefix judged. Narrowing to a longer prefix covers less of the same ground
+  // and is the same loss. Widening (a new entry) judges MORE, so it is not
+  // growth.
+  const treePaths = tree.slice.paths.map(nfc);
+  for (const entry of baseSlice.paths) {
+    const key = nfc(entry);
+    // A tree entry strictly inside the base entry narrows it: the same ground,
+    // less of it. `underPrefix` is exact for an entry with no trailing slash, so
+    // a file path can never be narrowed this way.
+    const narrower = treePaths.find((p) => p !== key && underPrefix(key, p));
+    if (narrower !== undefined) {
+      found.push({
+        kind: "paths-entry-narrowed",
+        detail: `slice paths entry ${entry} narrowed (now ${narrower})`,
+      });
+      continue;
+    }
+    if (!treePaths.includes(key)) {
+      found.push({
+        kind: "paths-entry-removed",
+        detail: `slice paths entry ${entry} removed`,
+      });
+    }
   }
 
   return found;
