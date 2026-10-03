@@ -86,11 +86,14 @@ commit, and it never skips.
 | 4   | `hexagen evidence pack <trace> --grant <each staged grant> --out <temp>.zip` | yes                    | the evidence is invalid; no bundle written                       | usage or a failed precondition |
 | 4b  | `hexagen evidence verify --since <pinned PR base SHA> --grant <each grant>`  | yes                    | a changed file no anchored line covers                           | bad input or stale state       |
 
-Step 3 runs the plain `hexagen contract check` instead when the base predates the
-sidecar files — the bootstrap PR — and says so in the log; step 4b does not run
-there at all, because it reads the slice from the `<since>` tree and that PR's
-base has none. See
-[The first PR](#the-first-pr-no-base-to-compare-against) below.
+Step 3 runs the plain `hexagen contract check` instead when the base carries
+neither sidecar file — the bootstrap PR — and says so in the log; and it exits 2
+without running either check when the base carries exactly one of them. Step 4b
+does not run when the base has no slice, and it runs and fails when the base has a
+slice but no trace. See
+[The first PR](#the-first-pr-no-base-to-compare-against) and
+[A base with a slice but no trace](#a-base-with-a-slice-but-no-trace-step-4b-runs-and-refuses)
+below.
 
 Every step prints its own `step <n> exit <code>` line, so a reader of the log can
 tell a **violation** (1) from **bad input or stale state** (2) without reading
@@ -142,27 +145,63 @@ that predates them — so `--base` would fail that PR with "absent at base becau
 it was never staged", which is true of the base and has nothing to do with the
 change under review. Failing the PR that sets the gate up is not a gate.
 
-The **"Resolve the base commit"** step therefore probes once, with
-`git cat-file -e "<base>:<path>"` on both files, and publishes what it found as
-`absent_at_base`. Steps 3 and 4b both read that one output, because a probe
-written twice is a probe that can disagree with itself:
+The **"Resolve the base commit"** step therefore probes the base once, with
+`git cat-file -e "<base>:<path>"`, and publishes what it found as step outputs:
+`base_state` (`none`, `both` or `partial`), `absent_at_base` (which files), plus
+`slice_at_base` and `trace_at_base` for step 4b. A probe written twice is a probe
+that can disagree with itself.
 
-- **base carries them** — the normal case: `hexagen contract check --base <sha>`,
-  and both violations and growth fail the PR; and step 4b judges the range.
-- **base carries neither** — the bootstrap PR: step 3 logs
+**Three states, not two.** The third is not a flavour of the second:
+
+- **`none`** — both sidecar files at the base, the normal case:
+  `hexagen contract check --base <sha>`, and both violations and growth fail the
+  PR; and step 4b judges the range.
+- **`both`** — neither at the base, the bootstrap PR: step 3 logs
   `::notice::bootstrap: no contract at base <sha>; growth guard starts on the next PR`,
   names which sidecar files were absent, and runs the plain `hexagen contract
 check`. Violations still fail the job. Only the growth comparison is skipped.
   **Step 4b does not run at all**: `evidence verify` reads the slice from the
-  `<since>` tree, and there is no slice there, so it would exit 2 for a
-  precondition that has nothing to do with the change.
+  `<since>` tree, and there is no slice there, so it has no governance to judge
+  the range against.
+- **`partial`** — exactly one of them at the base, which happens when the slice
+  and the contract are committed in different PRs. **This is a failure, exit 2,
+  naming the file.** It is not a bootstrap: there _is_ something at that base to
+  compare against, and skipping the growth guard would drop it on a PR that has a
+  contract to be compared to. It is not a base to compare against either: the
+  guard reads both files, so comparing half a baseline would judge the other half
+  as growth — or as a violation — on no evidence at all. The log says what to
+  stage:
 
-**The growth guard, and step 4b's coverage check, protect from the second PR
-onward**, once the base carries the contract. The bootstrap PR is judged on
-violations alone, and the log says so rather than leaving a reader to infer a
-pass. If the base has the contract and the PR deletes it, that is not the
-bootstrap: step 0 has already failed the PR by name, so the probe cannot be
-reached with a deleted contract.
+  ```
+  ::error::a half-staged base: <sha> carries one of .hexagen/contract.json and .hexagen/slice.json and not the other. … absent at the base commit: .hexagen/contract.json. Stage the missing file from the engagement machine, commit it on the branch, then re-run:
+  hexagen workbook export --stage .hexagen/contract.json --yes
+  ```
+
+**The growth guard protects from the second PR onward**, once the base carries the
+contract. The bootstrap PR is judged on violations alone, and the log says so
+rather than leaving a reader to infer a pass. If the base has the contract and
+the PR deletes it, that is not the bootstrap: step 0 has already failed the PR by
+name, so the probe cannot be reached with a deleted contract.
+
+### A base with a slice but no trace: step 4b runs and refuses
+
+The other half-staged shape, and it is **not** a second bootstrap. The sidecars
+landed in one PR and the evidence in the next, so the base has
+`.hexagen/slice.json` and `.hexagen/contract.json` but no trace.
+
+Step 4b's condition is the base **slice** and nothing else, because that is all
+`evidence verify` reads there — it never looks at the contract. With a slice at
+the base, step 4b runs, and it exits **2**:
+
+```
+the trace is not tracked at <since>; only lines appended after it could cover a change, and this checkout cannot tell which those are. Refusing to guess.
+```
+
+Skipping it would be a second bootstrap, and it would skip the only coverage
+check on the PR that starts the evidence — a PR that may carry an in-slice edit.
+So the gate refuses instead, and names the reason twice: once in the resolve
+step's warning, before the symptom, and once from the command. The next PR, whose
+base carries the trace, is judged normally.
 
 ### Steps 4 and 4b: the whole trace, then this PR
 
@@ -308,26 +347,69 @@ jobs:
             echo "::error::base commit '${base}' is not in this checkout; a pull_request run needs fetch-depth: 0. Refusing to gate against an unknown base."
             exit 2
           fi
-          # What the base holds, resolved once for both of the steps that care.
-          # Every writer of `.hexagen/` adds it to `.git/info/exclude`
+          # What the base holds, resolved once for every step that judges against
+          # it. Every writer of `.hexagen/` adds it to `.git/info/exclude`
           # (`slice init`, `contract add-rule`, `contract check --baseline`,
           # `observe`, `grant issue`), so the PR that FIRST stages the sidecar
           # files has a base that predates them: `git show` cannot tell "never
-          # staged" from "the commit that adds them", and there is nothing at
-          # that base to compare growth against or to judge a range against. Both
-          # steps below need to know when that is the case, and a probe written
-          # twice is a probe that can disagree with itself, so it is written here
-          # once and published as a step output.
+          # staged" from "the commit that adds it". A probe written twice is a
+          # probe that can disagree with itself, so it is written here once and
+          # published as step outputs.
+          #
+          # Three states, not two, and the third is not a flavour of the second:
+          #   none  — both sidecar files at the base; growth is guarded.
+          #   both  — neither at the base; this is the PR that stages them, and
+          #           there is nothing at that base to compare against.
+          #   partial — exactly one of them. The growth guard reads BOTH, so it
+          #           cannot compare half a baseline, and calling it a bootstrap
+          #           would skip the growth check on a PR that has a contract to
+          #           compare against. Step 3 refuses instead; see there.
           absent=""
+          missing=0
           for sidecar in .hexagen/contract.json .hexagen/slice.json; do
             if ! git cat-file -e "${base}:${sidecar}" 2>/dev/null; then
               absent="${absent} ${sidecar}"
+              missing=$((missing + 1))
             fi
           done
-          echo "base=${base}" >> "${GITHUB_OUTPUT}"
-          echo "absent_at_base=${absent}" >> "${GITHUB_OUTPUT}"
+          if [ "${missing}" -eq 0 ]; then
+            base_state=none
+          elif [ "${missing}" -eq 2 ]; then
+            base_state=both
+          else
+            base_state=partial
+          fi
+          # `evidence verify` reads the base SLICE and the base TRACE, and never
+          # the contract — so it gets its own probe rather than the pair above.
+          # Only the slice decides whether step 4b runs; the trace is published
+          # so the log can name, before the symptom, why step 4b will refuse.
+          TRACE_REL=".hexagen/evidence/trace.jsonl"
+          slice_at_base=true
+          trace_at_base=true
+          git cat-file -e "${base}:.hexagen/slice.json" 2>/dev/null || slice_at_base=false
+          git cat-file -e "${base}:${TRACE_REL}" 2>/dev/null || trace_at_base=false
+          {
+            echo "base=${base}"
+            echo "base_state=${base_state}"
+            echo "absent_at_base=${absent}"
+            echo "slice_at_base=${slice_at_base}"
+            echo "trace_at_base=${trace_at_base}"
+          } >> "${GITHUB_OUTPUT}"
           echo "gating against base ${base}"
-          echo "absent at the base commit:${absent:- none}"
+          case "${base_state}" in
+            none)
+              echo "the base carries both sidecar files; the growth guard is armed"
+              ;;
+            both)
+              echo "::notice::bootstrap: the base predates .hexagen/, so this run judges violations only"
+              ;;
+            *)
+              echo "::warning::a half-staged base; absent at the base commit:${absent}"
+              ;;
+          esac
+          if [ "${trace_at_base}" = "false" ]; then
+            echo "::warning::the base carries no ${TRACE_REL}; step 4b will exit 2 until the evidence is committed at the base, because a trace that was never tracked there cannot say which lines are new enough to cover a change"
+          fi
 
       - name: "step 0: the .hexagen/ inputs must be tracked"
         run: |
@@ -430,15 +512,35 @@ jobs:
           # step does not pass --strict, so it could only warn.
           set -uo pipefail
           base="${{ steps.base.outputs.base }}"
+          base_state="${{ steps.base.outputs.base_state }}"
           absent="${{ steps.base.outputs.absent_at_base }}"
-          # When the base holds no contract, run the plain check, which still
-          # fails on any violation. That PR is judged on violations only; growth
-          # is guarded from the next PR onward, once the base carries the contract.
+          # The growth guard reads BOTH sidecar files AT the base commit and exits
+          # 2 when either is absent there — with `.hexagen/` in the exclude file,
+          # "never staged" and "the commit that adds it" look the same to `git
+          # show`, so there is no first-commit pass inside the command. The base
+          # probe above resolved what the base holds, and there are three answers,
+          # not two:
+          #
+          #   none    — both there: compare, and let violations and growth fail.
+          #   both    — the PR that first stages them: run the plain check, which
+          #             still fails on any violation. Growth starts on the next PR.
+          #   partial — one of the two. This is NOT a bootstrap and NOT a base to
+          #             compare against, so refuse: comparing half a baseline would
+          #             judge the other half as growth or as a violation on no
+          #             evidence, and calling it a bootstrap would drop the growth
+          #             guard on a PR that has a contract to compare to. Exit 2,
+          #             naming the file, is the only honest answer here.
           #
           # A base that DOES hold them, and a PR that deletes them, is a different
-          # thing and step 0 has already failed that PR by name — so this branch
-          # is only reachable on the PR that introduces the sidecars.
-          if [ -n "${absent}" ]; then
+          # thing and step 0 has already failed that PR by name — so the `both`
+          # branch is only reachable on the PR that introduces the sidecars.
+          if [ "${base_state}" = "partial" ]; then
+            echo "::error::a half-staged base: ${base} carries one of .hexagen/contract.json and .hexagen/slice.json and not the other. The growth guard reads both, so it refuses rather than judge half a baseline; absent at the base commit:${absent}. Stage the missing file from the engagement machine, commit it on the branch, then re-run:"
+            echo "hexagen workbook export --stage${absent} --yes"
+            echo "step 3 exit 2"
+            exit 2
+          fi
+          if [ "${base_state}" = "both" ]; then
             echo "::notice::bootstrap: no contract at base ${base}; growth guard starts on the next PR"
             echo "::notice::absent at the base commit:${absent} — nothing to compare against, so this run judges violations only"
             set +e
@@ -451,7 +553,7 @@ jobs:
           set -e
           echo "step 3 exit ${code}"
           if [ "${code}" -eq 1 ]; then
-            if [ -n "${absent}" ]; then
+            if [ "${base_state}" = "both" ]; then
               echo "::error::contract check exit 1: a rule was crossed that is not in the baseline. This is the bootstrap PR, so there is no base to compare growth against."
             else
               echo "::error::contract check exit 1: a rule was crossed that is not in the baseline, or the gate was weakened against the base (a rule dropped or downgraded, a suppression added or extended, a slice exclude added). Both are refusals, not warnings."
@@ -524,14 +626,21 @@ jobs:
           exit "${code}"
 
       - name: "step 4b: evidence verify --since <base>"
-        # Skipped on the one PR that first stages `.hexagen/`: `evidence verify`
-        # reads the slice from the `<since>` tree, and that PR's base predates the
-        # slice, so it would exit 2 for a precondition that has nothing to do
-        # with the change under review. Step 3 already judges that PR on
-        # violations alone. From the next PR on the base carries the slice, and
-        # this step judges the range. The probe is in the "Resolve the base
-        # commit" step above; step 3 reads the same output.
-        if: steps.base.outputs.absent_at_base == ''
+        # Skipped on exactly one PR: the one that first stages `.hexagen/`, whose
+        # base has no slice to judge the range against, and which step 3 already
+        # judges on violations alone.
+        #
+        # The condition is the base SLICE and nothing else, because that is what
+        # `evidence verify` reads there — never the contract. A base that has the
+        # slice but not the trace is NOT skipped: that is the PR that starts the
+        # evidence, it may carry an in-slice edit, and skipping the only coverage
+        # check on it would let that edit through. `evidence verify` runs and
+        # exits 2, naming a trace that was never tracked at the base — which is
+        # the truth, and the probe in the resolve step above says so in the log
+        # before the symptom. A second bootstrap here would only ever be right
+        # about a base with no trace, which is not the same thing as no
+        # governance, so it is refused instead.
+        if: steps.base.outputs.slice_at_base == 'true'
         run: |
           # The per-PR gate, and the only step that narrows to what this PR
           # changed: a file inside the slice or inside a supplied grant with no
@@ -565,7 +674,10 @@ jobs:
           if [ "${code}" -eq 1 ]; then
             echo "::error::evidence verify exit 1: a changed file inside the slice or a grant has no covering trace line."
           elif [ "${code}" -eq 2 ]; then
-            echo "::error::evidence verify exit 2: bad input or stale state — an unresolvable --since, a missing trace, or an empty diff."
+            # Every cause the command has, because a reader of the log cannot see
+            # the command's own reasons in a one-line annotation, and "exit 2"
+            # alone does not say whether to fix the pin, the trace or the key.
+            echo "::error::evidence verify exit 2: nothing was judged. Every cause it has: an unresolvable --since (or one that is not an ancestor of HEAD); no slice at the base; a trace missing, empty or untracked at the base; a trace rewritten since the base; a trace that is not sound evidence — a broken chain, a torn last line, a failed rule, a tip that does not anchor its line or whose HMAC does not verify with the key; a proposal whose paths do not reproduce its line's result_digest; an empty diff; no engagement key; or a grant file that is unreadable, signed by another key, or given twice. The table is docs/ci/brownfield-gate-recipe.md §Exit codes, per command."
           fi
           exit "${code}"
 
@@ -681,6 +793,10 @@ refuses a tampered blob**.
   growth (there is no contract at that PR's base to compare against) nor coverage
   (there is no slice at that base for `evidence verify` to judge the range
   against). From the next PR on, all three.
+- On a base that carries only one of `contract.json` and `slice.json`, it checks
+  nothing: that is exit 2 with the file to stage, not a pass.
+- On the PR that first stages the trace, `evidence verify` exits 2 (the trace was
+  never tracked at the base). Commit the evidence first; the next PR is judged.
 
 Each of those is named in [kit plan 5](../planning/2026-10-03_kit-05-evidence-pack-and-ci-leave-behind.md)
 §7 rather than papered over here, because the recipe is what a client reads when

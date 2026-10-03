@@ -707,6 +707,112 @@ async function propose(
 
 const EMPTY_SECTION = { collected: true, items: [] };
 
+/**
+ * The sidecar, one file at a time.
+ *
+ * Written separately because two cases need a base commit that holds only part
+ * of it — a half-staged base, and a base with the slice but no trace — and a
+ * single "write it all" helper could not express either. `slice.repo.commit`
+ * names the commit the engagement machine was on when `slice init` ran, which
+ * is the commit before the sidecar is staged.
+ */
+async function writeSlice(): Promise<void> {
+  await put(
+    ".hexagen/slice.json",
+    `${JSON.stringify(
+      {
+        schemaVersion: "1.0.0",
+        id: SLICE_ID,
+        repo: { commit: treeOnly },
+        paths: ["src/"],
+        excludes: [],
+        createdBy: "t@example.test",
+        createdAt: CALL_TIME,
+      },
+      null,
+      2,
+    )}\n`,
+  );
+}
+
+async function writeContract(): Promise<void> {
+  await put(
+    ".hexagen/contract.json",
+    `${JSON.stringify(
+      {
+        schemaVersion: "1.0.0",
+        sliceId: SLICE_ID,
+        rules: [
+          {
+            id: "no-ui-api",
+            kind: "forbid",
+            from: "src/ui/",
+            to: "src/api/",
+            severity: "error",
+          },
+        ],
+        knownViolations: [],
+      },
+      null,
+      2,
+    )}\n`,
+  );
+}
+
+async function writeObserved(): Promise<void> {
+  await put(
+    ".hexagen/observed.json",
+    `${JSON.stringify(
+      {
+        schemaVersion: "1.0.0",
+        repo: { commit: treeOnly },
+        generatedAt: CALL_TIME,
+        packages: EMPTY_SECTION,
+        languages: EMPTY_SECTION,
+        build: EMPTY_SECTION,
+        generated: EMPTY_SECTION,
+        dontTouch: EMPTY_SECTION,
+        edges: { collected: true, unreadLanguages: [], items: [] },
+        unresolved: EMPTY_SECTION,
+        limits: { truncated: false, reasons: [] },
+      },
+      null,
+      2,
+    )}\n`,
+  );
+}
+
+/** Grant, one chained trace line, its proposal, and the tip that anchors it. */
+async function writeEvidence(): Promise<void> {
+  await put(".hexagen/grants/grant-1.json", signedGrant());
+  await appendChainedLine(abs(TRACE), (next) => ({
+    ...proposeLine("p0", ["src/api/client.ts"]),
+    ...next,
+  }));
+  await put(
+    ".hexagen/proposals/p0.json",
+    proposalMeta("p0", ["src/api/client.ts"], 0),
+  );
+  await anchorHead();
+}
+
+const SLICE_FILE = ".hexagen/slice.json";
+const CONTRACT_FILE = ".hexagen/contract.json";
+const OBSERVED_FILE = ".hexagen/observed.json";
+const GRANT_FILE = ".hexagen/grants/grant-1.json";
+const PROPOSAL_FILE = ".hexagen/proposals/p0.json";
+
+/** The paths `hexagen workbook export --stage` puts in the index. */
+const STAGED_SIDECAR = [
+  SLICE_FILE,
+  CONTRACT_FILE,
+  OBSERVED_FILE,
+  GRANT_FILE,
+  TRACE,
+  TIP,
+  PROPOSAL_FILE,
+];
+
 beforeAll(async () => {
   await assertBuiltArtifactsPresent();
   fix = await createPublishedLayoutFixture("", "hexagen-gate-contract-", {
@@ -734,18 +840,8 @@ beforeAll(async () => {
   await put("README.md", "# acme-client\n");
   await put("src/api/client.ts", 'export const client = "api";\n');
   await put("src/ui/view.ts", 'export const view = "ui";\n');
-  await put(".hexagen/grants/grant-1.json", signedGrant());
-  await appendChainedLine(abs(TRACE), (next) => ({
-    ...proposeLine("p0", ["src/api/client.ts"]),
-    ...next,
-  }));
-  await put(
-    ".hexagen/proposals/p0.json",
-    proposalMeta("p0", ["src/api/client.ts"], 0),
-  );
-  await anchorHead();
-  // One commit staging the client's tree and everything the gate reads, the way
-  // `hexagen workbook export --stage` puts it in the index.
+  // One commit staging the client's tree, the way the engagement machine had it
+  // before any kit command wrote to `.hexagen/`.
   commit("the engagement: the client's tree", [
     "package.json",
     "tsconfig.base.json",
@@ -754,77 +850,15 @@ beforeAll(async () => {
     "src/api/client.ts",
     "src/ui/view.ts",
   ]);
-  // `slice init` writes slice.repo.commit once and never moves it, and the
-  // observed report is read at that same commit; step 1 rewrites the report at
-  // HEAD on every run, so only step 0's list depends on these being committed.
-  const staged = git("rev-parse", "HEAD");
-  treeOnly = staged;
-  await put(
-    ".hexagen/slice.json",
-    `${JSON.stringify(
-      {
-        schemaVersion: "1.0.0",
-        id: SLICE_ID,
-        repo: { commit: staged },
-        paths: ["src/"],
-        excludes: [],
-        createdBy: "t@example.test",
-        createdAt: CALL_TIME,
-      },
-      null,
-      2,
-    )}\n`,
-  );
-  await put(
-    ".hexagen/contract.json",
-    `${JSON.stringify(
-      {
-        schemaVersion: "1.0.0",
-        sliceId: SLICE_ID,
-        rules: [
-          {
-            id: "no-ui-api",
-            kind: "forbid",
-            from: "src/ui/",
-            to: "src/api/",
-            severity: "error",
-          },
-        ],
-        knownViolations: [],
-      },
-      null,
-      2,
-    )}\n`,
-  );
-  await put(
-    ".hexagen/observed.json",
-    `${JSON.stringify(
-      {
-        schemaVersion: "1.0.0",
-        repo: { commit: staged },
-        generatedAt: CALL_TIME,
-        packages: EMPTY_SECTION,
-        languages: EMPTY_SECTION,
-        build: EMPTY_SECTION,
-        generated: EMPTY_SECTION,
-        dontTouch: EMPTY_SECTION,
-        edges: { collected: true, unreadLanguages: [], items: [] },
-        unresolved: EMPTY_SECTION,
-        limits: { truncated: false, reasons: [] },
-      },
-      null,
-      2,
-    )}\n`,
-  );
-  commit("the engagement: evidence staged", [
-    ".hexagen/slice.json",
-    ".hexagen/contract.json",
-    ".hexagen/observed.json",
-    ".hexagen/grants/grant-1.json",
-    TRACE,
-    TIP,
-    ".hexagen/proposals/p0.json",
-  ]);
+  // `slice init` read HEAD here and wrote that commit once; the observed report
+  // was read at the same commit. Step 1 rewrites the report at HEAD on every
+  // run, so only step 0's list depends on these being committed.
+  treeOnly = git("rev-parse", "HEAD");
+  await writeSlice();
+  await writeContract();
+  await writeObserved();
+  await writeEvidence();
+  commit("the engagement: evidence staged", STAGED_SIDECAR);
   pristine = git("rev-parse", "HEAD");
 }, 180_000);
 
@@ -1105,6 +1139,107 @@ describe(
         /will write: .*observed\.json/,
         dump(run),
       );
+    });
+
+    it("a half-staged base fails step 3 with exit 2, naming the file", async () => {
+      // The FDE committed the slice and the contract lands in a later PR. One of
+      // the two files the growth guard reads is at the base and the other is not,
+      // which is neither a first commit (both absent) nor a base to compare
+      // against (both present). Treating it as either would be a guess, and the
+      // guess that lets an in-slice edit through is the one that matters.
+      git("reset", "--hard", "-q", treeOnly);
+      await writeSlice();
+      const base = commit("the engagement: the slice, staged on its own", [
+        SLICE_FILE,
+      ]);
+      await writeContract();
+      await writeObserved();
+      await writeEvidence();
+      commit("the engagement: the contract and the evidence", [
+        CONTRACT_FILE,
+        OBSERVED_FILE,
+        GRANT_FILE,
+        TRACE,
+        TIP,
+        PROPOSAL_FILE,
+      ]);
+      await put(
+        "src/api/client.ts",
+        'export const client = "api";\nexport const retry = 2;\n',
+      );
+      commit("feat: retry the client twice", ["src/api/client.ts"]);
+
+      const run = await runGate({ base });
+
+      assert.equal(run.jobExit, 2, dump(run));
+      assert.equal(run.stoppedAt, STEP_3, dump(run));
+      const step3 = ran(run, STEP_3);
+      assert.equal(step3.code, 2, dump(run));
+      assert.match(step3.out, /step 3 exit 2/, dump(step3));
+      assert.match(step3.out, /half-staged base/, dump(step3));
+      assert.match(
+        step3.out,
+        new RegExp(`\\.hexagen/contract\\.json`),
+        dump(step3),
+      );
+      assert.match(step3.out, /hexagen workbook export --stage/, dump(step3));
+      // Neither the growth guard nor the coverage check was skipped over it.
+      skipped(run, STEP_4);
+      skipped(run, STEP_4B);
+    });
+
+    it("a base with the slice but no trace: step 4b runs and exits 2, it is not a bootstrap", async () => {
+      // The sidecars landed earlier; the evidence lands in this PR. Skipping
+      // step 4b here would be a second bootstrap, and it would skip the coverage
+      // gate for the one PR that starts the evidence — which may carry an
+      // in-slice edit. So it runs, and `evidence verify` refuses: a trace that
+      // was never tracked at `<since>` cannot say which lines are new enough to
+      // cover anything, and it will not guess.
+      git("reset", "--hard", "-q", treeOnly);
+      await writeSlice();
+      await writeContract();
+      await writeObserved();
+      const base = commit("the engagement: sidecar staged, no evidence yet", [
+        SLICE_FILE,
+        CONTRACT_FILE,
+        OBSERVED_FILE,
+      ]);
+      await writeEvidence();
+      await put(
+        "src/api/client.ts",
+        'export const client = "api";\nexport const retry = 2;\n',
+      );
+      commit("feat: retry the client twice, with the evidence", [
+        GRANT_FILE,
+        TRACE,
+        TIP,
+        PROPOSAL_FILE,
+        "src/api/client.ts",
+      ]);
+
+      const run = await runGate({ base });
+
+      assert.equal(run.jobExit, 2, dump(run));
+      assert.equal(run.stoppedAt, STEP_4B, dump(run));
+      // The whole-trace gate still ran and passed; only the range check refuses.
+      assert.equal(reportedExit(ran(run, STEP_4)), 0, dump(run));
+      assert.equal(reportedExit(ran(run, STEP_3)), 0, dump(run));
+      const step4b = ran(run, STEP_4B);
+      assert.equal(step4b.code, 2, dump(run));
+      assert.match(step4b.out, /step 4b exit 2/, dump(step4b));
+      assert.match(step4b.out, /the trace is not tracked at/, dump(step4b));
+      // The exit-2 annotation has to name the causes a reader cannot see: the
+      // command's own reasons are in the log, not in a one-line annotation, and
+      // "exit 2" alone does not say whether to fix the pin, the trace or the key.
+      for (const cause of [
+        /an unresolvable --since/,
+        /a trace rewritten since the base/,
+        /an empty diff/,
+        /signed by another key/,
+        /docs\/ci\/brownfield-gate-recipe\.md §Exit codes/,
+      ]) {
+        assert.match(step4b.out, cause, dump(step4b));
+      }
     });
 
     it("the bootstrap case: with no contract at the base, step 3 runs a plain check", async () => {
