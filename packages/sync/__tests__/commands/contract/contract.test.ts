@@ -1,8 +1,9 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import {
+  contractCommander,
   runContractAddRule,
   runContractCheck,
   runContractPropose,
@@ -571,6 +572,81 @@ describe("contract check: the closed kind", () => {
       { id: "c1", kind: "closed", except: [], severity: "error" },
     ]);
     expect((await runContractCheck({ root })).exitCode).toBe(0);
+  });
+});
+
+describe("contract add-rule: what commander collects for --except", () => {
+  /**
+   * Parses the real command, so the pin is on commander itself rather than on
+   * `runContractAddRule` (which skips the parser). Returns the exit code the
+   * command emitted and the messages it printed.
+   */
+  async function parse(args: string[]): Promise<{
+    code: number | string | null | undefined;
+    said: string;
+    root: string;
+  }> {
+    const root = await makeRepo();
+    await runSliceInit({ root, paths: ["src/"], id: "s1", yes: true });
+    const before = process.exitCode;
+    const said: string[] = [];
+    const spy = vi.spyOn(console, "error").mockImplementation((...line) => {
+      said.push(line.map(String).join(" "));
+    });
+    try {
+      await contractCommander.parseAsync(
+        ["add-rule", ...args, "--root", root, "--yes"],
+        { from: "user" },
+      );
+      return { code: process.exitCode, said: said.join("\n"), root };
+    } finally {
+      process.exitCode = before;
+      spy.mockRestore();
+    }
+  }
+
+  const exceptOf = async (args: string[]): Promise<unknown> => {
+    const { root } = await parse(args);
+    const c = await readContract(root);
+    return (c.rules[0] as { except: unknown }).except;
+  };
+
+  it("a bare second occurrence keeps the prefixes already collected", async () => {
+    // commander fills an optional-value option given without one with `true`,
+    // which used to replace the collected list and silently drop the crossing.
+    expect(
+      await exceptOf(["--kind", "closed", "--except", "lib/", "--except"]),
+    ).toEqual(["lib/"]);
+  });
+
+  it("a bare occurrence on its own collects nothing, which is a legal rule", async () => {
+    expect(await exceptOf(["--kind", "closed", "--except"])).toEqual([]);
+  });
+
+  it("one occurrence collects every following prefix", async () => {
+    expect(await exceptOf(["--kind", "closed", "--except", "a", "b"])).toEqual([
+      "a",
+      "b",
+    ]);
+  });
+
+  it("two occurrences collect both lists", async () => {
+    expect(
+      await exceptOf([
+        "--kind",
+        "closed",
+        "--except",
+        "lib/",
+        "--except",
+        "b/",
+      ]),
+    ).toEqual(["lib/", "b/"]);
+  });
+
+  it("an entry that is not a slice path is refused with exit 2", async () => {
+    const { code, said } = await parse(["--kind", "closed", "--except", ""]);
+    expect(code).toBe(2);
+    expect(said).toContain('--except ""');
   });
 });
 

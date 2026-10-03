@@ -142,9 +142,13 @@ describe("step commands match the real CLI", () => {
     const body = source.slice(from, to);
     expect(body).toMatch(/requiredOption\(\s*"--kind/);
     // --from/--to/--except are plain options: a prefix kind needs the first two,
-    // a closed rule needs the third, and each refuses the other's.
+    // a closed rule needs the third, and each refuses the other's. Either
+    // builder form counts (.option, or .createOption for the one carrying a
+    // preset); what the pin forbids is requiredOption.
     for (const flag of ["--from", "--to", "--except"]) {
-      expect(body, flag).toMatch(new RegExp(`\\.option\\(\\s*"${flag}[ "]`));
+      expect(body, flag).toMatch(
+        new RegExp(`\\.(option|createOption)\\(\\s*"${flag}[ "]`),
+      );
       expect(body, flag).not.toMatch(
         new RegExp(`requiredOption\\(\\s*"${flag}[ "]`),
       );

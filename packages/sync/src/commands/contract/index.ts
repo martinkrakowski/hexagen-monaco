@@ -400,51 +400,55 @@ contractCommander
     );
   });
 
-contractCommander
+const addRuleCommander = contractCommander
   .command("add-rule")
   .description("Add a rule to .hexagen/contract.json (requires --yes)")
   .requiredOption("--kind <kind>", "forbid, allow-only or closed")
   .option("--from <prefix>", "Source path prefix (forbid and allow-only)")
   .option("--to <prefix>", "Target path prefix (forbid and allow-only)")
-  .option(
-    "--except [prefix...]",
-    "Accepted crossing prefix; repeatable, and may be given no prefixes at all (closed)",
-  )
   .option("--severity <severity>", "error (default) or warn")
   .option("--id <id>", "Rule id (not a built-in id); random by default")
   .option(ROOT_FLAG, ROOT_DESC)
-  .option("--yes", "Confirm the writes listed by the `will write:` lines")
-  .action(
-    async (opts: {
-      kind: string;
-      from?: string;
-      to?: string;
-      /** `true` when --except was given with no prefix at all. */
-      except?: string[] | true;
-      severity?: string;
-      id?: string;
-      root?: string;
-      yes?: boolean;
-    }) => {
-      emit(
-        await runContractAddRule({
-          root: opts.root ?? process.cwd(),
-          kind: opts.kind as AddRuleOptions["kind"],
-          from: opts.from,
-          to: opts.to,
-          // commander hands back `true` for a variadic option given no value.
-          except: Array.isArray(opts.except)
-            ? opts.except
-            : opts.except
-              ? []
-              : undefined,
-          severity: opts.severity as "error" | "warn" | undefined,
-          id: opts.id,
-          yes: opts.yes,
-        }),
-      );
-    },
-  );
+  .option("--yes", "Confirm the writes listed by the `will write:` lines");
+// A bare occurrence of an optional-value option is otherwise collected as
+// `true`, which replaced the prefixes an earlier `--except` had gathered and
+// dropped the user's crossings. `preset([])` appends an empty group instead, so
+// nothing collected is lost; the action flattens the groups.
+addRuleCommander.addOption(
+  addRuleCommander
+    .createOption(
+      "--except [prefix...]",
+      "Accepted crossing prefix; repeatable, and may be given no prefixes at all (closed)",
+    )
+    .preset([]),
+);
+
+addRuleCommander.action(
+  async (opts: {
+    kind: string;
+    from?: string;
+    to?: string;
+    /** One group per occurrence, as `preset([])` collects them. */
+    except?: string[][];
+    severity?: string;
+    id?: string;
+    root?: string;
+    yes?: boolean;
+  }) => {
+    emit(
+      await runContractAddRule({
+        root: opts.root ?? process.cwd(),
+        kind: opts.kind as AddRuleOptions["kind"],
+        from: opts.from,
+        to: opts.to,
+        except: Array.isArray(opts.except) ? opts.except.flat() : undefined,
+        severity: opts.severity as "error" | "warn" | undefined,
+        id: opts.id,
+        yes: opts.yes,
+      }),
+    );
+  },
+);
 
 contractCommander
   .command("show")
