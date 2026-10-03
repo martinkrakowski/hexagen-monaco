@@ -7,6 +7,11 @@ function git(root: string, args: string[]): string | null {
       cwd: root,
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"],
+      // Past Node's 1 MiB default an `execFileSync` call throws, and `show`
+      // swallows every failure into a null the caller cannot tell from a
+      // missing path. A big ratchet baseline or contract is read whole or not
+      // at all; the same 256 MiB the brownfield sidecar helpers use.
+      maxBuffer: 256 * 1024 * 1024,
     });
   } catch {
     return null;
