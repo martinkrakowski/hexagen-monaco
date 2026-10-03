@@ -178,6 +178,32 @@ function entryLabel(entry: Contract["knownViolations"][number]): string {
   return `${entry.rule}  ${entry.file}  ${entry.specifier}`;
 }
 
+/** True when two entries name the same violation, expiry aside. */
+function sameIdentity(
+  a: Contract["knownViolations"][number],
+  b: Contract["knownViolations"][number],
+): boolean {
+  return a.rule === b.rule && a.file === b.file && a.specifier === b.specifier;
+}
+
+/** The identity of an entry, for grouping. A space cannot appear in any part. */
+function identityKey(entry: Contract["knownViolations"][number]): string {
+  return `${entry.rule} ${entry.file} ${entry.specifier}`;
+}
+
+/** True when `a` suppresses for longer than `b`: no date at all covers most. */
+function coversMore(
+  a: Contract["knownViolations"][number],
+  b: Contract["knownViolations"][number],
+): boolean {
+  const left = expiresInstant(a.expires);
+  const right = expiresInstant(b.expires);
+  if (left === right) return false;
+  if (left === undefined) return true;
+  if (right === undefined) return false;
+  return left > right;
+}
+
 /** The fields of a rule the guard treats as one edit: any difference is growth. */
 const RULE_FIELDS = ["kind", "from", "to", "severity"] as const;
 
@@ -225,35 +251,61 @@ export function findContractGrowth(input: {
   const treeEntries = tree.contract?.knownViolations ?? [];
   const found: ContractGrowth[] = [];
 
-  // The base's entries grouped by rule, so a re-pointed entry can still be found
-  // (below) without giving every entry the same rule the same identity.
-  const baseByRule = new Map<string, Contract["knownViolations"][number][]>();
+  // The base's entries grouped by rule and identity, each with a `taken` flag so
+  // one base entry can only cancel one tree entry. Two entries can share an
+  // identity, so pairing on the first match would compare every tree entry
+  // against the same base entry.
+  interface BaseSlot {
+    entry: Contract["knownViolations"][number];
+    taken: boolean;
+  }
+  const baseByRule = new Map<string, BaseSlot[]>();
   for (const known of base.knownViolations) {
     const same = baseByRule.get(known.rule);
-    if (same) same.push(known);
-    else baseByRule.set(known.rule, [known]);
+    if (same) same.push({ entry: known, taken: false });
+    else baseByRule.set(known.rule, [{ entry: known, taken: false }]);
   }
   const treePerRule = new Map<string, number>();
   for (const known of treeEntries) {
     treePerRule.set(known.rule, (treePerRule.get(known.rule) ?? 0) + 1);
   }
+  const baseIdentities = new Set(base.knownViolations.map(identityKey));
+  /** The untaken base entry for `entry`'s identity that matches `keep` best. */
+  const take = (
+    slots: BaseSlot[],
+    keep: (k: Contract["knownViolations"][number]) => boolean,
+  ): Contract["knownViolations"][number] | undefined => {
+    // The strongest first, so the entry a duplicate fails to cancel is the one
+    // that covers most, and a date is judged against the longest cover the base
+    // still has.
+    let best: BaseSlot | undefined;
+    for (const slot of slots) {
+      if (slot.taken || !keep(slot.entry)) continue;
+      if (!best || coversMore(slot.entry, best.entry)) best = slot;
+    }
+    if (best) best.taken = true;
+    return best?.entry;
+  };
 
   for (const entry of treeEntries) {
-    // Which base entry is this one? The same triple is the same entry, expiry
-    // deliberately ignored: an entry that has expired is still the entry the
-    // guard must compare against. Failing that, it can only be a re-pointed
-    // entry when neither side holds a second entry for that rule — with several,
-    // an edit cannot be attributed to one, and the honest report is a new entry,
-    // which is growth all the same.
+    // Which base entry does this one pair with? The strongest untaken entry for
+    // the same identity, so an exact duplicate cancels out however many the base
+    // holds: a base holding a dated entry and then a permanent duplicate, with
+    // the dated one removed, leaves a suppression that covers more, not a
+    // dropped expiry. Failing that, a re-pointed entry when neither side holds a
+    // second entry for that rule — with several, an edit cannot be attributed,
+    // and the honest report is a new entry, which is growth all the same.
     const sameRule = baseByRule.get(entry.rule) ?? [];
     const prior =
-      sameRule.find(
-        (k) => k.file === entry.file && k.specifier === entry.specifier,
-      ) ??
+      take(sameRule, (k) => sameIdentity(k, entry)) ??
       (sameRule.length === 1 && treePerRule.get(entry.rule) === 1
-        ? sameRule[0]
+        ? sameRule[0]!.entry
         : undefined);
     if (!prior) {
+      // The base already lists this violation, so this entry is a duplicate on
+      // top of it: more suppression for the same key is not growth. An identity
+      // the base never listed is a new baseline entry, which is.
+      if (baseIdentities.has(identityKey(entry))) continue;
       found.push({
         kind: "known-violation-added",
         detail: `new knownViolations entry ${entryLabel(entry)}`,
@@ -277,7 +329,9 @@ export function findContractGrowth(input: {
     }
     const was = expiresInstant(prior.expires);
     const now = expiresInstant(entry.expires);
-    if (now !== undefined && now > (was ?? Number.NEGATIVE_INFINITY)) {
+    // `was === undefined` means the base never expires, which is the strongest
+    // suppression there is: a dated tree entry then hides LESS, never more.
+    if (now !== undefined && was !== undefined && now > was) {
       found.push({
         kind: "expires-extended",
         detail:

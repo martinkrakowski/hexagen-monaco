@@ -164,7 +164,56 @@ describe("findContractGrowth", () => {
     ).toEqual([["rule-removed", "rule no-ui-api removed"]]);
   });
 
-  it("an entry or an expiry the base did not have is growth", () => {
+  it("entries are compared as a multiset, so an exact duplicate cancels out", () => {
+    const dated = entry({ expires: "2026-12-01" });
+    const permanent = entry();
+    const kinds = (
+      baseEntries: Contract["knownViolations"],
+      treeEntries: Contract["knownViolations"],
+    ) =>
+      findContractGrowth(
+        sides(
+          contract({ knownViolations: baseEntries }),
+          contract({ knownViolations: treeEntries }),
+        ),
+      ).map((g) => g.kind);
+
+    // The dated one first, then a permanent duplicate: removing the dated entry
+    // leaves a suppression that covers more, not a dropped expiry. Pairing on
+    // the first match reported the reverse.
+    expect(kinds([dated, permanent], [permanent])).toEqual([]);
+    // The other order matters too, and so does a longer date hiding behind a
+    // shorter one.
+    expect(kinds([permanent, dated], [permanent])).toEqual([]);
+    expect(kinds([dated, entry({ expires: "2027-01-01" })], [dated])).toEqual(
+      [],
+    );
+    expect(kinds([dated], [permanent])).toEqual(["expires-dropped"]);
+    expect(kinds([dated], [entry({ expires: "2027-01-01" })])).toEqual([
+      "expires-extended",
+    ]);
+    // The reverse is the ratchet moving forward.
+    expect(kinds([permanent], [dated])).toEqual([]);
+    // A permanent entry added where the base had a dated one is new coverage for
+    // a violation the base never listed, not a second entry for the same one.
+    expect(kinds([dated], [dated, permanent])).toEqual([]);
+    // The residue is judged against the longest cover the base still has, not
+    // against whichever entry happened to come first in the file.
+    expect(
+      findContractGrowth(
+        sides(
+          contract({
+            knownViolations: [entry({ expires: "2027-01-01" }), dated],
+          }),
+          contract({ knownViolations: [permanent] }),
+        ),
+      ).map((g) => g.detail),
+    ).toEqual([
+      "knownViolations entry r1  a.ts  x expires dropped (was 2027-01-01)",
+    ]);
+  });
+
+  it("an entry the base did not have is growth; an expiry added to one is not", () => {
     const base = contract({ knownViolations: [entry()] });
     expect(findContractGrowth(sides(base, base))).toEqual([]);
     const added = findContractGrowth(
@@ -176,14 +225,29 @@ describe("findContractGrowth", () => {
     expect(added).toHaveLength(1);
     expect(added[0]!.kind).toBe("known-violation-added");
     expect(added[0]!.detail).toContain("b.ts");
-    const dated = findContractGrowth(
-      sides(
-        base,
-        contract({ knownViolations: [entry({ expires: "2026-12-01" })] }),
+    // An expiry where the base had none makes the suppression stop sooner: the
+    // ratchet moving forward. Only a date pushed later from a date is growth.
+    expect(
+      findContractGrowth(
+        sides(
+          base,
+          contract({ knownViolations: [entry({ expires: "2026-12-01" })] }),
+        ),
       ),
-    );
-    expect(dated.map((g) => g.kind)).toEqual(["expires-extended"]);
-    expect(dated[0]!.detail).toContain("2026-12-01");
+    ).toEqual([]);
+    const dated = contract({
+      knownViolations: [entry({ expires: "2026-12-01" })],
+    });
+    expect(
+      findContractGrowth(
+        sides(
+          dated,
+          contract({ knownViolations: [entry({ expires: "2027-12-01" })] }),
+        ),
+      ).map((g) => g.detail),
+    ).toEqual([
+      "knownViolations entry r1  a.ts  x expires extended 2026-12-01 -> 2027-12-01",
+    ]);
   });
 
   it("an edit to the identity of an entry the base had is growth", () => {
@@ -228,12 +292,20 @@ describe("findContractGrowth", () => {
       ).map((g) => g.kind),
     ).toEqual(["known-violation-added"]);
     // An expires edit is still judged on its own terms, naming the base entry.
+    const dated = contract({
+      knownViolations: [entry({ expires: "2026-01-01" })],
+    });
     expect(
-      found(contract({ knownViolations: [entry({ expires: "2026-12-01" })] })),
+      findContractGrowth(
+        sides(
+          dated,
+          contract({ knownViolations: [entry({ expires: "2026-12-01" })] }),
+        ),
+      ).map((g) => [g.kind, g.detail]),
     ).toEqual([
       [
         "expires-extended",
-        "knownViolations entry r1  a.ts  x expires extended never -> 2026-12-01",
+        "knownViolations entry r1  a.ts  x expires extended 2026-01-01 -> 2026-12-01",
       ],
     ]);
   });
