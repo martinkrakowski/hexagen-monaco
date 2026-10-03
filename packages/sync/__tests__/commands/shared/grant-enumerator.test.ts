@@ -104,14 +104,22 @@ describe("openSidecar", () => {
     expect(sc.homeKeys).toBe(path.join(await realpath(home), ".hexagen/keys"));
   });
 
-  it("resolves the sidecar through a symlink, and keeps the keys directory real", async () => {
-    await mkdir(path.join(root, "real-sidecar"), { recursive: true });
-    await rm(path.join(root, ".hexagen"), { recursive: true, force: true });
-    await symlink(path.join(root, "real-sidecar"), path.join(root, ".hexagen"));
-    const sc = await open();
-    expect(sc.real).toBe(await realpath(path.join(root, "real-sidecar")));
-    expect(sc.homeKeys).toBe(path.join(await realpath(home), ".hexagen/keys"));
-  });
+  it.skipIf(process.platform === "win32")(
+    "resolves the sidecar through a symlink, and keeps the keys directory real",
+    async () => {
+      await mkdir(path.join(root, "real-sidecar"), { recursive: true });
+      await rm(path.join(root, ".hexagen"), { recursive: true, force: true });
+      await symlink(
+        path.join(root, "real-sidecar"),
+        path.join(root, ".hexagen"),
+      );
+      const sc = await open();
+      expect(sc.real).toBe(await realpath(path.join(root, "real-sidecar")));
+      expect(sc.homeKeys).toBe(
+        path.join(await realpath(home), ".hexagen/keys"),
+      );
+    },
+  );
 
   it("refuses a sidecar that does not exist, and names the command that makes one", async () => {
     await rm(path.join(root, ".hexagen"), { recursive: true, force: true });
@@ -152,14 +160,20 @@ describe("listDir", () => {
     expect(await listDir(await open(), "keys")).toEqual([]);
   });
 
-  it("propagates a readdir failure that is not a missing directory", async () => {
-    await put(root, ".hexagen/evidence/trace.jsonl", "{}\n");
-    const code = await listDir(await open(), "evidence/trace.jsonl").then(
-      () => "resolved",
-      (e: unknown) => (e as NodeJS.ErrnoException).code ?? "no code",
-    );
-    expect(code).toBe("ENOTDIR");
-  });
+  // POSIX only: libuv scans on Windows through FindFirstFile, which matches a
+  // file and yields no entries instead of ENOTDIR, so there is no non-ENOENT
+  // failure here to propagate. The guard this pins is unreachable there.
+  it.skipIf(process.platform === "win32")(
+    "propagates a readdir failure that is not a missing directory",
+    async () => {
+      await put(root, ".hexagen/evidence/trace.jsonl", "{}\n");
+      const code = await listDir(await open(), "evidence/trace.jsonl").then(
+        () => "resolved",
+        (e: unknown) => (e as NodeJS.ErrnoException).code ?? "no code",
+      );
+      expect(code).toBe("ENOTDIR");
+    },
+  );
 });
 
 describe("readAllowed", () => {
