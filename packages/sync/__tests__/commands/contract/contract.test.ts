@@ -575,3 +575,440 @@ describe("contract check: inputs", () => {
     expect((await runContractCheck({ root, strict: true })).exitCode).toBe(2);
   });
 });
+
+// ── contract check --base: the growth guard ──────────────────────────────────
+//
+// Every writer of `.hexagen/` adds it to the repo exclude file, so the guard can
+// only read a base when the client staged the sidecar (`workbook export
+// --stage`, or `git add -f`). `staged()` does that, which is what makes these
+// cases reachable at all.
+interface BaseFixture {
+  rules?: Record<string, string>[];
+  knownViolations?: Record<string, string>[];
+  excludes?: string[];
+  /** Leave contract.json out of the base commit (default: stage it). */
+  stageContract?: boolean;
+  /** Write observed.json in the working tree (default true). */
+  observed?: boolean;
+}
+
+const RULE = {
+  id: "no-ui-api",
+  kind: "forbid",
+  from: "ui/",
+  to: "api/",
+  severity: "error",
+};
+
+const ENTRY = {
+  rule: "unresolved-import",
+  file: "src/a.ts",
+  specifier: "@app/missing",
+  reason: "vendor shim",
+};
+
+const UNRESOLVED = [
+  { from: "src/a.ts", specifier: "@app/missing", reason: "not-found" },
+];
+
+interface TreeContract {
+  schemaVersion: string;
+  sliceId: string;
+  rules: Record<string, string>[];
+  knownViolations: Record<string, string>[];
+}
+
+const contractFile = (root: string): string =>
+  path.join(root, ".hexagen", "contract.json");
+
+async function readTreeContract(root: string): Promise<TreeContract> {
+  return JSON.parse(await readFile(contractFile(root), "utf8"));
+}
+
+async function writeTreeContract(
+  root: string,
+  next: TreeContract,
+): Promise<void> {
+  await put(
+    root,
+    ".hexagen/contract.json",
+    `${JSON.stringify(next, null, 2)}\n`,
+  );
+}
+
+/** A repo whose slice (and by default contract) are in the HEAD commit. */
+async function staged(opts: BaseFixture = {}): Promise<string> {
+  const root = await makeRepo(FILES);
+  await runSliceInit({
+    root,
+    paths: ["src/", "ui/", "api/"],
+    exclude: opts.excludes,
+    id: "s1",
+    yes: true,
+  });
+  await writeTreeContract(root, {
+    schemaVersion: "1.0.0",
+    sliceId: "s1",
+    rules: opts.rules ?? [RULE],
+    knownViolations: opts.knownViolations ?? [],
+  });
+  git(root, "add", "-f", ".hexagen/slice.json");
+  if (opts.stageContract !== false) {
+    git(root, "add", "-f", ".hexagen/contract.json");
+  }
+  git(root, "commit", "-q", "-m", "stage the baseline");
+  if (opts.observed !== false) await writeObserved(root);
+  return root;
+}
+
+async function addTreeExclude(root: string, entry: string): Promise<void> {
+  const file = path.join(root, ".hexagen", "slice.json");
+  const slice = JSON.parse(await readFile(file, "utf8")) as {
+    excludes: string[];
+  };
+  await put(
+    root,
+    ".hexagen/slice.json",
+    `${JSON.stringify({ ...slice, excludes: [...slice.excludes, entry] }, null, 2)}\n`,
+  );
+}
+
+/** Each row of the growth table: what the base holds, and how the tree weakens it. */
+const GROWTH_ROWS: Array<{
+  name: string;
+  base?: BaseFixture;
+  weaken: (root: string) => Promise<void>;
+}> = [
+  {
+    name: "a new knownViolations entry",
+    weaken: async (root) => {
+      const c = await readTreeContract(root);
+      c.knownViolations.push({ ...ENTRY });
+      await writeTreeContract(root, c);
+    },
+  },
+  {
+    name: "an expires pushed later",
+    base: { knownViolations: [{ ...ENTRY, expires: "2026-12-01" }] },
+    weaken: async (root) => {
+      const c = await readTreeContract(root);
+      c.knownViolations[0]!.expires = "2027-12-01";
+      await writeTreeContract(root, c);
+    },
+  },
+  {
+    name: "an expires dropped",
+    base: { knownViolations: [{ ...ENTRY, expires: "2026-12-01" }] },
+    weaken: async (root) => {
+      const c = await readTreeContract(root);
+      c.knownViolations = [{ ...ENTRY }];
+      await writeTreeContract(root, c);
+    },
+  },
+  {
+    name: "a removed rule",
+    base: { rules: [RULE, { ...RULE, id: "no-ui-lib" }] },
+    weaken: async (root) => {
+      const c = await readTreeContract(root);
+      c.rules = c.rules.filter((r) => r.id !== "no-ui-lib");
+      await writeTreeContract(root, c);
+    },
+  },
+  {
+    name: "a severity downgraded to warn",
+    weaken: async (root) => {
+      const c = await readTreeContract(root);
+      c.rules[0]!.severity = "warn";
+      await writeTreeContract(root, c);
+    },
+  },
+  {
+    name: "a rule field edited",
+    weaken: async (root) => {
+      const c = await readTreeContract(root);
+      c.rules[0]!.to = "api/legacy/";
+      await writeTreeContract(root, c);
+    },
+  },
+  {
+    name: "a new slice exclude",
+    weaken: (root) => addTreeExclude(root, "api/legacy/"),
+  },
+];
+
+describe("contract check --base: the growth guard", () => {
+  it("1. a new knownViolations entry fails against the base", async () => {
+    const root = await staged();
+    const c = await readTreeContract(root);
+    c.knownViolations.push({ ...ENTRY, file: "src/b.ts" });
+    await writeTreeContract(root, c);
+    const r = await runContractCheck({ root, base: "HEAD" });
+    expect(r.exitCode).toBe(1);
+    expect(all(r)).toContain("growth");
+    expect(all(r)).toContain("src/b.ts");
+    expect(all(r)).toContain("@app/missing");
+  });
+
+  it("2. a removed entry passes", async () => {
+    const root = await staged({ knownViolations: [{ ...ENTRY }] });
+    const c = await readTreeContract(root);
+    c.knownViolations = [];
+    await writeTreeContract(root, c);
+    expect((await runContractCheck({ root, base: "HEAD" })).exitCode).toBe(0);
+  });
+
+  it("3. an expires pushed later fails as growth", async () => {
+    const root = await staged({
+      knownViolations: [{ ...ENTRY, expires: "2026-12-01" }],
+    });
+    const c = await readTreeContract(root);
+    c.knownViolations[0]!.expires = "2027-12-01";
+    await writeTreeContract(root, c);
+    const r = await runContractCheck({ root, base: "HEAD" });
+    expect(r.exitCode).toBe(1);
+    expect(all(r)).toContain("expires");
+    expect(all(r)).toContain("2027-12-01");
+  });
+
+  it("4. --allow-growth without --reason (and without --base) exits 2", async () => {
+    const root = await staged();
+    const c = await readTreeContract(root);
+    c.knownViolations.push({ ...ENTRY });
+    await writeTreeContract(root, c);
+    const noReason = await runContractCheck({
+      root,
+      base: "HEAD",
+      allowGrowth: true,
+    });
+    expect(noReason.exitCode).toBe(2);
+    expect(all(noReason)).toContain("--reason");
+    const noBase = await runContractCheck({
+      root,
+      allowGrowth: true,
+      reason: "x",
+    });
+    expect(noBase.exitCode).toBe(2);
+    expect(all(noBase)).toContain("--base");
+  });
+
+  it("5. an unresolvable base ref exits 2, never 0", async () => {
+    const root = await staged();
+    for (const base of ["no-such-ref", "HEAD~99", "v1.2.3"]) {
+      const r = await runContractCheck({ root, base });
+      expect(r.exitCode, base).toBe(2);
+      expect(all(r), base).toContain(base);
+      // The two exit-2 causes must stay apart: GitReader.show returns null for
+      // both, so only resolving the ref first tells them apart.
+      expect(all(r), base).toContain("cannot resolve");
+      expect(all(r), base).not.toContain("never staged");
+    }
+  });
+
+  it("6. a contract.json absent at the base exits 2 and says it was never staged", async () => {
+    const root = await staged({ stageContract: false });
+    const r = await runContractCheck({ root, base: "HEAD" });
+    expect(r.exitCode).toBe(2);
+    expect(all(r)).toContain("contract.json");
+    expect(all(r)).toContain("absent at base because it was never staged");
+    expect(all(r)).not.toContain("first commit");
+  });
+
+  it("7. a violation baselined at the base still passes without --base", async () => {
+    const root = await staged({ knownViolations: [{ ...ENTRY }] });
+    await writeObserved(root, { unresolved: UNRESOLVED });
+    const r = await runContractCheck({ root });
+    expect(r.exitCode).toBe(0);
+    expect(all(r)).toContain("1 known violation");
+  });
+
+  it("8. a deleted rules[] entry fails as growth and names the id", async () => {
+    const root = await staged({
+      rules: [RULE, { ...RULE, id: "no-ui-lib" }],
+    });
+    const c = await readTreeContract(root);
+    c.rules = c.rules.filter((r) => r.id !== "no-ui-lib");
+    await writeTreeContract(root, c);
+    const r = await runContractCheck({ root, base: "HEAD" });
+    expect(r.exitCode).toBe(1);
+    expect(all(r)).toContain("no-ui-lib");
+    expect(all(r)).toContain("removed");
+  });
+
+  it("9. a severity downgraded to warn fails as growth, naming id and field", async () => {
+    const root = await staged();
+    const c = await readTreeContract(root);
+    c.rules[0]!.severity = "warn";
+    await writeTreeContract(root, c);
+    const r = await runContractCheck({ root, base: "HEAD" });
+    expect(r.exitCode).toBe(1);
+    expect(all(r)).toContain("no-ui-api");
+    expect(all(r)).toContain("severity");
+  });
+
+  it("10. editing a rule's from or to fails as growth, including a narrowing", async () => {
+    for (const edit of [
+      { field: "from", was: "ui/", now: "ui/ui/" },
+      { field: "to", was: "api/", now: "api/legacy/" },
+    ]) {
+      const root = await staged();
+      const c = await readTreeContract(root);
+      c.rules[0]![edit.field] = edit.now;
+      await writeTreeContract(root, c);
+      const r = await runContractCheck({ root, base: "HEAD" });
+      expect(r.exitCode, edit.field).toBe(1);
+      expect(all(r), edit.field).toContain("no-ui-api");
+      expect(all(r), edit.field).toContain(edit.field);
+      expect(all(r), edit.field).toContain(edit.was);
+    }
+  });
+
+  it("11. a new slice exclude fails as growth", async () => {
+    const root = await staged();
+    await addTreeExclude(root, "api/legacy/");
+    const r = await runContractCheck({ root, base: "HEAD" });
+    expect(r.exitCode).toBe(1);
+    expect(all(r)).toContain("api/legacy/");
+    expect(all(r)).toContain("exclude");
+  });
+
+  it("12. an expires dropped in the tree fails as growth, including the --baseline drop", async () => {
+    const root = await staged({
+      knownViolations: [{ ...ENTRY, expires: "2999-01-01" }],
+    });
+    const c = await readTreeContract(root);
+    c.knownViolations = [{ ...ENTRY }];
+    await writeTreeContract(root, c);
+    const direct = await runContractCheck({ root, base: "HEAD" });
+    expect(direct.exitCode).toBe(1);
+    expect(all(direct)).toContain("expires");
+    expect(all(direct)).toContain("@app/missing");
+
+    // The same drop with no flag and no message: re-baselining discards a date
+    // that has passed. The guard is what makes it visible.
+    const rebased = await staged({
+      knownViolations: [{ ...ENTRY, expires: "2020-01-01" }],
+    });
+    await writeObserved(rebased, { unresolved: UNRESOLVED });
+    expect(
+      (await runContractCheck({ root: rebased, baseline: true, yes: true }))
+        .exitCode,
+    ).toBe(0);
+    expect(
+      (await readTreeContract(rebased)).knownViolations[0],
+    ).not.toHaveProperty("expires");
+    const r = await runContractCheck({ root: rebased, base: "HEAD" });
+    expect(r.exitCode).toBe(1);
+    expect(all(r)).toContain("expires");
+    expect(all(r)).toContain("@app/missing");
+  });
+
+  it("13. a shortened expires and a removed entry are not growth", async () => {
+    const shorter = await staged({
+      knownViolations: [{ ...ENTRY, expires: "2999-01-01" }],
+    });
+    const c = await readTreeContract(shorter);
+    c.knownViolations[0]!.expires = "2026-01-01";
+    await writeTreeContract(shorter, c);
+    expect(
+      (await runContractCheck({ root: shorter, base: "HEAD" })).exitCode,
+    ).toBe(0);
+
+    const dropped = await staged({ knownViolations: [{ ...ENTRY }] });
+    const c2 = await readTreeContract(dropped);
+    c2.knownViolations = [];
+    await writeTreeContract(dropped, c2);
+    expect(
+      (await runContractCheck({ root: dropped, base: "HEAD" })).exitCode,
+    ).toBe(0);
+  });
+
+  it.each(GROWTH_ROWS)(
+    "14. --allow-growth --reason accepts $name at exit 0",
+    async ({ name, base, weaken }) => {
+      const root = await staged(base);
+      await weaken(root);
+      expect((await runContractCheck({ root, base: "HEAD" })).exitCode).toBe(1);
+      const reason = `reviewed: ${name}`;
+      const r = await runContractCheck({
+        root,
+        base: "HEAD",
+        allowGrowth: true,
+        reason,
+      });
+      expect(r.exitCode).toBe(0);
+      expect(all(r)).toContain(reason);
+    },
+  );
+
+  it("15. growth is reported with no observed.json, so the stale-input exit does not mask it", async () => {
+    const root = await staged({ observed: false });
+    const c = await readTreeContract(root);
+    c.knownViolations.push({ ...ENTRY });
+    await writeTreeContract(root, c);
+    expect(existsSync(path.join(root, ".hexagen", "observed.json"))).toBe(
+      false,
+    );
+    const r = await runContractCheck({ root, base: "HEAD" });
+    expect(r.exitCode).toBe(1);
+    expect(all(r)).toContain("@app/missing");
+    expect(all(r)).not.toContain("does not exist");
+  });
+
+  it("16. --base with --baseline exits 2 and writes nothing", async () => {
+    const root = await staged();
+    const before = await readFile(contractFile(root), "utf8");
+    const r = await runContractCheck({
+      root,
+      base: "HEAD",
+      baseline: true,
+      yes: true,
+    });
+    expect(r.exitCode).toBe(2);
+    expect(all(r)).toContain("--base");
+    expect(all(r)).toContain("--baseline");
+    expect(await readFile(contractFile(root), "utf8")).toBe(before);
+    expect(existsSync(`${contractFile(root)}.lock`)).toBe(false);
+  });
+
+  it("18. a base file that cannot be read exits 2, never 0", async () => {
+    const good = {
+      schemaVersion: "1.0.0",
+      sliceId: "s1",
+      rules: [RULE],
+      knownViolations: [],
+    };
+
+    const broken = await staged();
+    await put(broken, ".hexagen/contract.json", "{oops\n");
+    git(broken, "add", "-f", ".hexagen/contract.json");
+    git(broken, "commit", "-q", "-m", "bad json at the base");
+    await writeTreeContract(broken, good);
+    const badJson = await runContractCheck({ root: broken, base: "HEAD" });
+    expect(badJson.exitCode).toBe(2);
+    expect(all(badJson)).toContain("not valid JSON");
+
+    const offSchema = await staged();
+    await writeTreeContract(offSchema, {
+      ...good,
+      rules: [{ ...RULE, unexpected: "field" }],
+    } as unknown as TreeContract);
+    git(offSchema, "add", "-f", ".hexagen/contract.json");
+    git(offSchema, "commit", "-q", "-m", "off-schema base");
+    await writeTreeContract(offSchema, good);
+    const badShape = await runContractCheck({ root: offSchema, base: "HEAD" });
+    expect(badShape.exitCode).toBe(2);
+    expect(all(badShape)).toContain("does not match its schema");
+
+    // The slice is read at the base too: untracking it leaves the working tree
+    // whole, so only the base side is missing.
+    const untracked = await staged();
+    git(untracked, "rm", "-q", "--cached", ".hexagen/slice.json");
+    git(untracked, "commit", "-q", "-m", "untrack the slice");
+    const noSlice = await runContractCheck({ root: untracked, base: "HEAD" });
+    expect(noSlice.exitCode).toBe(2);
+    expect(all(noSlice)).toContain("slice.json");
+    expect(all(noSlice)).toContain(
+      "absent at base because it was never staged",
+    );
+  });
+});

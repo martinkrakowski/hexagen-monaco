@@ -20,6 +20,7 @@
  * for the parse-failure case only.
  */
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { describe, it, beforeAll } from "vitest";
 import { promises as fs } from "node:fs";
 import path from "node:path";
@@ -40,6 +41,108 @@ const BROKEN_MANIFEST = `${VALID_MANIFEST}bogus_unknown_key: 1
 `;
 
 const FIXTURE_PREFIX = "hexagen-exit-contract-";
+
+/**
+ * A git repo in the fixture root. The published-layout fixture has none today,
+ * and `contract check --base` needs history: the guard reads the sidecar at a
+ * commit through `git show`, so a fixture that cannot resolve a ref is exactly
+ * the "exit 2, never 0" case and nothing else can be proven there.
+ */
+function gitInit(root: string): string {
+  const git = (...args: string[]): string =>
+    execFileSync("git", args, { cwd: root, encoding: "utf8" }).trim();
+  git("init", "-q");
+  git("config", "user.email", "t@example.test");
+  git("config", "user.name", "t");
+  git("add", "-f", "package.json", "tsconfig.base.json");
+  git("commit", "-q", "-m", "fixture");
+  return git("rev-parse", "HEAD");
+}
+
+const EMPTY_SECTION = { collected: true, items: [] };
+
+/**
+ * Stage `.hexagen/` the way a client must: the sidecar is excluded from every
+ * writer, so `git add -f` (what `workbook export --stage` does) is the only way
+ * in. `contract: false` leaves contract.json out of the base commit, which is
+ * the "never staged" precondition failure.
+ */
+async function stageSidecar(
+  root: string,
+  commit: string,
+  opts: { contract: boolean },
+): Promise<void> {
+  const sidecar = path.join(root, ".hexagen");
+  await fs.mkdir(sidecar, { recursive: true });
+  await fs.writeFile(
+    path.join(sidecar, "slice.json"),
+    JSON.stringify(
+      {
+        schemaVersion: "1.0.0",
+        id: "s1",
+        repo: { commit },
+        paths: ["ui/", "api/"],
+        excludes: [],
+        createdBy: "t@example.test",
+        createdAt: "2026-10-03T00:00:00.000Z",
+      },
+      null,
+      2,
+    ) + "\n",
+    "utf8",
+  );
+  await fs.writeFile(
+    path.join(sidecar, "observed.json"),
+    JSON.stringify(
+      {
+        schemaVersion: "1.0.0",
+        repo: { commit },
+        generatedAt: "2026-10-03T00:00:00.000Z",
+        packages: EMPTY_SECTION,
+        languages: EMPTY_SECTION,
+        build: EMPTY_SECTION,
+        generated: EMPTY_SECTION,
+        dontTouch: EMPTY_SECTION,
+        edges: { collected: true, unreadLanguages: [], items: [] },
+        unresolved: EMPTY_SECTION,
+        limits: { truncated: false, reasons: [] },
+      },
+      null,
+      2,
+    ) + "\n",
+    "utf8",
+  );
+  const staged = [".hexagen/slice.json", ".hexagen/observed.json"];
+  if (opts.contract) {
+    await fs.writeFile(
+      path.join(sidecar, "contract.json"),
+      JSON.stringify(
+        {
+          schemaVersion: "1.0.0",
+          sliceId: "s1",
+          rules: [
+            {
+              id: "no-ui-api",
+              kind: "forbid",
+              from: "ui/",
+              to: "api/",
+              severity: "error",
+            },
+          ],
+          knownViolations: [],
+        },
+        null,
+        2,
+      ) + "\n",
+      "utf8",
+    );
+    staged.push(".hexagen/contract.json");
+  }
+  execFileSync("git", ["add", "-f", ...staged], { cwd: root });
+  execFileSync("git", ["commit", "-q", "-m", "stage the sidecar"], {
+    cwd: root,
+  });
+}
 
 describe("exit-code contract — built dist in published layout", () => {
   beforeAll(assertBuiltArtifactsPresent);
@@ -155,6 +258,104 @@ describe("exit-code contract — built dist in published layout", () => {
           r.stderr.includes("Could not load architecture manifest"),
           describeResult(r),
         );
+      } finally {
+        await cleanupFixture(fix.root);
+      }
+    });
+  });
+
+  describe("hexagen contract check --base (growth guard)", () => {
+    it("exits 2 in a repo with no .hexagen/ at all", async () => {
+      const fix = await createPublishedLayoutFixture(
+        VALID_MANIFEST,
+        FIXTURE_PREFIX,
+      );
+      try {
+        gitInit(fix.root);
+        const r = await runHexagen(fix, [
+          "contract",
+          "check",
+          "--base",
+          "HEAD",
+        ]);
+        assert.equal(r.code, 2, describeResult(r));
+        assert.ok(r.stderr.includes("slice does not exist"), describeResult(r));
+      } finally {
+        await cleanupFixture(fix.root);
+      }
+    });
+
+    it("exits 2 when contract.json was never staged at the base", async () => {
+      const fix = await createPublishedLayoutFixture(
+        VALID_MANIFEST,
+        FIXTURE_PREFIX,
+      );
+      try {
+        const commit = gitInit(fix.root);
+        await stageSidecar(fix.root, commit, { contract: false });
+        const r = await runHexagen(fix, [
+          "contract",
+          "check",
+          "--base",
+          "HEAD",
+        ]);
+        assert.equal(r.code, 2, describeResult(r));
+        assert.ok(
+          r.stderr.includes("absent at base because it was never staged"),
+          describeResult(r),
+        );
+      } finally {
+        await cleanupFixture(fix.root);
+      }
+    });
+
+    it("exits 0 with a committed contract that has not grown", async () => {
+      const fix = await createPublishedLayoutFixture(
+        VALID_MANIFEST,
+        FIXTURE_PREFIX,
+      );
+      try {
+        const commit = gitInit(fix.root);
+        await stageSidecar(fix.root, commit, { contract: true });
+        const r = await runHexagen(fix, [
+          "contract",
+          "check",
+          "--base",
+          "HEAD",
+        ]);
+        assert.equal(r.code, 0, describeResult(r));
+      } finally {
+        await cleanupFixture(fix.root);
+      }
+    });
+
+    it("exits 1 when the working tree weakens the committed contract", async () => {
+      const fix = await createPublishedLayoutFixture(
+        VALID_MANIFEST,
+        FIXTURE_PREFIX,
+      );
+      try {
+        const commit = gitInit(fix.root);
+        await stageSidecar(fix.root, commit, { contract: true });
+        const file = path.join(fix.root, ".hexagen", "contract.json");
+        const contract = JSON.parse(await fs.readFile(file, "utf8"));
+        contract.rules[0].severity = "warn";
+        await fs.writeFile(
+          file,
+          JSON.stringify(contract, null, 2) + "\n",
+          "utf8",
+        );
+        const r = await runHexagen(fix, [
+          "contract",
+          "check",
+          "--base",
+          "HEAD",
+        ]);
+        assert.equal(r.code, 1, describeResult(r));
+        const out = r.stdout + r.stderr;
+        assert.ok(out.includes("growth"), describeResult(r));
+        assert.ok(out.includes("no-ui-api"), describeResult(r));
+        assert.ok(out.includes("severity"), describeResult(r));
       } finally {
         await cleanupFixture(fix.root);
       }

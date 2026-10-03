@@ -127,3 +127,139 @@ export function isKnown(
 ): boolean {
   return findKnownViolation(contract, v, now) !== undefined;
 }
+
+// ── the growth guard ──────────────────────────────────────────────────────────
+//
+// `hexagen contract check --base <ref>` fails when the working tree has made the
+// slice's gate weaker than the contract at `<ref>`. The bypasses it closes are
+// all reachable without `--allow-growth`: an entry the base did not have, a date
+// pushed later, a date dropped (including the silent drop of `--baseline`), a
+// removed rule, a rule downgraded to `warn` (the check fails only on `error`),
+// an edit to a rule's `kind`/`from`/`to`, and a new `slice.json` exclude (which
+// removes files from the gate before paths are matched).
+//
+// Kept here, beside `findKnownViolation`, because the identity of a baseline
+// entry (rule + file + specifier) is the same one the check judges with. No
+// git and no clock: the caller supplies both sides.
+
+/** What kind of weakening a finding is. */
+export type ContractGrowthKind =
+  | "known-violation-added"
+  | "expires-extended"
+  | "expires-dropped"
+  | "rule-removed"
+  | "rule-field-changed"
+  | "exclude-added";
+
+export interface ContractGrowth {
+  kind: ContractGrowthKind;
+  /** One printed line, without any `growth: ` prefix. */
+  detail: string;
+}
+
+/**
+ * An `expires` date as an instant, or `undefined` when absent or unreadable.
+ * Both sides come from a parsed `Contract` in the CLI, so the schema has already
+ * refused an impossible date; a value this cannot read counts as absent, which
+ * fails toward growth rather than away from it.
+ */
+function expiresInstant(date: string | undefined): number | undefined {
+  if (date === undefined) return undefined;
+  const match = EXPIRES_RE.exec(date);
+  if (!match) return undefined;
+  return Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+}
+
+/** How `entry` names a violation, the triple `findKnownViolation` matches on. */
+function entryLabel(entry: Contract["knownViolations"][number]): string {
+  return `${entry.rule}  ${entry.file}  ${entry.specifier}`;
+}
+
+/** The fields of a rule the guard treats as one edit: any difference is growth. */
+const RULE_FIELDS = ["kind", "from", "to", "severity"] as const;
+
+/**
+ * Everything the working tree has weakened relative to `base`.
+ *
+ * Not growth, deliberately: a removed entry, a shortened `expires`, an added
+ * rule and a removed exclude. Those are the ratchet moving in the right
+ * direction. A `severity` raised from `warn` to `error` is likewise not growth,
+ * so it is reported only when it weakens.
+ */
+export function findContractGrowth(input: {
+  contract: Pick<Contract, "rules" | "knownViolations">;
+  slice: SlicePaths;
+  tree: {
+    contract: Pick<Contract, "rules" | "knownViolations"> | undefined;
+    slice: SlicePaths;
+  };
+}): ContractGrowth[] {
+  const { contract: base, slice: baseSlice, tree } = input;
+  const baseRules = base.rules;
+  // No contract in the tree is every rule gone, not a pass.
+  const treeRules = tree.contract?.rules ?? [];
+  const found: ContractGrowth[] = [];
+
+  for (const entry of tree.contract?.knownViolations ?? []) {
+    // Identity only — the same rule+file+specifier triple the check matches on,
+    // expiry deliberately ignored: an entry that has expired is still the entry
+    // the guard must compare against.
+    const prior = base.knownViolations.find(
+      (k) =>
+        k.rule === entry.rule &&
+        k.file === entry.file &&
+        k.specifier === entry.specifier,
+    );
+    if (!prior) {
+      found.push({
+        kind: "known-violation-added",
+        detail: `new knownViolations entry ${entryLabel(entry)}`,
+      });
+      continue;
+    }
+    const was = expiresInstant(prior.expires);
+    const now = expiresInstant(entry.expires);
+    if (now !== undefined && now > (was ?? Number.NEGATIVE_INFINITY)) {
+      found.push({
+        kind: "expires-extended",
+        detail:
+          `knownViolations entry ${entryLabel(entry)} expires extended ` +
+          `${prior.expires ?? "never"} -> ${entry.expires ?? "never"}`,
+      });
+    } else if (now === undefined && was !== undefined) {
+      found.push({
+        kind: "expires-dropped",
+        detail:
+          `knownViolations entry ${entryLabel(entry)} expires dropped ` +
+          `(was ${prior.expires ?? "never"})`,
+      });
+    }
+  }
+
+  for (const rule of baseRules) {
+    const now = treeRules.find((r) => r.id === rule.id);
+    if (!now) {
+      found.push({ kind: "rule-removed", detail: `rule ${rule.id} removed` });
+      continue;
+    }
+    for (const field of RULE_FIELDS) {
+      if (now[field] === rule[field]) continue;
+      // warn -> error is a stricter rule, not a weaker one.
+      if (field === "severity" && rule.severity === "warn") continue;
+      found.push({
+        kind: "rule-field-changed",
+        detail: `rule ${rule.id} ${field} changed (${rule[field]} -> ${now[field]})`,
+      });
+    }
+  }
+
+  for (const exclude of tree.slice.excludes) {
+    if (baseSlice.excludes.includes(exclude)) continue;
+    found.push({
+      kind: "exclude-added",
+      detail: `new slice exclude ${exclude}`,
+    });
+  }
+
+  return found;
+}
