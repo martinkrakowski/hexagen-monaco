@@ -50,7 +50,8 @@ const pretty = (value: unknown): string =>
  * may hold a space (which would arrive as two `--except` entries) or a shell
  * metacharacter (which would run whatever follows it); the printed line is meant
  * to be pasted, so every target is quoted. The fixed arguments carry nothing a
- * shell would read, so they are left as they are.
+ * shell would read, so they are left as they are. A slice prefix is a repo path
+ * for the same reason, so `propose`'s `--from`/`--to` go through this too.
  */
 const shellWord = (value: string): string =>
   `'${value.split("'").join(`'\\''`)}'`;
@@ -126,7 +127,7 @@ export async function runContractPropose(
         ? ["no cross-prefix edges inside the slice"]
         : found.flatMap((c) => [
             `${c.from} -> ${c.to}  (${c.count} edge${c.count === 1 ? "" : "s"}; e.g. ${c.example})`,
-            `    hexagen contract add-rule --kind forbid --from ${c.from} --to ${c.to}`,
+            `    hexagen contract add-rule --kind forbid --from ${shellWord(c.from)} --to ${shellWord(c.to)}`,
           ]);
     return {
       exitCode: 0,

@@ -118,6 +118,67 @@ describe("contract propose", () => {
     expect(out.match(/ui\/ -> api\//g)).toHaveLength(1);
     await expect(readContract(root)).rejects.toThrow();
   });
+
+  it("quotes a slice prefix holding a space or a shell metacharacter", async () => {
+    // The `add-rule` line is pasted into a shell, and `--from`/`--to` are the
+    // slice's own prefixes, so a prefix may hold a space (which would arrive as
+    // two arguments) or a `;` (which would run whatever follows it). `--closed`
+    // has quoted its `--except` targets since lane 3B; this line never did.
+    const root = await setup(
+      ["src/my dir/", "ui/a;b/"],
+      ["src/my dir/a.ts", "ui/a;b/x.ts"],
+    );
+    await writeObserved(root, {
+      edges: [
+        {
+          from: "src/my dir/a.ts",
+          to: "ui/a;b/x.ts",
+          specifier: "../../ui/a;b/x",
+        },
+      ],
+    });
+    const r = await runContractPropose({ root });
+    expect(r.exitCode).toBe(0);
+    const out = all(r);
+    const line = out.split("\n").find((l) => l.includes("contract add-rule"));
+    expect(line, out).toBeDefined();
+    expect(line!.trim()).toBe(
+      "hexagen contract add-rule --kind forbid --from 'src/my dir/' --to 'ui/a;b/'",
+    );
+    // Read back the way a shell reads it: one word per prefix, and a `;` that is
+    // a character in a path rather than the end of a command.
+    const words = shellWords(line!.trim());
+    expect(words).toEqual([
+      "hexagen",
+      "contract",
+      "add-rule",
+      "--kind",
+      "forbid",
+      "--from",
+      "src/my dir/",
+      "--to",
+      "ui/a;b/",
+    ]);
+    // And the words the shell would hand it are the prefixes that were proposed,
+    // so the pasted line writes the rule it advertised.
+    await runContractAddRule({
+      root,
+      kind: "forbid",
+      from: words[words.indexOf("--from") + 1],
+      to: words[words.indexOf("--to") + 1],
+      id: "f1",
+      yes: true,
+    });
+    expect((await readContract(root)).rules).toEqual([
+      {
+        id: "f1",
+        kind: "forbid",
+        from: "src/my dir/",
+        to: "ui/a;b/",
+        severity: "error",
+      },
+    ]);
+  });
 });
 
 describe("contract propose --closed", () => {
