@@ -286,6 +286,14 @@ async function check(options: ContractCheckOptions): Promise<CommandResult> {
     const growthLines: string[] = [];
     if (options.base !== undefined) {
       const base = readContractBase(root, options.base);
+      // The base must be a contract for the slice it is compared against, or the
+      // comparison pairs one slice's rules with another's excludes and reports
+      // the difference as growth.
+      if (base.contract.sliceId !== base.slice.id) {
+        throw new UsageError(
+          `inconsistent base: contract.json at ${base.hash} is for slice "${base.contract.sliceId}", but slice.json there is "${base.slice.id}"`,
+        );
+      }
       const growth = findContractGrowth({
         contract: base.contract,
         slice: base.slice,

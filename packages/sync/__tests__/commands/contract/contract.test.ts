@@ -664,17 +664,18 @@ async function staged(opts: BaseFixture = {}): Promise<string> {
 
 async function editTreeSlice(
   root: string,
-  over: { paths?: string[]; excludes?: string[] },
+  over: { id?: string; paths?: string[]; excludes?: string[] },
 ): Promise<void> {
   const slice = JSON.parse(
     await readFile(path.join(root, ".hexagen", "slice.json"), "utf8"),
-  ) as { paths: string[]; excludes: string[] };
+  ) as { id: string; paths: string[]; excludes: string[] };
   await put(
     root,
     ".hexagen/slice.json",
     `${JSON.stringify(
       {
         ...slice,
+        ...(over.id ? { id: over.id } : {}),
         ...(over.paths ? { paths: over.paths } : {}),
         ...(over.excludes
           ? { excludes: [...slice.excludes, ...over.excludes] }
@@ -1132,5 +1133,28 @@ describe("contract check --base: the growth guard", () => {
     expect(() =>
       readContractBase(neverStaged, "HEAD", { show: () => null }),
     ).toThrow("absent at base because it was never staged");
+  });
+
+  it("21. a base whose contract names another slice exits 2", async () => {
+    const root = await staged();
+    const consistent: TreeContract = {
+      schemaVersion: "1.0.0",
+      sliceId: "s1",
+      rules: [RULE],
+      knownViolations: [],
+    };
+    // Only the contract moves: the base commit holds a contract for slice
+    // "other" beside a slice.json that is still "s1", so the guard would compare
+    // one slice's rules against another's excludes and call the difference
+    // growth.
+    await writeTreeContract(root, { ...consistent, sliceId: "other" });
+    git(root, "add", "-f", ".hexagen/contract.json");
+    git(root, "commit", "-q", "-m", "an inconsistent base");
+    await writeTreeContract(root, consistent);
+    const r = await runContractCheck({ root, base: "HEAD" });
+    expect(r.exitCode).toBe(2);
+    expect(all(r)).toContain("inconsistent base");
+    expect(all(r)).toContain("other");
+    expect(all(r)).toContain("s1");
   });
 });
