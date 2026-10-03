@@ -81,20 +81,18 @@ fresh, short-lived grant rather than reading from a store.
 
 ### Compiling a grant
 
-`compileGrant(contexts, manifest, extraPaths?)` (monaco profile only — see
-below):
+`compileGrant(contexts, manifest)` (monaco profile only — see below):
 
 1. Look up each name in `manifest.bounded_contexts`. A name that is not a
    real context is a compile error (fail closed — see below), not a
    silently-dropped entry.
 2. Expand each context to `packages/<context>/`.
-3. Append `extraPaths` verbatim. Extras are **listed on the grant a human
-   reviews** (`hexagen grant show`) exactly like context-derived paths —
-   they never compile from a guess (there is no implicit "shared codegen
-   target" expansion or similar heuristic), and `hexagen grant check`
-   applies the same prefix rule to them as to every other entry in `paths`.
-   Extras are additive to `paths`; they are never a way to widen `contexts`
-   or imply a context wasn't really named.
+
+The compiled path list is exactly the named contexts expanded to
+`packages/<context>/`. Extra paths are never compiled from a guess (there is no
+implicit "shared codegen target" expansion or similar heuristic): a client repo
+names them explicitly with `hexagen grant issue --paths`, which takes the same
+prefixes `hexagen grant check` applies.
 
 This is the "reuse manifest.yaml" requirement: contexts are validated
 against the same file `hexagen_get_manifest` and the arch linter already
@@ -274,9 +272,43 @@ identically — `contexts` is purely how one profile happens to derive
 
 `hexagen grant issue` was built in place of the designed `compile` (it signs
 the grant and takes `--paths`/`--contexts` directly). `show` and `check` are
-built too, and so is `revoke`. All four live in `@hexagen/sync` (`packages/sync/src/commands/grant/`).
+built too, and so are `revoke` and `list`. All five live in `@hexagen/sync`
+(`packages/sync/src/commands/grant/`).
 
 ```
+hexagen grant list [--status live|expired|revoked|invalid|all]
+                   [--workspace-root <path>] [--key-file <path>] [--engagement <id>]
+                   [--json]
+    A read-only listing of every *.json under <root>/.hexagen/grants/. It reads
+    through the same sidecar guards as
+    `hexagen workbook export` — the allow-list, the realpath containment, the
+    per-file cap and an O_NOFOLLOW read — so it never becomes a third
+    enumerator of that directory, and it never searches upward or follows a
+    symlink out. Shape comes from `parseGrant`, the signature verdict from
+    `verifyGrantSignature` (which is handed the key resolved once for the whole
+    listing), and each row's status from `checkGrantWindow` (never re-derived
+    here), so a listing cannot disagree with `check`.
+    A file that cannot be read as a grant becomes a row, not a failed call:
+    a symlink is `invalid: symlink` and is never read, and so are an
+    off-allow-list name, a name the key/env pattern forbids, unparseable JSON,
+    a JSON value that is not a grant, a file over the per-file cap, and any
+    filesystem error an entry raises (an entry that vanishes mid-read is
+    `invalid: vanished before it could be read`). One unreadable grant never
+    hides the others. Rows are sorted by expires_at descending, then id. Prints
+    the workspace root, the key path and the key fingerprint, never the key, the
+    time the window was evaluated at, and a footer saying the listing is a
+    snapshot and that `live` speaks about the window only. --status filters the
+    printed rows and nothing else: the summary always totals every row
+    (`<n> shown (--status <s>); all <every row>`), so a failure the filter
+    dropped stays on screen.
+    Exit 0 only if at least one grant was read, every grant read verifies and
+    no row is invalid; 1 if no grant was read, any row is invalid, or any grant
+    read fails its signature — including one --status filtered out of the
+    printed rows; 2 bad input (an unknown --status, an unresolvable workspace
+    root, an unreadable directory) or a missing .hexagen/ or .hexagen/grants/.
+    --json prints an array of the same rows on stdout, with the key line and
+    the footer on stderr.
+
 hexagen grant show <grant-file>
     [--workspace-root <path>] [--key-file <path>] [--engagement <id>]
     Pretty-prints id, principal, agent, contexts (when present), paths, tools,
