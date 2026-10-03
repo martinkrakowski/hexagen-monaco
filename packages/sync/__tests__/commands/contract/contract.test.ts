@@ -815,7 +815,8 @@ describe("contract check: inputs", () => {
 // --stage`, or `git add -f`). `staged()` does that, which is what makes these
 // cases reachable at all.
 interface BaseFixture {
-  rules?: Record<string, string>[];
+  /** A rule is a `Record`: a `closed` rule carries `except`, a list. */
+  rules?: Record<string, string | string[]>[];
   knownViolations?: Record<string, string>[];
   excludes?: string[];
   /** Leave contract.json out of the base commit (default: stage it). */
@@ -829,6 +830,14 @@ const RULE = {
   kind: "forbid",
   from: "ui/",
   to: "api/",
+  severity: "error",
+};
+
+/** A `closed` rule: no from/to, `except` the only crossing it allows. */
+const CLOSED_RULE = {
+  id: "slice-closed",
+  kind: "closed",
+  except: ["api/legacy/"],
   severity: "error",
 };
 
@@ -846,7 +855,7 @@ const UNRESOLVED = [
 interface TreeContract {
   schemaVersion: string;
   sliceId: string;
-  rules: Record<string, string>[];
+  rules: Record<string, string | string[]>[];
   knownViolations: Record<string, string>[];
 }
 
@@ -1021,6 +1030,89 @@ const GROWTH_ROWS: Array<{
       // coverage key, so the guard cannot tell what that now hides -- and a
       // new-entry report would be the wrong cause.
       c.knownViolations[0]!.file = "src";
+      await writeTreeContract(root, c);
+    },
+  },
+  {
+    name: "a closed rule except added",
+    exit: 1,
+    finding: "except added api/vendor/",
+    base: { rules: [CLOSED_RULE] },
+    weaken: async (root) => {
+      const c = await readTreeContract(root);
+      c.rules[0]!.except = ["api/legacy/", "api/vendor/"];
+      await writeTreeContract(root, c);
+    },
+  },
+  {
+    name: "a closed rule except widened to a shorter prefix",
+    exit: 1,
+    finding: "except widened (api/vendor/ -> api/)",
+    base: { rules: [{ ...CLOSED_RULE, except: ["api/vendor/"] }] },
+    weaken: async (root) => {
+      const c = await readTreeContract(root);
+      c.rules[0]!.except = ["api/"];
+      await writeTreeContract(root, c);
+    },
+  },
+  {
+    name: "a closed rule except removed",
+    exit: 0,
+    base: {
+      rules: [{ ...CLOSED_RULE, except: ["api/legacy/", "api/vendor/"] }],
+    },
+    weaken: async (root) => {
+      const c = await readTreeContract(root);
+      c.rules[0]!.except = ["api/legacy/"];
+      await writeTreeContract(root, c);
+    },
+  },
+  {
+    name: "a closed rule except narrowed to a longer prefix",
+    exit: 0,
+    base: { rules: [{ ...CLOSED_RULE, except: ["api/"] }] },
+    weaken: async (root) => {
+      const c = await readTreeContract(root);
+      c.rules[0]!.except = ["api/vendor/"];
+      await writeTreeContract(root, c);
+    },
+  },
+  {
+    name: "a closed rule changed to a prefix kind",
+    exit: 1,
+    finding: "kind changed (closed -> forbid)",
+    base: { rules: [CLOSED_RULE] },
+    weaken: async (root) => {
+      const c = await readTreeContract(root);
+      c.rules = [
+        { ...RULE, id: "slice-closed" },
+        ...c.rules.slice(1),
+      ] as TreeContract["rules"];
+      await writeTreeContract(root, c);
+    },
+  },
+  {
+    name: "a prefix rule changed to closed",
+    exit: 1,
+    finding: "kind changed (forbid -> closed)",
+    base: { rules: [{ ...RULE, id: "slice-closed" }] },
+    weaken: async (root) => {
+      const c = await readTreeContract(root);
+      c.rules = [
+        { ...CLOSED_RULE },
+        ...c.rules.slice(1),
+      ] as TreeContract["rules"];
+      await writeTreeContract(root, c);
+    },
+  },
+  {
+    name: "a closed rule removed",
+    exit: 1,
+    finding: "rule slice-closed removed",
+    base: { rules: [CLOSED_RULE, RULE] },
+    weaken: async (root) => {
+      const c = await readTreeContract(root);
+      c.rules = c.rules.filter((r) => r.id !== "slice-closed");
       await writeTreeContract(root, c);
     },
   },

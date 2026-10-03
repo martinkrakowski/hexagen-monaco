@@ -227,7 +227,10 @@ describe("isSuppressionExpired and isKnown", () => {
 });
 
 describe("findContractGrowth", () => {
-  const rule = (over: Partial<ContractRule> = {}): ContractRule => ({
+  // A partial of the PREFIX variant: `Partial<ContractRule>` is a union of two
+  // partials, so spreading it over a forbid literal produces a `kind` that is
+  // `forbid | closed` with an optional `except`, which is neither variant.
+  const rule = (over: Partial<PrefixRule> = {}): ContractRule => ({
     id: "no-ui-api",
     kind: "forbid",
     from: "ui/",
@@ -290,6 +293,101 @@ describe("findContractGrowth", () => {
         g.kind,
         g.detail,
       ]),
+    ).toEqual([["rule-removed", "rule no-ui-api removed"]]);
+  });
+
+  const closedRule = (
+    except: string[],
+    over: { severity?: "error" | "warn" } = {},
+  ): ContractRule => ({
+    id: "no-ui-api",
+    kind: "closed",
+    except,
+    severity: "error",
+    ...over,
+  });
+
+  it("closed rules: an except added or widened is growth, one removed or narrowed is not", () => {
+    const found = (base: ContractRule[], tree: ContractRule[]) =>
+      findContractGrowth(
+        sides(contract({ rules: base }), contract({ rules: tree })),
+      ).map((g) => [g.kind, g.detail]);
+
+    // An except prefix opens a crossing the base did not allow, and a shorter
+    // prefix opens everything the longer one allowed and more.
+    expect(found([closedRule([])], [closedRule(["api/vendor/"])])).toEqual([
+      ["rule-field-changed", "rule no-ui-api except added api/vendor/"],
+    ]);
+    expect(
+      found([closedRule(["api/vendor/"])], [closedRule(["api/"])]),
+    ).toEqual([
+      [
+        "rule-field-changed",
+        "rule no-ui-api except widened (api/vendor/ -> api/)",
+      ],
+    ]);
+
+    // Both of these accept fewer crossings: the ratchet moving forward.
+    expect(
+      found(
+        [closedRule(["api/legacy/", "api/vendor/"])],
+        [closedRule(["api/legacy/"])],
+      ),
+    ).toEqual([]);
+    expect(
+      found([closedRule(["api/"])], [closedRule(["api/vendor/"])]),
+    ).toEqual([]);
+    // An unrelated prefix in place of the old one is a removal plus an addition,
+    // so the addition is growth.
+    expect(found([closedRule(["api/vendor/"])], [closedRule(["ui/"])])).toEqual(
+      [["rule-field-changed", "rule no-ui-api except added ui/"]],
+    );
+
+    // Reordered, or a second prefix added, changes nothing.
+    expect(
+      found([closedRule(["api/", "lib/"])], [closedRule(["lib/", "api/"])]),
+    ).toEqual([]);
+    expect(
+      found([closedRule(["api/"])], [closedRule(["api/", "api/vendor/"])]),
+    ).toEqual([
+      ["rule-field-changed", "rule no-ui-api except added api/vendor/"],
+    ]);
+
+    // Severity still speaks for a closed rule.
+    expect(
+      found(
+        [closedRule(["api/"])],
+        [closedRule(["api/"], { severity: "warn" })],
+      ),
+    ).toEqual([
+      ["rule-field-changed", "rule no-ui-api severity changed (error -> warn)"],
+    ]);
+  });
+
+  it("closed rules: any kind change is growth, and so is a removed closed rule", () => {
+    const found = (base: ContractRule[], tree: ContractRule[]) =>
+      findContractGrowth(
+        sides(contract({ rules: base }), contract({ rules: tree })),
+      ).map((g) => [g.kind, g.detail]);
+
+    // A `closed` rule and a prefix rule judge different edge sets, and there is
+    // no comparison to make between them, so neither direction can be proven
+    // strict.
+    expect(found([closedRule(["api/"])], [rule({ kind: "forbid" })])).toEqual([
+      ["rule-field-changed", "rule no-ui-api kind changed (closed -> forbid)"],
+    ]);
+    expect(found([rule()], [closedRule([])])).toEqual([
+      ["rule-field-changed", "rule no-ui-api kind changed (forbid -> closed)"],
+    ]);
+    // allow-only is the same case as forbid.
+    expect(found([rule()], [closedRule([])])).toHaveLength(1);
+    expect(
+      found([closedRule([])], [rule({ kind: "allow-only" })])[0]![1],
+    ).toContain("closed -> allow-only");
+
+    // Gone, like any other kind.
+    expect(
+      found([closedRule([]), rule({ id: "keep" })], [rule({ id: "keep" })]),
     ).toEqual([["rule-removed", "rule no-ui-api removed"]]);
   });
 

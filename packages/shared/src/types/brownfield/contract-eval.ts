@@ -227,9 +227,6 @@ function coversMore(
   return left > right;
 }
 
-/** The fields of a rule the guard treats as one edit: any difference is growth. */
-const RULE_FIELDS = ["kind", "from", "to", "severity"] as const;
-
 /**
  * The fields of a baseline entry that make it cover what it covers: the triple
  * the check matches on. Any difference is growth, whichever way it points.
@@ -237,18 +234,116 @@ const RULE_FIELDS = ["kind", "from", "to", "severity"] as const;
 const IDENTITY_FIELDS = ["file", "specifier"] as const;
 
 /**
- * True when `tree` judges at least as much as `base` under the same rule id:
- * `kind`, `from` and `to` must be identical — those are compared bluntly, the
- * guard cannot compare two prefixes — and `severity` may not have been lowered
- * from `error` to `warn`.
+ * The edits that make `tree` judge less than `base` under one rule id, as
+ * printed lines.
+ *
+ * `kind` first, because a `closed` rule and a prefix rule judge different edge
+ * sets — one is the slice with an `except` list, the other a prefix pair — and
+ * there is no comparison to make between them. So neither direction can be shown
+ * to be the stricter, and a kind change is always growth.
+ *
+ * `from`/`to` are read only after both rules are known to be prefix kinds, and
+ * `except` only after both are known to be `closed`; that is also why the
+ * comparison is written out per kind rather than driven off a field list.
+ */
+function ruleGrowth(base: ContractRule, tree: ContractRule): string[] {
+  const found: string[] = [];
+  const downgraded = base.severity === "error" && tree.severity === "warn";
+  if (base.kind !== tree.kind) {
+    // `closed` and a prefix rule judge different edge sets, and `forbid` and
+    // `allow-only` judge opposite ones, so neither direction can be shown to be
+    // the stricter.
+    found.push(`kind changed (${base.kind} -> ${tree.kind})`);
+    if (downgraded) found.push("severity changed (error -> warn)");
+    return found;
+  }
+  // Both kinds are known now, so each branch narrows both rules before it reads
+  // a field its variant may not carry.
+  if (base.kind === "closed" && tree.kind === "closed") {
+    // `except` is the whole escape hatch, so more of it allows more crossings:
+    // the mirror image of a slice `paths` entry, where more judges more.
+    found.push(...exceptGrowth(base.except, tree.except));
+  } else if (base.kind !== "closed" && tree.kind !== "closed") {
+    if (base.from !== tree.from) {
+      found.push(`from changed (${base.from} -> ${tree.from})`);
+    }
+    if (base.to !== tree.to)
+      found.push(`to changed (${base.to} -> ${tree.to})`);
+  }
+  if (downgraded) found.push("severity changed (error -> warn)");
+  return found;
+}
+
+/**
+ * True when `tree` judges at least as much as `base` under the same rule id.
+ * Kinds must match, `from`/`to` must be identical — those are compared bluntly,
+ * the guard cannot compare two prefixes — `except` must accept at least as much,
+ * and `severity` may not be lowered from `error` to `warn`.
  */
 function judgesAtLeastAsMuch(base: ContractRule, tree: ContractRule): boolean {
-  return (
-    base.kind === tree.kind &&
-    base.from === tree.from &&
-    base.to === tree.to &&
-    (base.severity === "warn" || tree.severity === "error")
-  );
+  if (base.severity === "error" && tree.severity === "warn") return false;
+  if (base.kind === "closed" && tree.kind === "closed") {
+    return exceptGrowth(base.except, tree.except).length === 0;
+  }
+  if (base.kind !== "closed" && tree.kind !== "closed") {
+    // `forbid` and `allow-only` judge opposite edges, so they are not
+    // interchangeable either.
+    return (
+      base.kind === tree.kind && base.from === tree.from && base.to === tree.to
+    );
+  }
+  // Kinds differ: strictness cannot be proven, so it never cancels a base rule.
+  return false;
+}
+
+/**
+ * The `except` prefixes a `closed` rule adds relative to the base, as printed
+ * lines. FEWER prefixes accept fewer crossings, so a tree list that accepts at
+ * least as much is not growth: an added or widened prefix is, a removed or
+ * narrowed one is not.
+ *
+ * Matched as a multiset with prefix overlap — one tree prefix can stand for
+ * several base prefixes, and each tree prefix is used once — so a base prefix
+ * with no partner is a removal (not growth) and only unpaired tree prefixes are
+ * additions.
+ */
+function exceptGrowth(
+  base: readonly string[],
+  tree: readonly string[],
+): string[] {
+  const found: string[] = [];
+  const paired = new Set<number>();
+  for (const entry of base) {
+    let at = -1;
+    for (let i = 0; i < tree.length; i++) {
+      if (paired.has(i)) continue;
+      // Any related prefix stands for this one: the same prefix, a parent (which
+      // accepts more) or a child (which accepts less). An unrelated prefix is
+      // not a partner — it is a different crossing being allowed.
+      if (
+        tree[i] === entry ||
+        underPrefix(tree[i]!, entry) ||
+        underPrefix(entry, tree[i]!)
+      ) {
+        at = i;
+        break;
+      }
+    }
+    // No partner at all: the prefix is gone, which accepts less. Not growth.
+    if (at === -1) continue;
+    paired.add(at);
+    // A strictly shorter prefix accepts everything this one did, and more.
+    // `underPrefix` alone is not enough: a prefix contains itself.
+    if (tree[at] !== entry && underPrefix(tree[at]!, entry)) {
+      found.push(`except widened (${entry} -> ${tree[at]})`);
+    }
+  }
+  // Only an unpaired tree prefix is new. A narrowed one is already paired above.
+  for (let i = 0; i < tree.length; i++) {
+    if (paired.has(i)) continue;
+    found.push(`except added ${tree[i]}`);
+  }
+  return found;
 }
 
 /**
@@ -336,7 +431,7 @@ export function findContractGrowth(input: {
       continue;
     }
     // `rule` + `file` + `specifier` IS the entry's coverage key, so an edit to it
-    // is reviewed like a rule's `from`/`to` (see RULE_FIELDS): the guard matches
+    // is reviewed like a rule field (see ruleGrowth): the guard matches
     // the two entries by exact equality, but a wider key — a directory where a
     // file was, a glob where an import was — is the shape that hides more than
     // the base recorded, and nothing here can compare the two coverages. `reason`
@@ -398,11 +493,12 @@ export function findContractGrowth(input: {
     }
     matched.add(sameId);
     const now = treeRules[sameId]!;
-    for (const field of RULE_FIELDS) {
-      if (now[field] === rule[field]) continue;
+    // ruleGrowth narrows on kind before it reads from/to or except, so the
+    // union is never indexed by a field the variant may not carry.
+    for (const detail of ruleGrowth(rule, now)) {
       found.push({
         kind: "rule-field-changed",
-        detail: `rule ${rule.id} ${field} changed (${rule[field]} -> ${now[field]})`,
+        detail: `rule ${rule.id} ${detail}`,
       });
     }
   }
