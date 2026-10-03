@@ -447,11 +447,13 @@ npx hexagen contract check --base <base-sha> --allow-growth --reason "<why>"
   root-package target (`.`), a target an `excludes` entry denies, or a target
   spelled as a directory — is reported as `not proposed:` with the advice that
   would accept it, because a rule naming one would still fail, or would accept
-  far more than the crossing observed. Both printed `add-rule` lines are
-  shell-quoted, so either can be pasted as it stands — the cross-prefix one
-  names the slice's own prefixes in `--from`/`--to`, and a prefix is a repo
-  path, so a space or a `;` in one would otherwise split the command or run
-  what follows. With `--closed`, an
+  far more than the crossing observed. Both printed `add-rule` lines — the
+  cross-prefix one and the `--closed` one — are quoted for a POSIX shell, so
+  `sh`, `bash` or `zsh` can run either as it stands; `cmd.exe` does not read
+  those quotes, so do not paste one there. The cross-prefix line names the
+  slice's own prefixes in `--from`/`--to`, and a prefix is a repo path, so a
+  space or a `;` in one would otherwise split the command or run what follows.
+  With `--closed`, an
   `observed.json` whose edges were not collected refuses (exit 2) and prints no
   command at all: nothing is known about the crossings, so "no edge leaves the
   slice" would be a claim the report cannot make. An incomplete edge list is a
@@ -736,7 +738,11 @@ recipe is a document rather than a template:
 Every step's `run:` script is read out of that workflow and executed against the
 built CLI on a fixture client repo by
 `__tests__/contract/brownfield-gate.contract.test.ts`, so the recipe cannot drift
-from what the job does.
+from what the job does. The one exception is `Install the hexagen CLI`: the
+fixture already holds the artifact that install fetches — the built dist, copied
+into the consumer's `node_modules/@hexagen-monaco/sync` — so the install is the
+only step the suite does not run. Every kit command, and every step that can
+decide the job, does run.
 
 - `evidence pack <trace> --grant <file>... --out <zip>` checks the whole trace and
   writes an HMAC'd bundle: 0 packed, 1 the evidence is invalid and nothing was
@@ -764,8 +770,11 @@ a base with a slice but no trace runs it and lets it exit 2.
 The gate needs no manifest, no `apps/web` and no workbench package: the published
 CLI is the only dependency. The engagement key is injected from a CI secret into
 `$RUNNER_TEMP` at mode 0600 and read through `HEXAGEN_GRANT_KEY_FILE`, never
-from the checkout — and a missing or weak key is a denial, not a skip: the
-injection step and both evidence commands exit 2 rather than passing. The
+from the checkout. A missing or weak key is a denial, never a skip — and
+because the job is fail-fast, only the first step that reads the key reports
+it: the injection step exits 2 on an empty secret, while a non-empty but weak
+key is caught by `evidence pack` in step 4, which exits 2 too.
+`evidence verify` never runs in either case, because the job stopped first. The
 bundle's HMAC is symmetric, so the CI secret can forge it and the FDE and CI
 cannot be told apart.
 
