@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://hexagen.dev/kernel/contract.schema.json",
   "title": "Contract",
-  "description": "`.hexagen/contract.json`: what the slice may and may not depend on. The built-in rule id `unresolved-import` covers an unresolved in-slice specifier. `knownViolations` entries have the shape of the ratchet baseline (tools/arch-linter/src/ratchet-baseline.ts). Mirrors packages/shared/src/types/brownfield/contract.ts.",
+  "description": "`.hexagen/contract.json`: what the slice may and may not depend on. A rule is one of two shapes, decided by its `kind`: the prefix kinds `forbid` and `allow-only` carry `from` and `to`, and the `closed` kind carries `except` (the slice is its `from` side, so it has no `from`/`to`). `closed` is the only kind that may carry `except`, and the prefix kinds are the only ones that may carry `from`/`to`. The built-in rule id `unresolved-import` covers an unresolved in-slice specifier. `knownViolations` entries have the shape of the ratchet baseline (tools/arch-linter/src/ratchet-baseline.ts). Mirrors packages/shared/src/types/brownfield/contract.ts.",
   "type": "object",
   "additionalProperties": false,
   "required": ["schemaVersion", "sliceId", "rules", "knownViolations"],
@@ -19,35 +19,54 @@
     "rules": {
       "type": "array",
       "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["id", "kind", "from", "to", "severity"],
-        "properties": {
-          "id": {
-            "type": "string",
-            "minLength": 1,
-            "not": {
-              "enum": ["unresolved-import"]
-            },
-            "description": "Must not be a built-in rule id (unresolved-import)."
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "kind", "from", "to", "severity"],
+            "description": "A prefix rule: `forbid` or `allow-only`, judged on one `from` prefix and one `to` prefix.",
+            "properties": {
+              "id": {
+                "$ref": "#/definitions/ruleId"
+              },
+              "kind": {
+                "enum": ["forbid", "allow-only"]
+              },
+              "from": {
+                "$ref": "#/definitions/slicePath"
+              },
+              "to": {
+                "$ref": "#/definitions/slicePath"
+              },
+              "severity": {
+                "$ref": "#/definitions/severity"
+              }
+            }
           },
-          "kind": {
-            "enum": ["forbid", "allow-only"]
-          },
-          "from": {
-            "type": "string",
-            "pattern": "^(?!/)(?![A-Za-z]:)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*//)(?!.*[\\\\\\u0000-\\u001f\\u007f\\u2028\\u2029]).+$",
-            "description": "Repo-relative, case-sensitive. Control characters (U+0000-U+001F, U+007F, U+2028, U+2029) are also refused. A trailing / makes a directory prefix; anything else is an exact file path. `.` and `..` segments, empty segments, absolute paths, backslashes and NUL are refused."
-          },
-          "to": {
-            "type": "string",
-            "pattern": "^(?!/)(?![A-Za-z]:)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*//)(?!.*[\\\\\\u0000-\\u001f\\u007f\\u2028\\u2029]).+$",
-            "description": "Repo-relative, case-sensitive. Control characters (U+0000-U+001F, U+007F, U+2028, U+2029) are also refused. A trailing / makes a directory prefix; anything else is an exact file path. `.` and `..` segments, empty segments, absolute paths, backslashes and NUL are refused."
-          },
-          "severity": {
-            "enum": ["error", "warn"]
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "kind", "except", "severity"],
+            "description": "A closed rule: the slice is the `from` side, so the rule carries no `from`/`to`; every edge that leaves the slice is denied unless its target is inside the slice or under an `except` prefix. `except` may be empty, which accepts no crossing.",
+            "properties": {
+              "id": {
+                "$ref": "#/definitions/ruleId"
+              },
+              "kind": {
+                "const": "closed"
+              },
+              "except": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/definitions/slicePath"
+                }
+              },
+              "severity": {
+                "$ref": "#/definitions/severity"
+              }
+            }
           }
-        }
+        ]
       }
     },
     "knownViolations": {
@@ -86,6 +105,24 @@
           }
         }
       }
+    }
+  },
+  "definitions": {
+    "ruleId": {
+      "type": "string",
+      "minLength": 1,
+      "not": {
+        "enum": ["unresolved-import"]
+      },
+      "description": "Must not be a built-in rule id (unresolved-import)."
+    },
+    "severity": {
+      "enum": ["error", "warn"]
+    },
+    "slicePath": {
+      "type": "string",
+      "pattern": "^(?!/)(?![A-Za-z]:)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*//)(?!.*[\\\\\\u0000-\\u001f\\u007f\\u2028\\u2029]).+$",
+      "description": "Repo-relative, case-sensitive. Control characters (U+0000-U+001F, U+007F, U+2028, U+2029) are also refused. A trailing / makes a directory prefix; anything else is an exact file path. `.` and `..` segments, empty segments, absolute paths, backslashes and NUL are refused."
     }
   }
 }

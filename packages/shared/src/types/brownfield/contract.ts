@@ -8,20 +8,50 @@ import { FilePathString, SchemaVersion, SlicePathString } from "./common.js";
 export const UNRESOLVED_IMPORT_RULE_ID = "unresolved-import";
 export const BUILTIN_RULE_IDS: readonly string[] = [UNRESOLVED_IMPORT_RULE_ID];
 
-const Rule = z
+const RuleId = z
+  .string()
+  .min(1)
+  .refine((id) => !BUILTIN_RULE_IDS.includes(id), {
+    message: "rule id is reserved for a built-in rule",
+  });
+
+const RuleSeverity = z.enum(["error", "warn"]);
+
+/**
+ * `forbid` and `allow-only` are prefix pairs: `from` and `to` are both
+ * required, and a rule of these kinds may not carry an `except` list.
+ */
+const PrefixRule = z
   .object({
-    id: z
-      .string()
-      .min(1)
-      .refine((id) => !BUILTIN_RULE_IDS.includes(id), {
-        message: "rule id is reserved for a built-in rule",
-      }),
+    id: RuleId,
     kind: z.enum(["forbid", "allow-only"]),
     from: SlicePathString,
     to: SlicePathString,
-    severity: z.enum(["error", "warn"]),
+    severity: RuleSeverity,
   })
   .strict();
+
+/**
+ * `closed` is the slice as the `from` side, so it carries no `from`/`to`: every
+ * edge that leaves the slice is denied unless its target is inside the slice or
+ * under an `except` prefix. The list is required (an empty one accepts no
+ * crossing) and may be empty.
+ */
+const ClosedRule = z
+  .object({
+    id: RuleId,
+    kind: z.literal("closed"),
+    except: z.array(SlicePathString),
+    severity: RuleSeverity,
+  })
+  .strict();
+
+/**
+ * A discriminated union on `kind`, so the shape of a rule is decided by its
+ * kind: `from`/`to` are refused on `closed`, `except` on the other two, and each
+ * invalid rule reports the field that was wrong instead of a generic failure.
+ */
+const Rule = z.discriminatedUnion("kind", [PrefixRule, ClosedRule]);
 
 /** True for a YYYY-MM-DD string that names a real calendar day (2026-02-30 is not one). */
 function isRealCalendarDate(text: string): boolean {

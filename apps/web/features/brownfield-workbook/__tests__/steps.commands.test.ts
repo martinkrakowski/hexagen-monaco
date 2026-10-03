@@ -50,7 +50,7 @@ const PINS: readonly Pin[] = [
     file: "contract/index.ts",
     sub: "add-rule",
     top: "hexagen contract",
-    required: ["--kind", "--from", "--to"],
+    required: ["--kind"],
   },
   {
     id: "contract",
@@ -132,6 +132,27 @@ describe("step commands match the real CLI", () => {
     const to = source.indexOf(".command(", from + 1);
     expect(from).toBeGreaterThan(-1);
     expect(source.slice(from, to)).toContain('"--yes"');
+  });
+
+  it("add-rule requires --kind and nothing else: the kind picks which flags it needs", () => {
+    const source = src("contract/index.ts");
+    const from = source.indexOf('.command("add-rule")');
+    const to = source.indexOf(".command(", from + 1);
+    expect(from).toBeGreaterThan(-1);
+    const body = source.slice(from, to);
+    expect(body).toMatch(/requiredOption\(\s*"--kind/);
+    // --from/--to/--except are plain options: a prefix kind needs the first two,
+    // a closed rule needs the third, and each refuses the other's. Either
+    // builder form counts (.option, or .createOption for the one carrying a
+    // preset); what the pin forbids is requiredOption.
+    for (const flag of ["--from", "--to", "--except"]) {
+      expect(body, flag).toMatch(
+        new RegExp(`\\.(option|createOption)\\(\\s*"${flag}[ "]`),
+      );
+      expect(body, flag).not.toMatch(
+        new RegExp(`requiredOption\\(\\s*"${flag}[ "]`),
+      );
+    }
   });
 
   it("the workbook export writes outside evidence/ and needs no --yes", () => {

@@ -328,10 +328,14 @@ describe("evidence pack, denials", () => {
   it("reports a forged denial and never counts it as evidence", async () => {
     await append(evLine());
     // Cites a tool outside the grant and a time after expiry: legitimate for a
-    // real denial, and exactly what a forger would claim.
+    // real denial, and exactly what a forger would claim. Its own window still
+    // has to contain the call (Rule 4) — that is internal to the line, not the
+    // grant it was refused by.
     await append(
       evLine({
         halt_reason: "grant_denied",
+        started_at: "2027-01-01T00:00:00.000Z",
+        ended_at: "2027-01-01T00:00:01.000Z",
         tool_calls: [
           {
             name: "hexagen_delete_everything",
@@ -359,6 +363,8 @@ describe("evidence pack, denials", () => {
   it("the same line as 'completed' is invalid", async () => {
     await append(
       evLine({
+        started_at: "2027-01-01T00:00:00.000Z",
+        ended_at: "2027-01-01T00:00:01.000Z",
         tool_calls: [
           {
             name: "hexagen_delete_everything",
@@ -404,15 +410,45 @@ describe("evidence pack, window and shape", () => {
       { name, args_digest: "sha256:aa", result_digest: "sha256:bb", time },
     ],
   });
+  /** The line's own window (Rule 4), which holds the call at `time`. */
+  const ownWindow = (time: string) => ({
+    started_at: time,
+    ended_at: time,
+  });
 
   it("a call exactly at expires_at is valid, one millisecond later is not", async () => {
-    await append(evLine(callAt("2026-12-01T00:00:00.000Z")));
+    await append(
+      evLine({
+        ...ownWindow("2026-12-01T00:00:00.000Z"),
+        ...callAt("2026-12-01T00:00:00.000Z"),
+      }),
+    );
     expect((await run()).exitCode).toBe(0);
     await rm(bundlePath());
     await rm(tipPath());
     await rm(traceFile);
-    await append(evLine(callAt("2026-12-01T00:00:00.001Z")));
+    await append(
+      evLine({
+        ...ownWindow("2026-12-01T00:00:00.001Z"),
+        ...callAt("2026-12-01T00:00:00.001Z"),
+      }),
+    );
     await failsClean(await run(), /after grant 'grant-1' expires_at/);
+  });
+
+  it("a call outside its own started_at/ended_at is invalid, on a denial line too", async () => {
+    await append(
+      evLine({
+        halt_reason: "grant_denied",
+        started_at: "2026-10-01T10:00:00.001Z",
+        ended_at: "2026-10-01T10:00:01.000Z",
+        ...callAt("2026-10-01T10:00:00.000Z"),
+      }),
+    );
+    await failsClean(
+      await run(),
+      /is before started_at \(2026-10-01T10:00:00\.001Z\)/,
+    );
   });
 
   it("hexagen_accept_transaction is allowed without being in grant.tools", async () => {
