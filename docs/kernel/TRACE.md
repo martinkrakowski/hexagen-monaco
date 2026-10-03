@@ -152,8 +152,13 @@ write, or the trace, as valid evidence) rather than warns:
    `tool_calls[].time` is at or after `started_at` and at or before
    `ended_at` (a call exactly at either bound is inside it), and the calls
    are in time order — a later call with an earlier `time` is invalid,
-   equal times are in order. A missing `started_at` or `ended_at`, or one
-   that does not parse as a timestamp, is a reason and not a skip: a
+   equal times are in order. Timestamps are compared at the precision they
+   carry, so a difference below a millisecond is still a difference. A call
+   whose own `time` does not parse is a reason here too, on every line: it
+   is reported once, by this rule, and the comparisons skip it rather than
+   compare a null — so an order error names the last call whose `time` did
+   parse. A missing `started_at` or `ended_at`, or one that does not parse
+   as a timestamp, is a reason and not a skip: a
    `completed` line without them is invalid, and so is a denial line's.
    This rule has no exemption for denial lines, unlike Rule 2 and the
    `tools` check: it compares values inside one line, written by one process,

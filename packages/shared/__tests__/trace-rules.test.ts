@@ -226,4 +226,85 @@ describe("traceRuleReasons — the line's own timeline (Rule 4)", () => {
       ),
     ).toEqual(["Tool call 't' has an invalid time 'not a time'"]);
   });
+
+  it("compares sub-millisecond differences exactly, not as equality", () => {
+    // Date.parse truncates both to the same millisecond, which is how a call
+    // that really precedes its own started_at used to pass.
+    expect(
+      traceRuleReasons(
+        {
+          ...line("2026-10-01T10:00:00.0001Z"),
+          started_at: "2026-10-01T10:00:00.0009Z",
+          ended_at: "2026-10-01T10:00:01.0009Z",
+        },
+        [grant],
+      ),
+    ).toEqual([
+      "Tool call 't' at 2026-10-01T10:00:00.0001Z is before started_at (2026-10-01T10:00:00.0009Z)",
+    ]);
+    expect(
+      traceRuleReasons(
+        {
+          ...line("2026-10-01T10:00:00.0009Z"),
+          started_at: "2026-10-01T10:00:00.0001Z",
+          ended_at: "2026-10-01T10:00:01.0009Z",
+        },
+        [grant],
+      ),
+    ).toEqual([]);
+    // The same instant written with different precision is still equal.
+    expect(
+      traceRuleReasons(
+        {
+          ...line("2026-10-01T10:00:00.0009Z"),
+          started_at: "2026-10-01T10:00:00.0009Z",
+          ended_at: "2026-10-01T10:00:00.00090Z",
+        },
+        [grant],
+      ),
+    ).toEqual([]);
+    // And so is a second ordering error that only shows up below a millisecond.
+    expect(
+      traceRuleReasons(
+        {
+          ...line(WINDOW),
+          ...wide,
+          tool_calls: calls(
+            "2026-10-01T10:00:30.0009Z",
+            "2026-10-01T10:00:30.0001Z",
+          ),
+        },
+        [grant],
+      ),
+    ).toEqual([
+      "Tool calls are out of order: tool_calls[1] at 2026-10-01T10:00:30.0001Z is before tool_calls[0] at 2026-10-01T10:00:30.0009Z",
+    ]);
+  });
+
+  it("an unparsable call time is a reason on every line, denials included", () => {
+    for (const halt_reason of ["completed", "grant_denied"]) {
+      // Exactly one reason: reported by the timeline rule, never twice, and
+      // never skipped because the line documents a refused attempt. The tool is
+      // one the grant allows, so the allowlist is not what fails here.
+      expect(
+        traceRuleReasons(line("not a time", "t", halt_reason, wide), [grant]),
+      ).toEqual(["Tool call 't' has an invalid time 'not a time'"]);
+    }
+  });
+
+  it("an order error names the last parsable call, not the index before", () => {
+    expect(
+      traceRuleReasons(
+        {
+          ...line(WINDOW),
+          ...wide,
+          tool_calls: calls("2026-10-01T10:00:30.000Z", "not a time", WINDOW),
+        },
+        [grant],
+      ),
+    ).toEqual([
+      "Tool call 't' has an invalid time 'not a time'",
+      "Tool calls are out of order: tool_calls[2] at 2026-10-01T10:00:00.000Z is before tool_calls[0] at 2026-10-01T10:00:30.000Z",
+    ]);
+  });
 });
