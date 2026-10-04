@@ -47,7 +47,16 @@ nobody edited.
   turbo whose schema has no such key.
 - **An existing project changes nothing until it re-syncs with `--force-root`.**
   `turbo.json` is a protected root file, so a plain `sync` skips it, present or
-  not. To take just this one file: `hexagen sync --force-root --only turbo.json`.
+  not. **Raise the project's own `turbo` dependency to `^2.11.5` and reinstall
+  first** — otherwise the generated `turbo.json` would carry a key an older
+  installed turbo does not know. Editing `package.json` yourself is the direct
+  route; `--only` takes several paths, so while that file is still exactly what
+  hexagen generated, one scoped run can take both:
+  `hexagen sync --force-root --only package.json turbo.json` (that rewrites the
+  whole `package.json` from the template, so do not use it on a root
+  `package.json` you have edited). If the upgrade is not happening now, leave
+  `turbo.json` alone until it is: an older turbo has no agent-guidance block to
+  write, so there is nothing to opt out of yet.
 - hexagen-monaco's own root `turbo.json` and its turbo 1.x dependency are
   untouched; the pin and the key are for generated projects only.
 
@@ -62,13 +71,18 @@ nobody edited.
   `.hexagen/proposals/<id>.json` names its `seq` and its grant, and its
   `paths` reproduce that line's `result_digest` — so an edited `paths` breaks the
   digest instead of being believed. Exit 1 names each unaccounted file; exit 2 is
-  a truncated diff, a rewritten trace, an unanchored tip or a grant that does not
-  verify.
+  bad input or unsound evidence — a truncated diff, a trace rewritten since
+  `<since>`, a missing or unusable tip, a proposal that does not reproduce its
+  line's digest, a grant that does not verify.
   **It requires a recorded tip** (owner-confirmed 2026-10-04): `tip.json` is the
-  only thing that binds a line to the engagement key, so no tip, or a line above
-  the tip, exits 2 — **pack before you verify**. Two limits it states itself: it
-  proves an authorized line covering a path exists, not that the line is true; and
-  until Trace carries paths itself, a change applied through
+  only thing that binds a line to the engagement key, so a missing tip, one whose
+  HMAC does not verify, or one the trace no longer matches — it ends below the
+  tip's `seq`, or the line at that `seq` differs — exits 2 before any coverage is
+  judged. A line _above_ the tip is not an error: it is unanchored, it covers
+  nothing, and a change that only such a line would have covered is reported as
+  unaccounted, exit 1. Hence **pack before you verify**. Two limits it states
+  itself: it proves an authorized line covering a path exists, not that the line
+  is true; and until Trace carries paths itself, a change applied through
   `hexagen_accept_transaction` is unaccounted here, because that writer leaves no
   path list behind (see "Deferred", below).
 - **`hexagen contract check --base <ref>`.** The ratchet: it reads
@@ -80,13 +94,16 @@ nobody edited.
   `--allow-growth --reason "<why>"` is the deliberate way through. Detection, not
   a write-time refusal: the change is already committed, so each finding prints as
   `growth: …` with the hash the base was read at.
-- **`hexagen grant list`.** A read-only listing of every `*.json` under
+- **`hexagen grant list`.** A read-only listing of every entry in
   `.hexagen/grants/` — status from the shared `checkGrantWindow`, the signature
   verdict from the key resolved once for the run, `--status` to filter and
-  `--json` for the same rows. Every refusal is a row, never a hidden one (a
-  symlink is listed, never read), and the exit code covers rows that `--status`
-  hid. `.hexagen/grants/` now has one enumerator, shared with
-  `workbook export`.
+  `--json` for the same rows. Every entry becomes a row, never a hidden one: an
+  entry that is not a valid grant — a symlink, which is listed and never read, an
+  off-allow-list or forbidden name, unparseable JSON, a value that is not a
+  grant, a file over the per-file cap, one that vanishes mid-read — is an
+  `invalid` row, and any invalid row (like any row `--status` hid, or any
+  unverified signature) exits 1. `.hexagen/grants/` now has one enumerator,
+  shared with `workbook export`.
 - **`contract propose --closed`, and the `closed` contract rule kind.** A
   `{id, kind: closed, except[], severity}` rule has no `from` or `to`: it flags
   any edge from inside the slice to a target that is neither in the slice nor
