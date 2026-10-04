@@ -987,6 +987,154 @@ describe("root files", () => {
     });
   });
 
+  // turbo 2.11.5 added `agentGuidance`: from that version on, a detected AI
+  // agent (`AI_AGENT`/`CLAUDECODE`) makes turbo append (and re-add) a
+  // `<!-- BEGIN:turborepo-agent-rules -->` block in the repo-root AGENTS.md on
+  // every repo-scoped command. In a generated project that edits a tree the
+  // generator owns, and `sync --check` then reports the dirty file, so the
+  // emitted turbo.json opts out with `"agentGuidance": false`. The pin in the
+  // built-in package.json template (`^2.11.5`) is the other half of the same
+  // contract — a floor, so no 2.x older than the key can be installed with it.
+  describe("agentGuidance opt-out (turbo >=2.11.5)", () => {
+    it("the built-in turbo.json sets agentGuidance:false (no manifest turboConfig)", async () => {
+      await withTempWorkspace(async ({ workspaceRoot }) => {
+        const manifest: Manifest = { system: "guidance-builtin" };
+        await generateRootFiles(
+          makeConfig(workspaceRoot, manifest, { forceRoot: true }),
+        );
+
+        const turbo = JSON.parse(
+          await readFile(path.join(workspaceRoot, "turbo.json")),
+        ) as Record<string, unknown>;
+        assert.strictEqual(
+          turbo.agentGuidance,
+          false,
+          "built-in turbo.json must carry agentGuidance:false — turbo >=2.11.5 otherwise rewrites the repo-root AGENTS.md and breaks sync:check",
+        );
+      });
+    });
+
+    it("a manifest turboConfig still gets agentGuidance:false (structured path)", async () => {
+      // buildTurboContentFromConfig assembles the doc from $schema +
+      // globalDependencies + tasks only, so the opt-out has to be added there
+      // explicitly — deriving it from the built-in template (as `tasks` is)
+      // would silently drop it for every project that declares a turboConfig.
+      await withTempWorkspace(async ({ workspaceRoot }) => {
+        const manifest: Manifest = {
+          system: "guidance-config",
+          monorepo: {
+            turboConfig: {
+              globalDependencies: ["**/.env.*"],
+              pipeline: { build: { outputs: ["dist/**"] } },
+            },
+          },
+        };
+        await generateRootFiles(
+          makeConfig(workspaceRoot, manifest, { forceRoot: true }),
+        );
+
+        const turbo = JSON.parse(
+          await readFile(path.join(workspaceRoot, "turbo.json")),
+        ) as Record<string, unknown>;
+        assert.strictEqual(
+          turbo.agentGuidance,
+          false,
+          "the turboConfig path must carry agentGuidance:false too, or a project with a manifest opts straight back in to turbo's agent rules",
+        );
+      });
+    });
+
+    it("a manifest may override the opt-out explicitly", async () => {
+      await withTempWorkspace(async ({ workspaceRoot }) => {
+        const manifest: Manifest = {
+          system: "guidance-override",
+          monorepo: { turboConfig: { agentGuidance: true } },
+        };
+        await generateRootFiles(
+          makeConfig(workspaceRoot, manifest, { forceRoot: true }),
+        );
+
+        const turbo = JSON.parse(
+          await readFile(path.join(workspaceRoot, "turbo.json")),
+        ) as Record<string, unknown>;
+        assert.strictEqual(
+          turbo.agentGuidance,
+          true,
+          "an explicit monorepo.turboConfig.agentGuidance is the manifest author's decision and must win over the default",
+        );
+      });
+    });
+
+    it("the emitted turbo.json key is exactly the one turbo 2.11.5 accepts", async () => {
+      // A rename or a nested spelling would be silently ignored by turbo, and
+      // the tree would be dirtied exactly as if the key were absent — so pin
+      // the literal, not just "some falsy value is present".
+      await withTempWorkspace(async ({ workspaceRoot }) => {
+        const manifest: Manifest = { system: "guidance-literal" };
+        await generateRootFiles(
+          makeConfig(workspaceRoot, manifest, { forceRoot: true }),
+        );
+
+        const raw = await readFile(path.join(workspaceRoot, "turbo.json"));
+        assert.ok(
+          raw.includes('"agentGuidance": false'),
+          "the key must be emitted at turbo.json's top level, spelled exactly as turbo's schema declares it",
+        );
+        assert.ok(
+          !raw.includes("agent_rules"),
+          "no hand-invented key name may appear alongside the documented one",
+        );
+      });
+    });
+
+    it("the built-in package.json pins turbo at ^2.11.5, the version that has the key", async () => {
+      // Floor discipline, not a floating pin: `^2.0.0` lets a fresh install
+      // resolve 2.0.x-2.11.4, whose schema.json has no `agentGuidance` — the
+      // opt-out would then be an unknown key in the generated turbo.json.
+      await withTempWorkspace(async ({ workspaceRoot }) => {
+        const manifest: Manifest = { system: "guidance-pin" };
+        await generateRootFiles(
+          makeConfig(workspaceRoot, manifest, { forceRoot: true }),
+        );
+
+        const pkg = JSON.parse(
+          await readFile(path.join(workspaceRoot, "package.json")),
+        ) as { devDependencies?: Record<string, string> };
+        assert.strictEqual(
+          pkg.devDependencies?.["turbo"],
+          "^2.11.5",
+          "the turbo floor must be the first release whose schema carries agentGuidance",
+        );
+      });
+    });
+
+    it("an author-supplied rootFiles.turbo.template still wins verbatim (no key injected)", async () => {
+      // The full-file override is the most specific precedence in this
+      // generator; injecting the opt-out into it would edit an author's own
+      // file behind their back.
+      await withTempWorkspace(async ({ workspaceRoot }) => {
+        const customTemplate = `{
+  "$schema": "https://turbo.build/schema.json",
+  "tasks": { "build": {} }
+}
+`;
+        const manifest: Manifest = {
+          system: "guidance-override-file",
+          monorepo: { rootFiles: { turbo: { template: customTemplate } } },
+        };
+        await generateRootFiles(
+          makeConfig(workspaceRoot, manifest, { forceRoot: true }),
+        );
+
+        assert.strictEqual(
+          await readFile(path.join(workspaceRoot, "turbo.json")),
+          customTemplate,
+          "an author-supplied turbo.json template is written verbatim",
+        );
+      });
+    });
+  });
+
   // L3 (gates-for-generated-projects): root-file-templates.ts emitted a
   // `format` script with no config — a script without a config reformats to
   // Prettier's own defaults on first run, burying real diffs under whole-file

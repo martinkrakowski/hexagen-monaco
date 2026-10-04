@@ -5,6 +5,18 @@
 // installing a stale toolchain. (A test sweeps generators/ for the old
 // literal — prose included, which is why this comment spells it obliquely.)
 // Manifest-supplied packageJson templates may use the same placeholder.
+//
+// `"turbo": "^2.11.5"` is a FLOOR, not a toolchain pin, and it must stay in
+// step with the `agentGuidance` key BUILTIN_TURBO_TEMPLATE emits below.
+// turbo 2.11.5 is the first 2.x whose schema.json carries `agentGuidance`
+// (absent from 2.10.0 and 2.11.0); from that version on, when turbo detects an
+// AI agent (`AI_AGENT`/`CLAUDECODE`) it appends a
+// `<!-- BEGIN:turborepo-agent-rules -->` block to the repo-root AGENTS.md on
+// every repo-scoped command, and re-adds it if removed. In a generated project
+// that dirties a tree the generator owns, and `sync --check` then reports the
+// edited AGENTS.md. `"agentGuidance": false` is the documented opt-out, so the
+// two must not drift: a wider floor is safe, a narrower one pairs the key with
+// a turbo that would reject it.
 const BUILTIN_PACKAGE_JSON_TEMPLATE = `{
   "name": "{system}",
   "private": true,
@@ -28,7 +40,7 @@ const BUILTIN_PACKAGE_JSON_TEMPLATE = `{
     "format": "prettier --write \\"**/*.{ts,tsx}\\""
   },
   "devDependencies": {
-    "turbo": "^2.0.0",
+    "turbo": "^2.11.5",
     "typescript": "^5.5.4",
     "eslint": "^9.0.0",
     "prettier": "^3.0.0",
@@ -55,8 +67,17 @@ const BUILTIN_TSCONFIG_BASE_TEMPLATE = `{
 }
 `;
 
+// `agentGuidance: false` opts the generated project out of turbo >=2.11.5's
+// automatic AI-agent rules block (see the `turbo` floor above for the full
+// story). A manifest may override it explicitly through
+// `monorepo.turboConfig.agentGuidance`; root-files.ts
+// (buildTurboContentFromConfig) is the other half of that contract and emits
+// the same default on the structured path, so a project with a `turboConfig`
+// gets the opt-out too. An author-supplied `rootFiles.turbo.template` is a
+// full-file override and stays verbatim — its author owns the key.
 const BUILTIN_TURBO_TEMPLATE = `{
   "$schema": "https://turbo.build/schema.json",
+  "agentGuidance": false,
   "tasks": {
     "build": {
       "dependsOn": ["^build"],

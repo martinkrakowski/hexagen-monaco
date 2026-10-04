@@ -70,6 +70,13 @@ export interface TurboPipeline {
 export interface TurboConfig {
   globalDependencies?: string[];
   pipeline?: Record<string, TurboPipeline>;
+  // Turbo's own agent-guidance opt-out (`agentGuidance`), top level in
+  // turbo.json — emitted as `false` by default (root-files.ts
+  // buildTurboContentFromConfig, BUILTIN_TURBO_TEMPLATE). Declared so a
+  // manifest can override the default explicitly; the key only exists in
+  // turbo >= 2.11.5, which is the floor the built-in package.json template
+  // pins.
+  agentGuidance?: boolean;
 }
 
 export interface MonorepoRoot {
