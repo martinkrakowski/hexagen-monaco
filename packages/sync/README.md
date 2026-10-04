@@ -142,9 +142,11 @@ manifest exists: a grant that names no context at all (no manifest to
 derive contexts from, and no `--contexts` given) is paths-only in the
 literal sense, but since every manifest-mutation tool's enforcement
 requires a context match, such a grant cannot authorize any of those seven
-tools — it is scoped only for a future, generic Field Kit adapter that
-doesn't check `contexts`, not for `hexagen_accept_transaction` as it exists
-today. Prints the grant JSON to stdout, or to `--out <file>` if given.
+tools. It is scoped for `hexagen_propose_patch`, the Field Kit adapter that
+exists today: that tool is propose-only, and its enforcement checks `tools`,
+`paths`, `max_files` and the slice, never `contexts`. It is not scoped for
+`hexagen_accept_transaction`, which requires a context match on every
+mutation. Prints the grant JSON to stdout, or to `--out <file>` if given.
 
 ### `hexagen grant show` and `hexagen grant check`
 
