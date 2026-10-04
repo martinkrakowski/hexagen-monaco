@@ -240,13 +240,14 @@ Stating these here rather than glossing over them:
   unmuzzled. A coding agent editing `apps/web`, or any
   client file, through a regular file-write tool never enters
   `hexagen_accept_transaction` — the general rule above says that write
-  should be denied when its path is outside `grant.paths`, but no adapter
-  enforces that yet. For monaco's own dogfood (this repo, where the manifest
-  mutation tools are the only sanctioned write path into `.architecture/`)
-  that gap doesn't bite. For the Field Kit, dropped onto a client repo where
-  agents edit arbitrary files with an editor tool, it does — closing it
-  needs a second adapter at the editor/shell-write layer, not just this
-  MCP one, before Grant can be called complete there.
+  should be denied when its path is outside `grant.paths`, and the one
+  adapter that enforces it today is `hexagen_propose_patch` (above), which
+  is reached only for a proposed patch. For monaco's own dogfood (this repo,
+  where the manifest mutation tools are the only sanctioned write path into
+  `.architecture/`) that gap doesn't bite. For the Field Kit, dropped onto a
+  client repo where agents edit arbitrary files with an editor tool, it does —
+  closing it needs a second adapter at the editor/shell-write layer, beyond
+  the propose-patch adapter above, before Grant can be called complete there.
 - **Human symmetry is only real if humans can't bypass accept-transaction
   either.** The claim that "the reviewer sees the same object the runtime
   checks" holds only if `.architecture/manifest.yaml` (and any path a grant

@@ -275,6 +275,12 @@ function frameworkBuildOutputs(manifest: Manifest): string[] {
  *     manifest doesn't mention (e.g. `dev`) are kept so root scripts like
  *     `turbo dev` still resolve.
  *   - `globalDependencies` is emitted verbatim when non-empty.
+ *   - `agentGuidance` is emitted `false` unless the manifest sets it: turbo
+ *     >=2.11.5 (the floor the built-in package.json template pins) otherwise
+ *     appends its `<!-- BEGIN:turborepo-agent-rules -->` block to the repo-root
+ *     AGENTS.md on every repo-scoped command, which dirties a generated tree
+ *     and breaks `sync --check`. Same default as BUILTIN_TURBO_TEMPLATE, which
+ *     covers the no-`turboConfig` path below.
  *   - Next/Nitro build outputs are appended to the `build` task (see
  *     {@link frameworkBuildOutputs}).
  *
@@ -314,6 +320,14 @@ function buildTurboContentFromConfig(
   const globalDependencies = turboConfig.globalDependencies ?? [];
   const doc: Record<string, unknown> = {
     $schema: builtin.$schema,
+    // The opt-out the built-in template also carries (see its comment). Only a
+    // manifest that states the key wins — an absent or non-boolean value keeps
+    // the safe default rather than emitting turbo's own agent-rules block into
+    // a project whose tree the generator owns.
+    agentGuidance:
+      typeof turboConfig.agentGuidance === "boolean"
+        ? turboConfig.agentGuidance
+        : false,
     ...(globalDependencies.length > 0 ? { globalDependencies } : {}),
     tasks,
   };
