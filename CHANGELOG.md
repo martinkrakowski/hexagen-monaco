@@ -9,6 +9,152 @@ Release notes for the co-published `@hexagen-monaco/sync` and
 (F1 preflight, #432): a merged bump blocks deploys until it is published. That
 is the guard working, not a fault to bypass.
 
+## 0.14.0
+
+**Six brownfield plans land as one release, and the piece that was missing is
+`hexagen evidence verify`.** Everything before this release could _write_ the
+evidence — a signed grant, a hash-chained trace, a contract, a slice — and
+nothing read it back. `evidence verify` is the reader: given a git range and the
+commits' `.hexagen/` evidence, it finds, after the fact, any change to the slice
+or to a grant's paths that no key-anchored trace line accounts for. Around it:
+a `--base` ratchet that fails a PR which weakens its own contract, a `closed`
+contract rule kind (the default-deny the slice could describe but not express),
+`hexagen grant list`, a fourth Trace rule on each line's own timeline, and a CI
+gate recipe a client repo can copy.
+
+**Minor, not patch.** Four new commands or command flags, one new contract rule
+kind, one new reader rule that can fail a pack, and the generated-project change
+below. Generated projects pin `^<engine version>`, so a project scaffolded by
+0.13.x stays on 0.13.x until the pin is changed.
+
+### ⚠️ Generated projects: the turbo pin moves, and turbo's agent-guidance block is opted out
+
+turbo 2.11.5 added an `agentGuidance` key — it is in that release's
+`schema.json`, and in neither 2.10.0's nor 2.11.0's. From that version on, when
+turbo detects an AI agent (`AI_AGENT` / `CLAUDECODE`) it appends a
+`<!-- BEGIN:turborepo-agent-rules -->` block to the repo-root `AGENTS.md` on every
+repo-scoped command, and re-adds it if removed. In a generated project that edits
+a tree the generator owns, and `hexagen sync --check` then reports a dirty file
+nobody edited.
+
+- **A new project** gets `"agentGuidance": false` in its root `turbo.json` — on
+  the built-in path and on the manifest `turboConfig` path alike. A manifest may
+  override it explicitly with `monorepo.turboConfig.agentGuidance`; an
+  author-supplied `rootFiles.turbo.template` is a full-file override and stays
+  verbatim.
+- **The generated `turbo` pin moves from `^2.0.0` to `^2.11.5`.** The key exists
+  only from that release on, so the wider range could pair the opt-out with a
+  turbo whose schema has no such key.
+- **An existing project changes nothing until it re-syncs with `--force-root`.**
+  `turbo.json` is a protected root file, so a plain `sync` skips it, present or
+  not. To take just this one file: `hexagen sync --force-root --only turbo.json`.
+- hexagen-monaco's own root `turbo.json` and its turbo 1.x dependency are
+  untouched; the pin and the key are for generated projects only.
+
+### New commands and flags (`@hexagen-monaco/sync`)
+
+- **`hexagen evidence verify --since <ref> [--until <ref>] --grant <file>…`.** A
+  read-only pass that opens no file under `.hexagen/` for writing. It takes the
+  slice from `<since>` and the trace, tip and proposals from `<until>` through
+  git, so only committed evidence counts and a committed blob cannot change under
+  it; it requires `<since>` to be an ancestor of `<until>`. Coverage is a join,
+  not a new field: a candidate line covers a path when some
+  `.hexagen/proposals/<id>.json` names its `seq` and its grant, and its
+  `paths` reproduce that line's `result_digest` — so an edited `paths` breaks the
+  digest instead of being believed. Exit 1 names each unaccounted file; exit 2 is
+  a truncated diff, a rewritten trace, an unanchored tip or a grant that does not
+  verify.
+  **It requires a recorded tip** (owner-confirmed 2026-10-04): `tip.json` is the
+  only thing that binds a line to the engagement key, so no tip, or a line above
+  the tip, exits 2 — **pack before you verify**. Two limits it states itself: it
+  proves an authorized line covering a path exists, not that the line is true; and
+  until Trace carries paths itself, a change applied through
+  `hexagen_accept_transaction` is unaccounted here, because that writer leaves no
+  path list behind (see "Deferred", below).
+- **`hexagen contract check --base <ref>`.** The ratchet: it reads
+  `.hexagen/contract.json` and `.hexagen/slice.json` **at** `<ref>` with
+  `git show` and exits 1 when the tree has made the gate weaker — a
+  `knownViolations` entry added, re-pointed or extended, a rule removed, weakened
+  or re-kinded, a `closed` rule's `except` added or widened, a severity moved
+  `error` → `warn`, a new slice exclude, a slice path removed or narrowed.
+  `--allow-growth --reason "<why>"` is the deliberate way through. Detection, not
+  a write-time refusal: the change is already committed, so each finding prints as
+  `growth: …` with the hash the base was read at.
+- **`hexagen grant list`.** A read-only listing of every `*.json` under
+  `.hexagen/grants/` — status from the shared `checkGrantWindow`, the signature
+  verdict from the key resolved once for the run, `--status` to filter and
+  `--json` for the same rows. Every refusal is a row, never a hidden one (a
+  symlink is listed, never read), and the exit code covers rows that `--status`
+  hid. `.hexagen/grants/` now has one enumerator, shared with
+  `workbook export`.
+- **`contract propose --closed`, and the `closed` contract rule kind.** A
+  `{id, kind: closed, except[], severity}` rule has no `from` or `to`: it flags
+  any edge from inside the slice to a target that is neither in the slice nor
+  under an `except` prefix, and excludes beat excepts. `contract propose --closed`
+  proposes one that excepts exactly today's crossing targets — it never widens a
+  target, reports the targets it cannot propose, and shell-quotes the command it
+  prints. `contract show` warns when a single closed rule's excepts cover every
+  package outside the slice, which is a slice that permits everything.
+
+### The trace has a fourth rule
+
+Rule 4 (`traceRuleReasons`, the one implementation `evidence pack` and
+`workbook export` share) judges each line against its own timestamps: `ended_at`
+at or after `started_at`, every tool call inside that window compared at full
+precision, and calls in order. A missing or unparsable `started_at` / `ended_at`
+is a reason, not a skip — on a `completed` line and on a denial line alike.
+`started_at`/`ended_at` were already carried and shape-checked, and no rule read
+them. Both writers already bind one timestamp and pass it as the call's `time`,
+`started_at` and `ended_at`, so a trace this kit writes is unaffected; a
+hand-edited or third-party trace whose own timestamps contradict is now rejected
+rather than packed.
+
+### A CI gate for client repos
+
+`docs/ci/brownfield-gate.yml` is a complete example workflow for a repo that
+holds only `.hexagen/` and no manifest — step 0 (the inputs are tracked), step 1
+`observe`, step 2 `slice check` as a non-blocking drift report, step 3
+`contract check --base` against a pinned PR base with a first-PR bootstrap, step
+4 `evidence pack`, step 4b `evidence verify`. Every step prints
+`step <n> exit <code>` and the job stops at the first non-zero one except step 2,
+and step 4 runs even where nobody wants the bundle, because it is the only
+command that anchors a line — what a green run leaves the client is an HMAC'd
+bundle they can re-check with the engagement key, by re-running
+`hexagen evidence pack` over the committed trace; no command takes a saved zip
+yet. The one `EDIT SPOT` is `HEXAGEN_VERSION`, and steps 3 and 4b make **0.14.0
+the minimum**, because they are the commands this release ships. The recipe that
+explains the gate is `docs/ci/brownfield-gate-recipe.md`, and
+`packages/sync/__tests__/contract/brownfield-gate.contract.test.ts` executes that
+workflow's own step scripts against the built CLI on a fixture client repo, so
+the two cannot drift apart.
+
+### Also in this release
+
+- **`contract propose` (without `--closed`) shell-quotes its `add-rule` lines**
+  (#763), with the same helper `--closed` uses, so a slice path containing a
+  space or a `;` no longer splits or runs anything when the printed command is
+  pasted.
+- The sync README documents every Field Kit command merged in #753–#760, each
+  checked against the merged code and the built CLI, and `docs/kernel/GRANT.md`
+  now names `hexagen_propose_patch` as the Field Kit adapter that exists today
+  rather than describing it as a future one.
+- `docs/kernel/TRACE.md` specifies `evidence verify` command by command, and
+  `GRANT.md` drops the unused `extraPaths`.
+- Test-only: the web workbench's integration waits are deterministic again
+  (#723/#752), which also fixed four bugs in `useStagedGenerationStream` found
+  while chasing the race. Neither change touches a published package.
+
+**Deferred: 1B, the Option A follow-on.** Option A would add an optional
+`paths: string[]` to each `tool_calls[]` record inside the hash chain, so a
+change applied through `hexagen_accept_transaction` becomes accountable too. It
+is a schema change plus a port and adapter change, and the owner chose Option D
+first (read the paths back from the proposal metadata the writer already leaves
+beside the line), so 1B has not started and does not exist until Option A is
+chosen.
+
+`@hexagen-monaco/arch-linter` is re-published at the same version for the
+co-release. It has no functional change in this release.
+
 ## 0.13.0
 
 **The brownfield workbook CLI.** `hexagen` can now work inside an existing client
