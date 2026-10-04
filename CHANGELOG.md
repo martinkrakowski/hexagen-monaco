@@ -116,14 +116,15 @@ holds only `.hexagen/` and no manifest — step 0 (the inputs are tracked), step
 `observe`, step 2 `slice check` as a non-blocking drift report, step 3
 `contract check --base` against a pinned PR base with a first-PR bootstrap, step
 4 `evidence pack`, step 4b `evidence verify`. Every step prints
-`step <n> exit <code>` and the job stops at the first non-zero one except step 2,
-and step 4 runs even where nobody wants the bundle, because it is the only
-command that anchors a line — what a green run leaves the client is an HMAC'd
-bundle they can re-check with the engagement key, by re-running
-`hexagen evidence pack` over the committed trace; no command takes a saved zip
-yet. The one `EDIT SPOT` is `HEXAGEN_VERSION`, and steps 3 and 4b make **0.14.0
-the minimum**, because they are the commands this release ships. The recipe that
-explains the gate is `docs/ci/brownfield-gate-recipe.md`, and
+`step <n> exit <code>` and the job stops at the first non-zero one except step 2.
+Step 4 is the whole-trace gate — every line of the committed trace is checked,
+chain, line shape, Rules 1 to 4 and the cited grants — and the bundle it writes
+is discarded, so a green run keeps none: the client reproduces one by re-running
+`hexagen evidence pack` over the committed trace, which is the same HMAC'd,
+re-checkable-with-the-engagement-key judgement step 4 makes (no command takes a
+saved zip yet). The one `EDIT SPOT` is `HEXAGEN_VERSION`, and steps 3 and 4b make
+**0.14.0 the minimum**, because they are the commands this release ships. The
+recipe that explains the gate is `docs/ci/brownfield-gate-recipe.md`, and
 `packages/sync/__tests__/contract/brownfield-gate.contract.test.ts` executes that
 workflow's own step scripts against the built CLI on a fixture client repo, so
 the two cannot drift apart.
