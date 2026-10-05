@@ -1,9 +1,130 @@
+// --- Hoisted mock objects for the four collaborators resolved at mount ---
+
+// 1. WebGPU detector (GraphicsCapabilityPort)
+const mockGpuDetector = vi.hoisted(() => ({
+  isSupported: vi.fn(() => false),
+  detect: vi.fn(async () => ({
+    success: true,
+    value: { supported: false, maxTextureSize: null, supportsFP16: false },
+  })),
+}));
+
+// 2. Hardware profiler (HardwareProfilerPort)
+const mockHwProfiler = vi.hoisted(() => ({
+  profile: vi.fn(async () => ({
+    success: true,
+    value: {
+      cpuCores: 4,
+      ramMB: null,
+      gpu: {
+        supported: false,
+        vendor: null,
+        architecture: null,
+        maxBufferMB: null,
+      },
+      deviceClass: "unknown",
+    },
+  })),
+}));
+
+// 3. Key vault (UserSecretVaultPort)
+const mockSecretVault = vi.hoisted(() => ({
+  getStatus: vi.fn(async () => ({
+    success: true,
+    value: { state: "empty", hasStoredPayload: false },
+  })),
+  store: vi.fn(async () => ({ success: true })),
+  retrieve: vi.fn(async () => ({ success: false, error: new Error("no key") })),
+  destroy: vi.fn(async () => ({ success: true })),
+  unlock: vi.fn(async () => ({ success: true })),
+  lock: vi.fn(async () => ({ success: true })),
+}));
+
+// Mock ApiKeyManager returned by createApiKeyManager
+const mockApiKeyManager = vi.hoisted(() => ({
+  saveApiKey: vi.fn(async () => undefined),
+  getApiKey: vi.fn(async () => null),
+  clearApiKeys: vi.fn(async () => undefined),
+}));
+
+// 4. Preferences store
+const mockPreferences = vi.hoisted(() => ({
+  hasEnabledLocalModels: false,
+  lastModelId: null,
+  autoLoadEnabled: false,
+  cloudProvider: null,
+  rememberApiKey: false,
+  skipAiSetup: false,
+  rememberChoice: false,
+}));
+
+// Hoisted factory mocks for wire module
+const mockGetWebGPUDetector = vi.hoisted(() => vi.fn(() => mockGpuDetector));
+const mockGetHardwareProfiler = vi.hoisted(() => vi.fn(() => mockHwProfiler));
+const mockGetSecretVault = vi.hoisted(() => vi.fn(() => mockSecretVault));
+const mockHasServerLLMAccessKey = vi.hoisted(() => vi.fn(() => false));
+
+// Seam: wire module — getWebGPUDetector, getHardwareProfiler, getSecretVault, hasServerLLMAccessKey
+vi.mock("../../../app/lib/wire", () => ({
+  getWebGPUDetector: mockGetWebGPUDetector,
+  getHardwareProfiler: mockGetHardwareProfiler,
+  getSecretVault: mockGetSecretVault,
+  hasServerLLMAccessKey: mockHasServerLLMAccessKey,
+}));
+
+// Hoisted factory mocks for modelPreferencesStorage module
+const mockGetModelPreferences = vi.hoisted(() =>
+  vi.fn(() => ({ ...mockPreferences })),
+);
+const mockCreateApiKeyManager = vi.hoisted(() =>
+  vi.fn(async () => mockApiKeyManager),
+);
+const mockSaveModelPreferences = vi.hoisted(() => vi.fn());
+const mockIsModelVerified = vi.hoisted(() => vi.fn(() => false));
+const mockUpdateModelCacheMetadata = vi.hoisted(() => vi.fn());
+const mockClearModelCacheMetadata = vi.hoisted(() => vi.fn());
+
+// Seam: modelPreferencesStorage — getModelPreferences, saveModelPreferences,
+// createApiKeyManager, isModelVerified, updateModelCacheMetadata, etc.
+vi.mock("../ModelSelectionFlow/modelPreferencesStorage", () => ({
+  getModelPreferences: mockGetModelPreferences,
+  saveModelPreferences: mockSaveModelPreferences,
+  createApiKeyManager: mockCreateApiKeyManager,
+  isModelVerified: mockIsModelVerified,
+  updateModelCacheMetadata: mockUpdateModelCacheMetadata,
+  clearModelCacheMetadata: mockClearModelCacheMetadata,
+  MODEL_PREFERENCE_KEYS: {
+    LAST_MODEL_ID: "hexagen:local-llm:last-model",
+    AUTO_LOAD_ENABLED: "hexagen:local-llm:auto-load",
+    HAS_ENABLED_LOCAL_MODELS: "hexagen:local-llm:has-enabled",
+    CLOUD_PROVIDER: "hexagen:manifest-flow:cloud-provider",
+    REMEMBER_API_KEY: "hexagen:manifest-flow:remember-api-key",
+    SKIP_AI_SETUP: "hexagen:manifest-flow:skip-ai-setup",
+    REMEMBER_CHOICE: "hexagen:manifest-flow:remember-choice",
+    MODEL_CACHE_METADATA_PREFIX: "hexagen:local-llm:cache-metadata:",
+  },
+  STORAGE_KEYS: {
+    LAST_MODEL_ID: "hexagen:local-llm:last-model",
+    AUTO_LOAD_ENABLED: "hexagen:local-llm:auto-load",
+    HAS_ENABLED_LOCAL_MODELS: "hexagen:local-llm:has-enabled",
+    CLOUD_PROVIDER: "hexagen:manifest-flow:cloud-provider",
+    REMEMBER_API_KEY: "hexagen:manifest-flow:remember-api-key",
+    SKIP_AI_SETUP: "hexagen:manifest-flow:skip-ai-setup",
+    REMEMBER_CHOICE: "hexagen:manifest-flow:remember-choice",
+    MODEL_CACHE_METADATA_PREFIX: "hexagen:local-llm:cache-metadata:",
+  },
+}));
+
 import { describe, it, beforeEach, afterEach, vi, type Mock } from "vitest";
 import assert from "node:assert";
 import { renderHook, act } from "@testing-library/react";
 import { useModelSelectionFlowState } from "../ModelSelectionFlow/useModelSelectionFlowState";
 import type { LocalLLMContext } from "../../../lib/llm-interfaces";
-import { createLLMEngineState, type LLMEngineState } from "@hexagen/local-llm";
+import {
+  createLLMEngineState,
+  type LLMEngineState,
+  DomainModelId,
+} from "@hexagen/local-llm";
 
 describe("useModelSelectionFlowState", () => {
   let mockEngineState: LLMEngineState;
@@ -16,7 +137,7 @@ describe("useModelSelectionFlowState", () => {
   beforeEach(() => {
     // "unavailable" is the engine's real initial status (LLM_ENGINE_INITIAL_STATE).
     mockEngineState = createLLMEngineState("unavailable", 0);
-    mockInitializeModel = vi.fn();
+    mockInitializeModel = vi.fn(async () => {});
     mockCancelDownload = vi.fn();
     mockHasAnyCachedModel = vi.fn(async () => false);
     mockHasModelInCache = vi.fn(async () => false);
@@ -34,9 +155,69 @@ describe("useModelSelectionFlowState", () => {
       sendStructuredPrompt: async () => "",
       messages: [],
     };
+
+    // Stub OffscreenCanvas so useWebGPUDetection's check doesn't mask the
+    // mock's supported value (jsdom lacks OffscreenCanvas, which would force
+    // isWebGPUSupported to false regardless of the mock return)
+    vi.stubGlobal("OffscreenCanvas", class OffscreenCanvasStub {});
+    mockGpuDetector.detect.mockResolvedValue({
+      success: true,
+      value: { supported: false, maxTextureSize: null, supportsFP16: false },
+    });
+    mockHwProfiler.profile.mockResolvedValue({
+      success: true,
+      value: {
+        cpuCores: 4,
+        ramMB: null,
+        gpu: {
+          supported: false,
+          vendor: null,
+          architecture: null,
+          maxBufferMB: null,
+        },
+        deviceClass: "unknown",
+      },
+    });
+    mockGetWebGPUDetector.mockReturnValue(mockGpuDetector);
+    mockGetHardwareProfiler.mockReturnValue(mockHwProfiler);
+    mockGetSecretVault.mockReturnValue(mockSecretVault);
+    mockHasServerLLMAccessKey.mockReturnValue(false);
+
+    mockPreferences.hasEnabledLocalModels = false;
+    mockPreferences.lastModelId = null;
+    mockPreferences.autoLoadEnabled = false;
+    mockPreferences.cloudProvider = null;
+    mockPreferences.rememberApiKey = false;
+    mockPreferences.skipAiSetup = false;
+    mockPreferences.rememberChoice = false;
+    mockGetModelPreferences.mockImplementation(() => ({ ...mockPreferences }));
+    mockCreateApiKeyManager.mockResolvedValue(mockApiKeyManager);
+    mockIsModelVerified.mockReturnValue(false);
+
+    // Reset mock call history
+    mockSaveModelPreferences.mockClear();
+    mockUpdateModelCacheMetadata.mockClear();
+    mockClearModelCacheMetadata.mockClear();
+    mockCancelDownload.mockClear();
+    mockInitializeModel.mockReset();
+    mockInitializeModel.mockImplementation(async () => {});
+    mockHasAnyCachedModel.mockReset();
+    mockHasAnyCachedModel.mockImplementation(async () => false);
+    mockHasModelInCache.mockReset();
+    mockHasModelInCache.mockImplementation(async () => false);
+    mockApiKeyManager.saveApiKey.mockClear();
+    mockApiKeyManager.getApiKey.mockClear();
+    mockApiKeyManager.clearApiKeys.mockClear();
+    mockSecretVault.store.mockClear();
+    mockSecretVault.retrieve.mockClear();
+    mockSecretVault.destroy.mockClear();
+    mockGpuDetector.isSupported.mockReturnValue(false);
+    mockGpuDetector.detect.mockClear();
+    mockHwProfiler.profile.mockClear();
   });
 
   afterEach(() => {
+    vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
 
@@ -67,28 +248,27 @@ describe("useModelSelectionFlowState", () => {
   describe("Initial State", () => {
     it("should start in idle state", async () => {
       const { result } = await renderFlowState();
-      // NOTE: Full state validation requires DI with mock.module support (Node.js v22.7.0 limitation)
-      // Test validates hook accepts llmContext parameter and initializes
-      assert.ok(typeof result.current[0] === "object");
-      assert.ok(result.current[0].state !== undefined);
+      assert.strictEqual(result.current[0].state, "idle");
+      assert.strictEqual(result.current[0].isModelReady, false);
     });
 
-    it("should detect unsupported WebGPU and transition to unsupported", async () => {
-      // NOTE: WebGPU detection testing requires mock.module support
-      // Test validates hook initialization and state structure
+    it("records isWebGPUSupported=false in hardwareCapabilities when WebGPU is unavailable", async () => {
       const { result } = await renderFlowState();
-      assert.ok(typeof result.current[0].state === "string");
-    });
-
-    it("should set webgpu_unavailable error code when WebGPU is not supported", async () => {
-      // NOTE: WebGPU error code assignment requires mock environment
-      // Test validates error code property structure
-      const { result } = await renderFlowState();
-      assert.ok(
-        result.current[0].errorCode === undefined ||
-          typeof result.current[0].errorCode === "string",
+      assert.strictEqual(
+        result.current[0].hardwareCapabilities?.isWebGPUSupported,
+        false,
       );
     });
+
+    it("leaves state idle and sets no error code when WebGPU is unavailable (see #766)", async () => {
+      const { result } = await renderFlowState();
+      assert.strictEqual(result.current[0].state, "idle");
+      assert.strictEqual(result.current[0].errorCode, undefined);
+    });
+
+    it.todo(
+      "should transition to unsupported with errorCode webgpu_unavailable when WebGPU is unavailable (#766)",
+    );
   });
 
   describe("State Transitions", () => {
@@ -100,107 +280,112 @@ describe("useModelSelectionFlowState", () => {
         transitionTo("model_selection");
       });
 
-      // NOTE: Full state transition testing requires DI environment
-      // Test validates transitionTo function exists and is callable
-      assert.ok(typeof transitionTo === "function");
+      assert.strictEqual(result.current[0].state, "model_selection");
     });
 
-    it("should transition model_selection → model_downloading (user selects model)", async () => {
+    it("selecting a model moves to model_downloading", async () => {
       const { result } = await renderFlowState();
-      const { transitionTo } = result.current[1];
+      const { selectLocalModel } = result.current[1];
 
-      // NOTE: Full model selection requires proper DI and async setup
-      // Test validates hook provides expected structure
-      act(() => {
-        transitionTo("model_selection");
+      await act(async () => {
+        selectLocalModel(DomainModelId.QWEN3_8B, true);
       });
 
-      // Verify hook has the action function
-      assert.ok(typeof result.current[1] === "object");
+      assert.strictEqual(result.current[0].state, "model_downloading");
+      assert.strictEqual(
+        result.current[0].selectedModelId,
+        DomainModelId.QWEN3_8B,
+      );
+      assert.strictEqual(result.current[0].rememberedChoice, true);
+      assert.strictEqual(result.current[0].generationProgress, 0);
     });
 
     it("should transition model_downloading → generating (model ready)", async () => {
+      llmContext = {
+        ...llmContext,
+        engineState: createLLMEngineState("ready", 100, DomainModelId.QWEN3_8B),
+      };
+      mockIsModelVerified.mockReturnValue(true);
       const { result } = await renderFlowState();
+      assert.strictEqual(result.current[0].state, "idle");
 
-      // NOTE: Full state transitions require DI initialization
-      // Test validates hook state structure
-      assert.ok(typeof result.current[0].state === "string");
+      const { selectLocalModel } = result.current[1];
+      await act(async () => {
+        selectLocalModel(DomainModelId.QWEN3_8B, false);
+      });
+
+      assert.strictEqual(result.current[0].state, "generating");
+      assert.strictEqual(result.current[0].isModelReady, true);
     });
 
     it("should transition model_downloading → error (download fails)", async () => {
+      mockInitializeModel.mockRejectedValue(new Error("Download failed"));
+      llmContext = { ...llmContext, initializeModel: mockInitializeModel };
       const { result } = await renderFlowState();
+      const { selectLocalModel } = result.current[1];
 
-      // NOTE: Error transitions require DI with proper mocks
-      // Test validates hook structure
-      assert.ok(
-        result.current[0].error === undefined ||
-          result.current[0].error === null ||
-          typeof result.current[0].error === "string",
-      );
+      await act(async () => {
+        selectLocalModel(DomainModelId.QWEN3_8B, true);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+
+      assert.strictEqual(result.current[0].state, "error");
+      assert.strictEqual(result.current[0].error, "Download failed");
     });
 
     it("should transition generating → error (generation fails)", async () => {
       const { result } = await renderFlowState();
-      const { setError } = result.current[1];
+      const { transitionTo, setError } = result.current[1];
+
+      act(() => {
+        transitionTo("generating");
+      });
+      assert.strictEqual(result.current[0].state, "generating");
 
       act(() => {
         setError("Generation failed");
       });
-
-      // Verify error handling capability
-      assert.ok(typeof setError === "function");
+      assert.strictEqual(result.current[0].state, "error");
+      assert.strictEqual(result.current[0].error, "Generation failed");
     });
 
     it("should transition error → idle (user retries)", async () => {
       const { result } = await renderFlowState();
       const { setError, retryGeneration } = result.current[1];
 
-      // First go to error state
       act(() => {
         setError("Error occurred");
       });
+      assert.strictEqual(result.current[0].state, "error");
 
-      // Retry back to idle
       act(() => {
         retryGeneration();
       });
-
-      // Verify retry function exists
-      assert.ok(typeof retryGeneration === "function");
+      assert.strictEqual(result.current[0].state, "idle");
+      assert.strictEqual(result.current[0].error, null);
     });
 
-    it("should transition to interrupted state (user cancels download)", async () => {
+    it("canceling model download sets interrupted state", async () => {
       const { result } = await renderFlowState();
       const { cancelModelDownload } = result.current[1];
-
-      // NOTE: Full cancel flow requires DI and async operations
-      // Test validates cancelModelDownload function exists and is callable
-      assert.ok(typeof cancelModelDownload === "function");
 
       act(() => {
         cancelModelDownload();
       });
 
-      // Verify function was callable
+      assert.strictEqual(result.current[0].state, "interrupted");
+      assert.strictEqual(result.current[0].isModelReady, false);
       assert.ok(mockCancelDownload.mock.calls.length > 0);
-    });
-
-    it("should transition to unsupported state (WebGPU not available)", async () => {
-      // NOTE: WebGPU state testing requires mock environment
-      const { result } = await renderFlowState();
-      act(() => {});
-      // Verify state property exists
-      assert.ok(typeof result.current[0].state === "string");
     });
 
     it("should regenerate manifest transitioning to generating", async () => {
       const { result } = await renderFlowState();
       const { setError, regenerateManifest } = result.current[1];
 
-      // Regenerate is reached from the inline error / retry paths
       act(() => {
         setError("Generation failed");
       });
+      assert.strictEqual(result.current[0].state, "error");
 
       act(() => {
         regenerateManifest();
@@ -216,46 +401,95 @@ describe("useModelSelectionFlowState", () => {
       const { result } = await renderFlowState();
       const { validateApiKey } = result.current[1];
 
-      // NOTE: Full API key validation testing requires DI environment
-      // Test validates validateApiKey function exists and is callable
-      assert.ok(typeof validateApiKey === "function");
+      // Invalid format (missing sk- prefix) → false
+      const invalidResult = await validateApiKey("openai", "bad-key");
+      assert.strictEqual(invalidResult, false);
+
+      // Valid format → true (after 500ms async validation delay)
+      vi.useFakeTimers();
+      try {
+        const validPromise = validateApiKey("openai", "sk-valid-key-123");
+        await vi.advanceTimersByTimeAsync(500);
+        const validResult = await validPromise;
+        assert.strictEqual(validResult, true);
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it("should select local model with remember=true/false", async () => {
       const { result } = await renderFlowState();
       const { selectLocalModel } = result.current[1];
 
-      // NOTE: Full model selection requires DI and async operations
-      // Test validates selectLocalModel function exists
-      assert.ok(typeof selectLocalModel === "function");
+      // With remember=true → saves preferences, sets selectedModelId and rememberedChoice
+      await act(async () => {
+        selectLocalModel(DomainModelId.QWEN3_8B, true);
+      });
+      assert.strictEqual(result.current[0].state, "model_downloading");
+      assert.strictEqual(
+        result.current[0].selectedModelId,
+        DomainModelId.QWEN3_8B,
+      );
+      assert.strictEqual(result.current[0].rememberedChoice, true);
+      assert.ok(
+        mockSaveModelPreferences.mock.calls.some(
+          (call) => call[0]?.lastModelId === DomainModelId.QWEN3_8B,
+        ),
+      );
+
+      // With remember=false → does NOT save lastModelId preference
+      mockSaveModelPreferences.mockClear();
+      await act(async () => {
+        selectLocalModel(DomainModelId.LLAMA_3_2_3B, false);
+      });
+      assert.strictEqual(
+        result.current[0].selectedModelId,
+        DomainModelId.LLAMA_3_2_3B,
+      );
+      assert.strictEqual(result.current[0].rememberedChoice, false);
+      assert.ok(
+        !mockSaveModelPreferences.mock.calls.some(
+          (call) => call[0]?.lastModelId !== undefined,
+        ),
+      );
     });
 
     it("should cancel model download", async () => {
       const { result } = await renderFlowState();
       const { cancelModelDownload } = result.current[1];
 
-      // NOTE: Full cancel flow requires DI and async setup
-      // Test validates cancelModelDownload function exists and is callable
-      assert.ok(typeof cancelModelDownload === "function");
-
       act(() => {
         cancelModelDownload();
       });
 
-      // Verify the mock was called
+      assert.strictEqual(result.current[0].state, "interrupted");
+      assert.strictEqual(result.current[0].isModelReady, false);
       assert.ok(mockCancelDownload.mock.calls.length > 0);
+      assert.ok(
+        mockSaveModelPreferences.mock.calls.some(
+          (call) => call[0]?.autoLoadEnabled === false,
+        ),
+      );
     });
 
     it("should skip AI setup", async () => {
+      mockPreferences.skipAiSetup = true;
       const { result } = await renderFlowState();
       const { skipAiSetup } = result.current[1];
+
+      assert.strictEqual(result.current[0].aiSetupSkipped, true);
 
       act(() => {
         skipAiSetup();
       });
 
-      // Verify skipAiSetup function exists
-      assert.ok(typeof skipAiSetup === "function");
+      assert.strictEqual(result.current[0].state, "idle");
+      assert.strictEqual(result.current[0].aiSetupSkipped, true);
+      assert.ok(
+        mockSaveModelPreferences.mock.calls.some(
+          (call) => call[0]?.skipAiSetup === true,
+        ),
+      );
     });
 
     it("should clear error and return to idle", async () => {
@@ -265,13 +499,14 @@ describe("useModelSelectionFlowState", () => {
       act(() => {
         setError("Test error");
       });
+      assert.strictEqual(result.current[0].state, "error");
+      assert.strictEqual(result.current[0].error, "Test error");
 
       act(() => {
         clearError();
       });
-
-      // Verify clearError function works
-      assert.ok(typeof clearError === "function");
+      assert.strictEqual(result.current[0].state, "idle");
+      assert.strictEqual(result.current[0].error, null);
     });
 
     it("should restart from selection", async () => {
@@ -281,13 +516,13 @@ describe("useModelSelectionFlowState", () => {
       act(() => {
         setError("Test error");
       });
+      assert.strictEqual(result.current[0].state, "error");
 
       act(() => {
         restartFromSelection();
       });
-
-      // Verify restart function exists
-      assert.ok(typeof restartFromSelection === "function");
+      assert.strictEqual(result.current[0].state, "model_selection");
+      assert.strictEqual(result.current[0].error, null);
     });
 
     it("should proceed to wizard", async () => {
@@ -298,8 +533,7 @@ describe("useModelSelectionFlowState", () => {
         proceedToWizard();
       });
 
-      // Verify proceedToWizard function exists
-      assert.ok(typeof proceedToWizard === "function");
+      assert.strictEqual(result.current[0].state, "wizard_hydration");
     });
 
     it("should set error with error code", async () => {
@@ -310,12 +544,9 @@ describe("useModelSelectionFlowState", () => {
         setError("Network error", "network_failure");
       });
 
-      // Verify error handling with error codes
-      assert.ok(
-        result.current[0].error === undefined ||
-          typeof result.current[0].error === "string" ||
-          result.current[0].error === null,
-      );
+      assert.strictEqual(result.current[0].state, "error");
+      assert.strictEqual(result.current[0].error, "Network error");
+      assert.strictEqual(result.current[0].errorCode, "network_failure");
     });
 
     it("should set key_invalid_format error code when cloud key validation fails", async () => {
@@ -326,11 +557,10 @@ describe("useModelSelectionFlowState", () => {
         await selectCloudProvider("openai", "bad-key", false);
       });
 
-      // Verify error state exists
-      assert.ok(
-        result.current[0].errorCode === undefined ||
-          typeof result.current[0].errorCode === "string",
-      );
+      assert.strictEqual(result.current[0].state, "error");
+      assert.strictEqual(result.current[0].errorCode, "key_invalid_format");
+      assert.strictEqual(result.current[0].cloudProvider, "openai");
+      assert.strictEqual(result.current[0].cloudApiKey, "bad-key");
     });
   });
 });
