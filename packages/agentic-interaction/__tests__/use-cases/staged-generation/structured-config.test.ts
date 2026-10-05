@@ -235,8 +235,8 @@ test("parseStructuredConfig: large input scales linearly below a generous ratio"
   };
   const best = (chars: number, n: number): number =>
     Math.min(...Array.from({ length: n }, () => timeParse(chars)));
-  const small = best(50_000, 3);
-  const large = best(400_000, 3);
+  const small = best(50_000, 5);
+  const large = best(400_000, 5);
   // Correctness on the large input is preserved from the original assertion.
   assert.strictEqual(
     parseStructuredConfig(makeYaml(400_000)).bounded_contexts.length,
