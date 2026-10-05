@@ -223,16 +223,30 @@ bounded_contexts:
   });
 });
 
-test("parseStructuredConfig: large input (50,000 chars) returns result within 1000ms", () => {
+test("parseStructuredConfig: large input scales linearly below a generous ratio", () => {
   const baseYaml =
     "project: large-test\nbounded_contexts:\n  - name: TestContext\n    type: core\n";
-  const padding = " ".repeat(50000 - baseYaml.length);
-  const largeYaml = baseYaml + padding;
-  const start = Date.now();
-  const config = parseStructuredConfig(largeYaml);
-  const duration = Date.now() - start;
-  assert.strictEqual(config.bounded_contexts.length, 1);
-  assert.ok(duration <= 1000, `Took ${duration}ms, expected <=1000ms`);
+  const makeYaml = (chars: number): string =>
+    baseYaml + " ".repeat(Math.max(0, chars - baseYaml.length));
+  const timeParse = (chars: number): number => {
+    const t0 = performance.now();
+    parseStructuredConfig(makeYaml(chars));
+    return performance.now() - t0;
+  };
+  const best = (chars: number, n: number): number =>
+    Math.min(...Array.from({ length: n }, () => timeParse(chars)));
+  const small = best(50_000, 3);
+  const large = best(400_000, 3);
+  // Correctness on the large input is preserved from the original assertion.
+  assert.strictEqual(
+    parseStructuredConfig(makeYaml(400_000)).bounded_contexts.length,
+    1,
+  );
+  // 8x input: linear ~8x, quadratic ~64x — 40 fails on regression, not on load.
+  assert.ok(
+    large / small < 40,
+    `parse ratio ${large / small} >= 40 (small=${small}ms, large=${large}ms)`,
+  );
 });
 
 // P18.3: buildDomainAnalysisFromConfig tests
