@@ -237,16 +237,16 @@ test("parseStructuredConfig: large input scales linearly below a generous ratio"
   const best = (chars: number, n: number): number =>
     Math.min(...Array.from({ length: n }, () => timeParse(chars)));
   const small = best(50_000, 5);
-  const large = best(400_000, 5);
+  const large = best(3_200_000, 5); // 50 000 vs 3 200 000 = 64x size ratio
   // Correctness on the large input is preserved from the original assertion.
   assert.strictEqual(
-    parseStructuredConfig(makeYaml(400_000)).bounded_contexts.length,
+    parseStructuredConfig(makeYaml(3_200_000)).bounded_contexts.length,
     1,
   );
-  // 8x input: linear ~8x, quadratic ~64x — 40 fails on regression, not on load.
+  // 64x input: linear ~64x, quadratic ~4096x — bound is 4 * 64 = 256.
   assert.ok(
-    large / small < 40,
-    `parse ratio ${large / small} >= 40 (small=${small}ms, large=${large}ms)`,
+    large / small < 4 * 64,
+    `parse ratio ${large / small} >= 4 * 64 (small=${small}ms, large=${large}ms)`,
   );
 });
 
