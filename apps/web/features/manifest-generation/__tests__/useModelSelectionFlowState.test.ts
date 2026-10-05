@@ -439,8 +439,9 @@ describe("useModelSelectionFlowState", () => {
         skipAiSetup();
       });
 
-      // Verify skipAiSetup function exists
-      assert.ok(typeof skipAiSetup === "function");
+      assert.strictEqual(result.current[0].state, "idle");
+      assert.strictEqual(result.current[0].aiSetupSkipped, true);
+      assert.ok(mockSaveModelPreferences.mock.calls.length > 0);
     });
 
     it("should clear error and return to idle", async () => {
@@ -450,13 +451,14 @@ describe("useModelSelectionFlowState", () => {
       act(() => {
         setError("Test error");
       });
+      assert.strictEqual(result.current[0].state, "error");
+      assert.strictEqual(result.current[0].error, "Test error");
 
       act(() => {
         clearError();
       });
-
-      // Verify clearError function works
-      assert.ok(typeof clearError === "function");
+      assert.strictEqual(result.current[0].state, "idle");
+      assert.strictEqual(result.current[0].error, null);
     });
 
     it("should restart from selection", async () => {
@@ -466,13 +468,13 @@ describe("useModelSelectionFlowState", () => {
       act(() => {
         setError("Test error");
       });
+      assert.strictEqual(result.current[0].state, "error");
 
       act(() => {
         restartFromSelection();
       });
-
-      // Verify restart function exists
-      assert.ok(typeof restartFromSelection === "function");
+      assert.strictEqual(result.current[0].state, "model_selection");
+      assert.strictEqual(result.current[0].error, null);
     });
 
     it("should proceed to wizard", async () => {
@@ -483,8 +485,7 @@ describe("useModelSelectionFlowState", () => {
         proceedToWizard();
       });
 
-      // Verify proceedToWizard function exists
-      assert.ok(typeof proceedToWizard === "function");
+      assert.strictEqual(result.current[0].state, "wizard_hydration");
     });
 
     it("should set error with error code", async () => {
@@ -495,12 +496,9 @@ describe("useModelSelectionFlowState", () => {
         setError("Network error", "network_failure");
       });
 
-      // Verify error handling with error codes
-      assert.ok(
-        result.current[0].error === undefined ||
-          typeof result.current[0].error === "string" ||
-          result.current[0].error === null,
-      );
+      assert.strictEqual(result.current[0].state, "error");
+      assert.strictEqual(result.current[0].error, "Network error");
+      assert.strictEqual(result.current[0].errorCode, "network_failure");
     });
 
     it("should set key_invalid_format error code when cloud key validation fails", async () => {
