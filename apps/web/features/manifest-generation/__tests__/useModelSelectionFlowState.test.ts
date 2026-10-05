@@ -228,10 +228,8 @@ describe("useModelSelectionFlowState", () => {
   describe("Initial State", () => {
     it("should start in idle state", async () => {
       const { result } = await renderFlowState();
-      // NOTE: Full state validation requires DI with mock.module support (Node.js v22.7.0 limitation)
-      // Test validates hook accepts llmContext parameter and initializes
-      assert.ok(typeof result.current[0] === "object");
-      assert.ok(result.current[0].state !== undefined);
+      assert.strictEqual(result.current[0].state, "idle");
+      assert.strictEqual(result.current[0].isModelReady, false);
     });
 
     it("should detect unsupported WebGPU and transition to unsupported", async () => {
