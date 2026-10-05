@@ -386,25 +386,49 @@ describe("useModelSelectionFlowState", () => {
       const { result } = await renderFlowState();
       const { selectLocalModel } = result.current[1];
 
-      // NOTE: Full model selection requires DI and async operations
-      // Test validates selectLocalModel function exists
-      assert.ok(typeof selectLocalModel === "function");
+      // With remember=true → saves preferences, sets selectedModelId and rememberedChoice
+      await act(async () => {
+        selectLocalModel(DomainModelId.QWEN3_8B, true);
+      });
+      assert.strictEqual(result.current[0].state, "model_downloading");
+      assert.strictEqual(result.current[0].selectedModelId, DomainModelId.QWEN3_8B);
+      assert.strictEqual(result.current[0].rememberedChoice, true);
+      assert.ok(
+        mockSaveModelPreferences.mock.calls.some(
+          (call) => call[0]?.lastModelId === DomainModelId.QWEN3_8B,
+        ),
+      );
+
+      // With remember=false → does NOT save lastModelId preference
+      mockSaveModelPreferences.mockClear();
+      await act(async () => {
+        selectLocalModel(DomainModelId.LLAMA_3_2_3B, false);
+      });
+      assert.strictEqual(result.current[0].selectedModelId, DomainModelId.LLAMA_3_2_3B);
+      assert.strictEqual(result.current[0].rememberedChoice, false);
+      assert.ok(
+        !mockSaveModelPreferences.mock.calls.some(
+          (call) => call[0]?.lastModelId !== undefined,
+        ),
+      );
     });
 
     it("should cancel model download", async () => {
       const { result } = await renderFlowState();
       const { cancelModelDownload } = result.current[1];
 
-      // NOTE: Full cancel flow requires DI and async setup
-      // Test validates cancelModelDownload function exists and is callable
-      assert.ok(typeof cancelModelDownload === "function");
-
       act(() => {
         cancelModelDownload();
       });
 
-      // Verify the mock was called
+      assert.strictEqual(result.current[0].state, "interrupted");
+      assert.strictEqual(result.current[0].isModelReady, false);
       assert.ok(mockCancelDownload.mock.calls.length > 0);
+      assert.ok(
+        mockSaveModelPreferences.mock.calls.some(
+          (call) => call[0]?.autoLoadEnabled === false,
+        ),
+      );
     });
 
     it("should skip AI setup", async () => {
