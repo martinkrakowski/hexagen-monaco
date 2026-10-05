@@ -229,8 +229,9 @@ test("parseStructuredConfig: large input scales linearly below a generous ratio"
   const makeYaml = (chars: number): string =>
     baseYaml + " ".repeat(Math.max(0, chars - baseYaml.length));
   const timeParse = (chars: number): number => {
+    const yaml = makeYaml(chars);
     const t0 = performance.now();
-    parseStructuredConfig(makeYaml(chars));
+    parseStructuredConfig(yaml);
     return performance.now() - t0;
   };
   const best = (chars: number, n: number): number =>
