@@ -32,6 +32,7 @@
     "cli": "node dist/cli.js",
     "pack:prepare": "node ../../scripts/prepare-publish-package.js .",
     "test": "vitest run",
+    "test:contract": "vitest run --config vitest.contract.config.ts",
     "test:watch": "vitest watch",
     "typecheck:test": "tsc -p tsconfig.test.json --noEmit"
   },
