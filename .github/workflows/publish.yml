@@ -133,6 +133,12 @@ jobs:
       - name: "Test Published Closure (release gate)"
         run: node scripts/verify-publish-test-scope.js packages/sync tools/arch-linter
 
+      # Contract suites live under __tests__/contract/** and run under the
+      # `test:contract` turbo task (sync's `test` excludes them). Gate on them
+      # here too, so the release gate still exercises them instead of skipping.
+      - name: "Test Sync Contract Suite (release gate)"
+        run: node scripts/verify-publish-test-scope.js packages/sync tools/arch-linter --task test:contract
+
       # Stage self-contained, scope-rewritten manifests. Each `publish/` dir
       # holds dist/ + a public package.json (name → @hexagen-monaco/*, no
       # workspace:* deps).

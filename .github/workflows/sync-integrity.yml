@@ -7,7 +7,7 @@ on:
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
-# Both jobs only read the repo (checkout with persist-credentials: false) and
+# All jobs only read the repo (checkout with persist-credentials: false) and
 # publish nothing — pin the GITHUB_TOKEN to read-only instead of inheriting
 # the repository default (same pattern as lint.yml / capstone.yml).
 permissions:
@@ -121,6 +121,48 @@ jobs:
 
       - name: "Run Test Suite"
         run: yarn turbo run test --output-logs=full --log-order=stream
+
+  verify-sync-contract:
+    name: "Run Sync Contract Suite"
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Checkout Repository"
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0 # Required for the engine's Git checks
+          persist-credentials: false
+
+      - name: "Enable Corepack"
+        run: corepack enable
+
+      - name: "Prepare Yarn"
+        run: corepack prepare --activate
+
+      - name: "Setup Node.js"
+        uses: actions/setup-node@v5
+        with:
+          node-version: "22.7"
+
+      - name: "Install Dependencies"
+        env:
+          YARN_HTTP_TIMEOUT: "120000"
+        run: |
+          for attempt in 1 2 3; do
+            yarn install --immutable && exit 0
+            echo "yarn install failed (attempt ${attempt}/3)"
+            if [ "$attempt" -eq 3 ]; then
+              exit 1
+            fi
+            sleep 15
+          done
+
+      - name: "Run Contract Suite"
+        # Isolate the spawn-heavy contract suites (__tests__/contract/**) onto
+        # their own runner: they spawn the built CLI and run real git/fs work,
+        # which starved the unit suites in `verify-sync`. `test:contract` builds
+        # the package first, so this job runs in parallel with `verify-sync`; every
+        # PR runs both jobs, so no suite is dropped — only relocated.
+        run: yarn turbo run test:contract --filter=@hexagen/sync --output-logs=full --log-order=stream
 
   # Windows leg — enforcement plan P3.1, scope decided by D-1 (accepted
   # 2026-08-23): packages/sync + tools/arch-linter ONLY. Every catalogue §2.3
@@ -261,4 +303,4 @@ jobs:
       - name: "Run Scoped Test Suites"
         if: steps.scope.outputs.run_tests == 'true'
         shell: bash
-        run: yarn turbo run test --filter=@hexagen/sync --filter=@hexagen/arch-linter --output-logs=full --log-order=stream
+        run: yarn turbo run test test:contract --filter=@hexagen/sync --filter=@hexagen/arch-linter --output-logs=full --log-order=stream

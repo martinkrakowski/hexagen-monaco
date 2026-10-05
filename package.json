@@ -17,6 +17,7 @@
     "capstone": "node scripts/capstone/first-run-green.js",
     "capstone:gate": "node scripts/capstone/generate-then-gate.js",
     "test:force": "turbo run test --force",
+    "test:all": "turbo run test test:contract",
     "typecheck:test": "turbo run typecheck:test",
     "build": "turbo build",
     "build:all": "turbo build",

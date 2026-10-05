@@ -319,6 +319,7 @@ Tests run in CI only. Local pre-commits run lint and typecheck (~2–5s); the fu
 
 ```bash
 yarn test                                       # every workspace that defines a test task
+yarn test:all                                   # every test task, incl. sync contract suites (test + test:contract)
 yarn workspace @hexagen/web-driver test         # one workspace
 yarn workspace @hexagen/web-driver exec vitest  # one workspace, watch mode
 ```

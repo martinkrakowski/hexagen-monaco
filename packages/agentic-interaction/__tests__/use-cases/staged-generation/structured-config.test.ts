@@ -223,16 +223,31 @@ bounded_contexts:
   });
 });
 
-test("parseStructuredConfig: large input (50,000 chars) returns result within 1000ms", () => {
+test("parseStructuredConfig: large input scales linearly below a generous ratio", () => {
   const baseYaml =
     "project: large-test\nbounded_contexts:\n  - name: TestContext\n    type: core\n";
-  const padding = " ".repeat(50000 - baseYaml.length);
-  const largeYaml = baseYaml + padding;
-  const start = Date.now();
-  const config = parseStructuredConfig(largeYaml);
-  const duration = Date.now() - start;
-  assert.strictEqual(config.bounded_contexts.length, 1);
-  assert.ok(duration <= 1000, `Took ${duration}ms, expected <=1000ms`);
+  const makeYaml = (chars: number): string =>
+    baseYaml + " ".repeat(Math.max(0, chars - baseYaml.length));
+  const timeParse = (chars: number): number => {
+    const yaml = makeYaml(chars);
+    const t0 = performance.now();
+    parseStructuredConfig(yaml);
+    return performance.now() - t0;
+  };
+  const best = (chars: number, n: number): number =>
+    Math.min(...Array.from({ length: n }, () => timeParse(chars)));
+  const small = best(50_000, 5);
+  const large = best(3_200_000, 5); // 50 000 vs 3 200 000 = 64x size ratio
+  // Correctness on the large input is preserved from the original assertion.
+  assert.strictEqual(
+    parseStructuredConfig(makeYaml(3_200_000)).bounded_contexts.length,
+    1,
+  );
+  // 64x input: linear ~64x, quadratic ~4096x — bound is 4 * 64 = 256.
+  assert.ok(
+    large / small < 4 * 64,
+    `parse ratio ${large / small} >= 4 * 64 (small=${small}ms, large=${large}ms)`,
+  );
 });
 
 // P18.3: buildDomainAnalysisFromConfig tests
