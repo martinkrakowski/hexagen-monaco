@@ -1,3 +1,111 @@
+// --- Hoisted mock objects for the four collaborators resolved at mount ---
+
+// 1. WebGPU detector (GraphicsCapabilityPort)
+const mockGpuDetector = vi.hoisted(() => ({
+  isSupported: vi.fn(() => false),
+  detect: vi.fn(async () => ({
+    success: true,
+    value: { supported: false, maxTextureSize: null, supportsFP16: false },
+  })),
+}));
+
+// 2. Hardware profiler (HardwareProfilerPort)
+const mockHwProfiler = vi.hoisted(() => ({
+  profile: vi.fn(async () => ({
+    success: true,
+    value: {
+      cpuCores: 4,
+      ramMB: null,
+      gpu: { supported: false, vendor: null, architecture: null, maxBufferMB: null },
+      deviceClass: "unknown",
+    },
+  })),
+}));
+
+// 3. Key vault (UserSecretVaultPort)
+const mockSecretVault = vi.hoisted(() => ({
+  getStatus: vi.fn(async () => ({
+    success: true,
+    value: { state: "empty", hasStoredPayload: false },
+  })),
+  store: vi.fn(async () => ({ success: true })),
+  retrieve: vi.fn(async () => ({ success: false, error: new Error("no key") })),
+  destroy: vi.fn(async () => ({ success: true })),
+  unlock: vi.fn(async () => ({ success: true })),
+  lock: vi.fn(async () => ({ success: true })),
+}));
+
+// Mock ApiKeyManager returned by createApiKeyManager
+const mockApiKeyManager = vi.hoisted(() => ({
+  saveApiKey: vi.fn(async () => undefined),
+  getApiKey: vi.fn(async () => null),
+  clearApiKeys: vi.fn(async () => undefined),
+}));
+
+// 4. Preferences store
+const mockPreferences = vi.hoisted(() => ({
+  hasEnabledLocalModels: false,
+  lastModelId: null,
+  autoLoadEnabled: false,
+  cloudProvider: null,
+  rememberApiKey: false,
+  skipAiSetup: false,
+  rememberChoice: false,
+}));
+
+// Hoisted factory mocks for wire module
+const mockGetWebGPUDetector = vi.hoisted(() => vi.fn(() => mockGpuDetector));
+const mockGetHardwareProfiler = vi.hoisted(() => vi.fn(() => mockHwProfiler));
+const mockGetSecretVault = vi.hoisted(() => vi.fn(() => mockSecretVault));
+const mockHasServerLLMAccessKey = vi.hoisted(() => vi.fn(() => false));
+
+// Seam: wire module — getWebGPUDetector, getHardwareProfiler, getSecretVault, hasServerLLMAccessKey
+vi.mock("../../../app/lib/wire", () => ({
+  getWebGPUDetector: mockGetWebGPUDetector,
+  getHardwareProfiler: mockGetHardwareProfiler,
+  getSecretVault: mockGetSecretVault,
+  hasServerLLMAccessKey: mockHasServerLLMAccessKey,
+}));
+
+// Hoisted factory mocks for modelPreferencesStorage module
+const mockGetModelPreferences = vi.hoisted(() => vi.fn(() => mockPreferences));
+const mockCreateApiKeyManager = vi.hoisted(() => vi.fn(async () => mockApiKeyManager));
+const mockSaveModelPreferences = vi.hoisted(() => vi.fn());
+const mockIsModelVerified = vi.hoisted(() => vi.fn(() => false));
+const mockUpdateModelCacheMetadata = vi.hoisted(() => vi.fn());
+const mockClearModelCacheMetadata = vi.hoisted(() => vi.fn());
+
+// Seam: modelPreferencesStorage — getModelPreferences, saveModelPreferences,
+// createApiKeyManager, isModelVerified, updateModelCacheMetadata, etc.
+vi.mock("../ModelSelectionFlow/modelPreferencesStorage", () => ({
+  getModelPreferences: mockGetModelPreferences,
+  saveModelPreferences: mockSaveModelPreferences,
+  createApiKeyManager: mockCreateApiKeyManager,
+  isModelVerified: mockIsModelVerified,
+  updateModelCacheMetadata: mockUpdateModelCacheMetadata,
+  clearModelCacheMetadata: mockClearModelCacheMetadata,
+  MODEL_PREFERENCE_KEYS: {
+    LAST_MODEL_ID: "hexagen:local-llm:last-model",
+    AUTO_LOAD_ENABLED: "hexagen:local-llm:auto-load",
+    HAS_ENABLED_LOCAL_MODELS: "hexagen:local-llm:has-enabled",
+    CLOUD_PROVIDER: "hexagen:manifest-flow:cloud-provider",
+    REMEMBER_API_KEY: "hexagen:manifest-flow:remember-api-key",
+    SKIP_AI_SETUP: "hexagen:manifest-flow:skip-ai-setup",
+    REMEMBER_CHOICE: "hexagen:manifest-flow:remember-choice",
+    MODEL_CACHE_METADATA_PREFIX: "hexagen:local-llm:cache-metadata:",
+  },
+  STORAGE_KEYS: {
+    LAST_MODEL_ID: "hexagen:local-llm:last-model",
+    AUTO_LOAD_ENABLED: "hexagen:local-llm:auto-load",
+    HAS_ENABLED_LOCAL_MODELS: "hexagen:local-llm:has-enabled",
+    CLOUD_PROVIDER: "hexagen:manifest-flow:cloud-provider",
+    REMEMBER_API_KEY: "hexagen:manifest-flow:remember-api-key",
+    SKIP_AI_SETUP: "hexagen:manifest-flow:skip-ai-setup",
+    REMEMBER_CHOICE: "hexagen:manifest-flow:remember-choice",
+    MODEL_CACHE_METADATA_PREFIX: "hexagen:local-llm:cache-metadata:",
+  },
+}));
+
 import { describe, it, beforeEach, afterEach, vi, type Mock } from "vitest";
 import assert from "node:assert";
 import { renderHook, act } from "@testing-library/react";
@@ -16,7 +124,7 @@ describe("useModelSelectionFlowState", () => {
   beforeEach(() => {
     // "unavailable" is the engine's real initial status (LLM_ENGINE_INITIAL_STATE).
     mockEngineState = createLLMEngineState("unavailable", 0);
-    mockInitializeModel = vi.fn();
+    mockInitializeModel = vi.fn(async () => {});
     mockCancelDownload = vi.fn();
     mockHasAnyCachedModel = vi.fn(async () => false);
     mockHasModelInCache = vi.fn(async () => false);
@@ -34,6 +142,59 @@ describe("useModelSelectionFlowState", () => {
       sendStructuredPrompt: async () => "",
       messages: [],
     };
+
+    // Reset mock implementations to deterministic defaults
+    mockGpuDetector.isSupported.mockReturnValue(false);
+    mockGpuDetector.detect.mockResolvedValue({
+      success: true,
+      value: { supported: false, maxTextureSize: null, supportsFP16: false },
+    });
+    mockHwProfiler.profile.mockResolvedValue({
+      success: true,
+      value: {
+        cpuCores: 4,
+        ramMB: null,
+        gpu: { supported: false, vendor: null, architecture: null, maxBufferMB: null },
+        deviceClass: "unknown",
+      },
+    });
+    mockGetWebGPUDetector.mockReturnValue(mockGpuDetector);
+    mockGetHardwareProfiler.mockReturnValue(mockHwProfiler);
+    mockGetSecretVault.mockReturnValue(mockSecretVault);
+    mockHasServerLLMAccessKey.mockReturnValue(false);
+
+    // Reset preferences to defaults
+    mockPreferences.hasEnabledLocalModels = false;
+    mockPreferences.lastModelId = null;
+    mockPreferences.autoLoadEnabled = false;
+    mockPreferences.cloudProvider = null;
+    mockPreferences.rememberApiKey = false;
+    mockPreferences.skipAiSetup = false;
+    mockPreferences.rememberChoice = false;
+    mockGetModelPreferences.mockReturnValue(mockPreferences);
+    mockCreateApiKeyManager.mockResolvedValue(mockApiKeyManager);
+    mockIsModelVerified.mockReturnValue(false);
+
+    // Reset mock call history
+    mockSaveModelPreferences.mockClear();
+    mockUpdateModelCacheMetadata.mockClear();
+    mockClearModelCacheMetadata.mockClear();
+    mockCancelDownload.mockClear();
+    mockInitializeModel.mockReset();
+    mockInitializeModel.mockImplementation(async () => {});
+    mockHasAnyCachedModel.mockReset();
+    mockHasAnyCachedModel.mockImplementation(async () => false);
+    mockHasModelInCache.mockReset();
+    mockHasModelInCache.mockImplementation(async () => false);
+    mockApiKeyManager.saveApiKey.mockClear();
+    mockApiKeyManager.getApiKey.mockClear();
+    mockApiKeyManager.clearApiKeys.mockClear();
+    mockSecretVault.store.mockClear();
+    mockSecretVault.retrieve.mockClear();
+    mockSecretVault.destroy.mockClear();
+    mockGpuDetector.isSupported.mockClear();
+    mockGpuDetector.detect.mockClear();
+    mockHwProfiler.profile.mockClear();
   });
 
   afterEach(() => {
