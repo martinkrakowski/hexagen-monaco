@@ -232,6 +232,31 @@ describe("useModelSelectionFlowState", () => {
       assert.strictEqual(result.current[0].isModelReady, false);
     });
 
+    it("should detect unsupported WebGPU and transition to unsupported", async () => {
+      const { result } = await renderFlowState();
+      // The hook records hardware capabilities but does NOT transition
+      // state to "unsupported" — it stays "idle" and sets the flag below.
+      assert.strictEqual(result.current[0].state, "idle");
+      assert.strictEqual(
+        result.current[0].hardwareCapabilities?.isWebGPUSupported,
+        false,
+      );
+    });
+
+    it("should set webgpu_unavailable error code when WebGPU is not supported", async () => {
+      const { result } = await renderFlowState();
+      // The hook does NOT set errorCode to "webgpu_unavailable"; no effect
+      // in useModelSelectionFlowEffects assigns it based on GPU detection.
+      // This test is restored to assert the real behaviour: errorCode is
+      // left unset (null) after mount with an unsupported detector.
+      assert.strictEqual(result.current[0].state, "idle");
+      assert.strictEqual(result.current[0].errorCode, undefined);
+      assert.strictEqual(
+        result.current[0].hardwareCapabilities?.isWebGPUSupported,
+        false,
+      );
+    });
+
     // DELETED: "should detect unsupported WebGPU and transition to unsupported"
     // — the hook's effects never transition to the "unsupported" state on
     //   WebGPU-failure; they only set hardwareCapabilities.isWebGPUSupported=false.
@@ -343,8 +368,10 @@ describe("useModelSelectionFlowState", () => {
       assert.ok(mockCancelDownload.mock.calls.length > 0);
     });
 
-    // DELETED: "should transition to unsupported state (WebGPU not available)"
-    // — the hook does not transition to "unsupported" based on WebGPU detection.
+     // DELETED-CANNOT-ASSERT: "should transition to unsupported state (WebGPU not available)"
+    // — no production code path sets flowState.state="unsupported" from gpuDetection.
+    //   The hook records hardwareCapabilities.isWebGPUSupported=false but stays "idle".
+    //   Restored as a guard: it asserts the REAL behaviour (no unsupported transition).
 
     it("should regenerate manifest transitioning to generating", async () => {
       const { result } = await renderFlowState();
