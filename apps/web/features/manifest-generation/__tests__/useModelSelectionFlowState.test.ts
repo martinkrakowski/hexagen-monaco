@@ -143,8 +143,10 @@ describe("useModelSelectionFlowState", () => {
       messages: [],
     };
 
-    // Reset mock implementations to deterministic defaults
-    mockGpuDetector.isSupported.mockReturnValue(false);
+    // Stub OffscreenCanvas so useWebGPUDetection's check doesn't mask the
+    // mock's supported value (jsdom lacks OffscreenCanvas, which would force
+    // isWebGPUSupported to false regardless of the mock return)
+    vi.stubGlobal("OffscreenCanvas", class OffscreenCanvasStub {});
     mockGpuDetector.detect.mockResolvedValue({
       success: true,
       value: { supported: false, maxTextureSize: null, supportsFP16: false },
