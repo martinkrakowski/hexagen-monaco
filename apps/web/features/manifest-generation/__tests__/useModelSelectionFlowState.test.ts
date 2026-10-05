@@ -190,7 +190,7 @@ describe("useModelSelectionFlowState", () => {
     mockPreferences.rememberApiKey = false;
     mockPreferences.skipAiSetup = false;
     mockPreferences.rememberChoice = false;
-    mockGetModelPreferences.mockReturnValue(() => ({ ...mockPreferences }));
+    mockGetModelPreferences.mockImplementation(() => ({ ...mockPreferences }));
     mockCreateApiKeyManager.mockResolvedValue(mockApiKeyManager);
     mockIsModelVerified.mockReturnValue(false);
 
@@ -473,8 +473,11 @@ describe("useModelSelectionFlowState", () => {
     });
 
     it("should skip AI setup", async () => {
+      mockPreferences.skipAiSetup = true;
       const { result } = await renderFlowState();
       const { skipAiSetup } = result.current[1];
+
+      assert.strictEqual(result.current[0].aiSetupSkipped, true);
 
       act(() => {
         skipAiSetup();
