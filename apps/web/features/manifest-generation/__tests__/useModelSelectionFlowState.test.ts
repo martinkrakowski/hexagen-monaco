@@ -16,7 +16,12 @@ const mockHwProfiler = vi.hoisted(() => ({
     value: {
       cpuCores: 4,
       ramMB: null,
-      gpu: { supported: false, vendor: null, architecture: null, maxBufferMB: null },
+      gpu: {
+        supported: false,
+        vendor: null,
+        architecture: null,
+        maxBufferMB: null,
+      },
       deviceClass: "unknown",
     },
   })),
@@ -68,8 +73,12 @@ vi.mock("../../../app/lib/wire", () => ({
 }));
 
 // Hoisted factory mocks for modelPreferencesStorage module
-const mockGetModelPreferences = vi.hoisted(() => vi.fn(() => mockPreferences));
-const mockCreateApiKeyManager = vi.hoisted(() => vi.fn(async () => mockApiKeyManager));
+const mockGetModelPreferences = vi.hoisted(() =>
+  vi.fn(() => ({ ...mockPreferences })),
+);
+const mockCreateApiKeyManager = vi.hoisted(() =>
+  vi.fn(async () => mockApiKeyManager),
+);
 const mockSaveModelPreferences = vi.hoisted(() => vi.fn());
 const mockIsModelVerified = vi.hoisted(() => vi.fn(() => false));
 const mockUpdateModelCacheMetadata = vi.hoisted(() => vi.fn());
@@ -111,7 +120,11 @@ import assert from "node:assert";
 import { renderHook, act } from "@testing-library/react";
 import { useModelSelectionFlowState } from "../ModelSelectionFlow/useModelSelectionFlowState";
 import type { LocalLLMContext } from "../../../lib/llm-interfaces";
-import { createLLMEngineState, type LLMEngineState, DomainModelId } from "@hexagen/local-llm";
+import {
+  createLLMEngineState,
+  type LLMEngineState,
+  DomainModelId,
+} from "@hexagen/local-llm";
 
 describe("useModelSelectionFlowState", () => {
   let mockEngineState: LLMEngineState;
@@ -156,7 +169,12 @@ describe("useModelSelectionFlowState", () => {
       value: {
         cpuCores: 4,
         ramMB: null,
-        gpu: { supported: false, vendor: null, architecture: null, maxBufferMB: null },
+        gpu: {
+          supported: false,
+          vendor: null,
+          architecture: null,
+          maxBufferMB: null,
+        },
         deviceClass: "unknown",
       },
     });
@@ -165,7 +183,6 @@ describe("useModelSelectionFlowState", () => {
     mockGetSecretVault.mockReturnValue(mockSecretVault);
     mockHasServerLLMAccessKey.mockReturnValue(false);
 
-    // Reset preferences to defaults
     mockPreferences.hasEnabledLocalModels = false;
     mockPreferences.lastModelId = null;
     mockPreferences.autoLoadEnabled = false;
@@ -173,7 +190,7 @@ describe("useModelSelectionFlowState", () => {
     mockPreferences.rememberApiKey = false;
     mockPreferences.skipAiSetup = false;
     mockPreferences.rememberChoice = false;
-    mockGetModelPreferences.mockReturnValue(mockPreferences);
+    mockGetModelPreferences.mockReturnValue(() => ({ ...mockPreferences }));
     mockCreateApiKeyManager.mockResolvedValue(mockApiKeyManager);
     mockIsModelVerified.mockReturnValue(false);
 
@@ -194,12 +211,13 @@ describe("useModelSelectionFlowState", () => {
     mockSecretVault.store.mockClear();
     mockSecretVault.retrieve.mockClear();
     mockSecretVault.destroy.mockClear();
-    mockGpuDetector.isSupported.mockClear();
+    mockGpuDetector.isSupported.mockReturnValue(false);
     mockGpuDetector.detect.mockClear();
     mockHwProfiler.profile.mockClear();
   });
 
   afterEach(() => {
+    vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
 
@@ -274,7 +292,10 @@ describe("useModelSelectionFlowState", () => {
       });
 
       assert.strictEqual(result.current[0].state, "model_downloading");
-      assert.strictEqual(result.current[0].selectedModelId, DomainModelId.QWEN3_8B);
+      assert.strictEqual(
+        result.current[0].selectedModelId,
+        DomainModelId.QWEN3_8B,
+      );
       assert.strictEqual(result.current[0].rememberedChoice, true);
       assert.strictEqual(result.current[0].generationProgress, 0);
     });
@@ -405,7 +426,10 @@ describe("useModelSelectionFlowState", () => {
         selectLocalModel(DomainModelId.QWEN3_8B, true);
       });
       assert.strictEqual(result.current[0].state, "model_downloading");
-      assert.strictEqual(result.current[0].selectedModelId, DomainModelId.QWEN3_8B);
+      assert.strictEqual(
+        result.current[0].selectedModelId,
+        DomainModelId.QWEN3_8B,
+      );
       assert.strictEqual(result.current[0].rememberedChoice, true);
       assert.ok(
         mockSaveModelPreferences.mock.calls.some(
@@ -418,7 +442,10 @@ describe("useModelSelectionFlowState", () => {
       await act(async () => {
         selectLocalModel(DomainModelId.LLAMA_3_2_3B, false);
       });
-      assert.strictEqual(result.current[0].selectedModelId, DomainModelId.LLAMA_3_2_3B);
+      assert.strictEqual(
+        result.current[0].selectedModelId,
+        DomainModelId.LLAMA_3_2_3B,
+      );
       assert.strictEqual(result.current[0].rememberedChoice, false);
       assert.ok(
         !mockSaveModelPreferences.mock.calls.some(
