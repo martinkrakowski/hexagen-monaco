@@ -265,7 +265,7 @@ describe("useModelSelectionFlowState", () => {
       assert.strictEqual(result.current[0].state, "model_selection");
     });
 
-    it("should transition model_selection → model_downloading (user selects model)", async () => {
+    it("selecting a model moves to model_downloading", async () => {
       const { result } = await renderFlowState();
       const { selectLocalModel } = result.current[1];
 
@@ -344,7 +344,7 @@ describe("useModelSelectionFlowState", () => {
       assert.strictEqual(result.current[0].error, null);
     });
 
-    it("should transition to interrupted state (user cancels download)", async () => {
+    it("canceling model download sets interrupted state", async () => {
       const { result } = await renderFlowState();
       const { cancelModelDownload } = result.current[1];
 
@@ -386,11 +386,14 @@ describe("useModelSelectionFlowState", () => {
 
       // Valid format → true (after 500ms async validation delay)
       vi.useFakeTimers();
-      const validPromise = validateApiKey("openai", "sk-valid-key-123");
-      await vi.advanceTimersByTimeAsync(500);
-      const validResult = await validPromise;
-      assert.strictEqual(validResult, true);
-      vi.useRealTimers();
+      try {
+        const validPromise = validateApiKey("openai", "sk-valid-key-123");
+        await vi.advanceTimersByTimeAsync(500);
+        const validResult = await validPromise;
+        assert.strictEqual(validResult, true);
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it("should select local model with remember=true/false", async () => {
@@ -452,7 +455,11 @@ describe("useModelSelectionFlowState", () => {
 
       assert.strictEqual(result.current[0].state, "idle");
       assert.strictEqual(result.current[0].aiSetupSkipped, true);
-      assert.ok(mockSaveModelPreferences.mock.calls.length > 0);
+      assert.ok(
+        mockSaveModelPreferences.mock.calls.some(
+          (call) => call[0]?.skipAiSetup === true,
+        ),
+      );
     });
 
     it("should clear error and return to idle", async () => {
