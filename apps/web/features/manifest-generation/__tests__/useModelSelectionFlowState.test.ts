@@ -234,36 +234,23 @@ describe("useModelSelectionFlowState", () => {
       assert.strictEqual(result.current[0].isModelReady, false);
     });
 
-    it("should detect unsupported WebGPU and transition to unsupported", async () => {
+    it("records isWebGPUSupported=false in hardwareCapabilities when WebGPU is unavailable", async () => {
       const { result } = await renderFlowState();
-      // The hook records hardware capabilities but does NOT transition
-      // state to "unsupported" — it stays "idle" and sets the flag below.
-      assert.strictEqual(result.current[0].state, "idle");
       assert.strictEqual(
         result.current[0].hardwareCapabilities?.isWebGPUSupported,
         false,
       );
     });
 
-    it("should set webgpu_unavailable error code when WebGPU is not supported", async () => {
+    it("leaves state idle and sets no error code when WebGPU is unavailable (see #766)", async () => {
       const { result } = await renderFlowState();
-      // The hook does NOT set errorCode to "webgpu_unavailable"; no effect
-      // in useModelSelectionFlowEffects assigns it based on GPU detection.
-      // This test is restored to assert the real behaviour: errorCode is
-      // left unset (null) after mount with an unsupported detector.
       assert.strictEqual(result.current[0].state, "idle");
       assert.strictEqual(result.current[0].errorCode, undefined);
-      assert.strictEqual(
-        result.current[0].hardwareCapabilities?.isWebGPUSupported,
-        false,
-      );
     });
 
-    // DELETED: "should detect unsupported WebGPU and transition to unsupported"
-    // — the hook's effects never transition to the "unsupported" state on
-    //   WebGPU-failure; they only set hardwareCapabilities.isWebGPUSupported=false.
-    // DELETED: "should set webgpu_unavailable error code when WebGPU is not supported"
-    // – no code path assigns errorCode:"webgpu_unavailable" from detection.
+    it.todo(
+      "should transition to unsupported with errorCode webgpu_unavailable when WebGPU is unavailable (#766)",
+    );
   });
 
   describe("State Transitions", () => {
@@ -369,11 +356,6 @@ describe("useModelSelectionFlowState", () => {
       assert.strictEqual(result.current[0].isModelReady, false);
       assert.ok(mockCancelDownload.mock.calls.length > 0);
     });
-
-     // DELETED-CANNOT-ASSERT: "should transition to unsupported state (WebGPU not available)"
-    // — no production code path sets flowState.state="unsupported" from gpuDetection.
-    //   The hook records hardwareCapabilities.isWebGPUSupported=false but stays "idle".
-    //   Restored as a guard: it asserts the REAL behaviour (no unsupported transition).
 
     it("should regenerate manifest transitioning to generating", async () => {
       const { result } = await renderFlowState();
