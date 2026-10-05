@@ -132,8 +132,8 @@ describe("scanSpecifiers", () => {
 
 describe("scanSpecifiers: hostile and JSX input", () => {
   it("stays linear on a failed-regex pattern (F1)", () => {
-    // Scale-relative, so a loaded CI machine does not fail it: 8x the input costs
-    // about 8x when linear and about 64x when quadratic. Best-of-N samples for
+    // Scale-relative, so a loaded CI machine does not fail it: 64x the input costs
+    // about 64x when linear and about 4096x when quadratic. Best-of-N samples for
     // both arms flatten the load spikes a shared runner imposes.
     const time = (kib: number): number => {
       const input = "/[".repeat((kib * 1024) / 2);
@@ -144,9 +144,9 @@ describe("scanSpecifiers: hostile and JSX input", () => {
     const best = (kib: number, n: number): number =>
       Math.min(...Array.from({ length: n }, () => time(kib)));
     const small = best(16, 5);
-    const large = best(128, 5);
-    // 8x input: linear ~8x, quadratic ~64x — 40 fails on regression, not on load.
-    expect(large / small).toBeLessThan(40);
+    const large = best(1024, 5); // 16 KiB vs 1 MiB = 64x size ratio
+    // 64x input: linear ~64x, quadratic ~4096x — bound is 4 * 64 = 256.
+    expect(large / small).toBeLessThan(4 * 64);
     // Correctness for the full 1 MiB, not an ms ceiling: that flakes on load.
     expect(scanSpecifiers("/[".repeat(512 * 1024))).toEqual([]);
   });
