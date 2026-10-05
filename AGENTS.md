@@ -88,6 +88,8 @@ yarn vitest run <path-to-file>.test.ts
 | Before committing                                          | `yarn test`                                 | Diagnose — never skip tests                    |
 | Before consuming another package's `dist` (local worktree) | `yarn turbo build --filter=<pkg> --force`   | Stale `dist` lies — rebuild before trusting it |
 
+Sync's contract suites run under the `test:contract` turbo task (or `yarn test:all`); the default `test` excludes them so they no longer starve the unit suites.
+
 **Clean CI simulation:**
 
 ```bash
