@@ -369,9 +369,17 @@ describe("useModelSelectionFlowState", () => {
       const { result } = await renderFlowState();
       const { validateApiKey } = result.current[1];
 
-      // NOTE: Full API key validation testing requires DI environment
-      // Test validates validateApiKey function exists and is callable
-      assert.ok(typeof validateApiKey === "function");
+      // Invalid format (missing sk- prefix) → false
+      const invalidResult = await validateApiKey("openai", "bad-key");
+      assert.strictEqual(invalidResult, false);
+
+      // Valid format → true (after 500ms async validation delay)
+      vi.useFakeTimers();
+      const validPromise = validateApiKey("openai", "sk-valid-key-123");
+      await vi.advanceTimersByTimeAsync(500);
+      const validResult = await validPromise;
+      assert.strictEqual(validResult, true);
+      vi.useRealTimers();
     });
 
     it("should select local model with remember=true/false", async () => {
@@ -479,11 +487,10 @@ describe("useModelSelectionFlowState", () => {
         await selectCloudProvider("openai", "bad-key", false);
       });
 
-      // Verify error state exists
-      assert.ok(
-        result.current[0].errorCode === undefined ||
-          typeof result.current[0].errorCode === "string",
-      );
+      assert.strictEqual(result.current[0].state, "error");
+      assert.strictEqual(result.current[0].errorCode, "key_invalid_format");
+      assert.strictEqual(result.current[0].cloudProvider, "openai");
+      assert.strictEqual(result.current[0].cloudApiKey, "bad-key");
     });
   });
 });
