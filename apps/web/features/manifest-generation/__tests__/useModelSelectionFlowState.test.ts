@@ -111,7 +111,7 @@ import assert from "node:assert";
 import { renderHook, act } from "@testing-library/react";
 import { useModelSelectionFlowState } from "../ModelSelectionFlow/useModelSelectionFlowState";
 import type { LocalLLMContext } from "../../../lib/llm-interfaces";
-import { createLLMEngineState, type LLMEngineState } from "@hexagen/local-llm";
+import { createLLMEngineState, type LLMEngineState, DomainModelId } from "@hexagen/local-llm";
 
 describe("useModelSelectionFlowState", () => {
   let mockEngineState: LLMEngineState;
@@ -232,22 +232,11 @@ describe("useModelSelectionFlowState", () => {
       assert.strictEqual(result.current[0].isModelReady, false);
     });
 
-    it("should detect unsupported WebGPU and transition to unsupported", async () => {
-      // NOTE: WebGPU detection testing requires mock.module support
-      // Test validates hook initialization and state structure
-      const { result } = await renderFlowState();
-      assert.ok(typeof result.current[0].state === "string");
-    });
-
-    it("should set webgpu_unavailable error code when WebGPU is not supported", async () => {
-      // NOTE: WebGPU error code assignment requires mock environment
-      // Test validates error code property structure
-      const { result } = await renderFlowState();
-      assert.ok(
-        result.current[0].errorCode === undefined ||
-          typeof result.current[0].errorCode === "string",
-      );
-    });
+    // DELETED: "should detect unsupported WebGPU and transition to unsupported"
+    // — the hook's effects never transition to the "unsupported" state on
+    //   WebGPU-failure; they only set hardwareCapabilities.isWebGPUSupported=false.
+    // DELETED: "should set webgpu_unavailable error code when WebGPU is not supported"
+    // – no code path assigns errorCode:"webgpu_unavailable" from detection.
   });
 
   describe("State Transitions", () => {
@@ -259,107 +248,112 @@ describe("useModelSelectionFlowState", () => {
         transitionTo("model_selection");
       });
 
-      // NOTE: Full state transition testing requires DI environment
-      // Test validates transitionTo function exists and is callable
-      assert.ok(typeof transitionTo === "function");
+      assert.strictEqual(result.current[0].state, "model_selection");
     });
 
     it("should transition model_selection → model_downloading (user selects model)", async () => {
       const { result } = await renderFlowState();
-      const { transitionTo } = result.current[1];
+      const { selectLocalModel } = result.current[1];
 
-      // NOTE: Full model selection requires proper DI and async setup
-      // Test validates hook provides expected structure
-      act(() => {
-        transitionTo("model_selection");
+      await act(async () => {
+        selectLocalModel(DomainModelId.QWEN3_8B, true);
       });
 
-      // Verify hook has the action function
-      assert.ok(typeof result.current[1] === "object");
+      assert.strictEqual(result.current[0].state, "model_downloading");
+      assert.strictEqual(result.current[0].selectedModelId, DomainModelId.QWEN3_8B);
+      assert.strictEqual(result.current[0].rememberedChoice, true);
+      assert.strictEqual(result.current[0].generationProgress, 0);
     });
 
     it("should transition model_downloading → generating (model ready)", async () => {
+      llmContext = {
+        ...llmContext,
+        engineState: createLLMEngineState("ready", 100, DomainModelId.QWEN3_8B),
+      };
+      mockIsModelVerified.mockReturnValue(true);
       const { result } = await renderFlowState();
+      assert.strictEqual(result.current[0].state, "idle");
 
-      // NOTE: Full state transitions require DI initialization
-      // Test validates hook state structure
-      assert.ok(typeof result.current[0].state === "string");
+      const { selectLocalModel } = result.current[1];
+      await act(async () => {
+        selectLocalModel(DomainModelId.QWEN3_8B, false);
+      });
+
+      assert.strictEqual(result.current[0].state, "generating");
+      assert.strictEqual(result.current[0].isModelReady, true);
     });
 
     it("should transition model_downloading → error (download fails)", async () => {
+      mockInitializeModel.mockRejectedValue(new Error("Download failed"));
+      llmContext = { ...llmContext, initializeModel: mockInitializeModel };
       const { result } = await renderFlowState();
+      const { selectLocalModel } = result.current[1];
 
-      // NOTE: Error transitions require DI with proper mocks
-      // Test validates hook structure
-      assert.ok(
-        result.current[0].error === undefined ||
-          result.current[0].error === null ||
-          typeof result.current[0].error === "string",
-      );
+      await act(async () => {
+        selectLocalModel(DomainModelId.QWEN3_8B, true);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+
+      assert.strictEqual(result.current[0].state, "error");
+      assert.strictEqual(result.current[0].error, "Download failed");
     });
 
     it("should transition generating → error (generation fails)", async () => {
       const { result } = await renderFlowState();
-      const { setError } = result.current[1];
+      const { transitionTo, setError } = result.current[1];
+
+      act(() => {
+        transitionTo("generating");
+      });
+      assert.strictEqual(result.current[0].state, "generating");
 
       act(() => {
         setError("Generation failed");
       });
-
-      // Verify error handling capability
-      assert.ok(typeof setError === "function");
+      assert.strictEqual(result.current[0].state, "error");
+      assert.strictEqual(result.current[0].error, "Generation failed");
     });
 
     it("should transition error → idle (user retries)", async () => {
       const { result } = await renderFlowState();
       const { setError, retryGeneration } = result.current[1];
 
-      // First go to error state
       act(() => {
         setError("Error occurred");
       });
+      assert.strictEqual(result.current[0].state, "error");
 
-      // Retry back to idle
       act(() => {
         retryGeneration();
       });
-
-      // Verify retry function exists
-      assert.ok(typeof retryGeneration === "function");
+      assert.strictEqual(result.current[0].state, "idle");
+      assert.strictEqual(result.current[0].error, null);
     });
 
     it("should transition to interrupted state (user cancels download)", async () => {
       const { result } = await renderFlowState();
       const { cancelModelDownload } = result.current[1];
 
-      // NOTE: Full cancel flow requires DI and async operations
-      // Test validates cancelModelDownload function exists and is callable
-      assert.ok(typeof cancelModelDownload === "function");
-
       act(() => {
         cancelModelDownload();
       });
 
-      // Verify function was callable
+      assert.strictEqual(result.current[0].state, "interrupted");
+      assert.strictEqual(result.current[0].isModelReady, false);
       assert.ok(mockCancelDownload.mock.calls.length > 0);
     });
 
-    it("should transition to unsupported state (WebGPU not available)", async () => {
-      // NOTE: WebGPU state testing requires mock environment
-      const { result } = await renderFlowState();
-      act(() => {});
-      // Verify state property exists
-      assert.ok(typeof result.current[0].state === "string");
-    });
+    // DELETED: "should transition to unsupported state (WebGPU not available)"
+    // — the hook does not transition to "unsupported" based on WebGPU detection.
 
     it("should regenerate manifest transitioning to generating", async () => {
       const { result } = await renderFlowState();
       const { setError, regenerateManifest } = result.current[1];
 
-      // Regenerate is reached from the inline error / retry paths
       act(() => {
         setError("Generation failed");
       });
+      assert.strictEqual(result.current[0].state, "error");
 
       act(() => {
         regenerateManifest();
