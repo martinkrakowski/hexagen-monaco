@@ -7,7 +7,7 @@ on:
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
-# Both jobs only read the repo (checkout with persist-credentials: false) and
+# All jobs only read the repo (checkout with persist-credentials: false) and
 # publish nothing — pin the GITHUB_TOKEN to read-only instead of inheriting
 # the repository default (same pattern as lint.yml / capstone.yml).
 permissions:
@@ -160,8 +160,8 @@ jobs:
         # Isolate the spawn-heavy contract suites (__tests__/contract/**) onto
         # their own runner: they spawn the built CLI and run real git/fs work,
         # which starved the unit suites in `verify-sync`. `test:contract` builds
-        # the package first, so this job runs in parallel with `verify-sync`; it
-        # is required alongside it, so no suite is dropped — only relocated.
+        # the package first, so this job runs in parallel with `verify-sync`; every
+        # PR runs both jobs, so no suite is dropped — only relocated.
         run: yarn turbo run test:contract --filter=@hexagen/sync --output-logs=full --log-order=stream
 
   # Windows leg — enforcement plan P3.1, scope decided by D-1 (accepted
