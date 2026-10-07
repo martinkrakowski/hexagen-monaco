@@ -23,6 +23,51 @@ describe("cleanText", () => {
   });
 });
 
+describe("cleanText and invisible Unicode format characters", () => {
+  // Written with escapes on purpose: the characters under test are invisible,
+  // and a literal one in this file would be the very thing the function stops.
+  it("strips every bidirectional control, so text is shown in the order it is stored", () => {
+    const controls = [
+      "\u202a",
+      "\u202b",
+      "\u202c",
+      "\u202d",
+      "\u202e", // embeddings, pop, overrides
+      "\u2066",
+      "\u2067",
+      "\u2068",
+      "\u2069", // isolates and their pop
+      "\u200e",
+      "\u200f",
+      "\u061c", // direction marks, Arabic letter mark
+    ];
+    for (const c of controls) {
+      expect(cleanText(`a${c}b`)).toBe("ab");
+    }
+    // The "Trojan Source" shape: an override that displays a comment's tail
+    // as if it were code.
+    expect(cleanText("if (ok) { /* \u202e } \u2066 */")).toBe(
+      "if (ok) { /*  }  */",
+    );
+  });
+
+  it("strips zero-width characters, so two different names cannot look the same", () => {
+    for (const c of ["\u200b", "\u200c", "\u200d", "\u2060", "\ufeff"]) {
+      expect(cleanText(`pay${c}load`)).toBe("payload");
+    }
+  });
+
+  it("keeps visible non-ASCII text, including right-to-left letters themselves", () => {
+    const t =
+      "caf\u00e9 \u05e9\u05dc\u05d5\u05dd \u0645\u0631\u062d\u0628\u0627 \u65e5\u672c \u{1f600}";
+    expect(cleanText(t)).toBe(t);
+  });
+
+  it("applies to the CRLF-keeping variant too", () => {
+    expect(cleanTextKeepingCrlf("a\u202eb\r\nc\u200bd")).toBe("ab\r\ncd");
+  });
+});
+
 describe("cleanTextKeepingCrlf", () => {
   it("keeps CRLF line endings", () => {
     expect(cleanTextKeepingCrlf("a\r\nb\r\n")).toBe("a\r\nb\r\n");
