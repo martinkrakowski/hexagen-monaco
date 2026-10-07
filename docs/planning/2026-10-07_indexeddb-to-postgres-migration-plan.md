@@ -116,11 +116,12 @@ Sizes: S is up to half a day, M up to two days, L more. Each packet is one lane 
 
 **B0. Backups and a restore drill, on SQLite, before anything else** · S
 The ETL in B4 is only reversible if the SQLite files it reads can be restored. Add a scheduled online backup of the three files to somewhere off the volume, for production and staging, and restore one into a scratch container. The image has no `sqlite3` binary, so the backup is `better-sqlite3`'s own `.backup()` run with `node`.
-_Done when:_ a restore from last night's backup serves a signed-in user's project list.
+_Done when:_ each of the three files is restored from last night's backup and checked on its own data: `platform.db` serves a signed-in user's project list, `byok.db` returns a known key's metadata and revocation state, and `quota.db` returns a known session's count for the day.
 
 **B1. Async store contracts and a connection seam, still on SQLite** · L
 Make every method in the sync rows of §2.2 return a promise, and port the roughly 20 files that call `getPlatformStore()`. Replace the `Database.Database` parameter in each store factory with a small interface the platform owns (`query`, `execute`, `transaction(async fn)`), implemented first over `better-sqlite3`. Move the two cross-store helpers onto the transaction object so they no longer depend on a shared connection.
-_Done when:_ the roughly 40 existing store and route test files pass unchanged in behaviour; a test asserts each interface method returns a `Promise`.
+_The SQLite side of `transaction(async fn)` cannot be `better-sqlite3`'s own `db.transaction`:_ that commits when the callback returns, so work after the first `await` would run outside the transaction and a later failure could not roll it back. On SQLite the seam issues `BEGIN IMMEDIATE`, awaits the callback, then `COMMIT` or `ROLLBACK`, and runs one transaction at a time on the single connection.
+_Done when:_ the roughly 40 existing store and route test files pass unchanged in behaviour; a test asserts each interface method returns a `Promise`; a transaction whose callback rejects after an `await` leaves no row behind, on SQLite, and fails if the seam is switched to `db.transaction`.
 _Not included:_ `QuotaStore`. `apps/web/lib/enforce-quota.ts:59` calls `consume()` synchronously and ADR-0063 freezes that file. See D-7.
 
 **B2. Postgres implementation, a migration runner, and one contract suite for both backends** · L
@@ -144,7 +145,7 @@ _Done when:_ a two-writer test against a real Postgres server shows exactly one 
 
 **B4. ETL and cutover** · M
 A script reads the SQLite files read-only and writes through the store interfaces into Postgres, so it is exercised by the B2 suite. It is idempotent. Staging first, then production inside a write freeze.
-_Done when:_ per-table row counts match and are printed in the pull request; one signed-in user's project list is byte-identical before and after; the SQLite files are kept read-only for 30 days.
+_Done when:_ for every table, the set of primary keys matches and a hash of each row's canonical content matches (types normalised per D-5 before hashing), with the per-table counts and mismatch counts printed in the pull request; as a smoke test on top, one signed-in user's project list is byte-identical before and after; the SQLite files are kept read-only for 30 days.
 _The way back:_ those files hold nothing written after the cutover. Returning to SQLite after users have written to Postgres needs a reverse export, written and rehearsed as part of this packet, or the cutover is accepted as one-way. That is decision D-13.
 
 **B5. Scan artifacts** · S
@@ -154,7 +155,7 @@ The files under `/data/scan-artifacts` are not rows and are not moved by B4. The
 
 **A0. Allow-list test for storage keys** · S
 A test that finds every storage key literal in the app and the three packages that persist, and requires each to be in a `DATA_KEYS` list (must have a server store when this plan is done) or a `PREFERENCE_KEYS` list (stays local).
-_Done when:_ adding a new `localStorage.setItem` key anywhere turns it red.
+_Done when:_ the test first fails if its scan finds no keys at all, or fewer than the keys of §2.1; then adding a new `localStorage.setItem` key anywhere turns it red.
 
 **A1. Scope the keys before moving them** · M
 Fix what §2.1 found, in the browser, first: chat history keyed by owner (and by project, per D-8); governance threads keyed by project; generation results keyed by project id; `purgeProjectData` (its `purgeProjectDataAtomic` helper) matching the keys the app really writes. The chat part waits on D-8; the rest needs no decision. Moving unscoped data to a server keyed by owner would turn "one browser's chat" into "the account's chat" by accident.
