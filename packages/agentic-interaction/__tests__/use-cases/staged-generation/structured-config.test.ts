@@ -236,17 +236,26 @@ test("parseStructuredConfig: large input scales linearly below a generous ratio"
   };
   const best = (chars: number, n: number): number =>
     Math.min(...Array.from({ length: n }, () => timeParse(chars)));
-  const small = best(50_000, 5);
-  const large = best(3_200_000, 5); // 50 000 vs 3 200 000 = 64x size ratio
+  // Both sizes are large enough to take milliseconds. With a 50 000-character
+  // baseline the small parse took under half a millisecond on a shared CI
+  // runner (0.44 ms), so timer resolution and warm-up decided the ratio, not
+  // the parser: a linear parser measured 434x for a 64x input and failed.
+  const SMALL = 400_000;
+  const LARGE = 3_200_000;
+  const sizeRatio = LARGE / SMALL; // 8
+  timeParse(SMALL); // warm-up, not measured
+  const small = best(SMALL, 5);
+  const large = best(LARGE, 5);
   // Correctness on the large input is preserved from the original assertion.
   assert.strictEqual(
-    parseStructuredConfig(makeYaml(3_200_000)).bounded_contexts.length,
+    parseStructuredConfig(makeYaml(LARGE)).bounded_contexts.length,
     1,
   );
-  // 64x input: linear ~64x, quadratic ~4096x — bound is 4 * 64 = 256.
+  // 8x input: linear ~8x, quadratic ~64x. The bound sits between them, at 4x
+  // the linear expectation (32), so a quadratic parser still fails.
   assert.ok(
-    large / small < 4 * 64,
-    `parse ratio ${large / small} >= 4 * 64 (small=${small}ms, large=${large}ms)`,
+    large / small < 4 * sizeRatio,
+    `parse ratio ${large / small} >= ${4 * sizeRatio} (small=${small}ms, large=${large}ms)`,
   );
 });
 
