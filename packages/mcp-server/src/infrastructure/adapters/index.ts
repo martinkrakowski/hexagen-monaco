@@ -2,6 +2,7 @@
 
 export * from "./audit-boundaries-tool.adapter.js";
 export * from "./governance-read.adapter.js";
+export * from "./grant-signature.adapter.js";
 export * from "./graph-resource.adapter.js";
 export * from "./in-memory-event-bus.adapter.js";
 export * from "./linter-report-resource.adapter.js";
@@ -14,7 +15,9 @@ export * from "./manifest-write.adapter.js";
 export * from "./mcp-server.adapter.js";
 export * from "./mcp-server.types.js";
 export * from "./project-configuration-read.adapter.js";
+export * from "./proposal-workspace.adapter.js";
 export * from "./report-governance.adapter.js";
 export * from "./resources/index.js";
 export * from "./sync-engine.adapter.js";
 export * from "./tools/index.js";
+export * from "./trace-write.adapter.js";
