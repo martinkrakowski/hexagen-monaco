@@ -1,4 +1,12 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
+
+// The real reader, wrapped so a single call can be made to reject: the
+// fallback's failure path is otherwise unreachable from a test.
+vi.mock("../bundle/read-bundle", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../bundle/read-bundle")>();
+  return { ...actual, readBundle: vi.fn(actual.readBundle) };
+});
+
 import { readBundle } from "../bundle/read-bundle";
 import {
   readBundleOffThread,
@@ -140,6 +148,42 @@ describe("readBundleOffThread", () => {
     const out = await readBundleOffThread(data, undefined, () => worker);
 
     expect(out).toBe(result);
+    expect(worker.terminateCount).toBe(1);
+  });
+
+  it("h. a main-thread read that REJECTS after a worker error rejects the call, and the worker is terminated", async () => {
+    const data = await buildBundle();
+    const worker = new FakeWorker((self) => self.emitError());
+    vi.mocked(readBundle).mockRejectedValueOnce(new Error("boom"));
+
+    await expect(
+      readBundleOffThread(data, undefined, () => worker),
+    ).rejects.toThrow("boom");
+    expect(worker.terminateCount).toBe(1);
+  });
+
+  it("i. with no worker at all, a rejecting read rejects the call instead of never settling", async () => {
+    const data = await buildBundle();
+    vi.mocked(readBundle).mockRejectedValueOnce(new Error("boom"));
+
+    await expect(
+      readBundleOffThread(data, undefined, () => {
+        throw new Error("no worker");
+      }),
+    ).rejects.toThrow("boom");
+  });
+
+  it("j. a postMessage that throws falls back to the main-thread result", async () => {
+    const data = await buildBundle();
+    const expected = await readBundle(data);
+    const worker = new FakeWorker();
+    worker.postMessage = () => {
+      throw new Error("DataCloneError");
+    };
+
+    const out = await readBundleOffThread(data, undefined, () => worker);
+
+    expect(out).toEqual(expected);
     expect(worker.terminateCount).toBe(1);
   });
 });
