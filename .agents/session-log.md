@@ -602,3 +602,112 @@ in a row with that gap.
 - **A `follow` started after the lane went idle reports a stall.** No allowed endpoint gives
   the session's current status.
 - **#723: the `AIGenerationPage.workbench` flake.**
+
+---
+
+## Wave 6 — brownfield carry-forward, first lanes in the project's own lane container (2026-10-07)
+
+Out of order on purpose: the records for the brownfield workbook wave (`brownfield-workbook-w03`,
+#722–#743) and the kit wave (`kit-plans-w05`, #745–#765) are still missing. This record does not
+replace them.
+
+### What merged
+
+| PR   | Squash     | What                                                                          | Made by                                            |
+| ---- | ---------- | ----------------------------------------------------------------------------- | -------------------------------------------------- |
+| #769 | `5dee2cad` | Scaling test for `parseStructuredConfig` measures inputs large enough to time | orchestrator                                       |
+| #768 | `28679be2` | `cleanText` strips bidirectional controls and zero-width characters           | orchestrator                                       |
+| #770 | `3c85256a` | Missing exports in two `@generated` mcp-server barrels                        | lane (edits), orchestrator (commit)                |
+| #771 | `89f3127c` | Brownfield viewer reads a bundle in a Web Worker; reads can be aborted        | lane (first commit), orchestrator (two fix rounds) |
+
+#769 came first because `main` had been red since 2026-10-05 on that one test, and every pull
+request inherited the failure. The old test divided a 189 ms parse by a 0.44 ms one on a shared
+runner and compared the ratio with 256.
+
+### What changed in how a lane is run
+
+- **Lanes now run in the project's own lane container**, not on the shared server. A lane sees
+  only this repository's clone and its own worktrees folder, and reaches the model through a
+  host-side key proxy. The container holds no provider key.
+- **Verification moved off the orchestrator's laptop** to a separate verification host that holds
+  no credentials and never pushes. One script runs install, build, `typecheck`, `typecheck:test`,
+  lint, a format check of the changed files and the tests, for the packages named.
+- **The brief lives at `.lane/brief.md`** in the worktree. `.agents/briefs/` is not ignored in
+  this repository, and a brief outside an ignored path would be committed by the lane.
+- **The orchestrator runs the install and a dependency pre-build before dispatch.** A lane that
+  installs for itself spends steps and reports failures badly.
+- **A lane commits by itself with a plain `git commit`.** No hook is installed in the lane
+  host's clone (Yarn 4 does not run the `prepare` script on install, so husky is never activated
+  there). See "Defects found in the plan" for how this was first got wrong.
+
+### What the review layer bought
+
+- **#771, the orchestrator's own read of the lane's diff:** when the worker failed and the
+  main-thread fallback then rejected, the promise never settled. The page would have stayed on
+  "Reading" with no error. Fixed with three tests; with the fix reverted two of them time out.
+- **#771, bots (qodo, PR-Agent):** a second file choice left the first worker running to the
+  end, holding its copy of the bytes; a failed worker kept running beside the fallback read.
+  Both accepted. The read now takes an `AbortSignal`.
+- **#768 and #770:** no bot findings.
+
+No model review pass was spent on any of the four.
+
+### What was refuted, and why
+
+- **PR-Agent on #771, "add a 5 s timeout to the worker."** A 256 MiB bundle on a slow machine
+  legitimately takes longer, so a fixed limit refuses valid input. A worker that never answers
+  is the same hang the main-thread read had before.
+
+### Defects found in the plan, not the code
+
+- **The first brief told the lane to commit with `--no-verify`.** The lane agent's rules deny
+  that flag, so the lane stopped with its files edited and the orchestrator committed for it
+  (#770). The brief assumed the pre-commit hook would run on the lane host. It does not: a
+  commit there takes 0.2 s and runs nothing. A lane-host branch for `.husky/pre-commit` was
+  written, tested by a real commit in the container, found to be unnecessary, and dropped.
+- **The verification script ran `typecheck` and `typecheck:test` in one turbo invocation.**
+  `@hexagen/sync`'s own build was rewritten while its test sources, which import the package by
+  name, were typechecked: a false "cannot find module". CI runs them as two steps; so does the
+  script now.
+- **A lane edited `src` and ran the package's tests without rebuilding.** The mcp-server
+  end-to-end test asserts that `dist` is not older than `src` and failed inside the container.
+  It passes wherever the package is built first.
+
+### Verified outside CI
+
+- **The worker is in the production build** (#771): the brownfield page chunk constructs
+  `new Worker(new URL(<chunk>))`, and that chunk holds the worker's message handler.
+- **Two lane containers on one bridge cannot reach each other**, probed from each side: ping
+  gets no reply and TCP connections time out.
+- **The lane host crashed and rebooted itself during this wave** (a kernel fault in a graphics
+  driver, not caused by a lane). For the first minutes of that boot the storage pool was up with
+  one of its three disks missing, and this repository's clone read as "not a git repository".
+  Nothing was written during the gap. The orchestrator now checks that all three disks are
+  mounted before any command that writes to the pool.
+
+### Runs per seat
+
+| seat                              | runs                                                | measured     |
+| --------------------------------- | --------------------------------------------------- | ------------ |
+| Poolside Laguna S 2.1 (`lane`)    | 2 lanes (18 and 42 steps), plus one read-only smoke | not recorded |
+| Fable (one script review, 1 pass) | the container build scripts, outside this repo      | not recorded |
+
+Costs were not written into an events file: these lanes were not run through the wave tooling,
+which has not yet been pointed at the container's port. That makes four waves without them.
+
+### Deferred
+
+- **Records for the workbook wave and the kit wave.**
+- **Run the wave tooling (events, the status push) against the container.**
+- **`sync --check` in CI.** #770 fixed two drifted `@generated` files by hand; nothing stops the
+  next drift.
+- **A structured `kind` on `grant_denied`** in the trace, and **the denial counts that disagree**
+  between the evidence pack and the viewer's left rail. Both need an owner decision first.
+- **A shared schema for `verdicts.json`.**
+- **The viewer's fallback is silent** (#771): a broken worker would put every user back on the
+  blocking read with nothing reporting it.
+- **`cleanText` strips where it could mark** (#768): a reviewer cannot see that a file held a
+  bidirectional override.
+- **The pre-commit hook fails on a developer machine** that has a `packages/sync/publish/`
+  folder: the package's generated lint config does not ignore it.
+- **The arch-linter tarball ships a `tsbuildinfo` file.**
