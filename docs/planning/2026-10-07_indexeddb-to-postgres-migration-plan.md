@@ -1,0 +1,262 @@
+# IndexedDB to Postgres: migration plan
+
+**Date:** 2026-10-07
+**Status:** plan only. Merging this document adopts nothing. Every row in §8 is an open decision until the owner answers it; the recommendations are the author's.
+**Baseline:** `origin/main` @ `04458ec4`. Every file and line reference below was read at that commit.
+**Input:** the owner's instruction, "write a migration plan for IndexedDB to Postgres".
+**Supersedes in part:** `2026-08-23-client-storage-to-server-plan.md` (packets P1.0 to P1.7) and the database tier of `2026-08-23-gcp-migration-plan.md` (packets G2.1, G2.2, G2.4). §3 says which of their packets landed, which this plan carries forward, and which it drops.
+
+## 1. What the ask means in this codebase
+
+The browser does not talk to a database, and most of what users think of as "their projects in IndexedDB" already left it. So the instruction resolves into two moves that share one destination.
+
+- **Move A, browser to server.** The data that still lives only in a browser (editor buffers, chat threads, drafts, canvas layout) gets a server store and follows the account.
+- **Move B, SQLite to Postgres.** Two of the server's three SQLite files (`platform.db` and `byok.db`) become one Postgres database. The third, `quota.db`, stays where it is unless D-7 says otherwise.
+
+Saved projects are the proof that this is the right reading. `apps/web/app/lib/wire.client.ts:136-141` wires `CachedSavedProjectsAdapter(IDBSavedProjectsAdapter, HttpSavedProjectsAdapter)` with the comment "server sqlite is authoritative; IDB is the local cache". The full project body is in `saved_projects.payload` on the server (`apps/web/lib/platform/saved-projects-store.ts:227`). Pointing IndexedDB "at Postgres" therefore means finishing Move A for the remaining stores and doing Move B underneath all of them.
+
+This reading is decision **D-1**. The alternatives are Move B alone (leave browser-only data where it is) or Move A alone (keep SQLite). The plan is written so either half can be taken without the other; §7 gives the order when both are taken.
+
+**What does not move.** Preferences and caches stay in the browser: theme, panel sizes, the last-used model, the model-verification cache, and the local model weights (which are in the Cache API, not IndexedDB). They cost a click to lose and a round-trip to fetch. The August plan made the same call as its D-S1; this plan keeps it and keeps that plan's allow-list test (§6, A0) as the enforcement.
+
+## 2. What exists today
+
+### 2.1 In the browser
+
+All IndexedDB access goes through `idb-keyval`'s default store: one database `keyval-store`, one object store `keyval`. There is no IndexedDB version or upgrade code.
+
+| Store                                            | Contents                                                                             | Server copy today  | Class                                   |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------ | ------------------ | --------------------------------------- |
+| IDB `hexagen:saved-projects`                     | the whole `SavedProject[]` array                                                     | yes, authoritative | mirror of the server                    |
+| IDB `hexagen:workspace:<projectId>`              | `PersistedEditorWorkspace`: full text of every edited generated file, and `unpushed` | none               | **durable, browser-only**               |
+| IDB `hexagen:chat-history`                       | `ChatMessage[]`, one key for the whole origin                                        | none               | **durable, browser-only**               |
+| IDB `hexagen:governance:<contextKey>`            | `GovernanceEntry[]` per question                                                     | none               | **durable, browser-only**               |
+| IDB `hexagen:generation:<name>-<timestamp>`      | a full generated file tree per run                                                   | none               | cache; no reader exists in app code     |
+| IDB `hexagen:wizard-draft:default`               | `WizardDraft`                                                                        | none               | legacy; only a migration step writes it |
+| localStorage `hexagen-brownfield-draft:*`        | `BrownfieldDraft`, 7-day expiry                                                      | none               | **durable, browser-only**               |
+| localStorage `hexagen-canvas-layout-<sessionId>` | node positions                                                                       | none               | **durable, browser-only**               |
+| localStorage `hexagen-active-workspace`          | a copy of form state and manifest                                                    | n/a                | stale duplicate of project data         |
+| localStorage settings, caches, migration flags   | model and AI-setup choices, verification flags                                       | none               | stays local                             |
+| Cache API `webllm/*`                             | model weights, multi-gigabyte                                                        | none               | stays local                             |
+
+Four facts shape Move A.
+
+- **Every durable store already sits behind a port** (`EditorWorkspacePersistencePort`, `ChatPersistencePort`, `CanvasLayoutPersistencePort`, and so on), except the brownfield draft and the active-workspace copy, which React code reads directly.
+- **The lift pattern exists once.** `CachedSavedProjectsAdapter.loadProjects` (`apps/web/app/lib/adapters/http-saved-projects.adapter.ts:385-400`) uploads a browser's projects exactly once, guarded by `project_owner_state.initialized` on the server and by an owner stamp in the browser that stops one account's cache being uploaded as another's.
+- **Keys are not consistently scoped.** Chat history is one key per origin, with no user or project in it. Governance keys carry no project id. Generation keys use the workspace name, not the project id. The cascade delete `purgeProjectData` (`packages/local-llm/src/infrastructure/adapters/idb-chat-persistence.adapter.ts:118-146`) therefore matches only the workspace key of the four shapes it tries to delete.
+- **No secret is persisted in the browser as wired.** The plaintext API key is held in memory only. Two adapters that would persist secrets (`LocalStorageByokStoreAdapter`, `EncryptedSessionVaultAdapter`) are never constructed.
+
+The app does not work signed-out (`apps/web/middleware.ts:145-158`, ADR-0070), so every browser that holds data also has an account to attach it to. That removes the anonymous question the August plan had to carry.
+
+### 2.2 On the server
+
+Three SQLite files, opened with `better-sqlite3`, on one volume mounted at `/data`.
+
+| File          | Holds                                                    | Tables                                                                                                                                                                                                                                                                                        |
+| ------------- | -------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `platform.db` | accounts, tenancy, projects, run history, scans, billing | `users`, `accounts`, `sessions`, `verification_tokens`, `orgs`, `org_members`, `org_invites`, `teams`, `team_members`, `audit_log`, `project_shares`, `saved_projects`, `run_events`, `model_prices`, `project_owner_state`, `entitlements`, `scan_records`, `repair_runs`, `repair_attempts` |
+| `byok.db`     | key metadata and revocations; no ciphertext              | `byok_key_metadata`, `byok_revocations`                                                                                                                                                                                                                                                       |
+| `quota.db`    | free-tier metering keyed by the anonymous session cookie | `quota_usage`                                                                                                                                                                                                                                                                                 |
+
+Scan artifacts are files under `/data/scan-artifacts`, referenced by `scan_records.artifact_path`.
+
+Five facts shape Move B.
+
+- **There is no migration runner.** `openPlatformDb` (`apps/web/lib/platform/platform-db.ts`) runs `CREATE … IF NOT EXISTS` and column-presence probes on every open. The August plans say migrations use `PRAGMA user_version`; the code does not.
+- **Half the store interfaces are synchronous.** `AuthRepository`, `EntitlementRepository`, `RunHistoryRepository`, `ScanRecordsStore`, `RepairTelemetryStore`, `OwnerStateStore`, `QuotaStore` and three methods of `SavedProjectsStore` return values, not promises. The orgs, teams, shares, audit and BYOK stores are already async.
+- **Transactions are synchronous closures over one shared handle.** `db.transaction(fn)` appears in the saved-projects, shares, orgs, teams, scan and quota stores. Two helpers (`prepareAuditAppend`, `prepareShareRevokeAllForProject`) are called inside other stores' transactions and work only because every store holds the same connection.
+- **Two write paths are safe today only because there is one process:** the check-then-insert in `createProjectRecord` (`apps/web/lib/platform/saved-projects-store.ts:307-328`) and the BYOK `write_seq` computed in-statement (`apps/web/lib/byok-store.ts:127,135`). The `rev` check on a project update is a single compare-and-set statement (`saved-projects-store.ts:171-182`) and carries over as it is.
+- **Nothing is backed up.** No backup step exists in `.github/workflows/deploy.yml` or `deploy/docker-compose.prod.yml`. The staging README says "we rely on backups" and describes a manual copy.
+
+The deployment is one container (production: Docker compose on a VPS; staging: one replica on k3s with a `ReadWriteOnce` volume). ADR-0064 line 36 says a Postgres cutover "require[s] amending this ADR first".
+
+## 3. What the August plans already delivered
+
+| August packet                                                      | State at this baseline                                                                                | This plan                                                                                                                                   |
+| ------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| P1.4 `rev` on `saved_projects`, no silent retry                    | landed (#656)                                                                                         | relies on it                                                                                                                                |
+| P1.6 `GET /api/account/export`                                     | landed for projects, runs and entitlement (#653); no browser-only data, because none is on the server | extends it in A4                                                                                                                            |
+| D-S2 anonymous users                                               | closed by ADR-0070 (#661): an account is required                                                     | not reopened                                                                                                                                |
+| P1.0 allow-list test                                               | not built                                                                                             | carried forward as A0                                                                                                                       |
+| P1.1 `owner_documents`, P1.2 routes, P1.3 cached adapters          | not built                                                                                             | carried forward as A1 to A3, with the scoping fixes of §2.1 added and three kinds dropped (`wizard-draft`, `generation`, `monaco`; see D-8) |
+| P1.5 offline outbox (its D-S5 chose the outbox)                    | not built                                                                                             | decision D-9, whose recommendation **reverses D-S5**                                                                                        |
+| D-S4 keep the last 10 generation results per project on the server | not built                                                                                             | **reversed**: D-8 recommends abandoning them, because nothing reads them                                                                    |
+| P1.7 remove dead adapters                                          | not built                                                                                             | carried forward as A5                                                                                                                       |
+| G2.2 async contracts and a `pg` implementation                     | not built                                                                                             | carried forward as B1 and B2                                                                                                                |
+| G2.4 one-shot ETL                                                  | not built                                                                                             | carried forward as B4                                                                                                                       |
+| G2.1 Cloud SQL, G2.5 artifacts to a bucket                         | not built; the hosting move they belong to has not happened                                           | **dropped from this plan.** Where Postgres runs is decision D-3, and this plan is written against a `DATABASE_URL`, not a provider          |
+
+## 4. Target
+
+One Postgres database holds everything `platform.db` and `byok.db` hold today, plus one new table for the browser-only data. The application reaches it through the store interfaces it already has, made async. SQLite remains a supported backend for local development and for the fast unit tests until the owner retires it (D-6).
+
+**The wire format does not change.** A project is the same JSON body, addressed by the same routes, with the same `"rev:<n>"` ETag. Browsers on an old bundle keep working across the cutover.
+
+**The on-disk format does change, once.** Today timestamps are ISO-8601 text in some tables and epoch milliseconds in others, booleans are `0/1` integers, and JSON is text. The Postgres schema is the one chance to choose (D-5).
+
+**New table for Move A**, carried from the August plan with two changes: a `project_id` column, so that a project's deletion reaches its documents, and a shorter list of kinds (the August list also had `wizard-draft`, `generation` and `monaco`, which §8 D-8 proposes to abandon). The key, the kinds and the nullable `project_id` are decision D-12:
+
+```sql
+owner_documents (
+  owner_id    text    not null,
+  kind        text    not null,  -- workspace | chat | governance | brownfield-draft | canvas-layout
+  id          text    not null,
+  project_id  text,              -- null for kinds that are not per project
+  rev         integer not null,
+  payload     jsonb   not null,
+  updated_at  …,                 -- type per D-5
+  updated_by  text,
+  primary key (owner_id, kind, id)
+)
+```
+
+## 5. Move B: SQLite to Postgres
+
+Sizes: S is up to half a day, M up to two days, L more. Each packet is one lane and one pull request.
+
+**B0. Backups and a restore drill, on SQLite, before anything else** · S
+The ETL in B4 is only reversible if the SQLite files it reads can be restored. Add a scheduled online backup of the three files to somewhere off the volume, for production and staging, and restore one into a scratch container. The image has no `sqlite3` binary, so the backup is `better-sqlite3`'s own `.backup()` run with `node`.
+_Done when:_ a restore from last night's backup serves a signed-in user's project list.
+
+**B1. Async store contracts and a connection seam, still on SQLite** · L
+Make every method in the sync rows of §2.2 return a promise, and port the roughly 20 files that call `getPlatformStore()`. Replace the `Database.Database` parameter in each store factory with a small interface the platform owns (`query`, `execute`, `transaction(async fn)`), implemented first over `better-sqlite3`. Move the two cross-store helpers onto the transaction object so they no longer depend on a shared connection.
+_Done when:_ the roughly 40 existing store and route test files pass unchanged in behaviour; a test asserts each interface method returns a `Promise`.
+_Not included:_ `QuotaStore`. `apps/web/lib/enforce-quota.ts:59` calls `consume()` synchronously and ADR-0063 freezes that file. See D-7.
+
+**B2. Postgres implementation, a migration runner, and one contract suite for both backends** · L
+A `pg` implementation of the B1 seam, selected when `DATABASE_URL` is set. A migration runner with a `schema_migrations` table and numbered SQL files replaces the probe-on-open code for Postgres (D-4). One contract suite runs every store against both backends.
+The dialect work is a known list, each item a test in the suite:
+
+- `strftime` and `datetime(…, 'unixepoch')` (`platform-db.ts:444`, `run-history-store.ts:166`);
+- `COLLATE NOCASE` on `github_login` (`platform-db.ts:76,139`);
+- the two `RAISE(ABORT)` triggers that keep org ids and user ids disjoint (`platform-db.ts:94-107`);
+- `rowid` as an insertion-order tie-break and `LIMIT -1 OFFSET` (`scan-records-store.ts:461-499`, `repair-telemetry-store.ts:679-691`);
+- `@name` parameters and dynamic `IN (?, ?, …)` lists;
+- `INSERT OR IGNORE` for the price seed (`platform-db.ts:633`);
+- error handling that matches `SQLITE_CONSTRAINT_UNIQUE` and a message regex (`orgs-store.ts:264-279`, `teams-store.ts:262-269`);
+- idempotency checks that read `.changes` (`orgs-store.ts:444-446`).
+
+_Done when:_ the contract suite is green on both backends; breaking one column name in a Postgres statement turns it red on Postgres only.
+
+**B3. Close the two single-process races** · M
+With more than one connection, the two unguarded paths of §2.2 become real races. Put the check-then-insert in `createProjectRecord` inside a transaction (or lean on the primary key and handle the conflict), and replace the BYOK `write_seq` subquery with a sequence.
+_Done when:_ a two-writer test against a real Postgres server shows exactly one winner for each path, and fails when the guard is removed.
+
+**B4. ETL and cutover** · M
+A script reads the SQLite files read-only and writes through the store interfaces into Postgres, so it is exercised by the B2 suite. It is idempotent. Staging first, then production inside a write freeze.
+_Done when:_ per-table row counts match and are printed in the pull request; one signed-in user's project list is byte-identical before and after; the SQLite files are kept read-only for 30 days.
+_The way back:_ those files hold nothing written after the cutover. Returning to SQLite after users have written to Postgres needs a reverse export, written and rehearsed as part of this packet, or the cutover is accepted as one-way. That is decision D-13.
+
+**B5. Scan artifacts** · S
+The files under `/data/scan-artifacts` are not rows and are not moved by B4. They stay on the volume unless D-3 puts the application somewhere without one.
+
+## 6. Move A: browser-only data to the server
+
+**A0. Allow-list test for storage keys** · S
+A test that finds every storage key literal in the app and the three packages that persist, and requires each to be in a `DATA_KEYS` list (must have a server store when this plan is done) or a `PREFERENCE_KEYS` list (stays local).
+_Done when:_ adding a new `localStorage.setItem` key anywhere turns it red.
+
+**A1. Scope the keys before moving them** · M
+Fix what §2.1 found, in the browser, first: chat history keyed by owner (and by project, per D-8); governance threads keyed by project; generation results keyed by project id; `purgeProjectData` (its `purgeProjectDataAtomic` helper) matching the keys the app really writes. The chat part waits on D-8; the rest needs no decision. Moving unscoped data to a server keyed by owner would turn "one browser's chat" into "the account's chat" by accident.
+_Done when:_ deleting a project in a test leaves no key of that project in the store.
+
+**A2. `owner_documents` store and routes** · M
+The table of §4, a store with `list`, `get`, `put(expectedRev)` and `delete`, and routes with the same guards as the project routes (the owner guard in `apps/web/lib/platform/require-owner.ts`, same-origin, rate limit, `If-Match`). Whether someone a project is shared with can read or write its documents is decision D-14; until it is answered, only the owner can.
+_Done when:_ a stale `If-Match` returns 409; a second owner reads nothing; a grantee's access matches D-14.
+
+**A3. Cached adapters and the one-time lift, per kind** · L
+For each durable kind, an HTTP adapter and a cached adapter of the shape `CachedSavedProjectsAdapter` already has, with the owner stamp extracted into one shared helper. The brownfield draft has no port today (React code reads localStorage directly), so it gets one first. The lift flag generalises from `project_owner_state(owner_id)` to `(owner_id, kind)`.
+Order, by what is lost if the browser's copy disappears: editor workspace, brownfield draft, governance threads, chat history, canvas layout.
+_Done when, per kind:_ an empty server and a non-empty browser lift exactly once; a browser stamped for another owner is wiped and lifts nothing.
+
+**A4. Account export covers documents** · S
+`GET /api/account/export` gains every `owner_documents` kind.
+_Done when:_ a test owner with one row of each kind gets all of them; the assertion is on the set of kinds.
+
+**A5. Remove what is dead** · S
+Delete the two unwired secret adapters, the write-only generation-result store (D-8), and the legacy localStorage migration steps once D-8 allows. Retire `hexagen-active-workspace` as a second copy of project data: its readers take the project from the saved-projects port. The Monaco session adapter is wired but appears to have no caller; confirm, then delete it too.
+
+## 7. Order
+
+```
+B0 ─► B1 ─► B2 ─► B3 ─► B4 (staging) ─► B4 (production)
+A0 ─► A1 ─► A2 ─► A3 ─► A4 ─► A5
+```
+
+- B0 and A0 need no decision and can start at once. So can A1, except its chat-history part, which waits on D-8.
+- B1 needs D-1 only. B2 waits on D-2, D-4 and D-5, because those three define what it builds.
+- A2 is written async against the B1 seam, so it comes after B1. It must land either before B2 starts or after B2 merges, never during: a store added while the Postgres implementation is being written is ported twice. The August hosting plan made the same point about its own companions.
+- B4 in production waits on D-3, D-13 and B0's restore drill.
+- Recommended order: B0 and A0; A1; B1; A2 (over SQLite); B2 and B3; B4 on staging; A3 to A5; B4 in production. That puts the contract change, which is the expensive part, before any new store is added to it, and rehearses the ETL with the new table already in it.
+
+## 8. Decisions for the owner
+
+Each row names who chooses. "Hard to undo" marks a one-way door.
+
+| #        | Decision                                                                                                                                                                                                                                         | Recommendation                                                                                                                                                                                                                                                                                      | Hard to undo?                                                                                                                                                                         | Chooses               |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------- |
+| **D-1**  | Scope: both moves, Move B only, or Move A only                                                                                                                                                                                                   | Both, in the §7 order                                                                                                                                                                                                                                                                               | No: each packet stands alone                                                                                                                                                          | owner                 |
+| **D-2**  | ADR changes: amend ADR-0064 and ADR-0065 to allow a Postgres cutover (a new ADR-0071), and amend ADR-0030, which still names the browser `ByokStore` and `LocalStorageByokStoreAdapter` as the ciphertext store although nothing constructs them | Yes to both, written before B2 merges. The ADR-0030 amendment records what the code already does (the key is held in memory only); it does not move ciphertext to the server                                                                                                                        | No, but it is the gate the ADRs themselves set                                                                                                                                        | owner                 |
+| **D-3**  | Where production Postgres runs: a container beside the app on the VPS with scheduled dumps; a managed service; or production moves onto a cluster with an operator                                                                               | Not recommended here: it is a hosting and cost decision. The plan needs only a `DATABASE_URL` and a tested restore                                                                                                                                                                                  | **Yes.** Moving a live database between hosts later is a second cutover                                                                                                               | owner                 |
+| **D-3s** | Whether staging gets its own Postgres cluster on the staging k3s host                                                                                                                                                                            | Yes, before B4, so the ETL is rehearsed where it can fail safely                                                                                                                                                                                                                                    | No                                                                                                                                                                                    | owner (host decision) |
+| **D-4**  | Migration tooling: a small in-repo runner with numbered SQL files, or a library; raw `pg` with a thin query layer, or an ORM                                                                                                                     | In-repo runner and raw `pg`. An ORM would move the schema's source of truth out of SQL and rewrite 19 tables' worth of working statements                                                                                                                                                           | **Yes.** Applied migrations are forward-only, and the runner's bookkeeping table is a format every later migration depends on                                                         | owner                 |
+| **D-5**  | Column types in Postgres: `timestamptz` or keep text and epoch integers; `boolean` or `0/1`; `jsonb` or text for `payload`                                                                                                                       | `timestamptz`, `boolean`, `jsonb`; ids stay `text`                                                                                                                                                                                                                                                  | **Yes.** It is the on-disk format; changing it later is a migration over live data. It also changes ordering semantics for the invite-expiry comparison, which today compares strings | owner                 |
+| **D-6**  | After cutover, is SQLite still a supported backend                                                                                                                                                                                               | Yes for local development and unit tests, for one release; then decide again with the test timings in hand                                                                                                                                                                                          | No                                                                                                                                                                                    | owner                 |
+| **D-7**  | `quota.db`: leave on SQLite (one instance forever), or lift ADR-0063's freeze and move it, re-keyed from the anonymous cookie to the user id that ADR-0070 left open                                                                             | Leave it for this plan. It is the only thing pinning the app to one instance, so it is the next plan, not this one                                                                                                                                                                                  | Re-keying is **yes**: old counters cannot be mapped to users                                                                                                                          | owner                 |
+| **D-8**  | What happens to data users already hold in their browsers, per kind (table below)                                                                                                                                                                | See table                                                                                                                                                                                                                                                                                           | **Yes** for every "abandon": once the adapter is removed the data is unreachable                                                                                                      | owner                 |
+| **D-9**  | Offline writes after Move A: an outbox that replays on reconnect, or read-only when offline                                                                                                                                                      | Read-only when offline, stated in the UI. This reverses the August plan's D-S5, which chose the outbox because read-only is a step back from today for a user with no network. The case for reversing: an outbox makes two-device conflicts routine, and can be added later without a format change | No                                                                                                                                                                                    | owner                 |
+| **D-10** | Does IndexedDB remain as the read cache after cutover                                                                                                                                                                                            | Yes (ADR-0070 says so today). Removing it is a separate, later choice                                                                                                                                                                                                                               | No                                                                                                                                                                                    | owner                 |
+| **D-11** | Test database role and prefix on the shared lane server (§9)                                                                                                                                                                                     | `hx_test`, `hx_`, one kept database `hx_concurrency`                                                                                                                                                                                                                                                | No                                                                                                                                                                                    | owner (host step)     |
+| **D-12** | `owner_documents`: the primary key `(owner_id, kind, id)`, the set of kinds, and a nullable `project_id`                                                                                                                                         | As in §4                                                                                                                                                                                                                                                                                            | **Yes.** The key and the kind names are in every stored row and every route path                                                                                                      | owner                 |
+| **D-13** | The way back after the production cutover: write and rehearse a Postgres-to-SQLite export, or accept the cutover as one-way                                                                                                                      | Accept it as one-way, on the strength of the staging rehearsal and a tested Postgres restore. A reverse export is a second ETL to maintain for a path that should never run                                                                                                                         | **Yes.** This is the cutover itself                                                                                                                                                   | owner                 |
+| **D-14** | Can someone a project is shared with read or write its documents (editor buffers, governance threads, drafts)                                                                                                                                    | Owner-only at first. Shared editing of buffers is a product feature with its own conflict rules, not a side effect of a storage move. The August plan also left document tenancy to the tenancy plan                                                                                                | No: access can be widened later; narrowing it after people rely on it is the hard direction                                                                                           | owner                 |
+
+**D-8, per kind.**
+
+| Browser data                                   | Recommendation                                                                                                                                       | If abandoned, the user loses                                                                                                                                                      |
+| ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Saved projects                                 | nothing to do: the server copy is authoritative and the lift has run                                                                                 | nothing                                                                                                                                                                           |
+| Editor workspace                               | **migrate** by lift                                                                                                                                  | unpushed edits to generated files                                                                                                                                                 |
+| Brownfield draft                               | **migrate** by lift, keeping the 7-day expiry server-side                                                                                            | an import in progress                                                                                                                                                             |
+| Governance threads                             | **migrate** by lift, after A1 scopes them to a project                                                                                               | the Q&A history beside each wizard question. Before A1 they cannot be attributed to a project, so a lift assigns them to the project open at the time: say so in the release note |
+| Chat history                                   | **owner's call.** One unscoped key per browser; a lift attaches it to the account as a single thread                                                 | the local-model chat transcript                                                                                                                                                   |
+| Canvas layout                                  | **migrate** by lift                                                                                                                                  | hand-arranged node positions                                                                                                                                                      |
+| Generation results                             | **abandon**: nothing reads them, and they are rebuilt from the manifest. (The August plan would have kept the last 10 per project; this reverses it) | nothing visible                                                                                                                                                                   |
+| `hexagen-active-workspace` (localStorage)      | **abandon**: it is a second copy of a saved project's form state and manifest                                                                        | nothing, once its readers use the saved-projects port (A5)                                                                                                                        |
+| `monaco-session-*` (localStorage)              | **abandon**: the adapter is wired but appears to have no caller; confirm in A5                                                                       | nothing, if confirmed                                                                                                                                                             |
+| Wizard draft, legacy localStorage copies       | **abandon** after the existing migration steps have had one more release to run                                                                      | nothing, unless a browser has not opened the app since before those steps shipped                                                                                                 |
+| `byok:keys`, `hexagen:vault:encrypted-payload` | **delete on load**: no shipped code writes them, and ADR-0030 forbids server-side ciphertext                                                         | nothing                                                                                                                                                                           |
+
+## 9. Test infrastructure
+
+Tests run against in-memory or temp-file SQLite today, with no service container in any workflow.
+
+- **Unit and route tests** keep their current speed by keeping an in-process backend. Two candidates: stay on SQLite for these (free, but it is then a second dialect to keep honest), or an in-process Postgres. D-6 defers the choice until B2 can measure both.
+- **The contract suite (B2) and the race tests (B3)** need a real server. In CI that is a Postgres service container on the jobs that run them. For lanes it is the shared lane test server.
+- **Lane registration.** Proposed role `hx_test` and database prefix `hx_`, with one kept database `hx_concurrency` for the B3 two-writer tests. The project's lane values change from `TEST_DB_ROLE=none` at B2, not before. These are host steps for the owner: register the role, open the lane container's egress to the test server, and install a Postgres client in the container for the verification step.
+- **Harness shape**, taken from a sibling project that has already made this move: a fresh database per test file cloned from a migrated template, and a real server only for tests about two writers.
+- Lanes run targeted suites only. GitHub CI remains the source of truth.
+
+## 10. Risks
+
+- **The contract change touches every authenticated route.** B1 is large and mechanical; a missed `await` on a guard is a security bug, not a crash. Mitigation: turn on the lint rule for floating promises in `apps/web` as part of B1, and land B1 alone.
+- **NextAuth adapter.** Its methods return sync values today. Whether NextAuth writes `sessions` or `verification_tokens` under the JWT strategy was not verified; B1 must check before deciding what the ETL carries.
+- **Staging rollback does not revert schema** (the staging README says so of SQLite; it is as true of Postgres). B4 keeps the SQLite files for that reason.
+- **Lift on a shared browser.** The owner stamp stops cross-account uploads for projects; A3 must reuse it for every kind, or one user's editor buffers reach another's account.
+- **Size.** Editor workspaces hold whole file trees as JSON. `owner_documents.payload` needs a size limit at the route, chosen in A2 from what real workspaces measure.
+
+## 11. Not verified
+
+- Production row counts and file sizes, which size the B4 freeze.
+- Whether the VPS has any host-level backup of the data volume outside this repository.
+- How `project_owner_state.initialized` is set on every path (read in the client adapter, not traced through the route handlers).
+- Whether any real browser still holds the legacy localStorage keys.
+- Whether the canvas layout has a session id for users without a migrated wizard draft; if not, that store is inert today and its lift is a no-op.
+
+## 12. Ready when
+
+- A signed-in user sees the same projects, editor buffers, drafts and threads on a second browser.
+- The application runs with `DATABASE_URL` set and no `platform.db` or `byok.db` open.
+- The contract suite passes on Postgres in CI, and the two-writer tests pass against a real server.
+- A restore from backup has been performed on the Postgres database, with the date recorded.
+- ADR-0071 is merged, and the August plans carry a note pointing here.
