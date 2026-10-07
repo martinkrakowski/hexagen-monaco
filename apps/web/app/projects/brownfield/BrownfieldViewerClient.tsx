@@ -9,10 +9,8 @@ import {
   BrownfieldViewerPage,
   type IntakeState,
 } from "@/brownfield-workbook/BrownfieldViewerPage";
-import {
-  BUNDLE_LIMITS,
-  readBundle,
-} from "@/brownfield-workbook/bundle/read-bundle";
+import { BUNDLE_LIMITS } from "@/brownfield-workbook/bundle/read-bundle";
+import { readBundleOffThread } from "@/brownfield-workbook/bundle/read-bundle-off-thread";
 
 /**
  * Container for the brownfield viewer: resolves `?project=<id>` to a saved
@@ -64,7 +62,7 @@ export function BrownfieldViewerClient() {
       }
       apply({ phase: "reading", fileName: file.name });
       try {
-        const result = await readBundle(
+        const result = await readBundleOffThread(
           new Uint8Array(await file.arrayBuffer()),
         );
         apply(
