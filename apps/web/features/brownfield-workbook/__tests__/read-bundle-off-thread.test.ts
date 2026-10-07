@@ -186,4 +186,78 @@ describe("readBundleOffThread", () => {
     expect(out).toEqual(expected);
     expect(worker.terminateCount).toBe(1);
   });
+
+  it("k. aborting stops the worker and rejects with an AbortError", async () => {
+    const data = await buildBundle();
+    const worker = new FakeWorker(); // never answers
+    const controller = new AbortController();
+
+    const pending = readBundleOffThread(
+      data,
+      undefined,
+      () => worker,
+      controller.signal,
+    );
+    expect(worker.calls).toHaveLength(1); // the read really started
+    controller.abort();
+
+    await expect(pending).rejects.toMatchObject({ name: "AbortError" });
+    expect(worker.terminateCount).toBe(1);
+  });
+
+  it("l. a signal that is already aborted starts no worker at all", async () => {
+    const data = await buildBundle();
+    let created = 0;
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(
+      readBundleOffThread(
+        data,
+        undefined,
+        () => {
+          created++;
+          return new FakeWorker();
+        },
+        controller.signal,
+      ),
+    ).rejects.toMatchObject({ name: "AbortError" });
+    expect(created).toBe(0);
+  });
+
+  it("m. aborting after the read finished changes nothing", async () => {
+    const data = await buildBundle();
+    const result = await readBundle(data);
+    const worker = new FakeWorker((self) =>
+      self.emitMessage({ ok: true, result }),
+    );
+    const controller = new AbortController();
+
+    const out = await readBundleOffThread(
+      data,
+      undefined,
+      () => worker,
+      controller.signal,
+    );
+    controller.abort();
+
+    expect(out).toBe(result);
+    expect(worker.terminateCount).toBe(1);
+  });
+
+  it("n. on fallback the worker is stopped BEFORE the main-thread read starts, and only once", async () => {
+    const data = await buildBundle();
+    const worker = new FakeWorker((self) => self.emitError());
+    let terminatedWhenReadStarted = -1;
+    vi.mocked(readBundle).mockImplementationOnce(async () => {
+      terminatedWhenReadStarted = worker.terminateCount;
+      return { ok: false, errors: ["stub"] };
+    });
+
+    const out = await readBundleOffThread(data, undefined, () => worker);
+
+    expect(out).toEqual({ ok: false, errors: ["stub"] });
+    expect(terminatedWhenReadStarted).toBe(1);
+    expect(worker.terminateCount).toBe(1);
+  });
 });

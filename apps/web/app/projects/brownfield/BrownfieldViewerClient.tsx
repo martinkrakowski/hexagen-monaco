@@ -39,14 +39,23 @@ export function BrownfieldViewerClient() {
   // Only the latest chosen file may set state: a slower earlier read is dropped.
   const latest = useRef(0);
 
+  // The read in flight, so a newer choice (or leaving the page) can stop its
+  // worker instead of letting it inflate and hash a bundle nobody will see.
+  const reading = useRef<AbortController | null>(null);
+
   // A change of project id drops any read still in flight.
   useEffect(() => {
     latest.current++;
+    reading.current?.abort();
+    return () => reading.current?.abort();
   }, [id]);
 
   const onFile = useCallback(
     async (file: File) => {
       const mine = ++latest.current;
+      reading.current?.abort();
+      const controller = new AbortController();
+      reading.current = controller;
       const apply = (next: IntakeState) => {
         if (latest.current === mine) setHeld({ id, intake: next });
       };
@@ -64,6 +73,9 @@ export function BrownfieldViewerClient() {
       try {
         const result = await readBundleOffThread(
           new Uint8Array(await file.arrayBuffer()),
+          undefined,
+          undefined,
+          controller.signal,
         );
         apply(
           result.ok

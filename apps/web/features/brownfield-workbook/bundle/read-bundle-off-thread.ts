@@ -32,13 +32,26 @@ const createDefaultWorker = (): WorkerLike => {
  * The caller's `data` is never transferred: a detached copy is posted to the
  * worker (and that copy is placed in the transfer list), so the original
  * Uint8Array's buffer stays intact for the fallback path if the worker fails.
+ *
+ * `signal` stops the read: the worker is terminated and the promise rejects
+ * with an AbortError. There is deliberately NO timeout: a 256 MiB bundle on a
+ * slow machine legitimately takes long, and a fixed limit would refuse it.
  */
 export function readBundleOffThread(
   data: Uint8Array,
   limits?: BundleLimits,
   createWorker: () => WorkerLike = createDefaultWorker,
+  signal?: AbortSignal,
 ): Promise<ReadBundleResult> {
   return new Promise((resolve, reject) => {
+    // An aborted read (the user chose another file, or left the page) must not
+    // keep a worker inflating and hashing a bundle nobody will look at.
+    const aborted = () =>
+      new DOMException("the bundle read was superseded", "AbortError");
+    if (signal?.aborted) {
+      reject(aborted());
+      return;
+    }
     let worker: WorkerLike;
     try {
       worker = createWorker();
@@ -52,26 +65,38 @@ export function readBundleOffThread(
     }
 
     let settled = false;
+    let terminated = false;
+    const stopWorker = () => {
+      if (terminated) return;
+      terminated = true;
+      worker.terminate();
+    };
+    const onAbort = () => fail(aborted());
     const finish = (result: ReadBundleResult) => {
       if (settled) return;
       settled = true;
-      worker.terminate();
+      signal?.removeEventListener("abort", onAbort);
+      stopWorker();
       resolve(result);
     };
     const fail = (cause: unknown) => {
       if (settled) return;
       settled = true;
-      worker.terminate();
+      signal?.removeEventListener("abort", onAbort);
+      stopWorker();
       reject(cause);
     };
+    signal?.addEventListener("abort", onAbort, { once: true });
     let fellBack = false;
     const fallback = () => {
       if (settled || fellBack) return;
       fellBack = true;
-      // `data` was posted as a *copy* (transferred separately), so the buffer
-      // backing `data` is still intact here. The worker is terminated when the
-      // main-thread read settles, whichever way: a rejection is passed on, never
-      // swallowed, so the caller is not left waiting for ever.
+      // The worker has failed: stop it now, so it cannot keep running beside
+      // the main-thread read. `data` was posted as a *copy* (transferred
+      // separately), so the buffer backing `data` is still intact here. A
+      // rejection is passed on, never swallowed, so the caller is not left
+      // waiting for ever.
+      stopWorker();
       readBundle(data, limits).then(finish, fail);
     };
 
