@@ -142,10 +142,11 @@ _The SQLite side of `transaction(async fn)` cannot be `better-sqlite3`'s own `db
 _Done when:_ the roughly 40 existing store and route test files pass unchanged in behaviour; a test asserts each interface method returns a `Promise`; a transaction whose callback rejects after an `await` leaves no row behind, on SQLite, and fails if the seam is switched to `db.transaction`.
 _Not included:_ `QuotaStore`. `apps/web/lib/enforce-quota.ts:59` calls `consume()` synchronously and ADR-0063 freezes that file. See D-7.
 
-_B1 is delivered in four lanes, each landing alone and in this order_ (decided while executing, 2026-10-08, because the packet is far larger than one lane):
+_B1 is delivered in five lanes, each landing alone and in this order_ (decided while executing, 2026-10-08, because the packet is far larger than one lane):
 
 - **B1a, the seam** (merged, #778): `PlatformDb` and `PlatformDbSession` in `apps/web/lib/platform/db.ts`, the SQLite implementation, and owner state as the first store on it.
 - **B1L, the lint:** type-aware `no-floating-promises`, `no-misused-promises` and `await-thenable` for the web app's server code, before any more methods turn async. This is the mitigation the risk section names.
+- **B1L2, the rule the standard ones lack:** B1L's own check showed that a missing `await` is reported by neither those rules nor the type checker when the promise lands where any value is accepted, such as a JSON response body. A small custom rule in the repository's ESLint plugin reports a promise passed where the expected type is `any` or `unknown`.
 - **B1b, the interfaces:** every remaining synchronous store method returns a promise and every caller awaits it, with the implementations still on the raw handle. This is the lane that touches the guards.
 - **B1c, the implementations:** every store moves from the raw handle to the seam in ONE lane, transactions and the two cross-store helpers included.
 
