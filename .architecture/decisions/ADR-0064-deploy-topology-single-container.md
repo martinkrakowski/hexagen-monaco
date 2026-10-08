@@ -2,6 +2,7 @@
 
 **Date:** 2026-08-17
 **Status:** Superseded by ADR-0065 (2026-08-23) — see the amendment at the end of this document
+**Amended by:** ADR-0071 (2026-10-08), see the amendment at the end of this document
 **Type:** Operations
 **Runbook ID:** D-4
 **Relates to:** ADR-0063 (quota-D2 — metering policy, not topology); `apps/web/lib/quota-store.ts`, `apps/web/lib/byok-store.ts`; `deploy/docker-compose.prod.yml`
@@ -45,3 +46,11 @@ A second replica, a shared SQLite, or a Postgres cutover is out of scope. Those 
 ## Amendment — 2026-08-23: superseded by ADR-0065
 
 This ADR decided to keep the `k8s/` manifests and fix them (replicas 1, PVC, `Recreate`, `fsGroup`). ADR-0065, filed in the same PR (#528), decided to remove them in favour of a single-container Compose deployment, and that PR deleted `k8s/deployment.yaml` and `k8s/ingress.yaml`. The tree has matched ADR-0065 since; the single-container topology and SQLite-on-a-volume conclusions here remain the operating model, only the "fix the manifests" instruction is void. See ADR-0065.
+
+## Amendment — 2026-10-08: Postgres cutover allowed by ADR-0071
+
+ADR-0071 records the owner's decision to move the platform database from SQLite to Postgres (plan `docs/planning/2026-10-07_indexeddb-to-postgres-migration-plan.md` §8, D-2, decided 2026-10-08). The original text above is unchanged. What changes:
+
+- The sentence in the Decision section, "A second replica, a shared SQLite, or a Postgres cutover is out of scope. Those are Phase 2, and they require amending this ADR first.", no longer puts a Postgres cutover out of scope. This amendment is the amendment it asks for. A second replica and a shared SQLite stay out of scope (plan §8, D-2, decided 2026-10-08).
+- The Consequences line "schema lands on the single-container SQLite (or an explicit successor decided later)" now has its successor for `platform.db` and `byok.db`: Postgres, as set out in ADR-0071. `quota.db` stays on SQLite (plan §8, D-7, decided 2026-10-08).
+- The single-container topology is not changed by this amendment (plan §8, D-7, decided 2026-10-08).

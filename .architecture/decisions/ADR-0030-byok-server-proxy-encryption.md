@@ -219,3 +219,19 @@ The decision is validated when:
 **Author:** Staff FE Engineer / Lead Architect
 **Approved By:** [Awaiting final acceptance]
 **Effective Date:** 2026-04-30
+
+---
+
+## Amendment — 2026-10-08: what the browser side does today
+
+The original text above is unchanged. This amendment records what the code does at `origin/main` (plan `docs/planning/2026-10-07_indexeddb-to-postgres-migration-plan.md` §8, D-2, decided 2026-10-08). It changes no decision of this ADR.
+
+**What the code does.**
+
+- The "Client-Side Store" section and the "Ciphertext storage" row name `ByokStore` and `LocalStorageByokStoreAdapter` as the place ciphertext is kept. The port `ByokStore` still exists in `packages/web-driver/src/application/ports/byok-store.port.ts`. `LocalStorageByokStoreAdapter` was deleted in commit `072c2581b` (#783), with the file `packages/web-driver/src/infrastructure/adapters/local-storage-byok-store.adapter.ts`. Nothing constructs a `ByokStore` in shipped code.
+- `useCloudLlm` has a `setByokStore` function (`apps/web/features/governance-assistant/hooks/useCloudLlm.ts`, line 52). Nothing calls it, so `byokStoreRef` stays `null` and the hook sends no `byokCiphertext`.
+- The plaintext API key is held in memory only. `apps/web/app/lib/wire.client.ts` (line 273) wires `EphemeralSecretVaultAdapter`, whose own comment says the key is never written to localStorage or IndexedDB (`packages/web-driver/src/infrastructure/adapters/ephemeral-secret-vault.adapter.ts`).
+- A start-up step deletes the two localStorage keys the removed adapters could have left, `byok:keys` and `hexagen:vault:encrypted-payload` (`packages/web-driver/src/infrastructure/migration/remove-unused-secret-keys-step.ts`).
+- `apps/web/lib/byok-store.ts` is a server SQLite store. It holds key metadata and revocations, and no ciphertext. It is a different thing from the browser `ByokStore` port.
+
+**What this amendment does not do.** It does not move ciphertext to the server. The rejection of "Database-Stored Ciphertext" in the Alternatives section stands. This amendment only brings the description of the browser side in line with the code (plan §8, D-2, decided 2026-10-08).
