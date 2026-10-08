@@ -7,3 +7,13 @@ resources:
   - service.yaml
   - middleware.yaml
   - ingress.yaml
+  - sqlite-backup/pvc.yaml
+  - sqlite-backup/cronjob.yaml
+# The script the backup job runs, from the file beside its manifest. One fixed
+# name, so a changed script replaces the ConfigMap instead of leaving old ones.
+configMapGenerator:
+  - name: hexagen-sqlite-backup-script
+    files:
+      - sqlite-backup/sqlite-backup.cjs
+generatorOptions:
+  disableNameSuffixHash: true
