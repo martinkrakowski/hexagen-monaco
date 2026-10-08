@@ -536,7 +536,10 @@ describe("repair telemetry store", () => {
     const { db, store } = openStore();
     for (let i = 0; i < MAX_REPAIR_RUNS_PER_OWNER; i++) {
       const id = `33333333-3333-4333-8333-${String(i).padStart(12, "0")}`;
-      await store.record(run({ runId: id, now: 1_700_000_000_000 + i }));
+      const seeded = await store.record(
+        run({ runId: id, now: 1_700_000_000_000 + i }),
+      );
+      assert.ok(seeded.success, `fixture write ${i} failed`);
     }
     const overwritten = `33333333-3333-4333-8333-000000000000`;
 
