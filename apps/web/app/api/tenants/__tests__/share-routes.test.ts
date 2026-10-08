@@ -491,6 +491,76 @@ describe("P-A4 — share and revoke", () => {
     );
   });
 
+  it("a project deleted between the route's check and the grant: 404, no live grant, and a project re-created under the same id is not shared", async () => {
+    const store = getPlatformStore();
+    const grant = store.shares.grant.bind(store.shares);
+    // The delete lands after the route has seen the project and before the
+    // store writes the grant: the window the route's own check cannot close.
+    const spy = vi
+      .spyOn(store.shares, "grant")
+      .mockImplementationOnce(async (input, actor) => {
+        const deleted = await store
+          .projectsFor(OWNER)
+          .deleteProjectRecord(PROJECT);
+        assert.equal(deleted.success, true, "the project was there to delete");
+        return grant(input, actor);
+      });
+    try {
+      signedInAs(OWNER);
+      const response = await postShare("@grantee", "write");
+      assert.equal(spy.mock.calls.length, 1, "the route reached the grant");
+      assert.equal(response.status, 404);
+      assert.equal(liveGrantCount(PROJECT), 0, "no grant on a missing project");
+      assert.equal(
+        auditRows().filter((row) => row.action === "share.grant").length,
+        0,
+        "a refused grant leaves no audit row",
+      );
+    } finally {
+      spy.mockRestore();
+    }
+
+    // The id comes back (a stale tab saves the project again). Nobody shared
+    // THIS project, so the grantee must not be able to read it.
+    await seedProject();
+    const after = await readProject(GRANTEE);
+    assert.equal(after.status, 403);
+  });
+
+  it("a grant and the project's deletion started together leave no live grant, in either order", async () => {
+    const store = getPlatformStore();
+    const input = {
+      ownerId: OWNER,
+      projectId: PROJECT,
+      granteeType: "user" as const,
+      granteeId: GRANTEE,
+      role: "read" as const,
+      grantedBy: OWNER,
+    };
+
+    // Deletion first: the grant's transaction runs second and finds no project.
+    const [, late] = await Promise.allSettled([
+      store.projectsFor(OWNER).deleteProjectRecord(PROJECT),
+      store.shares.grant(input, { actorId: OWNER }),
+    ]);
+    assert.equal(late.status, "rejected");
+    assert.equal(
+      late.status === "rejected" && (late.reason as Error).name,
+      "ShareProjectNotFoundError",
+    );
+    assert.equal(liveGrantCount(PROJECT), 0);
+
+    // Grant first: it lands, and the deletion that follows revokes it.
+    await seedProject();
+    const [early, deleted] = await Promise.allSettled([
+      store.shares.grant(input, { actorId: OWNER }),
+      store.projectsFor(OWNER).deleteProjectRecord(PROJECT),
+    ]);
+    assert.equal(early.status, "fulfilled");
+    assert.equal(deleted.status, "fulfilled");
+    assert.equal(liveGrantCount(PROJECT), 0);
+  });
+
   it("a failing audit insert rolls back the grant", async () => {
     await closePlatformStore();
     const db = openPlatformDb(dbPath);
