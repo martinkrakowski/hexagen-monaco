@@ -127,11 +127,13 @@ and CronJob `hexagen-pg-dump`.
 ### Backup
 
 CronJob `hexagen-pg-dump` runs `pg_dump --format=custom` at 03:17 UTC every
-day into `hexagen-pg-dumps`, reads the dump back with `pg_restore --list`
-before giving it its final name, and keeps the seven newest. Run one now:
+day into `hexagen-pg-dumps`, reads the whole dump back with `pg_restore`
+before giving it its final name, and keeps the seven newest. Run one now (the
+name carries the time, so the command can be repeated; a finished job can be
+deleted, its dump stays):
 
 ```sh
-ssh m 'KUBECONFIG=$HOME/.kube/config kubectl -n webapps create job --from=cronjob/hexagen-pg-dump hexagen-pg-dump-manual'
+ssh m 'KUBECONFIG=$HOME/.kube/config kubectl -n webapps create job --from=cronjob/hexagen-pg-dump hexagen-pg-dump-manual-$(date +%s)'
 ```
 
 **What the dumps do not cover.** Both claims are `local-path` on the node's one
