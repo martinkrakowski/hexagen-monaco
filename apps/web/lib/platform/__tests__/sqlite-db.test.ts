@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import Database from "better-sqlite3";
 import { openPlatformDb } from "../platform-db";
 import { createSqlitePlatformDb } from "../sqlite-db";
-import type { PlatformDb } from "../db";
+import type { PlatformDb, PlatformDbSession } from "../db";
 
 describe("sqlite-db", () => {
   let db: PlatformDb;
@@ -121,6 +121,18 @@ describe("sqlite-db", () => {
     expect(rows[0].id).toBe(2);
   });
 
+  it("4b: a plain call with no transaction open runs immediately (synchronously)", () => {
+    void db.run("INSERT INTO test (id, name, val) VALUES (?, ?, ?)", [
+      1,
+      "a",
+      10,
+    ]);
+    const count = handle.prepare("SELECT COUNT(*) AS n FROM test").get() as {
+      n: number;
+    };
+    expect(count.n).toBe(1);
+  });
+
   it("5: two transactions started together run one after the other, never interleaved", async () => {
     const order: string[] = [];
     let release1: () => void = () => {};
@@ -153,6 +165,43 @@ describe("sqlite-db", () => {
     await Promise.all([p1, p2]);
 
     expect(order).toEqual(["begin 1", "end 1", "begin 2", "end 2"]);
+    const rows = await db.all<{ id: number }>(
+      "SELECT id FROM test ORDER BY id",
+    );
+    expect(rows.map((r) => r.id)).toEqual([1, 2]);
+  });
+
+  it("5b: isUniqueViolation detects sqlite unique-constraint errors", async () => {
+    await db.run("INSERT INTO test (id, name, val) VALUES (?, ?, ?)", [
+      1,
+      "a",
+      10,
+    ]);
+    let dupErr: unknown = undefined;
+    try {
+      await db.run("INSERT INTO test (id, name, val) VALUES (?, ?, ?)", [
+        1,
+        "b",
+        20,
+      ]);
+    } catch (e) {
+      dupErr = e;
+    }
+    expect(db.isUniqueViolation(dupErr)).toBe(true);
+
+    // unrelated errors are not unique violations
+    expect(db.isUniqueViolation(new Error("not a constraint"))).toBe(false);
+    expect(db.isUniqueViolation({ code: "SQLITE_CONSTRAINT_FOREIGNKEY" })).toBe(
+      false,
+    );
+    expect(db.isUniqueViolation(undefined)).toBe(false);
+    expect(db.isUniqueViolation(null)).toBe(false);
+    expect(db.isUniqueViolation({ code: "SQLITE_CONSTRAINT_UNIQUE" })).toBe(
+      true,
+    );
+    expect(db.isUniqueViolation({ code: "SQLITE_CONSTRAINT_PRIMARYKEY" })).toBe(
+      true,
+    );
   });
 
   it("6: after a transaction rejects, a following transaction and a following plain run both succeed", async () => {
@@ -216,5 +265,76 @@ describe("sqlite-db", () => {
     const preparesForSql = spy.mock.calls.filter((c) => c[0] === sql);
     expect(preparesForSql).toHaveLength(1);
     spy.mockRestore();
+  });
+
+  it(
+    "1a: a plain db.run inside a callback rejects, rolls back, and does not wedge",
+    { timeout: 2000 },
+    async () => {
+      await expect(
+        db.transaction(async () => {
+          await expect(
+            db.run("INSERT INTO test (id, name, val) VALUES (?, ?, ?)", [
+              1,
+              "a",
+              10,
+            ]),
+          ).rejects.toThrow("plain db call inside a transaction");
+          throw new Error("callback lets an error escape");
+        }),
+      ).rejects.toThrow("callback lets an error escape");
+
+      // the transaction rolled back:
+      const rows = await db.all<{ id: number }>("SELECT * FROM test");
+      expect(rows).toHaveLength(0);
+
+      // nothing is wedged: a following plain call and transaction both succeed
+      await db.run("INSERT INTO test (id, name, val) VALUES (?, ?, ?)", [
+        2,
+        "b",
+        20,
+      ]);
+      await db.transaction(async (tx) => {
+        await tx.run("INSERT INTO test (id, name, val) VALUES (?, ?, ?)", [
+          3,
+          "c",
+          30,
+        ]);
+      });
+      const rows2 = await db.all<{ id: number }>(
+        "SELECT * FROM test ORDER BY id",
+      );
+      expect(rows2.map((r) => r.id)).toEqual([2, 3]);
+    },
+  );
+
+  it("1b: db.transaction called inside a callback rejects with the nested error", async () => {
+    await expect(
+      db.transaction(async () => {
+        await db.transaction(async () => {});
+      }),
+    ).rejects.toThrow("Nested transactions are not supported");
+  });
+
+  it("3b: db.transaction rejects when a raw transaction is already open on the handle", async () => {
+    handle.exec("BEGIN");
+    await expect(
+      db.transaction(async (tx) => {
+        await tx.run("INSERT INTO test (id, name, val) VALUES (?, ?, ?)", [
+          1,
+          "a",
+          10,
+        ]);
+      }),
+    ).rejects.toThrow("a transaction is already open on this connection");
+    handle.exec("ROLLBACK");
+    // the queue still works after the tripwire:
+    await db.run("INSERT INTO test (id, name, val) VALUES (?, ?, ?)", [
+      2,
+      "b",
+      20,
+    ]);
+    const rows = await db.all<{ id: number }>("SELECT * FROM test");
+    expect(rows).toHaveLength(1);
   });
 });
