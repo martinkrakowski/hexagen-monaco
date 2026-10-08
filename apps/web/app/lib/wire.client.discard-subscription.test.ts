@@ -13,7 +13,7 @@
  * event on the real event bus and asserts the registered adapters are not
  * touched as a side effect of wiring.
  */
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { PROJECT_DISCARDED_EVENT } from "@hexagen/monaco-orchestration";
 import {
   getEventBus,
@@ -28,20 +28,24 @@ describe("wire.client — ProjectDiscarded is not subscribed at the composition 
     useGovernanceThreadStore.getState().clearAllThreads();
   });
 
-  it("registers a remove-unused-secret-keys migration step at the composition root", async () => {
-    // Run FIRST, before the shared afterEach clears localStorage: the
-    // orchestrator runs once at module load (before any test), so by the time
-    // the first test executes its ready promise is already settled and the
-    // persisted status reflects the steps this build wired.
+  // The start-up steps run once, when wire.client is first imported, and their
+  // record lives in localStorage, which other tests and teardowns may clear.
+  // Read it once here, before any test in this file runs, so the assertion
+  // below does not depend on the order of the tests.
+  let completedStepsAtStart: string[] = [];
+  beforeAll(async () => {
     await getMigrationReady();
     const raw = localStorage.getItem("hexagen:migration:status");
-    const status = raw
-      ? (JSON.parse(raw) as { completedSteps: string[] })
-      : { completedSteps: [] };
-    // The step that deletes the two removed-secret-adapter keys must be wired as
-    // the last migration step; if it is absent here, removing it from
-    // wire.client.ts would silently drop the key cleanup.
-    expect(status.completedSteps).toContain("remove-unused-secret-keys");
+    completedStepsAtStart = raw
+      ? (JSON.parse(raw) as { completedSteps: string[] }).completedSteps
+      : [];
+  });
+
+  it("registers a remove-unused-secret-keys migration step at the composition root", () => {
+    // If the step were dropped from wire.client.ts, the clean-up of the two
+    // removed secret stores' keys would silently stop; nothing else observes
+    // the step list.
+    expect(completedStepsAtStart).toContain("remove-unused-secret-keys");
   });
 
   it("publishing ProjectDiscarded purges nothing and clears no thread", () => {
