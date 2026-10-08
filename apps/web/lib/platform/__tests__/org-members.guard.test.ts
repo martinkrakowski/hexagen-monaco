@@ -20,7 +20,7 @@ function fixture() {
   return {
     db,
     orgs: createOrgsRepository(platformDb),
-    teams: createTeamsRepository(db),
+    teams: createTeamsRepository(platformDb),
     audit: createAuditLogRepository(platformDb),
   };
 }

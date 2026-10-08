@@ -12,7 +12,7 @@ import { createRepairTelemetryStore } from "../repair-telemetry-store";
  * test pins each signature at runtime so a future revert to synchronous breaks
  * the suite before it breaks callers.
  */
-describe("async contract — 46 store methods return Promises", () => {
+describe("async contract — 60 store methods return Promises", () => {
   const store = createPlatformStore(":memory:");
   const OWNER = "user-owner";
 
@@ -337,6 +337,149 @@ describe("async contract — 46 store methods return Promises", () => {
       {
         name: "deleteOrg",
         result: orgs.deleteOrg("nonexistent-org", { actorId: OWNER }),
+      },
+    ];
+
+    for (const { name, result } of cases) {
+      assert.ok(
+        result instanceof Promise,
+        `${name} must return a Promise, got ${typeof result}`,
+      );
+      try {
+        await result;
+      } catch {
+        // some cases may reject; the contract only requires a Promise
+      }
+    }
+  });
+
+  it("each TeamsRepository method returns a Promise", async () => {
+    const teams = store.teams;
+
+    // Set up: an org with an owner and a member, and a team with a member.
+    const org = await store.orgs.createOrgWithOwner(
+      { slug: "test-teams", name: "Test Teams", createdBy: OWNER },
+      { actorId: OWNER },
+    );
+    await store.orgs.addMember(org.id, "member-1", "member");
+    const team = await teams.createTeam(
+      {
+        orgId: org.id,
+        slug: "platform",
+        name: "Platform",
+        createdBy: OWNER,
+      },
+      { actorId: OWNER },
+    );
+    await teams.addMember(team.id, "member-1", { actorId: OWNER });
+
+    const cases: { name: string; result: unknown }[] = [
+      {
+        name: "createTeam",
+        result: teams.createTeam({
+          orgId: org.id,
+          slug: "second-team",
+          name: "Second Team",
+          createdBy: OWNER,
+        }),
+      },
+      { name: "getTeam", result: teams.getTeam(team.id) },
+      {
+        name: "getTeamBySlug",
+        result: teams.getTeamBySlug(org.id, "platform"),
+      },
+      { name: "listTeamsForOrg", result: teams.listTeamsForOrg(org.id) },
+      {
+        name: "deleteTeam",
+        result: teams.deleteTeam("nonexistent-team", { actorId: OWNER }),
+      },
+      {
+        name: "addMember",
+        result: teams.addMember(team.id, "member-1", { actorId: OWNER }),
+      },
+      {
+        name: "removeMember",
+        result: teams.removeMember(team.id, "member-1", { actorId: OWNER }),
+      },
+      { name: "isMember", result: teams.isMember(team.id, "member-1") },
+      {
+        name: "listTeamIdsForUser",
+        result: teams.listTeamIdsForUser("member-1"),
+      },
+    ];
+
+    for (const { name, result } of cases) {
+      assert.ok(
+        result instanceof Promise,
+        `${name} must return a Promise, got ${typeof result}`,
+      );
+      try {
+        await result;
+      } catch {
+        // some cases may reject; the contract only requires a Promise
+      }
+    }
+  });
+
+  it("each ProjectSharesRepository method returns a Promise", async () => {
+    const shares = store.shares;
+
+    // Set up: a live grant to revoke and observe.
+    await shares.grant(
+      {
+        ownerId: OWNER,
+        projectId: "proj-1",
+        granteeType: "user",
+        granteeId: "member-1",
+        role: "read",
+        grantedBy: OWNER,
+      },
+      { actorId: OWNER },
+    );
+
+    const cases: { name: string; result: unknown }[] = [
+      {
+        name: "grant",
+        result: shares.grant(
+          {
+            ownerId: OWNER,
+            projectId: "proj-1",
+            granteeType: "user",
+            granteeId: "member-1",
+            role: "read",
+            grantedBy: OWNER,
+          },
+          { actorId: OWNER },
+        ),
+      },
+      {
+        name: "revoke",
+        result: shares.revoke(
+          {
+            ownerId: OWNER,
+            projectId: "proj-1",
+            granteeType: "user",
+            granteeId: "member-1",
+          },
+          { actorId: OWNER },
+        ),
+      },
+      { name: "listForProject", result: shares.listForProject(OWNER, "proj-1") },
+      {
+        name: "accessFor",
+        result: shares.accessFor(OWNER, "proj-1", {
+          userId: "member-1",
+          orgIds: [],
+          teamIds: [],
+        }),
+      },
+      {
+        name: "selectSharedWith",
+        result: shares.selectSharedWith({
+          userId: "member-1",
+          orgIds: [],
+          teamIds: [],
+        }),
       },
     ];
 

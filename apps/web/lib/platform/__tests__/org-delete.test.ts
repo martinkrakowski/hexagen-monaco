@@ -17,8 +17,8 @@ function fixture() {
   return {
     db,
     orgs: createOrgsRepository(platformDb),
-    teams: createTeamsRepository(db),
-    shares: createProjectSharesRepository(db),
+    teams: createTeamsRepository(platformDb),
+    shares: createProjectSharesRepository(platformDb),
   };
 }
 

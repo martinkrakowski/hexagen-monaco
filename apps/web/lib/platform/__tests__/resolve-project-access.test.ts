@@ -42,8 +42,8 @@ function fixture() {
   const db = openPlatformDb(path);
   const platformDb = createSqlitePlatformDb(db);
   const orgs = createOrgsRepository(platformDb);
-  const teams = createTeamsRepository(db);
-  const shares = createProjectSharesRepository(db);
+  const teams = createTeamsRepository(platformDb);
+  const shares = createProjectSharesRepository(platformDb);
   const readers: ProjectAccessReaders = {
     memberRole: (orgId, userId) => orgs.memberRole(orgId, userId),
     listOrgIdsForUser: (userId) => orgs.listOrgIdsForUser(userId),

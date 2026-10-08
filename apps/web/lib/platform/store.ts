@@ -73,9 +73,9 @@ export function createPlatformStore(
     auth: createAuthRepository(platformDb),
     billing: createEntitlementRepository(platformDb),
     orgs: createOrgsRepository(platformDb),
-    teams: createTeamsRepository(db),
+    teams: createTeamsRepository(platformDb),
     audit: createAuditLogRepository(platformDb),
-    shares: createProjectSharesRepository(db),
+    shares: createProjectSharesRepository(platformDb),
     projectsFor(ownerId) {
       return createSavedProjectsStore(db, ownerId);
     },

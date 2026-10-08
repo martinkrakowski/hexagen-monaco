@@ -1,5 +1,6 @@
 import type Database from "better-sqlite3";
-import { prepareAuditAppend } from "./audit-log-store";
+import type { PlatformDb, PlatformDbSession } from "./db";
+import { appendAudit } from "./audit-log-store";
 
 /**
  * Grants on a project (P-A3).
@@ -20,6 +21,36 @@ export type GranteeType = "user" | "org" | "team";
 /** What a grant confers. Two roles only (D-A2); `owner` is not a grant. */
 export type ShareRole = "read" | "write";
 
+/**
+ * Revoke every live share on one project through the seam.
+ *
+ * Runs the same UPDATE as {@link prepareShareRevokeAllForProject} — same columns,
+ * same record — so the seam transaction in saved-projects-store (next lane) can
+ * call this helper instead of the synchronous appender.
+ */
+export async function revokeSharesForProject(
+  session: PlatformDbSession,
+  ownerId: string,
+  projectId: string,
+): Promise<number> {
+  return (
+    await session.run(
+      `
+    UPDATE project_shares
+       SET revoked_at = @revoked_at
+     WHERE owner_id = @owner_id AND project_id = @project_id
+       AND revoked_at IS NULL
+   `,
+      {
+        owner_id: ownerId,
+        project_id: projectId,
+        revoked_at: new Date().toISOString(),
+      },
+    )
+  ).changes;
+}
+
+// Removed when saved-projects-store is converted (same PR).
 /**
  * Synchronous revoke-all for ONE project, for enlisting in another store's
  * transaction (the prepareAuditAppend pattern). Deleting a project must
@@ -212,10 +243,9 @@ function collapseToStrongest(rows: SharedGrantRow[]): SharedProjectGrant[] {
 }
 
 export function createProjectSharesRepository(
-  db: Database.Database,
+  db: PlatformDb,
 ): ProjectSharesRepository {
-  const appendAudit = prepareAuditAppend(db);
-  const upsert = db.prepare(`
+  const upsert = `
     INSERT INTO project_shares
       (owner_id, project_id, grantee_type, grantee_id, role, granted_by, created_at, revoked_at)
     VALUES (@ownerId, @projectId, @granteeType, @granteeId, @role, @grantedBy, @createdAt, NULL)
@@ -223,54 +253,63 @@ export function createProjectSharesRepository(
       role = excluded.role,
       granted_by = excluded.granted_by,
       revoked_at = NULL
-  `);
+  `;
 
-  const revokeOne = db.prepare(`
+  const revokeOne = `
     UPDATE project_shares SET revoked_at = @revokedAt
     WHERE owner_id = @ownerId AND project_id = @projectId
       AND grantee_type = @granteeType AND grantee_id = @granteeId
       AND revoked_at IS NULL
-  `);
+  `;
 
-  const selectForProject = db.prepare(
-    "SELECT * FROM project_shares WHERE owner_id = ? AND project_id = ? AND revoked_at IS NULL",
-  );
+  const selectForProject =
+    "SELECT * FROM project_shares WHERE owner_id = ? AND project_id = ? AND revoked_at IS NULL";
 
-  function grantNow(input: {
-    ownerId: string;
-    projectId: string;
-    granteeType: GranteeType;
-    granteeId: string;
-    role: ShareRole;
-    grantedBy: string;
-  }): void {
-    upsert.run({ ...input, createdAt: new Date().toISOString() });
+  async function grantNow(
+    session: PlatformDbSession,
+    input: {
+      ownerId: string;
+      projectId: string;
+      granteeType: GranteeType;
+      granteeId: string;
+      role: ShareRole;
+      grantedBy: string;
+    },
+  ): Promise<void> {
+    await session.run(upsert, { ...input, createdAt: new Date().toISOString() });
   }
 
-  function revokeNow(input: {
-    ownerId: string;
-    projectId: string;
-    granteeType: GranteeType;
-    granteeId: string;
-  }): number {
-    return revokeOne.run({ ...input, revokedAt: new Date().toISOString() })
-      .changes;
+  async function revokeNow(
+    session: PlatformDbSession,
+    input: {
+      ownerId: string;
+      projectId: string;
+      granteeType: GranteeType;
+      granteeId: string;
+    },
+  ): Promise<number> {
+    return (
+      await session.run(revokeOne, {
+        ...input,
+        revokedAt: new Date().toISOString(),
+      })
+    ).changes;
   }
 
-  const grantAudited = db.transaction(
-    (
-      input: {
-        ownerId: string;
-        projectId: string;
-        granteeType: GranteeType;
-        granteeId: string;
-        role: ShareRole;
-        grantedBy: string;
-      },
-      actorId: string,
-    ) => {
-      grantNow(input);
-      appendAudit({
+  const grantAudited = (
+    input: {
+      ownerId: string;
+      projectId: string;
+      granteeType: GranteeType;
+      granteeId: string;
+      role: ShareRole;
+      grantedBy: string;
+    },
+    actorId: string,
+  ): Promise<void> =>
+    db.transaction(async (tx) => {
+      await grantNow(tx, input);
+      await appendAudit(tx, {
         actorId,
         action: "share.grant",
         subjectOwnerId: input.ownerId,
@@ -278,22 +317,21 @@ export function createProjectSharesRepository(
         granteeType: input.granteeType,
         granteeId: input.granteeId,
       });
-    },
-  );
+    });
 
-  const revokeAudited = db.transaction(
-    (
-      input: {
-        ownerId: string;
-        projectId: string;
-        granteeType: GranteeType;
-        granteeId: string;
-      },
-      actorId: string,
-    ) => {
-      const changes = revokeNow(input);
-      if (changes > 0) {
-        appendAudit({
+  const revokeAudited = (
+    input: {
+      ownerId: string;
+      projectId: string;
+      granteeType: GranteeType;
+      granteeId: string;
+    },
+    actorId: string,
+  ): Promise<number> =>
+    db.transaction(async (tx) => {
+      const changes = await revokeNow(tx, input);
+      if (changes > 0)
+        await appendAudit(tx, {
           actorId,
           action: "share.revoke",
           subjectOwnerId: input.ownerId,
@@ -301,24 +339,25 @@ export function createProjectSharesRepository(
           granteeType: input.granteeType,
           granteeId: input.granteeId,
         });
-      }
       return changes;
-    },
-  );
+    });
 
   return {
     async grant(input, actor) {
-      if (actor) grantAudited(input, actor.actorId);
-      else grantNow(input);
+      if (actor) await grantAudited(input, actor.actorId);
+      else await grantNow(db, input);
     },
 
     async revoke(input, actor) {
-      if (actor) revokeAudited(input, actor.actorId);
-      else revokeNow(input);
+      if (actor) await revokeAudited(input, actor.actorId);
+      else await revokeNow(db, input);
     },
 
     async listForProject(ownerId, projectId) {
-      const rows = selectForProject.all(ownerId, projectId) as ShareRow[];
+      const rows = await db.all<ShareRow>(selectForProject, [
+        ownerId,
+        projectId,
+      ]);
       return rows.map(toShare);
     },
 
@@ -335,11 +374,13 @@ export function createProjectSharesRepository(
         ORDER BY CASE role WHEN 'write' THEN 0 ELSE 1 END
         LIMIT 1
       `;
-      const row = db
-        .prepare(sql)
-        .get(ownerId, projectId, userId, ...orgIds, ...teamIds) as
-        | { role: string }
-        | undefined;
+      const row = await db.get<{ role: string }>(sql, [
+        ownerId,
+        projectId,
+        userId,
+        ...orgIds,
+        ...teamIds,
+      ]);
       return row ? (row.role as ShareRole) : null;
     },
 
@@ -364,16 +405,14 @@ export function createProjectSharesRepository(
           ${projectId !== undefined ? "AND s.project_id = ?" : ""}
         ORDER BY p.ord ASC, CASE s.role WHEN 'write' THEN 0 ELSE 1 END
       `;
-      const rows = db
-        .prepare(sql)
-        .all(
-          userId,
-          ...orgIds,
-          ...teamIds,
-          userId,
-          ...orgIds,
-          ...(projectId !== undefined ? [projectId] : []),
-        ) as SharedGrantRow[];
+      const rows = await db.all<SharedGrantRow>(sql, [
+        userId,
+        ...orgIds,
+        ...teamIds,
+        userId,
+        ...orgIds,
+        ...(projectId !== undefined ? [projectId] : []),
+      ]);
       return collapseToStrongest(rows);
     },
   };

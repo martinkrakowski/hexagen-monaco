@@ -1,5 +1,5 @@
-import type Database from "better-sqlite3";
-import { prepareAuditAppend, type AuditEntry } from "./audit-log-store";
+import type { PlatformDb, PlatformDbSession } from "./db";
+import { appendAudit, type AuditEntry } from "./audit-log-store";
 
 /**
  * Teams and their membership (P-A2).
@@ -136,95 +136,105 @@ function toTeam(row: TeamRow): Team {
   };
 }
 
-export function createTeamsRepository(db: Database.Database): TeamsRepository {
-  const insertTeam = db.prepare(`
+export function createTeamsRepository(db: PlatformDb): TeamsRepository {
+  const insertTeam = `
     INSERT INTO teams (id, org_id, slug, name, created_by, created_at)
     VALUES (@id, @org_id, @slug, @name, @created_by, @created_at)
-  `);
-  const selectTeam = db.prepare("SELECT * FROM teams WHERE id = ?");
-  const selectTeamBySlug = db.prepare(
-    "SELECT * FROM teams WHERE org_id = ? AND slug = ?",
-  );
-  const selectTeamsForOrg = db.prepare(
-    "SELECT * FROM teams WHERE org_id = ? ORDER BY slug",
-  );
-  const selectOrgMember = db.prepare(
-    "SELECT 1 FROM org_members WHERE org_id = ? AND user_id = ?",
-  );
-  const upsertMember = db.prepare(`
+  `;
+  const selectTeam = "SELECT * FROM teams WHERE id = ?";
+  const selectTeamBySlug = "SELECT * FROM teams WHERE org_id = ? AND slug = ?";
+  const selectTeamsForOrg =
+    "SELECT * FROM teams WHERE org_id = ? ORDER BY slug";
+  const selectOrgMember =
+    "SELECT 1 FROM org_members WHERE org_id = ? AND user_id = ?";
+  const upsertMember = `
     INSERT INTO team_members (team_id, user_id, created_at)
     VALUES (@team_id, @user_id, @created_at)
     ON CONFLICT(team_id, user_id) DO NOTHING
-  `);
-  const deleteMember = db.prepare(
-    "DELETE FROM team_members WHERE team_id = ? AND user_id = ?",
-  );
-  const selectMember = db.prepare(
-    "SELECT 1 FROM team_members WHERE team_id = ? AND user_id = ?",
-  );
-  const selectTeamIds = db.prepare(
-    "SELECT team_id FROM team_members WHERE user_id = ? ORDER BY team_id",
-  );
-
-  const deleteTeamRow = db.prepare("DELETE FROM teams WHERE id = ?");
-  const deleteAllMembers = db.prepare(
-    "DELETE FROM team_members WHERE team_id = ?",
-  );
+  `;
+  const deleteMember =
+    "DELETE FROM team_members WHERE team_id = ? AND user_id = ?";
+  const selectMember =
+    "SELECT 1 FROM team_members WHERE team_id = ? AND user_id = ?";
+  const selectTeamIds =
+    "SELECT team_id FROM team_members WHERE user_id = ? ORDER BY team_id";
+  const deleteTeamRow = "DELETE FROM teams WHERE id = ?";
+  const deleteAllMembers =
+    "DELETE FROM team_members WHERE team_id = ?";
 
   // The audit row is written INSIDE each mutation's transaction, not after it
   // by a separate awaited repository call. Two independent commits mean the
   // mutation can land while the audit write throws, and an unaudited change is
   // exactly the event the log exists to make impossible to miss.
-  const appendAudit = prepareAuditAppend(db);
-  const audited = (
+  const audited = async (
+    session: PlatformDbSession,
     audit: TeamAuditContext | undefined,
     entry: Omit<AuditEntry, "actorId">,
   ) => {
-    if (audit) appendAudit({ ...entry, actorId: audit.actorId });
+    if (audit) await appendAudit(session, { ...entry, actorId: audit.actorId });
   };
 
-  const createTeamTx = db.transaction(
-    (row: TeamRow, audit?: TeamAuditContext) => {
-      insertTeam.run(row);
-      audited(audit, {
+  const createTeamTx = (
+    row: TeamRow,
+    audit?: TeamAuditContext,
+  ): Promise<void> =>
+    db.transaction(async (tx) => {
+      await tx.run(insertTeam, {
+        id: row.id,
+        org_id: row.org_id,
+        slug: row.slug,
+        name: row.name,
+        created_by: row.created_by,
+        created_at: row.created_at,
+      });
+      await audited(tx, audit, {
         action: "team.create",
         subjectOwnerId: row.org_id,
         subjectId: row.id,
       });
-    },
-  );
+    });
 
   // Memberships go with the team, atomically: rows pointing at a team that no
   // longer exists would be invisible grants.
-  const deleteTeamTx = db.transaction(
-    (teamId: string, audit?: TeamAuditContext) => {
-      const team = selectTeam.get(teamId) as TeamRow | undefined;
-      deleteAllMembers.run(teamId);
-      const removed = deleteTeamRow.run(teamId);
+  const deleteTeamTx = (
+    teamId: string,
+    audit?: TeamAuditContext,
+  ): Promise<void> =>
+    db.transaction(async (tx) => {
+      const team = await tx.get<TeamRow | undefined>(selectTeam, [teamId]);
+      await tx.run(deleteAllMembers, [teamId]);
+      const removed = await tx.run(deleteTeamRow, [teamId]);
       // Gate on affected rows: an audit row for a delete that hit nothing is a
       // record of an event that did not happen, which is worse than a missing
       // one — a reader cannot tell it from a real deletion.
       if (removed.changes > 0)
-        audited(audit, {
+        await audited(tx, audit, {
           action: "team.delete",
           subjectOwnerId: team?.org_id ?? null,
           subjectId: teamId,
         });
-    },
-  );
+    });
 
   // Check-and-insert in ONE transaction: without it, an org removal
   // interleaving between the membership check and the insert would leave a
   // team row belonging to a user who is no longer in the org — precisely the
   // orphan the cascade exists to prevent.
-  const addMemberTx = db.transaction(
-    (teamId: string, userId: string, audit?: TeamAuditContext) => {
-      const team = selectTeam.get(teamId) as TeamRow | undefined;
+  const addMemberTx = (
+    teamId: string,
+    userId: string,
+    audit?: TeamAuditContext,
+  ): Promise<void> =>
+    db.transaction(async (tx) => {
+      const team = await tx.get<TeamRow | undefined>(selectTeam, [teamId]);
       if (!team) throw new UnknownTeamError(teamId);
-      if (!selectOrgMember.get(team.org_id, userId)) {
+      const orgMember = await tx.get<{ ok: number }>(selectOrgMember, [
+        team.org_id,
+        userId,
+      ]);
+      if (!orgMember) {
         throw new NotAnOrgMemberError(teamId, userId);
       }
-      const inserted = upsertMember.run({
+      const inserted = await tx.run(upsertMember, {
         team_id: teamId,
         user_id: userId,
         created_at: new Date().toISOString(),
@@ -232,30 +242,32 @@ export function createTeamsRepository(db: Database.Database): TeamsRepository {
       // ON CONFLICT DO NOTHING: a duplicate add changes nothing, so recording
       // "member added" would be a false entry.
       if (inserted.changes > 0)
-        audited(audit, {
+        await audited(tx, audit, {
           action: "team.member.add",
           subjectOwnerId: team.org_id,
           subjectId: teamId,
           granteeType: "user",
           granteeId: userId,
         });
-    },
-  );
+    });
 
-  const removeMemberTx = db.transaction(
-    (teamId: string, userId: string, audit?: TeamAuditContext) => {
-      const team = selectTeam.get(teamId) as TeamRow | undefined;
-      const removedMember = deleteMember.run(teamId, userId);
+  const removeMemberTx = (
+    teamId: string,
+    userId: string,
+    audit?: TeamAuditContext,
+  ): Promise<void> =>
+    db.transaction(async (tx) => {
+      const team = await tx.get<TeamRow | undefined>(selectTeam, [teamId]);
+      const removedMember = await tx.run(deleteMember, [teamId, userId]);
       if (removedMember.changes > 0)
-        audited(audit, {
+        await audited(tx, audit, {
           action: "team.member.remove",
           subjectOwnerId: team?.org_id ?? null,
           subjectId: teamId,
           granteeType: "user",
           granteeId: userId,
         });
-    },
-  );
+    });
 
   /**
    * The UNIQUE index on (org_id, slug) is the arbiter, not a prior SELECT.
@@ -264,10 +276,8 @@ export function createTeamsRepository(db: Database.Database): TeamsRepository {
    * creates and the loser would escape as a 500.
    */
   const isDuplicateSlug = (err: unknown): boolean =>
-    typeof err === "object" &&
-    err !== null &&
-    (err as { code?: string }).code === "SQLITE_CONSTRAINT_UNIQUE" &&
-    String((err as { message?: string }).message ?? "").includes("teams.slug");
+    db.isUniqueViolation(err) &&
+    String((err as { message?: unknown }).message ?? "").includes("teams.slug");
 
   return {
     async createTeam(input, audit) {
@@ -280,7 +290,7 @@ export function createTeamsRepository(db: Database.Database): TeamsRepository {
         created_at: new Date().toISOString(),
       };
       try {
-        createTeamTx(row, audit);
+        await createTeamTx(row, audit);
       } catch (err) {
         if (isDuplicateSlug(err)) {
           throw new DuplicateTeamSlugError(input.orgId, input.slug);
@@ -290,30 +300,35 @@ export function createTeamsRepository(db: Database.Database): TeamsRepository {
       return toTeam(row);
     },
     async getTeam(teamId) {
-      const row = selectTeam.get(teamId) as TeamRow | undefined;
+      const row = await db.get<TeamRow | undefined>(selectTeam, [teamId]);
       return row ? toTeam(row) : null;
     },
     async getTeamBySlug(orgId, slug) {
-      const row = selectTeamBySlug.get(orgId, slug) as TeamRow | undefined;
+      const row = await db.get<TeamRow | undefined>(selectTeamBySlug, [
+        orgId,
+        slug,
+      ]);
       return row ? toTeam(row) : null;
     },
     async listTeamsForOrg(orgId) {
-      return (selectTeamsForOrg.all(orgId) as TeamRow[]).map(toTeam);
+      const rows = await db.all<TeamRow>(selectTeamsForOrg, [orgId]);
+      return rows.map(toTeam);
     },
     async deleteTeam(teamId, audit) {
-      deleteTeamTx(teamId, audit);
+      await deleteTeamTx(teamId, audit);
     },
     async addMember(teamId, userId, audit) {
-      addMemberTx(teamId, userId, audit);
+      await addMemberTx(teamId, userId, audit);
     },
     async removeMember(teamId, userId, audit) {
-      removeMemberTx(teamId, userId, audit);
+      await removeMemberTx(teamId, userId, audit);
     },
     async isMember(teamId, userId) {
-      return selectMember.get(teamId, userId) !== undefined;
+      const row = await db.get<{ ok: number }>(selectMember, [teamId, userId]);
+      return row !== undefined;
     },
     async listTeamIdsForUser(userId) {
-      const rows = selectTeamIds.all(userId) as Array<{ team_id: string }>;
+      const rows = await db.all<{ team_id: string }>(selectTeamIds, [userId]);
       return rows.map((r) => r.team_id);
     },
   };
