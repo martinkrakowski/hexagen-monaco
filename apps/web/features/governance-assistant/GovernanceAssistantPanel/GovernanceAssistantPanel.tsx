@@ -59,10 +59,10 @@ export function GovernanceAssistantPanel({
   // this panel reads them. They were threaded through `ModeWrapper` and
   // `LocalModeView` to no consumer at all, which also means
   // `GovernancePanelWrapper`'s `handleRefresh` — the ONLY caller of
-  // `useGovernanceData().refresh`, and therefore the only thing that would ever
-  // populate `violations` / `suggestions` — is never invoked. Both props stay on
-  // the interface because deciding what that surface should do is a product
-  // question, not a refactor; see the PR notes.
+  // `useGovernanceData().refresh`, and therefore the only thing that would
+  // ever populate `violations` / `suggestions` — is never invoked. Both props
+  // stay on the interface because deciding what that surface should do is a
+  // product question, not a refactor; see the PR notes.
   const {
     activeItem,
     selectItem,
@@ -251,6 +251,8 @@ export function GovernanceAssistantPanel({
 
   const engineBusy = status === "downloading" || status === "loading_vram";
 
+  let panelContent: React.ReactNode;
+
   if (
     lifecycleOwnsThePanel(lifecycle) ||
     panelView === "model-settings" ||
@@ -268,7 +270,7 @@ export function GovernanceAssistantPanel({
       cloudConnection.config?.model ??
       "Unknown Model";
 
-    return (
+    panelContent = (
       <ModeWrapper
         mode={mode}
         vault={vault}
@@ -307,8 +309,40 @@ export function GovernanceAssistantPanel({
         onResetConfig={handleResetConfig}
       />
     );
+  } else {
+    panelContent = (
+      <GovernanceQaView
+        currentStepIndex={currentStepIndex}
+        violations={violations}
+        suggestions={suggestions}
+        activeItem={activeItem}
+        onSelectViolation={(v) => selectItem({ type: "violation", item: v })}
+        onSelectSuggestion={(s) => selectItem({ type: "suggestion", item: s })}
+        displayQuestions={displayQuestions}
+        isStreaming={isStreaming}
+        isExpanded={(id) => expandedQuestionId === id}
+        onQuestionClick={handleQuestionClick}
+        conversationThread={conversationThread}
+        lastAssistantMessage={lastAssistantMessage}
+        regeneratingEntryId={regeneratingEntryId}
+        onRegenerate={regenerateAnswer}
+        followUpQuestions={followUpQuestions}
+        onFollowUpClick={handleFollowUpClick}
+        threadLoaded={threadLoaded}
+        footerModelId={llmEngineState.loadedModelId}
+        footerModelLabel={
+          serverAssistantAvailable ? capabilities.chatModelName : undefined
+        }
+        footerIsLoading={engineBusy}
+        onOpenSettings={handleOpenSettings}
+      />
+    );
   }
 
+  // Outer layout: h-full flex flex-col gives the panel a bounded height from
+  // Tabs.Content (flex-1 overflow-hidden). The notice is shrink-0 so it never
+  // steals scroll space; the content sits in flex-1 min-h-0 so its internal
+  // flex-1 overflow-y-auto list can scroll.
   return (
     <div className="h-full flex flex-col">
       {localLLMOffer && (
@@ -321,35 +355,7 @@ export function GovernanceAssistantPanel({
           />
         </div>
       )}
-      <div className="flex-1 min-h-0">
-        <GovernanceQaView
-          currentStepIndex={currentStepIndex}
-          violations={violations}
-          suggestions={suggestions}
-          activeItem={activeItem}
-          onSelectViolation={(v) => selectItem({ type: "violation", item: v })}
-          onSelectSuggestion={(s) =>
-            selectItem({ type: "suggestion", item: s })
-          }
-          displayQuestions={displayQuestions}
-          isStreaming={isStreaming}
-          isExpanded={(id) => expandedQuestionId === id}
-          onQuestionClick={handleQuestionClick}
-          conversationThread={conversationThread}
-          lastAssistantMessage={lastAssistantMessage}
-          regeneratingEntryId={regeneratingEntryId}
-          onRegenerate={regenerateAnswer}
-          followUpQuestions={followUpQuestions}
-          onFollowUpClick={handleFollowUpClick}
-          threadLoaded={threadLoaded}
-          footerModelId={llmEngineState.loadedModelId}
-          footerModelLabel={
-            serverAssistantAvailable ? capabilities.chatModelName : undefined
-          }
-          footerIsLoading={engineBusy}
-          onOpenSettings={handleOpenSettings}
-        />
-      </div>
+      <div className="flex-1 min-h-0">{panelContent}</div>
     </div>
   );
 }

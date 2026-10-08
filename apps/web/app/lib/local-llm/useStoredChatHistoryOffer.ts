@@ -74,7 +74,6 @@ export function useStoredChatHistoryOffer(
       cancelled = true;
       ignore = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [persistencePort]);
 
   const download = useCallback(async () => {
