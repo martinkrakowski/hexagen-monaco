@@ -418,14 +418,26 @@ describe("sqlite-db", () => {
     await expect(second).resolves.toBeUndefined();
   });
 
-  it("the statement cache is bounded: many distinct statements still run, old and new", async () => {
+  it("the statement cache is bounded: an evicted statement is prepared again, a cached one is not", async () => {
+    const prepare = vi.spyOn(handle, "prepare");
+    const preparesOf = (sql: string) =>
+      prepare.mock.calls.filter(([text]) => text === sql).length;
     const first = "SELECT 0 AS n";
     expect((await db.get<{ n: number }>(first))?.n).toBe(0);
+    expect((await db.get<{ n: number }>(first))?.n).toBe(0);
+    expect(preparesOf(first), "a cached statement is prepared once").toBe(1);
     for (let i = 1; i <= 400; i++) {
       const row = await db.get<{ n: number }>(`SELECT ${i} AS n`);
       expect(row?.n).toBe(i);
     }
-    // Evicted long ago, and prepared again without complaint.
+    // 400 distinct statements later the first is long evicted (the limit is
+    // 256), so running it again prepares it again. A cache with no limit
+    // would still hold it and this count would stay at 1.
     expect((await db.get<{ n: number }>(first))?.n).toBe(0);
+    expect(preparesOf(first), "an evicted statement is prepared again").toBe(2);
+    // The most recent statement is still cached.
+    expect((await db.get<{ n: number }>("SELECT 400 AS n"))?.n).toBe(400);
+    expect(preparesOf("SELECT 400 AS n")).toBe(1);
+    prepare.mockRestore();
   });
 });
