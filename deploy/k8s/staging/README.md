@@ -84,7 +84,7 @@ effectively immutable.
 
 ### SQLite backup
 
-CronJob `hexagen-sqlite-backup` copies the SQLite files at 02:47 UTC every day
+CronJob `hexagen-sqlite-backup` copies the SQLite files at 02:17 UTC every day
 into a second claim, `hexagen-web-backups` (1Gi), and keeps the seven newest of
 each. It runs the app's own image (the deploy script gives it the same tag as
 the app) and `sqlite-backup/sqlite-backup.cjs`, mounted from a ConfigMap. The

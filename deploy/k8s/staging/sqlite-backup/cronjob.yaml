@@ -12,7 +12,9 @@ metadata:
     # not reach the backups.
     app: hexagen-sqlite-backup
 spec:
-  schedule: "47 2 * * *"
+  # 02:17 UTC, so that the off-node copy that runs from about 02:40 UTC finds
+  # this night's files and not last night's. The job takes seconds.
+  schedule: "17 2 * * *"
   timeZone: Etc/UTC
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 2
