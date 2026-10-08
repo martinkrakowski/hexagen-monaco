@@ -14,6 +14,8 @@ const TARGET_RULES = new Set([
   "@typescript-eslint/await-thenable",
 ]);
 
+const MY_RULE = "hexagen-ui/no-promise-in-untyped-position";
+
 // Each case gets its OWN probe file. TypeScript's project service is a
 // process-wide singleton (not owned by the ESLint instance), so reusing one
 // path for two cases can lint the second case against the first case's
@@ -36,6 +38,58 @@ const probes = {
   scope: {
     rel: "features/__lint_probe_scope__.ts",
     code: "async function f() {} ; f();",
+  },
+  typed_invalid: {
+    rel: "lib/platform/__lint_probe_typed_invalid__.ts",
+    code: [
+      "async function check(): Promise<boolean> { return true; }",
+      "async function takesUnknown(x: unknown) {}",
+      "async function takesAny(arr: any) {}",
+      "function generic<T>(body: T): void {}",
+      "function identity<T>(x: T): T { return x; }",
+      "function sinkWithThis<T>(this: void, value: T): void {}",
+      "function assertUser(value: unknown): void {}",
+      "async function go() {",
+      "  void takesUnknown({ initialized: check() });",
+      "  void takesAny([check()]);",
+      "  void takesUnknown(check());",
+      "  void generic(check());",
+      "  void generic([check()]);",
+      "  void generic({ initialized: check() });",
+      "  void sinkWithThis(check());",
+      "  void assertUser(check());",
+      "  void identity(check());",
+      "  `${check()}`;",
+      "}",
+      "void go();",
+    ].join("\n"),
+  },
+  typed_valid: {
+    rel: "lib/platform/__lint_probe_typed_valid__.ts",
+    code: [
+      "async function check(): Promise<boolean> { return true; }",
+      "function generic<T>(body: T): void {}",
+      "async function takesUnknown(x: unknown) {}",
+      "async function takesAny(arr: any) {}",
+      "async function takesPromise(o: { initialized: Promise<boolean> }) {}",
+      "async function go() {",
+      "  void takesUnknown({ initialized: await check() });",
+      "  void takesAny([await check()]);",
+      "  void `${await check()}`;",
+      "  void takesUnknown(await check());",
+      "  void Promise.all([check(), check()]);",
+      "  const tasks: Promise<boolean>[] = [check()];",
+      "  void takesPromise({ initialized: check() });",
+      "  void check();",
+      "  const m = new Map<string, Promise<boolean>>();",
+      '  m.set("k", check());',
+      "  const list: Promise<boolean>[] = [];",
+      "  list.push(check());",
+      "  void Promise.race([check()]);",
+      "  void generic<Promise<boolean>>(check());",
+      "}",
+      "void go();",
+    ].join("\n"),
   },
 };
 
@@ -104,6 +158,10 @@ function probes_count() {
   return Object.keys(probes).length;
 }
 
+function myRuleMessages(result: ESLint.LintResult) {
+  return result.messages.filter((m) => m.ruleId === MY_RULE);
+}
+
 describe("server floating-promises lint block", () => {
   it("flags a floating promise under lib/platform (no-floating-promises)", () => {
     const r = resultFor(probes.floating.rel);
@@ -154,6 +212,52 @@ describe("server floating-promises lint block", () => {
       rules.length,
       0,
       `expected no target-rule errors; got ${JSON.stringify(messagesOf(r))}`,
+    );
+  });
+});
+
+describe("no-promise-in-untyped-position rule", () => {
+  it("reports every invalid line of the probe, with the rule id", () => {
+    const r = resultFor(probes.typed_invalid.rel);
+    const msgs = myRuleMessages(r);
+    // One report per statement inside go(): each such line is one invalid
+    // shape, so a shape that stops being caught names itself here.
+    const lines = probes.typed_invalid.code.split("\n");
+    const expected = lines
+      .map((text, index) => ({ text, line: index + 1 }))
+      .filter(
+        ({ text }) => text.startsWith("  void ") || text.startsWith("  `"),
+      );
+    assert.ok(expected.length >= 10, `probe has ${expected.length} cases`);
+    const reported = new Set(msgs.map((m) => m.line));
+    for (const { text, line } of expected) {
+      assert.ok(
+        reported.has(line),
+        `no report for line ${line}: ${text.trim()} (got ${JSON.stringify(messagesOf(r))})`,
+      );
+    }
+    for (const m of msgs) {
+      assert.equal(m.ruleId, MY_RULE);
+    }
+  });
+
+  it("covers all four position kinds in the invalid probe", () => {
+    const r = resultFor(probes.typed_invalid.rel);
+    const positions = myRuleMessages(r).map((m) => m.message);
+    const has = (substr: string) => positions.some((s) => s.includes(substr));
+    assert.ok(has("object-property"), "expected object-property report");
+    assert.ok(has("array-element"), "expected array-element report");
+    assert.ok(has("call-argument"), "expected call-argument report");
+    assert.ok(has("template-literal"), "expected template-literal report");
+  });
+
+  it("does not report any valid case", () => {
+    const r = resultFor(probes.typed_valid.rel);
+    const msgs = myRuleMessages(r);
+    assert.equal(
+      msgs.length,
+      0,
+      `expected 0 reports, got ${msgs.length}: ${JSON.stringify(messagesOf(r))}`,
     );
   });
 });

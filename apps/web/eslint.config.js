@@ -641,10 +641,14 @@ export default [
         tsconfigRootDir: __dirname,
       },
     },
+    plugins: {
+      "hexagen-ui": hexagenUi,
+    },
     rules: {
       "@typescript-eslint/no-floating-promises": "error",
       "@typescript-eslint/no-misused-promises": "error",
       "@typescript-eslint/await-thenable": "error",
+      "hexagen-ui/no-promise-in-untyped-position": "error",
     },
   },
 ];

@@ -103,7 +103,11 @@ import {
  * Simple registry-based composition for ports used by web-driver use-cases.
  * Intent Bus / projections / components consume via typed getters.
  */
-export const wireDependencies = () => {
+export const wireDependencies = (): {
+  get: <T>(portName: string) => T;
+  register: (portName: string, instance: unknown) => void;
+  migrationReady: Promise<void>;
+} => {
   const registry = new Map<string, unknown>();
 
   // Monaco persistence port → dedicated localStorage adapter
