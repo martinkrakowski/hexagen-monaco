@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import type Database from "better-sqlite3";
 import { openPlatformDb } from "../platform-db";
+import { createSqlitePlatformDb } from "../sqlite-db";
 import {
   MAX_INLINE_FINDING_ENTRIES,
   MAX_SCAN_RECORDS_PER_OWNER,
@@ -29,10 +30,11 @@ const NOW = 1_700_000_000_000;
 
 function harness(ownerId = "owner-a") {
   const db = openPlatformDb(":memory:");
+  const platformDb = createSqlitePlatformDb(db);
   return {
     db,
-    store: createScanRecordsStore(db, ownerId, ARTIFACTS_ROOT),
-    other: createScanRecordsStore(db, "owner-b", ARTIFACTS_ROOT),
+    store: createScanRecordsStore(platformDb, ownerId, ARTIFACTS_ROOT),
+    other: createScanRecordsStore(platformDb, "owner-b", ARTIFACTS_ROOT),
   };
 }
 

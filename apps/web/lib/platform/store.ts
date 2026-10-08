@@ -55,7 +55,7 @@ export interface PlatformStore {
   readonly scanArtifactsDir: string;
   isProjectsInitialized(ownerId: string): Promise<boolean>;
   markProjectsInitialized(ownerId: string): Promise<void>;
-  close(): void;
+  close(): Promise<void>;
 }
 
 export function createPlatformStore(
@@ -70,20 +70,20 @@ export function createPlatformStore(
   const ownerState = createOwnerStateStore(platformDb);
   return {
     scanArtifactsDir: artifactsDir,
-    auth: createAuthRepository(db),
-    billing: createEntitlementRepository(db),
-    orgs: createOrgsRepository(db),
-    teams: createTeamsRepository(db),
-    audit: createAuditLogRepository(db),
-    shares: createProjectSharesRepository(db),
+    auth: createAuthRepository(platformDb),
+    billing: createEntitlementRepository(platformDb),
+    orgs: createOrgsRepository(platformDb),
+    teams: createTeamsRepository(platformDb),
+    audit: createAuditLogRepository(platformDb),
+    shares: createProjectSharesRepository(platformDb),
     projectsFor(ownerId) {
-      return createSavedProjectsStore(db, ownerId);
+      return createSavedProjectsStore(platformDb, ownerId);
     },
     runsFor(ownerId) {
-      return createRunHistoryRepository(db, ownerId);
+      return createRunHistoryRepository(platformDb, ownerId);
     },
     scansFor(ownerId) {
-      return createScanRecordsStore(db, ownerId, artifactsDir);
+      return createScanRecordsStore(platformDb, ownerId, artifactsDir);
     },
     async isProjectsInitialized(ownerId) {
       return ownerState.isInitialized(ownerId);
@@ -92,7 +92,7 @@ export function createPlatformStore(
       return ownerState.markInitialized(ownerId);
     },
     close() {
-      db.close();
+      return platformDb.close();
     },
   };
 }
@@ -106,9 +106,10 @@ export function getPlatformStore(): PlatformStore {
   return singleton;
 }
 
-export function closePlatformStore(): void {
+export async function closePlatformStore(): Promise<void> {
   if (singleton) {
-    singleton.close();
+    const closing = singleton;
     singleton = null;
+    await closing.close();
   }
 }

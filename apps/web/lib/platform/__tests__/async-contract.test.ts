@@ -4,6 +4,7 @@ import type { AdapterAccount } from "next-auth/adapters";
 import type { SavedProject } from "@hexagen/shared";
 import { createPlatformStore } from "../store";
 import { openPlatformDb } from "../platform-db";
+import { createSqlitePlatformDb } from "../sqlite-db";
 import { createRepairTelemetryStore } from "../repair-telemetry-store";
 
 /**
@@ -12,7 +13,35 @@ import { createRepairTelemetryStore } from "../repair-telemetry-store";
  * test pins each signature at runtime so a future revert to synchronous breaks
  * the suite before it breaks callers.
  */
-describe("async contract — 30 store methods return Promises", () => {
+/**
+ * Each case must be a Promise, and must settle the way the test says: a method
+ * that rejects when it was expected to resolve is a failure, so a broken
+ * statement cannot hide behind "it returned a Promise".
+ */
+async function assertPromisesSettle(
+  cases: ReadonlyArray<{ name: string; result: unknown }>,
+  expectedRejections: readonly string[],
+): Promise<void> {
+  for (const { name, result } of cases) {
+    assert.ok(
+      result instanceof Promise,
+      `${name} must return a Promise, got ${typeof result}`,
+    );
+  }
+  const settled = await Promise.allSettled(
+    cases.map((c) => c.result as Promise<unknown>),
+  );
+  const rejected = cases
+    .filter((_, i) => settled[i]?.status === "rejected")
+    .map((c) => c.name);
+  assert.deepEqual(rejected, [...expectedRejections]);
+}
+
+const EXPECTED_REJECTIONS_1: readonly string[] = [];
+const EXPECTED_REJECTIONS_2: readonly string[] = [];
+const EXPECTED_REJECTIONS_3: readonly string[] = [];
+
+describe("async contract — 60 store methods return Promises", () => {
   const store = createPlatformStore(":memory:");
   const OWNER = "user-owner";
 
@@ -223,7 +252,10 @@ describe("async contract — 30 store methods return Promises", () => {
 
   it("each RepairTelemetryStore method returns a Promise", async () => {
     const db = openPlatformDb(":memory:");
-    const telemetry = createRepairTelemetryStore(db, OWNER);
+    const telemetry = createRepairTelemetryStore(
+      createSqlitePlatformDb(db),
+      OWNER,
+    );
 
     const recordResult = telemetry.record({
       surface: "client-deterministic",
@@ -260,5 +292,216 @@ describe("async contract — 30 store methods return Promises", () => {
     await classStatsResult;
 
     db.close();
+  });
+
+  it("each AuditLogRepository method returns a Promise", async () => {
+    const audit = store.audit;
+
+    const appendResult = audit.append({
+      actorId: "actor-1",
+      action: "team.member.add",
+      subjectOwnerId: "org-1",
+      subjectId: "team-1",
+      granteeType: "user",
+      granteeId: "user-1",
+    });
+    assert.ok(appendResult instanceof Promise, "append must return a Promise");
+    await appendResult;
+
+    const countResult = audit.countFor("team.member.add", "team-1");
+    assert.ok(countResult instanceof Promise, "countFor must return a Promise");
+    await countResult;
+  });
+
+  it("each OrgsRepository method returns a Promise", async () => {
+    const orgs = store.orgs;
+
+    // Set up: an org with an owner so subsequent methods have valid data.
+    const org = await orgs.createOrgWithOwner(
+      { slug: "test-org", name: "Test Org", createdBy: OWNER },
+      { actorId: OWNER },
+    );
+
+    const cases: { name: string; result: unknown }[] = [
+      {
+        name: "createOrg",
+        result: orgs.createOrg({
+          slug: "other-org",
+          name: "Other",
+          createdBy: OWNER,
+        }),
+      },
+      {
+        name: "createOrgWithOwner",
+        result: orgs.createOrgWithOwner(
+          { slug: "second-org", name: "Second", createdBy: "user-2" },
+          { actorId: "user-2" },
+        ),
+      },
+      { name: "getOrg", result: orgs.getOrg(org.id) },
+      { name: "getOrgBySlug", result: orgs.getOrgBySlug("test-org") },
+      {
+        name: "addMember",
+        result: orgs.addMember(org.id, "user-2", "member"),
+      },
+      {
+        name: "removeMember",
+        result: orgs.removeMember(org.id, "user-2", { actorId: OWNER }),
+      },
+      { name: "memberRole", result: orgs.memberRole(org.id, OWNER) },
+      { name: "listOrgIdsForUser", result: orgs.listOrgIdsForUser(OWNER) },
+      { name: "listMembers", result: orgs.listMembers(org.id) },
+      {
+        name: "invite",
+        result: orgs.invite(org.id, "github-user", "member", {
+          actorId: OWNER,
+        }),
+      },
+      { name: "listPendingInvites", result: orgs.listPendingInvites(org.id) },
+      {
+        name: "acceptInvitesForLogin",
+        result: orgs.acceptInvitesForLogin("id-1", "github-user"),
+      },
+      { name: "listOrgsForUser", result: orgs.listOrgsForUser(OWNER) },
+      {
+        name: "deleteOrg",
+        result: orgs.deleteOrg("nonexistent-org", { actorId: OWNER }),
+      },
+    ];
+
+    await assertPromisesSettle(cases, EXPECTED_REJECTIONS_1);
+  });
+
+  it("each TeamsRepository method returns a Promise", async () => {
+    const teams = store.teams;
+
+    // Set up: an org with an owner and a member, and a team with a member.
+    const org = await store.orgs.createOrgWithOwner(
+      { slug: "test-teams", name: "Test Teams", createdBy: OWNER },
+      { actorId: OWNER },
+    );
+    await store.orgs.addMember(org.id, "member-1", "member");
+    const team = await teams.createTeam(
+      {
+        orgId: org.id,
+        slug: "platform",
+        name: "Platform",
+        createdBy: OWNER,
+      },
+      { actorId: OWNER },
+    );
+    await teams.addMember(team.id, "member-1", { actorId: OWNER });
+
+    const cases: { name: string; result: unknown }[] = [
+      {
+        name: "createTeam",
+        result: teams.createTeam({
+          orgId: org.id,
+          slug: "second-team",
+          name: "Second Team",
+          createdBy: OWNER,
+        }),
+      },
+      { name: "getTeam", result: teams.getTeam(team.id) },
+      {
+        name: "getTeamBySlug",
+        result: teams.getTeamBySlug(org.id, "platform"),
+      },
+      { name: "listTeamsForOrg", result: teams.listTeamsForOrg(org.id) },
+      {
+        name: "deleteTeam",
+        result: teams.deleteTeam("nonexistent-team", { actorId: OWNER }),
+      },
+      {
+        name: "addMember",
+        result: teams.addMember(team.id, "member-1", { actorId: OWNER }),
+      },
+      {
+        name: "removeMember",
+        result: teams.removeMember(team.id, "member-1", { actorId: OWNER }),
+      },
+      { name: "isMember", result: teams.isMember(team.id, "member-1") },
+      {
+        name: "listTeamIdsForUser",
+        result: teams.listTeamIdsForUser("member-1"),
+      },
+    ];
+
+    await assertPromisesSettle(cases, EXPECTED_REJECTIONS_2);
+  });
+
+  it("each ProjectSharesRepository method returns a Promise", async () => {
+    const shares = store.shares;
+
+    // Set up: a live grant to revoke and observe.
+    await shares.grant(
+      {
+        ownerId: OWNER,
+        projectId: "proj-1",
+        granteeType: "user",
+        granteeId: "member-1",
+        role: "read",
+        grantedBy: OWNER,
+      },
+      { actorId: OWNER },
+    );
+
+    const cases: { name: string; result: unknown }[] = [
+      {
+        name: "grant",
+        result: shares.grant(
+          {
+            ownerId: OWNER,
+            projectId: "proj-1",
+            granteeType: "user",
+            granteeId: "member-1",
+            role: "read",
+            grantedBy: OWNER,
+          },
+          { actorId: OWNER },
+        ),
+      },
+      {
+        name: "revoke",
+        result: shares.revoke(
+          {
+            ownerId: OWNER,
+            projectId: "proj-1",
+            granteeType: "user",
+            granteeId: "member-1",
+          },
+          { actorId: OWNER },
+        ),
+      },
+      {
+        name: "listForProject",
+        result: shares.listForProject(OWNER, "proj-1"),
+      },
+      {
+        name: "accessFor",
+        result: shares.accessFor(OWNER, "proj-1", {
+          userId: "member-1",
+          orgIds: [],
+          teamIds: [],
+        }),
+      },
+      {
+        name: "selectSharedWith",
+        result: shares.selectSharedWith({
+          userId: "member-1",
+          orgIds: [],
+          teamIds: [],
+        }),
+      },
+    ];
+
+    await assertPromisesSettle(cases, EXPECTED_REJECTIONS_3);
+  });
+
+  it("close returns a Promise", async () => {
+    const store = createPlatformStore(":memory:");
+    const result = store.close();
+    assert.ok(result instanceof Promise, "close must return a Promise");
+    await result;
   });
 });

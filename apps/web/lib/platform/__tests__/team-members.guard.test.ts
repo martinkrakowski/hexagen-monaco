@@ -5,11 +5,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { openPlatformDb } from "../platform-db";
+import { createSqlitePlatformDb } from "../sqlite-db";
 import { createOrgsRepository } from "../orgs-store";
 import {
   createTeamsRepository,
   DuplicateTeamSlugError,
   NotAnOrgMemberError,
+  UnknownTeamError,
 } from "../teams-store";
 import { createAuditLogRepository } from "../audit-log-store";
 
@@ -19,11 +21,12 @@ function fixture() {
     "p.db",
   );
   const db = openPlatformDb(path);
+  const platformDb = createSqlitePlatformDb(db);
   return {
     db,
-    orgs: createOrgsRepository(db),
-    teams: createTeamsRepository(db),
-    audit: createAuditLogRepository(db),
+    orgs: createOrgsRepository(platformDb),
+    teams: createTeamsRepository(platformDb),
+    audit: createAuditLogRepository(platformDb),
   };
 }
 
@@ -128,6 +131,96 @@ describe("P-A2 — team membership invariants", () => {
         },
       );
       assert.equal(await teams.isMember(team.id, "stranger"), false);
+    } finally {
+      db.close();
+    }
+  });
+
+  it("addMember to an unknown team rejects with UnknownTeamError; no team_members row and no audit row appear", async () => {
+    const { db, orgs, teams, audit } = fixture();
+    try {
+      const org = await orgs.createOrg({
+        slug: "acme",
+        name: "Acme",
+        createdBy: "owner-1",
+      });
+      await orgs.addMember(org.id, "member-1", "member");
+      await teams.createTeam({
+        orgId: org.id,
+        slug: "platform",
+        name: "Platform",
+        createdBy: "owner-1",
+      });
+
+      await assert.rejects(
+        () => teams.addMember("nonexistent-team", "member-1"),
+        (err: unknown) => {
+          assert.ok(err instanceof UnknownTeamError);
+          assert.equal(err.code, "unknown_team");
+          return true;
+        },
+      );
+      assert.equal(
+        (
+          db
+            .prepare("SELECT COUNT(*) AS n FROM team_members WHERE user_id = ?")
+            .get("member-1") as { n: number }
+        ).n,
+        0,
+        "no team_members row must appear for an unknown team",
+      );
+      assert.equal(
+        await audit.countFor("team.member.add", "nonexistent-team"),
+        0,
+        "no audit row must appear for an unknown team",
+      );
+    } finally {
+      db.close();
+    }
+  });
+
+  it("addMember of a user who is not in the org rejects with NotAnOrgMemberError; no team_members row and no audit row appear", async () => {
+    const { db, orgs, teams, audit } = fixture();
+    try {
+      const org = await orgs.createOrg({
+        slug: "acme",
+        name: "Acme",
+        createdBy: "owner-1",
+      });
+      const team = await teams.createTeam({
+        orgId: org.id,
+        slug: "platform",
+        name: "Platform",
+        createdBy: "owner-1",
+      });
+
+      // Non-vacuity: the team exists, so the refusal is the org-membership rule.
+      assert.ok(await teams.getTeam(team.id), "team must exist");
+
+      await assert.rejects(
+        () => teams.addMember(team.id, "stranger"),
+        (err: unknown) => {
+          assert.ok(err instanceof NotAnOrgMemberError);
+          assert.equal(err.code, "not_an_org_member");
+          return true;
+        },
+      );
+      assert.equal(
+        (
+          db
+            .prepare(
+              "SELECT COUNT(*) AS n FROM team_members WHERE team_id = ? AND user_id = ?",
+            )
+            .get(team.id, "stranger") as { n: number }
+        ).n,
+        0,
+        "no team_members row must appear for a non-org-member",
+      );
+      assert.equal(
+        await audit.countFor("team.member.add", team.id),
+        0,
+        "no audit row must appear for a non-org-member",
+      );
     } finally {
       db.close();
     }

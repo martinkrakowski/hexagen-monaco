@@ -12,6 +12,7 @@ vi.mock("../store", () => ({
 
 import { getToken } from "next-auth/jwt";
 import { openPlatformDb } from "../platform-db";
+import { createSqlitePlatformDb } from "../sqlite-db";
 import { createOrgsRepository } from "../orgs-store";
 import { createAuthRepository } from "../auth-store";
 import { requireTenant } from "../require-owner";
@@ -23,7 +24,8 @@ function orgsOnTempDb() {
     "platform.db",
   );
   const db = openPlatformDb(path);
-  return { db, orgs: createOrgsRepository(db) };
+  const platformDb = createSqlitePlatformDb(db);
+  return { db, orgs: createOrgsRepository(platformDb) };
 }
 
 const req = () => new NextRequest("http://localhost/api/tenants/x/projects");
@@ -166,7 +168,7 @@ describe("H1.2 — requireTenant", () => {
   it("does not authorize a membership whose org_id is a personal user id", async () => {
     const { db, orgs } = orgsOnTempDb();
     try {
-      const auth = createAuthRepository(db);
+      const auth = createAuthRepository(createSqlitePlatformDb(db));
       const victim = await auth.createUser({
         name: "Victim",
         email: "victim@example.com",

@@ -13,8 +13,8 @@ function signedInAs(sub: string | null): void {
 }
 
 describe("GET /api/orgs — membership list (H1.5)", () => {
-  beforeEach(() => {
-    closePlatformStore();
+  beforeEach(async () => {
+    await closePlatformStore();
     vi.mocked(getToken).mockReset();
   });
   afterEach(() => closePlatformStore());

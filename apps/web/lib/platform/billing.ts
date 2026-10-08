@@ -1,4 +1,4 @@
-import type Database from "better-sqlite3";
+import type { PlatformDb } from "./db";
 
 export const BILLING_PLANS = ["free", "repo"] as const;
 export type BillingPlan = (typeof BILLING_PLANS)[number];
@@ -117,10 +117,10 @@ export interface EntitlementRepository {
 }
 
 export function createEntitlementRepository(
-  db: Database.Database,
+  db: PlatformDb,
 ): EntitlementRepository {
-  const select = db.prepare("SELECT * FROM entitlements WHERE user_id = ?");
-  const upsert = db.prepare(`
+  const select = "SELECT * FROM entitlements WHERE user_id = ?";
+  const upsert = `
     INSERT INTO entitlements (
       user_id, plan, repo_limit, stripe_customer_id, stripe_subscription_id,
       status, current_period_end, updated_at
@@ -136,19 +136,19 @@ export function createEntitlementRepository(
       status = excluded.status,
       current_period_end = excluded.current_period_end,
       updated_at = excluded.updated_at
-  `);
+  `;
 
   return {
     async resolve(userId) {
       if (!userId) return FREE_ENTITLEMENT;
-      const row = select.get(userId) as EntitlementRow | undefined;
+      const row = await db.get<EntitlementRow>(select, [userId]);
       if (!row) {
         return { ...FREE_ENTITLEMENT, userId };
       }
       return rowToEntitlement(row);
     },
     async upsert(entitlement) {
-      upsert.run({
+      await db.run(upsert, {
         user_id: entitlement.userId,
         plan: entitlement.plan,
         repo_limit: entitlement.repoLimit,

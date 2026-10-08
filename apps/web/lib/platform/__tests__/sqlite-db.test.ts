@@ -337,4 +337,107 @@ describe("sqlite-db", () => {
     const rows = await db.all<{ id: number }>("SELECT * FROM test");
     expect(rows).toHaveLength(1);
   });
+
+  it("a plain call from a context that outlived its transaction is accepted", async () => {
+    let later: Promise<void> = Promise.resolve();
+    await db.transaction(async (tx) => {
+      await tx.run("INSERT INTO test (id, name, val) VALUES (?, ?, ?)", [
+        1,
+        "a",
+        10,
+      ]);
+      later = new Promise<void>((resolve, reject) =>
+        setTimeout(() => {
+          db.get("SELECT 1 AS one").then(() => resolve(), reject);
+        }, 20),
+      );
+    });
+    await later;
+  });
+
+  it("a plain call made in the same tick as a transaction waits for it", async () => {
+    const t = db.transaction(async (tx) => {
+      await tx.run("INSERT INTO test (id, name, val) VALUES (?, ?, ?)", [
+        1,
+        "a",
+        10,
+      ]);
+    });
+    const q = db.get<{ n: number }>("SELECT COUNT(*) AS n FROM test");
+    await t;
+    const result = await q;
+    expect(result?.n).toBe(1);
+  });
+
+  it("after a transaction commits, a plain call runs at once", async () => {
+    await db.transaction(async (tx) => {
+      await tx.run("INSERT INTO test (id, name, val) VALUES (?, ?, ?)", [
+        1,
+        "a",
+        10,
+      ]);
+    });
+    const runPromise = db.run(
+      "INSERT INTO test (id, name, val) VALUES (?, ?, ?)",
+      [2, "b", 20],
+    );
+    const count = handle.prepare("SELECT COUNT(*) AS n FROM test").get() as {
+      n: number;
+    };
+    expect(count.n).toBe(2);
+    await runPromise;
+  });
+
+  it("after a transaction rolls back, a plain call runs at once", async () => {
+    await expect(
+      db.transaction(async (tx) => {
+        await tx.run("INSERT INTO test (id, name, val) VALUES (?, ?, ?)", [
+          1,
+          "a",
+          10,
+        ]);
+        throw new Error("rollback");
+      }),
+    ).rejects.toThrow("rollback");
+    const runPromise = db.run(
+      "INSERT INTO test (id, name, val) VALUES (?, ?, ?)",
+      [2, "b", 20],
+    );
+    const count = handle.prepare("SELECT COUNT(*) AS n FROM test").get() as {
+      n: number;
+    };
+    expect(count.n).toBe(1);
+    await runPromise;
+  });
+
+  it("close is safe to call twice: the second call resolves without throwing", async () => {
+    await db.close();
+    // Second close must not reject — better-sqlite3 throws on a closed handle.
+    const second = db.close();
+    expect(second).toBeInstanceOf(Promise);
+    await expect(second).resolves.toBeUndefined();
+  });
+
+  it("the statement cache is bounded: an evicted statement is prepared again, a cached one is not", async () => {
+    const prepare = vi.spyOn(handle, "prepare");
+    const preparesOf = (sql: string) =>
+      prepare.mock.calls.filter(([text]) => text === sql).length;
+    const first = "SELECT 0 AS n";
+    expect((await db.get<{ n: number }>(first))?.n).toBe(0);
+    expect((await db.get<{ n: number }>(first))?.n).toBe(0);
+    expect(preparesOf(first), "a cached statement is prepared once").toBe(1);
+    for (let i = 1; i <= 400; i++) {
+      const row = await db.get<{ n: number }>(`SELECT ${i} AS n`);
+      expect(row?.n).toBe(i);
+    }
+    // 400 distinct statements later the first is long evicted (the limit is
+    // 256), so running it again prepares it again. A cache with no limit
+    // would still hold it and this count would stay at 1.
+    expect((await db.get<{ n: number }>(first))?.n).toBe(0);
+    expect(preparesOf(first), "an evicted statement is prepared again").toBe(2);
+    // The most recent statement is still cached.
+    expect((await db.get<{ n: number }>("SELECT 400 AS n"))?.n).toBe(400);
+    expect(preparesOf("SELECT 400 AS n")).toBe(1);
+    prepare.mockRestore();
+  });
 });

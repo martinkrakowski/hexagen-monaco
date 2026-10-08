@@ -1,4 +1,4 @@
-import type Database from "better-sqlite3";
+import type { PlatformDb } from "./db";
 import type { Adapter, AdapterUser, AdapterAccount } from "next-auth/adapters";
 
 interface UserRow {
@@ -104,80 +104,70 @@ export interface AuthRepository {
   }): Promise<{ identifier: string; token: string; expires: Date } | null>;
 }
 
-export function createAuthRepository(db: Database.Database): AuthRepository {
-  const insertUser = db.prepare(`
+export function createAuthRepository(db: PlatformDb): AuthRepository {
+  const insertUser = `
     INSERT INTO users (id, name, email, email_verified, image, created_at)
     VALUES (@id, @name, @email, @email_verified, @image, @created_at)
-  `);
-  const selectUser = db.prepare("SELECT * FROM users WHERE id = ?");
-  const selectUserByEmail = db.prepare("SELECT * FROM users WHERE email = ?");
-  const selectUserByAccount = db.prepare(`
+  `;
+  const selectUser = "SELECT * FROM users WHERE id = ?";
+  const selectUserByEmail = "SELECT * FROM users WHERE email = ?";
+  const selectUserByAccount = `
     SELECT u.* FROM users u
       INNER JOIN accounts a ON a.user_id = u.id
      WHERE a.provider = ? AND a.provider_account_id = ?
-  `);
-  const updateUser = db.prepare(`
+  `;
+  const updateUser = `
     UPDATE users
        SET name = COALESCE(@name, name),
            email = COALESCE(@email, email),
            email_verified = COALESCE(@email_verified, email_verified),
            image = COALESCE(@image, image)
-     WHERE id = @id
-  `);
-  const setGithubLogin = db.prepare(
-    "UPDATE users SET github_login = @github_login WHERE id = @id",
-  );
-  const selectUserByGithubLogin = db.prepare(
-    "SELECT * FROM users WHERE github_login = ?",
-  );
-  const selectOnboardedAt = db.prepare(
-    "SELECT onboarded_at FROM users WHERE id = ?",
-  );
-  const markOnboarded = db.prepare(
-    `UPDATE users
+      WHERE id = @id
+  `;
+  const setGithubLogin =
+    "UPDATE users SET github_login = @github_login WHERE id = @id";
+  const selectUserByGithubLogin = "SELECT * FROM users WHERE github_login = ?";
+  const selectOnboardedAt = "SELECT onboarded_at FROM users WHERE id = ?";
+  const markOnboarded = `
+    UPDATE users
         SET onboarded_at = @onboarded_at
-      WHERE id = @id AND onboarded_at IS NULL`,
-  );
-  const insertAccount = db.prepare(`
+      WHERE id = @id AND onboarded_at IS NULL
+  `;
+  const insertAccount = `
     INSERT INTO accounts (provider, provider_account_id, user_id, type)
     VALUES (@provider, @provider_account_id, @user_id, @type)
     ON CONFLICT(provider, provider_account_id) DO UPDATE SET
       user_id = excluded.user_id,
       type = excluded.type
-  `);
-  const deleteAccount = db.prepare(
-    "DELETE FROM accounts WHERE provider = ? AND provider_account_id = ?",
-  );
-  const insertSession = db.prepare(`
+  `;
+  const deleteAccount =
+    "DELETE FROM accounts WHERE provider = ? AND provider_account_id = ?";
+  const insertSession = `
     INSERT INTO sessions (session_token, user_id, expires)
     VALUES (@session_token, @user_id, @expires)
-  `);
-  const selectSession = db.prepare(
-    "SELECT * FROM sessions WHERE session_token = ?",
-  );
-  const updateSession = db.prepare(`
+  `;
+  const selectSession = "SELECT * FROM sessions WHERE session_token = ?";
+  const updateSession = `
     UPDATE sessions
        SET user_id = COALESCE(@user_id, user_id),
            expires = COALESCE(@expires, expires)
      WHERE session_token = @session_token
-  `);
-  const deleteSession = db.prepare(
-    "DELETE FROM sessions WHERE session_token = ?",
-  );
-  const insertVerification = db.prepare(`
+  `;
+  const deleteSession = "DELETE FROM sessions WHERE session_token = ?";
+  const insertVerification = `
     INSERT INTO verification_tokens (identifier, token, expires)
     VALUES (@identifier, @token, @expires)
-  `);
-  const takeVerification = db.prepare(`
+  `;
+  const takeVerification = `
     DELETE FROM verification_tokens
      WHERE identifier = ? AND token = ?
     RETURNING identifier, token, expires
-  `);
+  `;
 
   return {
     async createUser(user) {
       const id = crypto.randomUUID();
-      insertUser.run({
+      await db.run(insertUser, {
         id,
         name: user.name ?? null,
         email: user.email ?? null,
@@ -187,26 +177,27 @@ export function createAuthRepository(db: Database.Database): AuthRepository {
         image: user.image ?? null,
         created_at: new Date().toISOString(),
       });
-      const row = selectUser.get(id) as UserRow;
+      const row = (await db.get<UserRow>(selectUser, [id]))!;
       return toAdapterUser(row);
     },
     async getUser(id) {
-      const row = selectUser.get(id) as UserRow | undefined;
+      const row = await db.get<UserRow | undefined>(selectUser, [id]);
       return row ? toAdapterUser(row) : null;
     },
     async getUserByEmail(email) {
       if (!email) return null;
-      const row = selectUserByEmail.get(email) as UserRow | undefined;
+      const row = await db.get<UserRow | undefined>(selectUserByEmail, [email]);
       return row ? toAdapterUser(row) : null;
     },
     async getUserByAccount(provider, providerAccountId) {
-      const row = selectUserByAccount.get(provider, providerAccountId) as
-        | UserRow
-        | undefined;
+      const row = await db.get<UserRow | undefined>(selectUserByAccount, [
+        provider,
+        providerAccountId,
+      ]);
       return row ? toAdapterUser(row) : null;
     },
     async updateUser(user) {
-      updateUser.run({
+      await db.run(updateUser, {
         id: user.id,
         name: user.name ?? null,
         email: user.email ?? null,
@@ -215,7 +206,7 @@ export function createAuthRepository(db: Database.Database): AuthRepository {
           : null,
         image: user.image ?? null,
       });
-      const row = selectUser.get(user.id) as UserRow | undefined;
+      const row = await db.get<UserRow | undefined>(selectUser, [user.id]);
       if (!row) {
         throw new Error(`User ${user.id} not found`);
       }
@@ -224,28 +215,31 @@ export function createAuthRepository(db: Database.Database): AuthRepository {
     async setGithubLogin(userId, login) {
       const canonical = canonicalizeGithubLogin(login);
       if (!canonical) return;
-      setGithubLogin.run({ id: userId, github_login: canonical });
+      await db.run(setGithubLogin, { id: userId, github_login: canonical });
     },
     async getUserByGithubLogin(login) {
       const canonical = canonicalizeGithubLogin(login);
       if (!canonical) return null;
-      const row = selectUserByGithubLogin.get(canonical) as UserRow | undefined;
+      const row = await db.get<UserRow | undefined>(selectUserByGithubLogin, [
+        canonical,
+      ]);
       return row ? toAdapterUser(row) : null;
     },
     async getOnboardedAt(userId) {
-      const row = selectOnboardedAt.get(userId) as
-        | { onboarded_at: string | null }
-        | undefined;
+      const row = await db.get<{ onboarded_at: string | null }>(
+        selectOnboardedAt,
+        [userId],
+      );
       return row?.onboarded_at ?? null;
     },
     async markOnboarded(userId) {
-      markOnboarded.run({
+      await db.run(markOnboarded, {
         id: userId,
         onboarded_at: new Date().toISOString(),
       });
     },
     async linkAccount(account) {
-      insertAccount.run({
+      await db.run(insertAccount, {
         provider: account.provider,
         provider_account_id: account.providerAccountId,
         user_id: account.userId,
@@ -253,10 +247,10 @@ export function createAuthRepository(db: Database.Database): AuthRepository {
       });
     },
     async unlinkAccount(provider, providerAccountId) {
-      deleteAccount.run(provider, providerAccountId);
+      await db.run(deleteAccount, [provider, providerAccountId]);
     },
     async createSession(session) {
-      insertSession.run({
+      await db.run(insertSession, {
         session_token: session.sessionToken,
         user_id: session.userId,
         expires: session.expires.toISOString(),
@@ -264,9 +258,13 @@ export function createAuthRepository(db: Database.Database): AuthRepository {
       return session;
     },
     async getSessionAndUser(sessionToken) {
-      const session = selectSession.get(sessionToken) as SessionRow | undefined;
+      const session = await db.get<SessionRow | undefined>(selectSession, [
+        sessionToken,
+      ]);
       if (!session) return null;
-      const user = selectUser.get(session.user_id) as UserRow | undefined;
+      const user = await db.get<UserRow | undefined>(selectUser, [
+        session.user_id,
+      ]);
       if (!user) return null;
       return {
         session: {
@@ -278,14 +276,14 @@ export function createAuthRepository(db: Database.Database): AuthRepository {
       };
     },
     async updateSession(session) {
-      updateSession.run({
+      await db.run(updateSession, {
         session_token: session.sessionToken,
         user_id: session.userId ?? null,
         expires: session.expires ? session.expires.toISOString() : null,
       });
-      const row = selectSession.get(session.sessionToken) as
-        | SessionRow
-        | undefined;
+      const row = await db.get<SessionRow | undefined>(selectSession, [
+        session.sessionToken,
+      ]);
       if (!row) return null;
       return {
         sessionToken: row.session_token,
@@ -294,10 +292,10 @@ export function createAuthRepository(db: Database.Database): AuthRepository {
       };
     },
     async deleteSession(sessionToken) {
-      deleteSession.run(sessionToken);
+      await db.run(deleteSession, [sessionToken]);
     },
     async createVerificationToken(token) {
-      insertVerification.run({
+      await db.run(insertVerification, {
         identifier: token.identifier,
         token: token.token,
         expires: token.expires.toISOString(),
@@ -305,9 +303,10 @@ export function createAuthRepository(db: Database.Database): AuthRepository {
       return token;
     },
     async useVerificationToken(params) {
-      const row = takeVerification.get(params.identifier, params.token) as
-        | VerificationRow
-        | undefined;
+      const row = await db.get<VerificationRow | undefined>(takeVerification, [
+        params.identifier,
+        params.token,
+      ]);
       if (!row) return null;
       return {
         identifier: row.identifier,

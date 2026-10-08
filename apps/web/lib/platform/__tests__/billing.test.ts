@@ -50,6 +50,6 @@ describe("billing / entitlement seam", () => {
     assert.equal(paid.plan, "repo");
     assert.equal(shouldUseFreeQuota(paid), false);
     assert.equal((await store.billing.resolve("user-1")).repoLimit, 3);
-    store.close();
+    await store.close();
   });
 });

@@ -1,5 +1,5 @@
-import type Database from "better-sqlite3";
-import { prepareAuditAppend, type AuditEntry } from "./audit-log-store";
+import type { PlatformDb, PlatformDbSession } from "./db";
+import { appendAudit, type AuditEntry } from "./audit-log-store";
 import { ORG_INVITE_TTL_MS } from "./platform-db";
 
 /**
@@ -261,128 +261,131 @@ function assertRole(role: OrgRole): void {
   }
 }
 
-function sqliteConstraintCode(err: unknown): string {
-  if (typeof err !== "object" || err === null || !("code" in err)) return "";
-  return typeof err.code === "string" ? err.code : "";
-}
+export function createOrgsRepository(db: PlatformDb): OrgsRepository {
+  // B2: match the constraint name instead of the driver's message text.
+  const isDuplicateOrgSlug = (err: unknown): boolean => {
+    if (!db.isUniqueViolation(err)) return false;
+    const message = err instanceof Error ? err.message : "";
+    return (
+      /UNIQUE constraint failed: orgs\.slug/i.test(message) ||
+      /idx_orgs_slug/i.test(message)
+    );
+  };
 
-/** The unique index on `orgs.slug` — not PK `orgs.id`. */
-function isDuplicateOrgSlugConstraint(err: unknown): boolean {
-  const code = sqliteConstraintCode(err);
-  if (code !== "SQLITE_CONSTRAINT_UNIQUE" && code !== "SQLITE_CONSTRAINT") {
-    return false;
-  }
-  const message = err instanceof Error ? err.message : "";
-  return (
-    /UNIQUE constraint failed: orgs\.slug/i.test(message) ||
-    /idx_orgs_slug/i.test(message)
-  );
-}
-
-export function createOrgsRepository(db: Database.Database): OrgsRepository {
-  const insertOrg = db.prepare(`
+  const insertOrg = `
     INSERT INTO orgs (id, slug, name, created_by, created_at)
     VALUES (@id, @slug, @name, @created_by, @created_at)
-  `);
-  const userIdTaken = db.prepare("SELECT 1 AS ok FROM users WHERE id = ?");
-  const selectOrg = db.prepare("SELECT * FROM orgs WHERE id = ?");
-  const selectOrgBySlug = db.prepare("SELECT * FROM orgs WHERE slug = ?");
-  const upsertMember = db.prepare(`
+  `;
+  const userIdTaken = "SELECT 1 AS ok FROM users WHERE id = ?";
+  const selectOrg = "SELECT * FROM orgs WHERE id = ?";
+  const selectOrgBySlug = "SELECT * FROM orgs WHERE slug = ?";
+  const upsertMember = `
     INSERT INTO org_members (org_id, user_id, role, created_at)
     VALUES (@org_id, @user_id, @role, @created_at)
     ON CONFLICT(org_id, user_id) DO UPDATE SET role = excluded.role
-  `);
+  `;
   // Promote-never-demote at acceptance: an owner-level invite to someone who
   // joined as a member in the meantime lands the promotion; a member-level
   // invite to someone who became an owner changes nothing. Both directions
   // are asserted in org-members.guard.test.
-  const insertMemberIfAbsent = db.prepare(`
+  const insertMemberIfAbsent = `
     INSERT INTO org_members (org_id, user_id, role, created_at)
     VALUES (@org_id, @user_id, @role, @created_at)
     ON CONFLICT(org_id, user_id) DO UPDATE SET role = 'owner'
       WHERE excluded.role = 'owner' AND org_members.role = 'member' 
-  `);
-  const deleteMember = db.prepare(
-    "DELETE FROM org_members WHERE org_id = ? AND user_id = ?",
-  );
-  const selectMemberRow = db.prepare(
-    "SELECT role FROM org_members WHERE org_id = ? AND user_id = ?",
-  );
-  const countOwners = db.prepare(
-    "SELECT COUNT(*) AS n FROM org_members WHERE org_id = ? AND role = 'owner'",
-  );
-  const selectMembers = db.prepare(
-    "SELECT user_id, role, created_at FROM org_members WHERE org_id = ? ORDER BY created_at, user_id",
-  );
+  `;
+  const deleteMember =
+    "DELETE FROM org_members WHERE org_id = ? AND user_id = ?";
+  const selectMemberRow =
+    "SELECT role FROM org_members WHERE org_id = ? AND user_id = ?";
+  const countOwners =
+    "SELECT COUNT(*) AS n FROM org_members WHERE org_id = ? AND role = 'owner'";
+  const selectMembers =
+    "SELECT user_id, role, created_at FROM org_members WHERE org_id = ? ORDER BY created_at, user_id";
   // P-A2: leaving an org leaves every team in it. A team membership that
   // outlived its org membership would be a live grant nobody can see from the
   // org page or revoke from it.
-  const deleteTeamMemberships = db.prepare(`
+  const deleteTeamMemberships = `
     DELETE FROM team_members
     WHERE user_id = ?
       AND team_id IN (SELECT id FROM teams WHERE org_id = ?)
-  `);
+  `;
   // Org, owner membership and audit row in ONE transaction. An org whose
   // owner insert failed is administerable by nobody and refused by
   // requireTenant for everybody — a row that exists and cannot be used.
-  const createOrgWithOwnerTx = db.transaction(
-    (row: OrgRow, actorId: string): Org => {
+  const assertNotAUserId = async (
+    session: PlatformDbSession,
+    id: string,
+  ): Promise<void> => {
+    const taken = await session.get<{ ok: number }>(userIdTaken, [id]);
+    if (taken) throw new Error("org id collides with an existing user");
+  };
+
+  const createOrgWithOwnerTx = (row: OrgRow, actorId: string): Promise<Org> =>
+    db.transaction(async (tx) => {
+      // The id check belongs with the insert it guards: on the synchronous
+      // driver nothing could come between the two.
+      await assertNotAUserId(tx, row.id);
       try {
-        insertOrg.run(row);
+        await tx.run(insertOrg, {
+          id: row.id,
+          slug: row.slug,
+          name: row.name,
+          created_by: row.created_by,
+          created_at: row.created_at,
+        });
       } catch (err) {
-        if (isDuplicateOrgSlugConstraint(err)) {
+        if (isDuplicateOrgSlug(err)) {
           throw new DuplicateOrgSlugError(row.slug);
         }
         throw err;
       }
-      upsertMember.run({
+      await tx.run(upsertMember, {
         org_id: row.id,
         user_id: row.created_by,
         role: "owner",
         created_at: row.created_at,
       });
-      appendAudit({
+      await appendAudit(tx, {
         actorId,
         action: "org.create",
         subjectOwnerId: row.id,
         subjectId: row.id,
       });
       return toOrg(row);
-    },
-  );
+    });
 
   // JOIN orgs so a membership row whose org_id is not an org (the FK
   // constraint, or a connection that forgot PRAGMA foreign_keys) cannot
   // authorize requireTenant against a personal owner id.
-  const selectRole = db.prepare(`
+  const selectRole = `
     SELECT m.role FROM org_members m
      INNER JOIN orgs o ON o.id = m.org_id
      WHERE m.org_id = ? AND m.user_id = ?
-  `);
-  const selectOrgIds = db.prepare(`
+  `;
+  const selectOrgIds = `
     SELECT m.org_id FROM org_members m
      INNER JOIN orgs o ON o.id = m.org_id
      WHERE m.user_id = ?
-     ORDER BY m.org_id
-  `);
+      ORDER BY m.org_id
+  `;
   // Same JOIN as listOrgIdsForUser: a membership whose org_id is not an org
   // cannot appear in the switcher. Role comes from the membership row so
   // GET /api/orgs is one statement, not 2N+1.
-  const selectOrgsForUser = db.prepare(`
+  const selectOrgsForUser = `
     SELECT o.id, o.slug, o.name, m.role
       FROM org_members m
       INNER JOIN orgs o ON o.id = m.org_id
      WHERE m.user_id = ?
-     ORDER BY m.org_id
-  `);
+      ORDER BY m.org_id
+  `;
 
-  const selectInvite = db.prepare(
-    "SELECT * FROM org_invites WHERE org_id = ? AND github_login = ?",
-  );
+  const selectInvite =
+    "SELECT * FROM org_invites WHERE org_id = ? AND github_login = ?";
   // Only a PENDING invite is re-writable. Once accepted the row is history:
   // overwriting it would let a re-invite silently reset `accepted_at` and
   // re-grant on the next sign-in.
-  const upsertInvite = db.prepare(`
+  const upsertInvite = `
     INSERT INTO org_invites (org_id, github_login, role, invited_by, created_at, expires_at, accepted_at)
     VALUES (@org_id, @github_login, @role, @invited_by, @created_at, @expires_at, NULL)
     ON CONFLICT(org_id, github_login) DO UPDATE
@@ -390,8 +393,8 @@ export function createOrgsRepository(db: Database.Database): OrgsRepository {
           invited_by = excluded.invited_by,
           created_at = excluded.created_at,
           expires_at = excluded.expires_at
-      WHERE org_invites.accepted_at IS NULL
-  `);
+    WHERE org_invites.accepted_at IS NULL
+  `;
   // THE expiry gate for the acceptance path -- deliberately the only one, so
   // that removing it has a single visible consequence rather than being
   // masked by a duplicate check further down. An invite past `expires_at` is
@@ -403,43 +406,52 @@ export function createOrgsRepository(db: Database.Database): OrgsRepository {
   // String comparison is correct because both sides are ISO-8601 UTC produced
   // by `toISOString()` -- fixed width, zero-padded, same offset -- so
   // lexicographic order is chronological order.
-  const selectPendingForLogin = db.prepare(
-    "SELECT * FROM org_invites WHERE github_login = @login AND accepted_at IS NULL AND expires_at > @now ORDER BY org_id",
-  );
-  const selectPendingForOrg = db.prepare(
-    "SELECT * FROM org_invites WHERE org_id = @org_id AND accepted_at IS NULL AND expires_at > @now ORDER BY github_login",
-  );
-  const markAccepted = db.prepare(`
+  const selectPendingForLogin =
+    "SELECT * FROM org_invites WHERE github_login = @login AND accepted_at IS NULL AND expires_at > @now ORDER BY org_id";
+  const selectPendingForOrg =
+    "SELECT * FROM org_invites WHERE org_id = @org_id AND accepted_at IS NULL AND expires_at > @now ORDER BY github_login";
+  const markAccepted = `
     UPDATE org_invites SET accepted_at = @accepted_at
      WHERE org_id = @org_id AND github_login = @github_login
        AND accepted_at IS NULL
-  `);
+  `;
 
   // The audit row is written INSIDE each mutation's transaction, not after it
   // by a separate awaited repository call. Two independent commits mean the
   // mutation can land while the audit write throws, and an unaudited
   // membership change is exactly the event the log exists to make impossible
   // to miss.
-  const appendAudit = prepareAuditAppend(db);
-  const audited = (
+  const audited = async (
+    session: PlatformDbSession,
     audit: OrgAuditContext | undefined,
     entry: Omit<AuditEntry, "actorId">,
   ) => {
-    if (audit) appendAudit({ ...entry, actorId: audit.actorId });
+    if (audit) await appendAudit(session, { ...entry, actorId: audit.actorId });
   };
 
   /** @throws LastOwnerError */
-  const guardLastOwner = (orgId: string, userId: string, was: OrgRole) => {
+  const guardLastOwner = async (
+    session: PlatformDbSession,
+    orgId: string,
+    userId: string,
+    was: OrgRole,
+  ) => {
     if (was !== "owner") return;
-    const { n } = countOwners.get(orgId) as { n: number };
-    if (n <= 1) throw new LastOwnerError(orgId, userId);
+    const row = await session.get<{ n: number }>(countOwners, [orgId]);
+    if (!row || row.n <= 1) throw new LastOwnerError(orgId, userId);
   };
 
-  const addMemberTx = db.transaction(
-    (orgId: string, userId: string, role: OrgRole, audit?: OrgAuditContext) => {
-      const existing = selectMemberRow.get(orgId, userId) as
-        | { role: OrgRole }
-        | undefined;
+  const addMemberTx = (
+    orgId: string,
+    userId: string,
+    role: OrgRole,
+    audit?: OrgAuditContext,
+  ): Promise<void> =>
+    db.transaction(async (tx) => {
+      const existing = await tx.get<{ role: OrgRole }>(selectMemberRow, [
+        orgId,
+        userId,
+      ]);
 
       // A re-add at the SAME role changes nothing. `ON CONFLICT DO UPDATE SET
       // role = excluded.role` still reports changes = 1 for it, so the
@@ -448,15 +460,15 @@ export function createOrgsRepository(db: Database.Database): OrgsRepository {
       // Comparing before the write is what makes the audit trail honest.
       if (existing?.role === role) return;
 
-      if (existing) guardLastOwner(orgId, userId, existing.role);
+      if (existing) await guardLastOwner(tx, orgId, userId, existing.role);
 
-      upsertMember.run({
+      await tx.run(upsertMember, {
         org_id: orgId,
         user_id: userId,
         role,
         created_at: new Date().toISOString(),
       });
-      audited(audit, {
+      await audited(tx, audit, {
         // A role change is not an add: conflating them would make the trail
         // unable to answer "when did this person become an owner".
         action: existing ? "org.member.role_change" : "org.member.add",
@@ -465,40 +477,47 @@ export function createOrgsRepository(db: Database.Database): OrgsRepository {
         granteeType: "user",
         granteeId: userId,
       });
-    },
-  );
+    });
 
   // ONE transaction, so a failure in either statement rolls back both: a user
   // dropped from the org but left in its teams is the orphan this prevents,
   // and the reverse (teams cleared, org row surviving) is just as wrong.
-  const removeMemberTx = db.transaction(
-    (orgId: string, userId: string, audit?: OrgAuditContext) => {
-      const existing = selectMemberRow.get(orgId, userId) as
-        | { role: OrgRole }
-        | undefined;
-      if (existing) guardLastOwner(orgId, userId, existing.role);
+  const removeMemberTx = (
+    orgId: string,
+    userId: string,
+    audit?: OrgAuditContext,
+  ): Promise<void> =>
+    db.transaction(async (tx) => {
+      const existing = await tx.get<{ role: OrgRole }>(selectMemberRow, [
+        orgId,
+        userId,
+      ]);
+      if (existing) await guardLastOwner(tx, orgId, userId, existing.role);
 
-      deleteTeamMemberships.run(userId, orgId);
-      const removed = deleteMember.run(orgId, userId);
+      await tx.run(deleteTeamMemberships, [userId, orgId]);
+      const removed = await tx.run(deleteMember, [orgId, userId]);
       // Gate on affected rows: an audit row for a removal that hit nothing
       // records an event that did not happen, and a reader cannot tell it from
       // a real removal.
       if (removed.changes > 0)
-        audited(audit, {
+        await audited(tx, audit, {
           action: "org.member.remove",
           subjectOwnerId: orgId,
           subjectId: orgId,
           granteeType: "user",
           granteeId: userId,
         });
-    },
-  );
+    });
 
-  const inviteTx = db.transaction(
-    (row: InviteRow, audit: OrgAuditContext): InviteRow => {
-      const existing = selectInvite.get(row.org_id, row.github_login) as
-        | InviteRow
-        | undefined;
+  const inviteTx = (
+    row: InviteRow,
+    audit: OrgAuditContext,
+  ): Promise<InviteRow> =>
+    db.transaction(async (tx) => {
+      const existing = await tx.get<InviteRow>(selectInvite, [
+        row.org_id,
+        row.github_login,
+      ]);
 
       // Already accepted — the person is a member; nothing to re-issue, and no
       // event happened.
@@ -516,8 +535,16 @@ export function createOrgsRepository(db: Database.Database): OrgsRepository {
         return existing;
       }
 
-      upsertInvite.run(row);
-      audited(audit, {
+      await tx.run(upsertInvite, {
+        org_id: row.org_id,
+        github_login: row.github_login,
+        role: row.role,
+        invited_by: row.invited_by,
+        created_at: row.created_at,
+        expires_at: row.expires_at,
+        accepted_at: row.accepted_at,
+      });
+      await audited(tx, audit, {
         action: "org.invite",
         subjectOwnerId: row.org_id,
         subjectId: row.org_id,
@@ -527,39 +554,38 @@ export function createOrgsRepository(db: Database.Database): OrgsRepository {
         granteeId: row.github_login,
       });
       return row;
-    },
-  );
+    });
 
   // Membership + acceptance stamp in ONE transaction. Split across two
   // commits, a crash between them leaves either an invite marked accepted with
   // no membership (silently lost access, and never retried because the
   // pending-invite query no longer matches it) or a membership whose invite
   // stays pending and re-grants on every future sign-in.
-  const acceptInvitesTx = db.transaction(
-    (userId: string, login: string): string[] => {
+  const acceptInvitesTx = (userId: string, login: string): Promise<string[]> =>
+    db.transaction(async (tx) => {
       const now = new Date().toISOString();
-      const pending = selectPendingForLogin.all({
+      const pending = await tx.all<InviteRow>(selectPendingForLogin, {
         login,
         now,
-      }) as InviteRow[];
+      });
       const joined: string[] = [];
       for (const invite of pending) {
         // Stamp first and gate on it: if two sign-ins race, only the one whose
         // UPDATE matched `accepted_at IS NULL` writes the membership and the
         // audit row, so acceptance is recorded exactly once.
-        const stamped = markAccepted.run({
+        const stamped = await tx.run(markAccepted, {
           accepted_at: now,
           org_id: invite.org_id,
           github_login: invite.github_login,
         });
         if (stamped.changes === 0) continue;
-        insertMemberIfAbsent.run({
+        await tx.run(insertMemberIfAbsent, {
           org_id: invite.org_id,
           user_id: userId,
           role: invite.role,
           created_at: now,
         });
-        appendAudit({
+        await appendAudit(tx, {
           // The acceptor is the actor: they are the one performing this
           // mutation. The inviter is already on the `org.invite` row.
           actorId: userId,
@@ -572,26 +598,20 @@ export function createOrgsRepository(db: Database.Database): OrgsRepository {
         joined.push(invite.org_id);
       }
       return joined;
-    },
-  );
+    });
 
-  const countOwnedProjects = db.prepare(
-    "SELECT COUNT(*) AS n FROM saved_projects WHERE owner_id = ?",
-  );
-  const deleteOrgTeamMembers = db.prepare(`
+  const countOwnedProjects =
+    "SELECT COUNT(*) AS n FROM saved_projects WHERE owner_id = ?";
+  const deleteOrgTeamMembers = `
     DELETE FROM team_members
     WHERE team_id IN (SELECT id FROM teams WHERE org_id = ?)
-  `);
-  const deleteOrgTeams = db.prepare("DELETE FROM teams WHERE org_id = ?");
-  const deleteOrgMembers = db.prepare(
-    "DELETE FROM org_members WHERE org_id = ?",
-  );
-  const deleteOrgInvites = db.prepare(
-    "DELETE FROM org_invites WHERE org_id = ?",
-  );
+  `;
+  const deleteOrgTeams = "DELETE FROM teams WHERE org_id = ?";
+  const deleteOrgMembers = "DELETE FROM org_members WHERE org_id = ?";
+  const deleteOrgInvites = "DELETE FROM org_invites WHERE org_id = ?";
   // Soft-revoke, not row deletion: the grant rows are the audit trail of who
   // had access; what must die with the org is the ACCESS, i.e. liveness.
-  const revokeGrantsToOrgAndTeams = db.prepare(`
+  const revokeGrantsToOrgAndTeams = `
     UPDATE project_shares SET revoked_at = @revoked_at
     WHERE revoked_at IS NULL
       AND (
@@ -601,56 +621,58 @@ export function createOrgsRepository(db: Database.Database): OrgsRepository {
           AND grantee_id IN (SELECT id FROM teams WHERE org_id = @org_id)
         )
       )
-  `);
+   `;
   // Owner-side liveness dies with the org too: the schema does not force a
   // share row's project to exist in saved_projects, so "zero owned projects"
   // does not imply "zero live owner-side grants". Revoking by owner_id closes
   // that gap (review flag on #658).
-  const revokeGrantsOwnedByOrg = db.prepare(`
+  const revokeGrantsOwnedByOrg = `
     UPDATE project_shares SET revoked_at = @revoked_at
     WHERE owner_id = @org_id AND revoked_at IS NULL
-  `);
+  `;
   // Run telemetry is owner-scoped operational data, not an audit trail; with
   // the tenant gone it is unreachable through every access path, so leaving
   // it would be orphaned customer data, not history (review flag on #658).
-  const deleteRunEvents = db.prepare(
-    "DELETE FROM run_events WHERE owner_id = ?",
-  );
-  const deleteOrgRow = db.prepare("DELETE FROM orgs WHERE id = ?");
-  const deleteOrgTx = db.transaction((orgId: string, actorId: string) => {
-    // Inside the transaction, so the count and the deletes are one atomic
-    // view — a concurrent project create either lands before (refusal) or
-    // after (harmless: the owner row no longer exists to authorize writes).
-    const owned = countOwnedProjects.get(orgId) as { n: number };
-    if (owned.n > 0) throw new OrgOwnsProjectsError(orgId, owned.n);
-    // Grants revoked BEFORE the teams rows go — the team subquery needs them.
-    const revokedAt = new Date().toISOString();
-    revokeGrantsToOrgAndTeams.run({ org_id: orgId, revoked_at: revokedAt });
-    revokeGrantsOwnedByOrg.run({ org_id: orgId, revoked_at: revokedAt });
-    deleteRunEvents.run(orgId);
-    deleteOrgTeamMembers.run(orgId);
-    deleteOrgTeams.run(orgId);
-    deleteOrgInvites.run(orgId);
-    deleteOrgMembers.run(orgId);
-    const removed = deleteOrgRow.run(orgId);
-    // Gate on affected rows (P-A2's rule): an org.delete row for an org that
-    // did not exist would be a record of an event that never happened.
-    if (removed.changes > 0) {
-      appendAudit({
-        actorId,
-        action: "org.delete",
-        subjectOwnerId: orgId,
-        subjectId: orgId,
+  const deleteRunEvents = "DELETE FROM run_events WHERE owner_id = ?";
+  const deleteOrgRow = "DELETE FROM orgs WHERE id = ?";
+  const deleteOrgTx = (orgId: string, actorId: string): Promise<void> =>
+    db.transaction(async (tx) => {
+      // Inside the transaction, so the count and the deletes are one atomic
+      // view — a concurrent project create either lands before (refusal) or
+      // after (harmless: the owner row no longer exists to authorize writes).
+      const owned = await tx.get<{ n: number }>(countOwnedProjects, [orgId]);
+      if (owned && owned.n > 0) throw new OrgOwnsProjectsError(orgId, owned.n);
+      // Grants revoked BEFORE the teams rows go — the team subquery needs them.
+      const revokedAt = new Date().toISOString();
+      await tx.run(revokeGrantsToOrgAndTeams, {
+        org_id: orgId,
+        revoked_at: revokedAt,
       });
-    }
-  });
+      await tx.run(revokeGrantsOwnedByOrg, {
+        org_id: orgId,
+        revoked_at: revokedAt,
+      });
+      await tx.run(deleteRunEvents, [orgId]);
+      await tx.run(deleteOrgTeamMembers, [orgId]);
+      await tx.run(deleteOrgTeams, [orgId]);
+      await tx.run(deleteOrgInvites, [orgId]);
+      await tx.run(deleteOrgMembers, [orgId]);
+      const removed = await tx.run(deleteOrgRow, [orgId]);
+      // Gate on affected rows (P-A2's rule): an org.delete row for an org that
+      // did not exist would be a record of an event that never happened.
+      if (removed.changes > 0) {
+        await appendAudit(tx, {
+          actorId,
+          action: "org.delete",
+          subjectOwnerId: orgId,
+          subjectId: orgId,
+        });
+      }
+    });
 
   return {
     async createOrg(input) {
       const id = input.id ?? crypto.randomUUID();
-      if (userIdTaken.get(id)) {
-        throw new Error("org id collides with an existing user");
-      }
       const org: OrgRow = {
         id,
         slug: input.slug,
@@ -658,14 +680,20 @@ export function createOrgsRepository(db: Database.Database): OrgsRepository {
         created_by: input.createdBy,
         created_at: new Date().toISOString(),
       };
-      insertOrg.run(org);
+      await db.transaction(async (tx) => {
+        await assertNotAUserId(tx, id);
+        await tx.run(insertOrg, {
+          id: org.id,
+          slug: org.slug,
+          name: org.name,
+          created_by: org.created_by,
+          created_at: org.created_at,
+        });
+      });
       return toOrg(org);
     },
     async createOrgWithOwner(input, actor) {
       const id = input.id ?? crypto.randomUUID();
-      if (userIdTaken.get(id)) {
-        throw new Error("org id collides with an existing user");
-      }
       return createOrgWithOwnerTx(
         {
           id,
@@ -678,39 +706,37 @@ export function createOrgsRepository(db: Database.Database): OrgsRepository {
       );
     },
     async getOrg(orgId) {
-      const row = selectOrg.get(orgId) as OrgRow | undefined;
+      const row = await db.get<OrgRow>(selectOrg, [orgId]);
       return row ? toOrg(row) : null;
     },
     async getOrgBySlug(slug) {
-      const row = selectOrgBySlug.get(slug) as OrgRow | undefined;
+      const row = await db.get<OrgRow>(selectOrgBySlug, [slug]);
       return row ? toOrg(row) : null;
     },
     async addMember(orgId, userId, role, audit) {
       assertRole(role);
-      addMemberTx(orgId, userId, role, audit);
+      await addMemberTx(orgId, userId, role, audit);
     },
     async removeMember(orgId, userId, audit) {
-      removeMemberTx(orgId, userId, audit);
+      await removeMemberTx(orgId, userId, audit);
     },
     async memberRole(orgId, userId) {
-      const row = selectRole.get(orgId, userId) as
-        | { role: OrgRole }
-        | undefined;
+      const row = await db.get<{ role: OrgRole }>(selectRole, [orgId, userId]);
       return row ? row.role : null;
     },
     async deleteOrg(orgId, actor) {
-      deleteOrgTx(orgId, actor.actorId);
+      await deleteOrgTx(orgId, actor.actorId);
     },
     async listOrgIdsForUser(userId) {
-      const rows = selectOrgIds.all(userId) as Array<{ org_id: string }>;
+      const rows = await db.all<{ org_id: string }>(selectOrgIds, [userId]);
       return rows.map((r) => r.org_id);
     },
     async listMembers(orgId) {
-      const rows = selectMembers.all(orgId) as Array<{
+      const rows = await db.all<{
         user_id: string;
         role: OrgRole;
         created_at: string;
-      }>;
+      }>(selectMembers, [orgId]);
       return rows.map((r) => ({
         userId: r.user_id,
         role: r.role,
@@ -723,7 +749,7 @@ export function createOrgsRepository(db: Database.Database): OrgsRepository {
       if (!login) throw new Error("github login is required");
       const now = new Date().toISOString();
       return toInvite(
-        inviteTx(
+        await inviteTx(
           {
             org_id: orgId,
             github_login: login,
@@ -738,10 +764,10 @@ export function createOrgsRepository(db: Database.Database): OrgsRepository {
       );
     },
     async listPendingInvites(orgId) {
-      const rows = selectPendingForOrg.all({
+      const rows = await db.all<InviteRow>(selectPendingForOrg, {
         org_id: orgId,
         now: new Date().toISOString(),
-      }) as InviteRow[];
+      });
       return rows.map(toInvite);
     },
     async acceptInvitesForLogin(userId, login) {
@@ -750,12 +776,12 @@ export function createOrgsRepository(db: Database.Database): OrgsRepository {
       return acceptInvitesTx(userId, canonical);
     },
     async listOrgsForUser(userId) {
-      const rows = selectOrgsForUser.all(userId) as Array<{
+      const rows = await db.all<{
         id: string;
         slug: string;
         name: string;
         role: OrgRole;
-      }>;
+      }>(selectOrgsForUser, [userId]);
       return rows.map((r) => ({
         id: r.id,
         slug: r.slug,

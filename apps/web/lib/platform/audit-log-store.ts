@@ -1,4 +1,4 @@
-import type Database from "better-sqlite3";
+import type { PlatformDb, PlatformDbSession } from "./db";
 
 /**
  * The audit trail (D-A6): narrow, and APPEND-ONLY.
@@ -16,9 +16,7 @@ import type Database from "better-sqlite3";
  * the table directly, which is deliberate — a reader added only to satisfy a
  * test is a reader with no product behind it.
  *
- * ASYNC BY DECISION (D-A9), as with `orgs-store` and `teams-store` — but see
- * `prepareAuditAppend` for the synchronous form the stores enlist in their own
- * transactions.
+ * ASYNC BY DECISION (D-A9), as with `orgs-store` and `teams-store`.
  */
 
 /** v1 vocabulary (D-A6): org and team management, plus share grant/revoke from P-A4. */
@@ -66,20 +64,7 @@ export interface AuditLogRepository {
   countFor(action: AuditAction, subjectId: string): Promise<number>;
 }
 
-/**
- * The SYNCHRONOUS appender, for callers that must write the audit row inside
- * the same better-sqlite3 transaction as the mutation it records.
- *
- * A separate `await audit.append(...)` after an awaited mutation commits
- * independently: the mutation can succeed while the audit write throws,
- * leaving an unaudited change — which is precisely the event an audit log
- * exists to make impossible to miss. Enlisting both in one transaction means
- * a failed append rolls the mutation back.
- */
-export function prepareAuditAppend(
-  db: Database.Database,
-): (entry: AuditEntry) => void {
-  const insert = db.prepare(`
+const INSERT_AUDIT = `
     INSERT INTO audit_log (
       id, actor_id, action, subject_owner_id, subject_id,
       grantee_type, grantee_id, created_at
@@ -87,34 +72,42 @@ export function prepareAuditAppend(
       @id, @actor_id, @action, @subject_owner_id, @subject_id,
       @grantee_type, @grantee_id, @created_at
     )
-  `);
-  return (entry) => {
-    insert.run({
-      id: crypto.randomUUID(),
-      actor_id: entry.actorId,
-      action: entry.action,
-      subject_owner_id: entry.subjectOwnerId ?? null,
-      subject_id: entry.subjectId ?? null,
-      grantee_type: entry.granteeType ?? null,
-      grantee_id: entry.granteeId ?? null,
-      created_at: new Date().toISOString(),
-    });
-  };
+  `;
+
+/**
+ * Writes one audit row on the caller's session. A store that records a
+ * mutation calls this with its transaction's `tx`, so the row commits with the
+ * mutation or not at all: a separate append after the mutation commits
+ * independently, and an unaudited change is precisely the event an audit log
+ * exists to make impossible to miss.
+ */
+export async function appendAudit(
+  session: PlatformDbSession,
+  entry: AuditEntry,
+): Promise<void> {
+  await session.run(INSERT_AUDIT, {
+    id: crypto.randomUUID(),
+    actor_id: entry.actorId,
+    action: entry.action,
+    subject_owner_id: entry.subjectOwnerId ?? null,
+    subject_id: entry.subjectId ?? null,
+    grantee_type: entry.granteeType ?? null,
+    grantee_id: entry.granteeId ?? null,
+    created_at: new Date().toISOString(),
+  });
 }
 
-export function createAuditLogRepository(
-  db: Database.Database,
-): AuditLogRepository {
-  const append = prepareAuditAppend(db);
-  const count = db.prepare(
-    "SELECT COUNT(*) AS n FROM audit_log WHERE action = ? AND subject_id = ?",
-  );
+export function createAuditLogRepository(db: PlatformDb): AuditLogRepository {
   return {
     async append(entry) {
-      append(entry);
+      await appendAudit(db, entry);
     },
     async countFor(action, subjectId) {
-      return (count.get(action, subjectId) as { n: number }).n;
+      const row = await db.get<{ n: number }>(
+        "SELECT COUNT(*) AS n FROM audit_log WHERE action = ? AND subject_id = ?",
+        [action, subjectId],
+      );
+      return row ? row.n : 0;
     },
   };
 }

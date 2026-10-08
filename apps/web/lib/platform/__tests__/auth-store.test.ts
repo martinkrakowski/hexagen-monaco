@@ -42,7 +42,7 @@ describe("auth store + NextAuth adapter", () => {
     const byEmail = await adapter.getUserByEmail?.("octo@example.com");
     assert.ok(byEmail);
     assert.equal(byEmail.id, user.id);
-    store.close();
+    await store.close();
   });
 
   it("markOnboarded stamps once; a replay never moves the timestamp (P-U0b)", async () => {
@@ -71,6 +71,6 @@ describe("auth store + NextAuth adapter", () => {
 
     // Unknown ids read as NULL — same answer as "not onboarded".
     assert.equal(await store.auth.getOnboardedAt("no-such-user"), null);
-    store.close();
+    await store.close();
   });
 });

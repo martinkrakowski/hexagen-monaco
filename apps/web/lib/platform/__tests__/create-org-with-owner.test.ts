@@ -5,12 +5,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { openPlatformDb } from "../platform-db";
+import { createSqlitePlatformDb } from "../sqlite-db";
 import { createOrgsRepository, DuplicateOrgSlugError } from "../orgs-store";
 
 function fixture() {
   const path = join(mkdtempSync(join(tmpdir(), "hexagen-create-org-")), "p.db");
   const db = openPlatformDb(path);
-  return { db, orgs: createOrgsRepository(db) };
+  const platformDb = createSqlitePlatformDb(db);
+  return { db, orgs: createOrgsRepository(platformDb) };
 }
 
 const countOrgs = (db: ReturnType<typeof fixture>["db"]) =>

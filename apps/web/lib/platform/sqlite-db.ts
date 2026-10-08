@@ -38,11 +38,19 @@ type PreparedStmt = {
  *     no BEGIN is issued, so a later COMMIT/ROLLBACK cannot silently undo it.
  */
 export function createSqlitePlatformDb(handle: Database.Database): PlatformDb {
+  // Bounded: three stores build SQL whose text depends on how many ids are
+  // bound (an IN list), so the set of distinct texts is not fixed. The oldest
+  // entry goes first; a Map iterates in insertion order.
+  const CACHE_LIMIT = 256;
   const cache = new Map<string, PreparedStmt>();
   const prepare = (sql: string): PreparedStmt => {
     let stmt = cache.get(sql);
     if (!stmt) {
       stmt = handle.prepare(sql) as unknown as PreparedStmt;
+      if (cache.size >= CACHE_LIMIT) {
+        const oldest = cache.keys().next().value;
+        if (oldest !== undefined) cache.delete(oldest);
+      }
       cache.set(sql, stmt);
     }
     return stmt;
@@ -75,6 +83,7 @@ export function createSqlitePlatformDb(handle: Database.Database): PlatformDb {
 
   // Promise chain serialising transactions and plain `db` calls. See header.
   let tail: Promise<void> = Promise.resolve();
+  let closed = false;
   // Transactions currently running or queued; a plain call with txCount === 0
   // runs at once, otherwise it enqueues so it never lands inside an in-flight tx.
   let txCount = 0;
@@ -87,7 +96,8 @@ export function createSqlitePlatformDb(handle: Database.Database): PlatformDb {
     return next;
   };
 
-  const nestedGuard = new AsyncLocalStorage<boolean>();
+  type TxToken = { active: boolean };
+  const nestedGuard = new AsyncLocalStorage<TxToken>();
   const plainInTxError = () =>
     new Error(
       "plain db call inside a transaction: use the tx session passed to the callback",
@@ -96,7 +106,7 @@ export function createSqlitePlatformDb(handle: Database.Database): PlatformDb {
   // is, it enqueues so it never lands inside an in-flight transaction. Inside a
   // callback's async-local scope a plain call is always rejected (item 1).
   const immediateOrEnqueue = <T>(work: () => Promise<T>): Promise<T> => {
-    if (nestedGuard.getStore()) return Promise.reject(plainInTxError());
+    if (nestedGuard.getStore()?.active) return Promise.reject(plainInTxError());
     if (txCount > 0) return enqueue(work);
     return work();
   };
@@ -106,7 +116,7 @@ export function createSqlitePlatformDb(handle: Database.Database): PlatformDb {
     get: (sql, params) => immediateOrEnqueue(() => getSync(sql, params)),
     all: (sql, params) => immediateOrEnqueue(() => allSync(sql, params)),
     transaction: <T>(fn: (tx: PlatformDbSession) => Promise<T>): Promise<T> => {
-      if (nestedGuard.getStore()) {
+      if (nestedGuard.getStore()?.active) {
         return Promise.reject(
           new Error(
             "Nested transactions are not supported: start one transaction and compose statements within it",
@@ -126,13 +136,14 @@ export function createSqlitePlatformDb(handle: Database.Database): PlatformDb {
           run: (sql, params) =>
             finished ? Promise.reject(finishedErr) : runSync(sql, params),
         };
+        const token: TxToken = { active: true };
         try {
           if (handle.inTransaction) {
             throw new Error("a transaction is already open on this connection");
           }
           handle.exec("BEGIN IMMEDIATE");
           begun = true;
-          const result = await nestedGuard.run(true, () => fn(tx));
+          const result = await nestedGuard.run(token, () => fn(tx));
           handle.exec("COMMIT");
           finished = true;
           return result;
@@ -147,12 +158,15 @@ export function createSqlitePlatformDb(handle: Database.Database): PlatformDb {
           finished = true;
           throw e;
         } finally {
+          token.active = false;
           txCount--;
         }
       });
     },
     close: () =>
       tail.then(() => {
+        if (closed) return;
+        closed = true;
         handle.close();
       }),
     isUniqueViolation: (error: unknown): boolean => {

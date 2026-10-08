@@ -2,6 +2,9 @@ import { describe, it } from "vitest";
 import assert from "node:assert/strict";
 import type { SavedProject } from "@hexagen/shared";
 import { createPlatformStore } from "../store";
+import { openPlatformDb } from "../platform-db";
+import { createSqlitePlatformDb } from "../sqlite-db";
+import { createSavedProjectsStore } from "../saved-projects-store";
 
 function project(id: string, name = id): SavedProject {
   return {
@@ -67,7 +70,7 @@ describe("sqlite SavedProjectsPersistencePort", () => {
         [b.id],
       );
     }
-    store.close();
+    await store.close();
   });
 
   it("saveProjects replaces the whole list in the given order", async () => {
@@ -86,7 +89,7 @@ describe("sqlite SavedProjectsPersistencePort", () => {
         ["a", "b"],
       );
     }
-    store.close();
+    await store.close();
   });
 
   it("does not leak one owner's projects to another", async () => {
@@ -96,7 +99,7 @@ describe("sqlite SavedProjectsPersistencePort", () => {
     const other = await store.projectsFor("owner-b").loadProjects();
     assert.equal(other.success, true);
     if (other.success) assert.deepEqual(other.value, []);
-    store.close();
+    await store.close();
   });
 
   it("putProject rejects a stale If-Match without clobbering the stored row", async () => {
@@ -118,6 +121,90 @@ describe("sqlite SavedProjectsPersistencePort", () => {
     const loaded = await projects.loadProjects();
     assert.equal(loaded.success, true);
     if (loaded.success) assert.equal(loaded.value[0]?.name, "first");
-    store.close();
+    await store.close();
+  });
+
+  it("deleting a project whose share revoke fails leaves the project in place", async () => {
+    const db = openPlatformDb(":memory:");
+    const platformDb = createSqlitePlatformDb(db);
+    const store = createSavedProjectsStore(platformDb, "owner-a");
+
+    const proj = project("11111111-1111-4111-8111-111111111111", "shared");
+    const created = await store.createProjectRecord(proj);
+    assert.equal(created.success, true);
+
+    // Plant a live share grant so the delete path has something to revoke.
+    db.prepare(
+      `INSERT INTO project_shares (owner_id, project_id, grantee_type, grantee_id, role, granted_by, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      "owner-a",
+      proj.id,
+      "user",
+      "grantee-1",
+      "read",
+      "owner-a",
+      "2026-01-01T00:00:00Z",
+    );
+
+    // Force the share revoke UPDATE to fail inside the transaction. The delete
+    // and the revoke share one transaction; a rollback must restore the project
+    // row even though the trigger never touched it.
+    db.exec(`
+      CREATE TRIGGER share_revoke_boom BEFORE UPDATE ON project_shares
+      WHEN NEW.revoked_at IS NOT NULL AND OLD.revoked_at IS NULL
+      BEGIN SELECT RAISE(ABORT, 'share revoke blocked'); END;
+    `);
+
+    const deleted = await store.deleteProjectRecord(proj.id);
+    assert.equal(deleted.success, false);
+    if (!deleted.success) {
+      assert.equal(deleted.error.kind, "SerializationFailed");
+    }
+
+    const loaded = await store.loadProjects();
+    assert.equal(loaded.success, true);
+    if (loaded.success) {
+      assert.equal(loaded.value.length, 1);
+      assert.equal(loaded.value[0]?.id, proj.id);
+    }
+    db.close();
+  });
+
+  it("two creates started together get different positions, and a repeated id conflicts once", async () => {
+    const db = openPlatformDb(":memory:");
+    const store = createSavedProjectsStore(
+      createSqlitePlatformDb(db),
+      "owner-a",
+    );
+    const ids = [1, 2, 3, 4].map(
+      (n) => `2222222${n}-2222-4222-8222-222222222222`,
+    );
+    // Started in one tick, so their statements would interleave if the check,
+    // the MIN(ord) read and the insert were not one transaction.
+    const results = await Promise.all(
+      ids.map((id) => store.createProjectRecord(project(id))),
+    );
+    assert.deepEqual(
+      results.map((r) => r.success),
+      [true, true, true, true],
+    );
+    const rows = db
+      .prepare("SELECT ord FROM saved_projects WHERE owner_id = ?")
+      .all("owner-a") as Array<{ ord: number }>;
+    assert.equal(new Set(rows.map((r) => r.ord)).size, 4);
+
+    const twice = await Promise.all([
+      store.createProjectRecord(
+        project("33333333-3333-4333-8333-333333333333"),
+      ),
+      store.createProjectRecord(
+        project("33333333-3333-4333-8333-333333333333"),
+      ),
+    ]);
+    assert.deepEqual(twice.map((r) => r.success).sort(), [false, true]);
+    const loser = twice.find((r) => !r.success);
+    assert.equal(loser && !loser.success && loser.error.kind, "Conflict");
+    db.close();
   });
 });

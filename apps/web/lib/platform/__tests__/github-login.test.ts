@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import Database from "better-sqlite3";
 import { openPlatformDb } from "../platform-db";
+import { createSqlitePlatformDb } from "../sqlite-db";
 import { createAuthRepository } from "../auth-store";
 
 function tmpDbPath(prefix: string): string {
@@ -21,7 +22,7 @@ describe("P-A1 — users.github_login", () => {
   it("persists the handle and is idempotent across repeat sign-ins", async () => {
     const db = openPlatformDb(tmpDbPath("hexagen-login-set-"));
     try {
-      const auth = createAuthRepository(db);
+      const auth = createAuthRepository(createSqlitePlatformDb(db));
       const user = await auth.createUser({
         name: "Ada",
         email: "ada@example.com",
@@ -60,7 +61,7 @@ describe("P-A1 — users.github_login", () => {
   it("canonicalizes mixed-case logins so Ada and ada are one identity", async () => {
     const db = openPlatformDb(tmpDbPath("hexagen-login-case-"));
     try {
-      const auth = createAuthRepository(db);
+      const auth = createAuthRepository(createSqlitePlatformDb(db));
       const user = await auth.createUser({
         name: "Ada",
         email: "ada@example.com",
@@ -91,7 +92,7 @@ describe("P-A1 — users.github_login", () => {
   it("a user with no handle still authenticates (existing accounts)", async () => {
     const db = openPlatformDb(tmpDbPath("hexagen-login-null-"));
     try {
-      const auth = createAuthRepository(db);
+      const auth = createAuthRepository(createSqlitePlatformDb(db));
       const user = await auth.createUser({
         name: "Legacy",
         email: "legacy@example.com",

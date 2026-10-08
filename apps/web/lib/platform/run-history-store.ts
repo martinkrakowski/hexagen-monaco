@@ -1,4 +1,4 @@
-import type Database from "better-sqlite3";
+import type { PlatformDb } from "./db";
 
 export interface StageTelemetryInput {
   stage: number;
@@ -125,10 +125,10 @@ export interface RunHistoryRepository {
 }
 
 export function createRunHistoryRepository(
-  db: Database.Database,
+  db: PlatformDb,
   ownerId: string,
 ): RunHistoryRepository {
-  const insert = db.prepare(`
+  const insert = `
     INSERT INTO run_events (
       id, owner_id, run_id, project_id, stage, label, model, refiner_model,
       duration_ms, retry_count, input_tokens, output_tokens,
@@ -153,18 +153,17 @@ export function createRunHistoryRepository(
       cost_cents = excluded.cost_cents,
       created_at = excluded.created_at
     RETURNING *
-  `);
-  const selectPrice = db.prepare(
-    "SELECT usd_per_1k_input, usd_per_1k_output FROM model_prices WHERE model = ?",
-  );
-  const selectRecent = db.prepare(`
+  `;
+  const selectPrice =
+    "SELECT usd_per_1k_input, usd_per_1k_output FROM model_prices WHERE model = ?";
+  const selectRecent = `
     SELECT * FROM run_events
      WHERE owner_id = @owner_id
        AND (@project_id IS NULL OR project_id = @project_id)
      ORDER BY created_at DESC
      LIMIT @limit
-  `);
-  const selectTrend = db.prepare(`
+  `;
+  const selectTrend = `
     SELECT
       substr(datetime(created_at / 1000, 'unixepoch'), 1, 10) AS day,
       COUNT(DISTINCT run_id) AS runs,
@@ -173,13 +172,13 @@ export function createRunHistoryRepository(
      WHERE owner_id = @owner_id AND created_at >= @since
      GROUP BY day
      ORDER BY day ASC
-  `);
+  `;
 
-  function lookupPrice(
+  async function lookupPrice(
     model: string | undefined,
-  ): { usdPer1kInput: number; usdPer1kOutput: number } | null {
+  ): Promise<{ usdPer1kInput: number; usdPer1kOutput: number } | null> {
     if (!model) return null;
-    const exact = selectPrice.get(model) as PriceRow | undefined;
+    const exact = await db.get<PriceRow>(selectPrice, [model]);
     if (exact) {
       return {
         usdPer1kInput: exact.usd_per_1k_input,
@@ -189,7 +188,7 @@ export function createRunHistoryRepository(
     const alias = model.includes("/")
       ? model.slice(model.lastIndexOf("/") + 1)
       : model;
-    const aliased = selectPrice.get(alias) as PriceRow | undefined;
+    const aliased = await db.get<PriceRow>(selectPrice, [alias]);
     if (!aliased) return null;
     return {
       usdPer1kInput: aliased.usd_per_1k_input,
@@ -204,7 +203,7 @@ export function createRunHistoryRepository(
       const costCents = computeCostCents(
         telemetry.inputTokensEstimate,
         telemetry.outputTokensActual,
-        lookupPrice(telemetry.modelName),
+        await lookupPrice(telemetry.modelName),
       );
       const record: RunEventRecord = {
         id: crypto.randomUUID(),
@@ -224,7 +223,7 @@ export function createRunHistoryRepository(
         costCents,
         createdAt: now,
       };
-      const stored = insert.get({
+      const stored = (await db.get<RunEventRow>(insert, {
         id: record.id,
         owner_id: ownerId,
         run_id: record.runId,
@@ -242,24 +241,24 @@ export function createRunHistoryRepository(
         summary: record.summary,
         cost_cents: record.costCents,
         created_at: record.createdAt,
-      }) as RunEventRow;
+      }))!;
       return rowToRecord(stored);
     },
     async list(options = {}) {
-      const rows = selectRecent.all({
+      const rows = await db.all<RunEventRow>(selectRecent, {
         owner_id: ownerId,
         project_id: options.projectId ?? null,
         limit: options.limit ?? 100,
-      }) as RunEventRow[];
+      });
       return rows.map(rowToRecord);
     },
     async trend(days = 14) {
       const since = Date.now() - days * 24 * 60 * 60 * 1000;
-      const rows = selectTrend.all({ owner_id: ownerId, since }) as Array<{
+      const rows = await db.all<{
         day: string;
         runs: number;
         cost_cents: number;
-      }>;
+      }>(selectTrend, { owner_id: ownerId, since });
       return rows.map((row) => ({
         day: row.day,
         runs: row.runs,

@@ -31,8 +31,8 @@ function postOrg(body: unknown): NextRequest {
  * `resolveProjectAccess` granted on membership, but nothing produced an org.
  */
 describe("H1.1 — POST /api/orgs", () => {
-  beforeEach(() => {
-    closePlatformStore();
+  beforeEach(async () => {
+    await closePlatformStore();
     vi.mocked(getToken).mockReset();
   });
   afterEach(() => closePlatformStore());

@@ -60,7 +60,7 @@ async function eventsOf(response: Response): Promise<unknown[]> {
  */
 describe("/api/runs — tenant-scoped history (H1.5)", () => {
   beforeEach(async () => {
-    closePlatformStore();
+    await closePlatformStore();
     vi.mocked(getToken).mockReset();
     // Wave-3 FK: org_members.org_id → orgs.id, so the org row must exist
     // before membership. MEMBER genuinely belongs to it.

@@ -9,6 +9,8 @@ vi.mock("next-auth/jwt", () => ({ getToken: vi.fn() }));
 
 import { getToken } from "next-auth/jwt";
 import { openPlatformDb } from "../platform-db";
+import { createSqlitePlatformDb } from "../sqlite-db";
+import type { PlatformDb } from "../db";
 import { createOrgsRepository } from "../orgs-store";
 import { createTeamsRepository } from "../teams-store";
 import { createProjectSharesRepository } from "../project-shares-store";
@@ -39,9 +41,10 @@ function fixture() {
     "platform.db",
   );
   const db = openPlatformDb(path);
-  const orgs = createOrgsRepository(db);
-  const teams = createTeamsRepository(db);
-  const shares = createProjectSharesRepository(db);
+  const platformDb = createSqlitePlatformDb(db);
+  const orgs = createOrgsRepository(platformDb);
+  const teams = createTeamsRepository(platformDb);
+  const shares = createProjectSharesRepository(platformDb);
   const readers: ProjectAccessReaders = {
     memberRole: (orgId, userId) => orgs.memberRole(orgId, userId),
     listOrgIdsForUser: (userId) => orgs.listOrgIdsForUser(userId),
@@ -49,7 +52,7 @@ function fixture() {
     accessFor: (ownerId, projectId, identity) =>
       shares.accessFor(ownerId, projectId, identity),
   };
-  return { db, orgs, teams, shares, readers };
+  return { db, platformDb, orgs, teams, shares, readers };
 }
 
 function project(id: string): SavedProject {
@@ -63,10 +66,10 @@ function project(id: string): SavedProject {
 }
 
 async function seedProject(
-  db: ReturnType<typeof openPlatformDb>,
+  platformDb: PlatformDb,
   ownerId: string,
 ): Promise<void> {
-  const store = createSavedProjectsStore(db, ownerId);
+  const store = createSavedProjectsStore(platformDb, ownerId);
   const created = await store.createProjectRecord(project(PROJECT));
   assert.equal(created.success, true, "fixture project must be created");
 }
@@ -96,9 +99,9 @@ describe("P-A3 — resolveProjectAccess", () => {
   });
 
   it("the owner of their own tenant gets role owner", async () => {
-    const { db, readers } = fixture();
+    const { db, platformDb, readers } = fixture();
     try {
-      await seedProject(db, OWNER);
+      await seedProject(platformDb, OWNER);
       signedInAs(OWNER);
       const r = await resolveProjectAccess(req(), OWNER, PROJECT, readers);
       assert.equal(r.ok, true);
@@ -113,9 +116,9 @@ describe("P-A3 — resolveProjectAccess", () => {
   });
 
   it("cross-tenant read is 403 — and the project DOES exist in the owner's tenant", async () => {
-    const { db, orgs, readers } = fixture();
+    const { db, platformDb, orgs, readers } = fixture();
     try {
-      await seedProject(db, OWNER);
+      await seedProject(platformDb, OWNER);
       // The outsider is a real, signed-in user with an org of their own, so
       // the refusal cannot be "this user has no identity".
       await orgs.createOrg({
@@ -128,9 +131,10 @@ describe("P-A3 — resolveProjectAccess", () => {
 
       // Non-vacuity: prove the row is there before asserting the refusal, so
       // the 403 is an authorization decision and not a 404 in disguise.
-      const owned = await createSavedProjectsStore(db, OWNER).getProject(
-        PROJECT,
-      );
+      const owned = await createSavedProjectsStore(
+        platformDb,
+        OWNER,
+      ).getProject(PROJECT);
       assert.equal(owned.success, true);
       if (owned.success) {
         assert.ok(owned.value, "the project must exist in the owner's tenant");
@@ -147,9 +151,9 @@ describe("P-A3 — resolveProjectAccess", () => {
   });
 
   it("a direct user grant resolves to its role", async () => {
-    const { db, shares, readers } = fixture();
+    const { db, platformDb, shares, readers } = fixture();
     try {
-      await seedProject(db, OWNER);
+      await seedProject(platformDb, OWNER);
       await shares.grant({
         ownerId: OWNER,
         projectId: PROJECT,
@@ -172,9 +176,9 @@ describe("P-A3 — resolveProjectAccess", () => {
   });
 
   it("a grant to one of the caller's ORGS resolves", async () => {
-    const { db, orgs, shares, readers } = fixture();
+    const { db, platformDb, orgs, shares, readers } = fixture();
     try {
-      await seedProject(db, OWNER);
+      await seedProject(platformDb, OWNER);
       await orgs.createOrg({
         id: "org-b",
         slug: "org-b",
@@ -200,9 +204,9 @@ describe("P-A3 — resolveProjectAccess", () => {
   });
 
   it("a grant to one of the caller's TEAMS resolves (teams are grantees, D-A1)", async () => {
-    const { db, orgs, teams, shares, readers } = fixture();
+    const { db, platformDb, orgs, teams, shares, readers } = fixture();
     try {
-      await seedProject(db, OWNER);
+      await seedProject(platformDb, OWNER);
       await orgs.createOrg({
         id: "org-b",
         slug: "org-b",
@@ -236,9 +240,9 @@ describe("P-A3 — resolveProjectAccess", () => {
   });
 
   it("a revoked grant is refused on the very next call, with no cache in between", async () => {
-    const { db, shares, readers } = fixture();
+    const { db, platformDb, shares, readers } = fixture();
     try {
-      await seedProject(db, OWNER);
+      await seedProject(platformDb, OWNER);
       await shares.grant({
         ownerId: OWNER,
         projectId: PROJECT,
@@ -270,9 +274,9 @@ describe("P-A3 — resolveProjectAccess", () => {
   });
 
   it("the strongest grant wins when a caller is reached more than one way", async () => {
-    const { db, orgs, shares, readers } = fixture();
+    const { db, platformDb, orgs, shares, readers } = fixture();
     try {
-      await seedProject(db, OWNER);
+      await seedProject(platformDb, OWNER);
       await orgs.createOrg({
         id: "org-b",
         slug: "org-b",
@@ -308,9 +312,9 @@ describe("P-A3 — resolveProjectAccess", () => {
   });
 
   it("an org member reaches the org tenant's projects as owner", async () => {
-    const { db, orgs, readers } = fixture();
+    const { db, platformDb, orgs, readers } = fixture();
     try {
-      await seedProject(db, "org-a");
+      await seedProject(platformDb, "org-a");
       await orgs.createOrg({
         id: "org-a",
         slug: "org-a",

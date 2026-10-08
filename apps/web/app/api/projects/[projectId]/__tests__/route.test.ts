@@ -39,12 +39,12 @@ function put(id: string, body: unknown): NextRequest {
 }
 
 describe("GET/PUT /api/projects/[projectId]", () => {
-  beforeEach(() => {
-    closePlatformStore();
+  beforeEach(async () => {
+    await closePlatformStore();
     vi.mocked(getToken).mockResolvedValue({ sub: "user-a" } as never);
   });
-  afterEach(() => {
-    closePlatformStore();
+  afterEach(async () => {
+    await closePlatformStore();
   });
 
   it("rejects a missing JWT with 401", async () => {

@@ -83,8 +83,8 @@ async function seed(): Promise<{ mine: number; theirs: number }> {
 }
 
 describe("GET /api/account/export", () => {
-  beforeEach(() => {
-    closePlatformStore();
+  beforeEach(async () => {
+    await closePlatformStore();
     vi.mocked(getToken).mockResolvedValue({ sub: OWNER } as never);
   });
   afterEach(() => closePlatformStore());

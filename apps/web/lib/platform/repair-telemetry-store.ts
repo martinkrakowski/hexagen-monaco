@@ -1,4 +1,4 @@
-import type Database from "better-sqlite3";
+import type { PlatformDb } from "./db";
 import type { PersistenceError, Result } from "@hexagen/shared";
 
 /**
@@ -611,10 +611,10 @@ export interface RepairTelemetryStore {
 }
 
 export function createRepairTelemetryStore(
-  db: Database.Database,
+  db: PlatformDb,
   ownerId: string,
 ): RepairTelemetryStore {
-  const insertRun = db.prepare(`
+  const insertRun = `
     INSERT INTO repair_runs (
       id, owner_id, schema_version, run_id, surface, outcome, rounds,
       violations_initial, violations_remaining, attempts_total,
@@ -636,9 +636,9 @@ export function createRepairTelemetryStore(
       schema_version = excluded.schema_version,
       created_at = excluded.created_at
     RETURNING ${RUN_COLUMNS}
-  `);
+  `;
 
-  const insertAttempt = db.prepare(`
+  const insertAttempt = `
     INSERT INTO repair_attempts (
       id, owner_id, schema_version, run_id, round, seq, violation_class,
       violation_status, path, eligible, applied, changed_yaml, duration_ms,
@@ -663,44 +663,42 @@ export function createRepairTelemetryStore(
       gate_reason = excluded.gate_reason,
       schema_version = excluded.schema_version,
       created_at = excluded.created_at
-  `);
+  `;
 
   // A re-recorded run replaces its attempt set wholesale. Upserting attempt
   // rows alone would leave orphans from a longer previous loop, and a run whose
   // attempts_total disagrees with its attempt count is unusable evidence.
-  const deleteAttemptsForRun = db.prepare(
-    "DELETE FROM repair_attempts WHERE owner_id = ? AND run_id = ?",
-  );
+  const deleteAttemptsForRun =
+    "DELETE FROM repair_attempts WHERE owner_id = ? AND run_id = ?";
 
   // Retention is version-BLIND, like scan_records: gating eviction on
   // schema_version would make foreign-version rows immortal and the table would
   // grow forever behind an invisible wall.
-  const selectEvictableRuns = db.prepare(`
+  const selectEvictableRuns = `
     SELECT run_id FROM repair_runs
      WHERE owner_id = @owner_id
      ORDER BY created_at DESC, rowid DESC
      LIMIT -1 OFFSET @keep
-  `);
-  const deleteRunByRunId = db.prepare(
-    "DELETE FROM repair_runs WHERE owner_id = ? AND run_id = ?",
-  );
+  `;
+  const deleteRunByRunId =
+    "DELETE FROM repair_runs WHERE owner_id = ? AND run_id = ?";
 
-  const selectRuns = db.prepare(`
+  const selectRuns = `
     SELECT ${RUN_COLUMNS} FROM repair_runs
      WHERE owner_id = @owner_id
        AND schema_version = @schema_version
        AND (@surface IS NULL OR surface = @surface)
      ORDER BY created_at DESC, rowid DESC
      LIMIT @limit
-  `);
+  `;
 
-  const selectAttempts = db.prepare(`
+  const selectAttempts = `
     SELECT ${ATTEMPT_COLUMNS} FROM repair_attempts
      WHERE owner_id = @owner_id
-       AND run_id = @run_id
-       AND schema_version = @schema_version
+      AND run_id = @run_id
+      AND schema_version = @schema_version
      ORDER BY round ASC, seq ASC
-  `);
+  `;
 
   // Median, not mean: one 30s LLM round otherwise swamps a hundred
   // sub-millisecond deterministic fixes and the class average stops describing
@@ -715,7 +713,7 @@ export function createRepairTelemetryStore(
   // `rn = (n + 1) / 2` is integer division, so n=1,2 -> 1; n=3,4 -> 2. Even
   // counts resolve DOWN, which is what "lower-middle" means and keeps the
   // reported value an observed duration rather than an interpolated one.
-  const selectClassStats = db.prepare(`
+  const selectClassStats = `
     WITH scoped AS (
       SELECT
         a.violation_class AS violation_class,
@@ -742,37 +740,42 @@ export function createRepairTelemetryStore(
     FROM scoped
     GROUP BY violation_class
     ORDER BY attempts DESC, violation_class ASC
-  `);
+  `;
 
   interface RunWriteParams {
     run: Record<string, string | number | null>;
     attempts: Array<Record<string, string | number | null>>;
   }
 
-  const writeWithRetention = db.transaction(
-    (params: RunWriteParams): RepairRunRow => {
+  const writeWithRetention = (params: RunWriteParams): Promise<RepairRunRow> =>
+    db.transaction(async (tx) => {
       // The STORED row, not the input: on the upsert path the conflicting row
       // keeps its original `id`, so returning the freshly minted one would hand
       // the caller a primary key that is not in the table.
-      const stored = insertRun.get(params.run) as RepairRunRow;
-      deleteAttemptsForRun.run(ownerId, params.run.run_id as string);
+      const stored = (await tx.get<RepairRunRow>(
+        insertRun,
+        params.run,
+      )) as RepairRunRow;
+      await tx.run(deleteAttemptsForRun, [
+        ownerId,
+        params.run.run_id as string,
+      ]);
       for (const attempt of params.attempts) {
-        insertAttempt.run(attempt);
+        await tx.run(insertAttempt, attempt);
       }
-      const evictable = selectEvictableRuns.all({
+      const evictable = await tx.all<{ run_id: string }>(selectEvictableRuns, {
         owner_id: ownerId,
         keep: MAX_REPAIR_RUNS_PER_OWNER,
-      }) as Array<{ run_id: string }>;
+      });
       for (const row of evictable) {
         // Attempts first: a run row deleted while its attempts survive leaves
         // rows the class-stats join silently drops, i.e. a table that looks
         // smaller than it is.
-        deleteAttemptsForRun.run(ownerId, row.run_id);
-        deleteRunByRunId.run(ownerId, row.run_id);
+        await tx.run(deleteAttemptsForRun, [ownerId, row.run_id]);
+        await tx.run(deleteRunByRunId, [ownerId, row.run_id]);
       }
       return stored;
-    },
-  );
+    });
 
   return {
     async record(input) {
@@ -864,7 +867,7 @@ export function createRepairTelemetryStore(
 
       let stored: RepairRunRow;
       try {
-        stored = writeWithRetention({
+        stored = await writeWithRetention({
           run: {
             id: pending.id,
             owner_id: ownerId,
@@ -903,12 +906,12 @@ export function createRepairTelemetryStore(
     },
 
     async listRuns(options = {}) {
-      const rows = selectRuns.all({
+      const rows = (await db.all<RepairRunRow>(selectRuns, {
         owner_id: ownerId,
         schema_version: REPAIR_TELEMETRY_SCHEMA_VERSION,
         surface: options.surface ?? null,
         limit: clampLimit(options.limit, 100),
-      }) as RepairRunRow[];
+      })) as RepairRunRow[];
       const records: RepairRunRecord[] = [];
       for (const row of rows) {
         const record = runRowToRecord(row);
@@ -921,11 +924,11 @@ export function createRepairTelemetryStore(
       if (!OPAQUE_ID.test(typeof runId === "string" ? runId : "")) {
         return rejected("runId must be an opaque UUID");
       }
-      const rows = selectAttempts.all({
+      const rows = (await db.all<RepairAttemptRow>(selectAttempts, {
         owner_id: ownerId,
         run_id: runId,
         schema_version: REPAIR_TELEMETRY_SCHEMA_VERSION,
-      }) as RepairAttemptRow[];
+      })) as RepairAttemptRow[];
       const records: RepairAttemptRecord[] = [];
       for (const row of rows) {
         const record = attemptRowToRecord(row);
@@ -935,17 +938,17 @@ export function createRepairTelemetryStore(
     },
 
     async classStats(options = {}) {
-      const rows = selectClassStats.all({
-        owner_id: ownerId,
-        schema_version: REPAIR_TELEMETRY_SCHEMA_VERSION,
-        surface: options.surface ?? null,
-      }) as Array<{
+      const rows = await db.all<{
         violation_class: string;
         attempts: number;
         eligible: number;
         applied: number;
         median_duration_ms: number | null;
-      }>;
+      }>(selectClassStats, {
+        owner_id: ownerId,
+        schema_version: REPAIR_TELEMETRY_SCHEMA_VERSION,
+        surface: options.surface ?? null,
+      });
       const stats: RepairClassStat[] = [];
       for (const row of rows) {
         if (!isRepairViolationClass(row.violation_class)) continue;

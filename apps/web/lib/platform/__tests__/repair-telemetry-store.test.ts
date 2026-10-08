@@ -6,6 +6,7 @@ import { join } from "node:path";
 import Database from "better-sqlite3";
 import { canAutoFix, type ViolationCode } from "@hexagen/manifest-generation";
 import { openPlatformDb } from "../platform-db";
+import { createSqlitePlatformDb } from "../sqlite-db";
 import {
   MAX_REPAIR_RUNS_PER_OWNER,
   REPAIR_VIOLATION_CLASSES,
@@ -23,7 +24,8 @@ import {
 // run-history-store convention.
 function openStore(ownerId = "owner-a") {
   const db = openPlatformDb(":memory:");
-  return { db, store: createRepairTelemetryStore(db, ownerId) };
+  const platformDb = createSqlitePlatformDb(db);
+  return { db, store: createRepairTelemetryStore(platformDb, ownerId) };
 }
 
 const RUN_ID = "11111111-1111-4111-8111-111111111111";
@@ -262,8 +264,9 @@ describe("repair telemetry store", () => {
 
   it("scopes rows to the owner", async () => {
     const db = openPlatformDb(":memory:");
-    const a = createRepairTelemetryStore(db, "owner-a");
-    const b = createRepairTelemetryStore(db, "owner-b");
+    const platformDb = createSqlitePlatformDb(db);
+    const a = createRepairTelemetryStore(platformDb, "owner-a");
+    const b = createRepairTelemetryStore(platformDb, "owner-b");
     // Asserted, not discarded: `record` returns a Result rather than throwing,
     // so a fixture that stopped validating would make "b sees 0 rows" pass for
     // the wrong reason -- b sees nothing because nothing exists.
@@ -668,7 +671,10 @@ describe("repair telemetry migration", () => {
       .prepare("SELECT name FROM saved_projects WHERE id = ?")
       .get("proj-1") as { name: string } | undefined;
     assert.equal(kept?.name, "shop");
-    const store = createRepairTelemetryStore(upgraded, "owner-a");
+    const store = createRepairTelemetryStore(
+      createSqlitePlatformDb(upgraded),
+      "owner-a",
+    );
     assert.equal((await store.record(run())).success, true);
     upgraded.close();
 
@@ -676,7 +682,10 @@ describe("repair telemetry migration", () => {
     // row written above must still be there.
     openPlatformDb(path).close();
     const third = openPlatformDb(path);
-    const again = await createRepairTelemetryStore(third, "owner-a").listRuns();
+    const again = await createRepairTelemetryStore(
+      createSqlitePlatformDb(third),
+      "owner-a",
+    ).listRuns();
     assert.ok(again.success);
     assert.equal(again.success && again.value.length, 1);
     third.close();

@@ -58,8 +58,8 @@ async function seedOrgWithProject() {
 }
 
 describe("P-U5 — GET /api/tenants/[ownerId]/projects", () => {
-  beforeEach(() => {
-    closePlatformStore();
+  beforeEach(async () => {
+    await closePlatformStore();
     vi.mocked(getToken).mockReset();
   });
   afterEach(() => closePlatformStore());

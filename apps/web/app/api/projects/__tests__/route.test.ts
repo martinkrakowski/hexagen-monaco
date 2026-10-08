@@ -29,8 +29,8 @@ function get(): NextRequest {
 }
 
 describe("GET/POST/PUT /api/projects", () => {
-  beforeEach(() => {
-    closePlatformStore();
+  beforeEach(async () => {
+    await closePlatformStore();
     vi.mocked(getToken).mockResolvedValue({ sub: "user-a" } as never);
   });
   afterEach(() => closePlatformStore());

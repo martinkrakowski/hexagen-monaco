@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { openPlatformDb, ORG_INVITE_TTL_DAYS } from "../platform-db";
+import { createSqlitePlatformDb } from "../sqlite-db";
 import { createOrgsRepository, LastOwnerError } from "../orgs-store";
 import { createTeamsRepository } from "../teams-store";
 import { createAuditLogRepository } from "../audit-log-store";
@@ -15,11 +16,12 @@ function fixture() {
     "p.db",
   );
   const db = openPlatformDb(path);
+  const platformDb = createSqlitePlatformDb(db);
   return {
     db,
-    orgs: createOrgsRepository(db),
-    teams: createTeamsRepository(db),
-    audit: createAuditLogRepository(db),
+    orgs: createOrgsRepository(platformDb),
+    teams: createTeamsRepository(platformDb),
+    audit: createAuditLogRepository(platformDb),
   };
 }
 
@@ -476,8 +478,9 @@ describe("H1.2 — invite expiry", () => {
       fx.db.close();
 
       const db = openPlatformDb(path);
+      const platformDb = createSqlitePlatformDb(db);
       try {
-        const orgs = createOrgsRepository(db);
+        const orgs = createOrgsRepository(platformDb);
         const [pending] = await orgs.listPendingInvites("org-acme");
         assert.ok(pending, "the migrated invite must still be redeemable");
         assert.match(
@@ -515,8 +518,9 @@ describe("H1.2 — invite expiry", () => {
       fx.db.close();
 
       const db = openPlatformDb(path);
+      const platformDb = createSqlitePlatformDb(db);
       try {
-        const orgs = createOrgsRepository(db);
+        const orgs = createOrgsRepository(platformDb);
         const [pending] = await orgs.listPendingInvites("org-acme");
         assert.ok(pending, "the repaired invite must still be redeemable");
         assert.match(

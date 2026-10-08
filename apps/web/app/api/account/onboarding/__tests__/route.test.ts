@@ -41,8 +41,8 @@ async function onboardedAtOf(res: Response): Promise<string | null> {
 }
 
 describe("P-U0b — /api/account/onboarding", () => {
-  beforeEach(() => {
-    closePlatformStore();
+  beforeEach(async () => {
+    await closePlatformStore();
     vi.mocked(getToken).mockReset();
   });
   afterEach(() => closePlatformStore());
@@ -108,8 +108,8 @@ describe("P-U0b — /api/account/onboarding", () => {
 });
 
 describe("rate-limit keying (review flag on #663)", () => {
-  beforeEach(() => {
-    closePlatformStore();
+  beforeEach(async () => {
+    await closePlatformStore();
     vi.mocked(getToken).mockReset();
   });
   afterEach(() => closePlatformStore());
