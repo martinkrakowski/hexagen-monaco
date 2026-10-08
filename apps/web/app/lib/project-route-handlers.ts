@@ -205,7 +205,7 @@ export async function handleProjectCreate(
       { status },
     );
   }
-  store.markProjectsInitialized(tenant.tenantId);
+  await store.markProjectsInitialized(tenant.tenantId);
   return NextResponse.json(created.value, { status: 201 });
 }
 
@@ -236,7 +236,7 @@ export async function handleProjectList(
   }
   return NextResponse.json({
     projects: loaded.value,
-    initialized: store.isProjectsInitialized(tenant.tenantId),
+    initialized: await store.isProjectsInitialized(tenant.tenantId),
     ownerId: tenant.tenantId,
   });
 }
@@ -312,7 +312,7 @@ export async function handleProjectPut(
     access.actorUserId,
   );
   if (updated.success) {
-    store.markProjectsInitialized(access.ownerId);
+    await store.markProjectsInitialized(access.ownerId);
     // The new rev goes back as the ETag, so the next write can send a rev
     // precondition without the client having to know how revs are produced.
     return NextResponse.json(updated.value.project, {
@@ -340,7 +340,7 @@ export async function handleProjectPut(
     if (!created.success) {
       return persistenceError(created.error.kind, created.error.message);
     }
-    store.markProjectsInitialized(access.ownerId);
+    await store.markProjectsInitialized(access.ownerId);
     return NextResponse.json(created.value, { status: 201 });
   }
   return persistenceError(updated.error.kind, updated.error.message);
@@ -370,6 +370,6 @@ export async function handleProjectDelete(
   if (!deleted.success) {
     return persistenceError(deleted.error.kind, deleted.error.message);
   }
-  store.markProjectsInitialized(access.ownerId);
+  await store.markProjectsInitialized(access.ownerId);
   return NextResponse.json({ ok: true });
 }

@@ -94,6 +94,6 @@ export async function PUT(request: NextRequest) {
       { status: 500 },
     );
   }
-  getPlatformStore().markProjectsInitialized(owner.ownerId);
+  await getPlatformStore().markProjectsInitialized(owner.ownerId);
   return NextResponse.json({ projects, initialized: true });
 }
