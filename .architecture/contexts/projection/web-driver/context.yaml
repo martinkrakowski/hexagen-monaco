@@ -15,7 +15,6 @@ layers:
       - LocalStorageMonacoAdapter
       - LocalStorageCanvasLayoutAdapter
       - ArchitectureGraphProviderAdapter
-      - LocalStorageByokStoreAdapter
 depends_on:
   - agentic-interaction
   - monaco-orchestration

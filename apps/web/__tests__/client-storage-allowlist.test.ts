@@ -262,8 +262,8 @@ export const PREFERENCE_KEYS = [
   "hexagen-saved-projects", // localStorage: legacy saved-projects migration source (saved-projects-migration-step.ts)
   "hexagen-wizard-draft", // localStorage: legacy wizard-draft migration source (wizard-draft-migration-step.ts)
   "hexagen-editor-workspace-", // localStorage: legacy editor-workspace migration source (editor-workspace-migration-step.ts)
-  "byok:keys", // localStorage: BYOK provider entries (local-storage-byok-store.adapter.ts)
-  "hexagen:vault:encrypted-payload", // localStorage: encrypted API key vault (encrypted-session-vault.adapter.ts)
+  "byok:keys", // localStorage: removed keys deleted at start by remove-unused-secret-keys-step.ts
+  "hexagen:vault:encrypted-payload", // localStorage: removed keys deleted at start by remove-unused-secret-keys-step.ts
   "hexagen-workspace-layout-v1", // localStorage: react-resizable-panels autoSaveId (constants.ts)
   "hexagen-plan-workbench-v1", // localStorage: react-resizable-panels autoSaveId (constants.ts)
   "manifest-preview-layout", // localStorage: react-resizable-panels autoSaveId (ManifestPreview.tsx)

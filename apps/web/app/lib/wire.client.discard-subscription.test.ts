@@ -19,12 +19,29 @@ import {
   getEventBus,
   getChatPersistence,
   getGenerationResultPersistence,
+  getMigrationReady,
 } from "./wire.client";
 import { useGovernanceThreadStore } from "../../features/governance-assistant/stores/useGovernanceThreadStore";
 
 describe("wire.client — ProjectDiscarded is not subscribed at the composition root", () => {
   afterEach(() => {
     useGovernanceThreadStore.getState().clearAllThreads();
+  });
+
+  it("registers a remove-unused-secret-keys migration step at the composition root", async () => {
+    // Run FIRST, before the shared afterEach clears localStorage: the
+    // orchestrator runs once at module load (before any test), so by the time
+    // the first test executes its ready promise is already settled and the
+    // persisted status reflects the steps this build wired.
+    await getMigrationReady();
+    const raw = localStorage.getItem("hexagen:migration:status");
+    const status = raw
+      ? (JSON.parse(raw) as { completedSteps: string[] })
+      : { completedSteps: [] };
+    // The step that deletes the two removed-secret-adapter keys must be wired as
+    // the last migration step; if it is absent here, removing it from
+    // wire.client.ts would silently drop the key cleanup.
+    expect(status.completedSteps).toContain("remove-unused-secret-keys");
   });
 
   it("publishing ProjectDiscarded purges nothing and clears no thread", () => {
