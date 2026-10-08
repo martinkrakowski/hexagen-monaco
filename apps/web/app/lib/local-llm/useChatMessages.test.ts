@@ -68,9 +68,26 @@ describe("useChatMessages — persistence removed", () => {
     expect(fakePort.loadChatHistory).not.toHaveBeenCalled();
   });
 
-  it("starts with an empty message list on every mount", () => {
+  it("starts with an empty message list on every mount, even when the port holds a stored list", async () => {
+    // The fake port holds a non-empty stored list — the old load effect would
+    // have restored it. Now it must be ignored: the hook starts empty and
+    // never calls loadChatHistory.
+    fakePort.loadChatHistory.mockResolvedValue({
+      success: true,
+      value: [
+        { id: "old", role: "user", content: "from storage", timestamp: 1 },
+      ],
+    });
+
     const { result } = renderHook(() => useChatMessages(makeProps()));
+
+    // Let any pending effects flush
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    // The list is still empty despite the stored list being non-empty
     expect(result.current.messages).toEqual([]);
+    // And the hook never called loadChatHistory
+    expect(fakePort.loadChatHistory).not.toHaveBeenCalled();
   });
 
   it("does not call saveChatHistory after messages change", async () => {

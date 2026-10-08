@@ -3,9 +3,11 @@
 import { Alert } from "@hexagen/ui";
 import { Button } from "@hexagen/ui";
 
+export type NoticeError = "download" | "discard" | null;
+
 export interface StoredHistoryNoticeProps {
   count: number;
-  error: boolean;
+  error: NoticeError;
   onDownload: () => void;
   onDiscard: () => void;
 }
@@ -18,8 +20,8 @@ export function StoredHistoryNotice({
 }: StoredHistoryNoticeProps) {
   const message =
     count === 1
-      ? "This browser holds 1 assistant message from earlier sessions. They are no longer kept between sessions. Download a copy, or discard them."
-      : `This browser holds ${count} assistant messages from earlier sessions. They are no longer kept between sessions. Download a copy, or discard them.`;
+      ? "This browser holds 1 assistant message from earlier sessions. They are no longer kept between sessions. Download a copy if you want one, then discard them."
+      : `This browser holds ${count} assistant messages from earlier sessions. They are no longer kept between sessions. Download a copy if you want one, then discard them.`;
 
   return (
     <Alert tone="info" title="Stored assistant messages">
@@ -32,9 +34,14 @@ export function StoredHistoryNotice({
           Discard
         </Button>
       </div>
-      {error && (
+      {error === "discard" && (
         <p className="mt-2 text-xs text-destructive">
           The stored messages could not be removed. Try again.
+        </p>
+      )}
+      {error === "download" && (
+        <p className="mt-2 text-xs text-destructive">
+          The messages could not be prepared for download.
         </p>
       )}
     </Alert>

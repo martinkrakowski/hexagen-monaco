@@ -5,9 +5,11 @@ import { getChatPersistence } from "@/lib/wire";
 
 import { formatChatTranscript } from "./format-chat-transcript";
 
+export type OfferError = "download" | "discard" | null;
+
 export interface StoredChatHistoryOffer {
   count: number;
-  error: boolean;
+  error: OfferError;
   download: () => Promise<void>;
   discard: () => Promise<void>;
 }
@@ -28,7 +30,7 @@ const defaultDownloadFile: DownloadFileFn = (content, filename) => {
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
 };
 
 function formatDateYYYYMMDD(date: Date): string {
@@ -47,7 +49,7 @@ export function useStoredChatHistoryOffer(
   } = options ?? {};
 
   const [messages, setMessages] = useState<ChatMessage[] | null>(null);
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<OfferError>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -82,24 +84,22 @@ export function useStoredChatHistoryOffer(
     const transcript = formatChatTranscript(messages, exportedAt);
     const filename = `hexagen-assistant-messages-${formatDateYYYYMMDD(exportedAt)}.md`;
 
-    downloadFile(transcript, filename);
-
-    const clearResult = await persistencePort.clearChatHistory();
-    if (clearResult.success) {
-      setMessages(null);
-      setError(false);
-    } else {
-      setError(true);
+    try {
+      downloadFile(transcript, filename);
+    } catch {
+      setError("download");
+      return;
     }
-  }, [messages, persistencePort, downloadFile]);
+    // download does NOT clear; the offer stays so the user can retry
+  }, [messages, downloadFile]);
 
   const discard = useCallback(async () => {
     const clearResult = await persistencePort.clearChatHistory();
     if (clearResult.success) {
       setMessages(null);
-      setError(false);
+      setError(null);
     } else {
-      setError(true);
+      setError("discard");
     }
   }, [persistencePort]);
 

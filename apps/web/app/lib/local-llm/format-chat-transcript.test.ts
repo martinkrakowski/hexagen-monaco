@@ -132,10 +132,32 @@ describe("formatChatTranscript", () => {
   it("leaves content containing Markdown and backticks untouched", () => {
     const content = "Here is some `code` and a **bold** thing.";
     const messages: ChatMessage[] = [
-      { id: "u1", role: "user", content, timestamp: 1704110400000 },
+      { id: "u1", role: "user", content, timestamp: 1735684800000 },
     ];
     const exportedAt = new Date("2026-01-01T12:00:00Z");
     const result = formatChatTranscript(messages, exportedAt);
     assert.ok(result.includes("Here is some `code` and a **bold** thing."));
+  });
+
+  it("renders non-string content as '(unreadable)'", () => {
+    const messages = [
+      {
+        id: "u1",
+        role: "user",
+        content: 12345,
+        timestamp: 1735684800000,
+      },
+    ] as unknown as ChatMessage[];
+    const exportedAt = new Date("2026-01-01T12:00:00Z");
+    const result = formatChatTranscript(messages, exportedAt);
+    assert.ok(result.includes("(unreadable)"));
+    assert.ok(!result.includes("12345"));
+  });
+
+  it("renders a non-object entry as '(unreadable entry)'", () => {
+    const messages = ["garbage" as unknown as ChatMessage];
+    const exportedAt = new Date("2026-01-01T12:00:00Z");
+    const result = formatChatTranscript(messages, exportedAt);
+    assert.ok(result.includes("(unreadable entry)"));
   });
 });

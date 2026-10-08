@@ -310,9 +310,9 @@ export function GovernanceAssistantPanel({
   }
 
   return (
-    <div>
+    <div className="h-full flex flex-col">
       {localLLMOffer && (
-        <div className="p-3">
+        <div className="shrink-0 p-3">
           <StoredHistoryNotice
             count={localLLMOffer.count}
             error={localLLMOffer.error}
@@ -321,31 +321,35 @@ export function GovernanceAssistantPanel({
           />
         </div>
       )}
-      <GovernanceQaView
-        currentStepIndex={currentStepIndex}
-        violations={violations}
-        suggestions={suggestions}
-        activeItem={activeItem}
-        onSelectViolation={(v) => selectItem({ type: "violation", item: v })}
-        onSelectSuggestion={(s) => selectItem({ type: "suggestion", item: s })}
-        displayQuestions={displayQuestions}
-        isStreaming={isStreaming}
-        isExpanded={(id) => expandedQuestionId === id}
-        onQuestionClick={handleQuestionClick}
-        conversationThread={conversationThread}
-        lastAssistantMessage={lastAssistantMessage}
-        regeneratingEntryId={regeneratingEntryId}
-        onRegenerate={regenerateAnswer}
-        followUpQuestions={followUpQuestions}
-        onFollowUpClick={handleFollowUpClick}
-        threadLoaded={threadLoaded}
-        footerModelId={llmEngineState.loadedModelId}
-        footerModelLabel={
-          serverAssistantAvailable ? capabilities.chatModelName : undefined
-        }
-        footerIsLoading={engineBusy}
-        onOpenSettings={handleOpenSettings}
-      />
+      <div className="flex-1 min-h-0">
+        <GovernanceQaView
+          currentStepIndex={currentStepIndex}
+          violations={violations}
+          suggestions={suggestions}
+          activeItem={activeItem}
+          onSelectViolation={(v) => selectItem({ type: "violation", item: v })}
+          onSelectSuggestion={(s) =>
+            selectItem({ type: "suggestion", item: s })
+          }
+          displayQuestions={displayQuestions}
+          isStreaming={isStreaming}
+          isExpanded={(id) => expandedQuestionId === id}
+          onQuestionClick={handleQuestionClick}
+          conversationThread={conversationThread}
+          lastAssistantMessage={lastAssistantMessage}
+          regeneratingEntryId={regeneratingEntryId}
+          onRegenerate={regenerateAnswer}
+          followUpQuestions={followUpQuestions}
+          onFollowUpClick={handleFollowUpClick}
+          threadLoaded={threadLoaded}
+          footerModelId={llmEngineState.loadedModelId}
+          footerModelLabel={
+            serverAssistantAvailable ? capabilities.chatModelName : undefined
+          }
+          footerIsLoading={engineBusy}
+          onOpenSettings={handleOpenSettings}
+        />
+      </div>
     </div>
   );
 }

@@ -113,11 +113,13 @@ describe("GovernanceAssistantPanel — stored chat history notice", () => {
   });
 
   it("renders the notice when the offer is non-null", async () => {
+    const download = vi.fn();
+    const discard = vi.fn();
     offerMock.mockReturnValue({
       count: 3,
-      error: false,
-      download: vi.fn(),
-      discard: vi.fn(),
+      error: null,
+      download,
+      discard,
     });
 
     const { container } = render(
@@ -136,7 +138,40 @@ describe("GovernanceAssistantPanel — stored chat history notice", () => {
     expect(container.textContent).toContain(
       "This browser holds 3 assistant messages",
     );
-    expect(screen.getByText("Download")).toBeTruthy();
-    expect(screen.getByText("Discard")).toBeTruthy();
+
+    // Click each button and assert the offer's handler is invoked
+    const downloadBtn = screen.getByText("Download");
+    const discardBtn = screen.getByText("Discard");
+    downloadBtn.click();
+    discardBtn.click();
+
+    expect(download).toHaveBeenCalledTimes(1);
+    expect(discard).toHaveBeenCalledTimes(1);
+  });
+
+  it("wrapper has h-full flex flex-col, and the Q&A container has flex-1 min-h-0 (layout structural stand-in)", async () => {
+    offerMock.mockReturnValue(null);
+
+    const { container } = render(
+      <GovernanceAssistantPanel
+        wizardData={wizardData}
+        currentStepIndex={0}
+        violations={[violation]}
+        suggestions={[suggestion]}
+        onRefresh={() => {}}
+        isLoading={false}
+      />,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    // Structural stand-in for a layout check: jsdom cannot measure layout,
+    // so we assert the classes that make it correct. The outer wrapper
+    // establishes a full-height flex column; the Q&A container gets the
+    // remaining space with min-h-0 so overflow can scroll under Tabs.Content.
+    const wrapper = container.querySelector(".h-full.flex.flex-col");
+    expect(wrapper).toBeTruthy();
+
+    const qaContainer = container.querySelector(".flex-1.min-h-0");
+    expect(qaContainer).toBeTruthy();
   });
 });

@@ -19,12 +19,17 @@ export function formatChatTranscript(
   lines.push(`Count: ${messages.length}`);
 
   for (const msg of messages) {
+    if (typeof msg !== "object" || msg === null) {
+      lines.push("(unreadable entry)");
+      continue;
+    }
+
     const role =
       msg.role === "user"
         ? "User"
         : msg.role === "assistant"
           ? "Assistant"
-          : msg.role;
+          : String(msg.role);
 
     let timeLabel: string;
     if (typeof msg.timestamp === "number" && !Number.isNaN(msg.timestamp)) {
@@ -34,7 +39,15 @@ export function formatChatTranscript(
     }
 
     lines.push(`## ${role} — ${timeLabel}`);
-    lines.push(msg.content.length === 0 ? "(empty)" : msg.content);
+
+    const content = msg.content;
+    if (typeof content !== "string") {
+      lines.push("(unreadable)");
+    } else if (content.length === 0) {
+      lines.push("(empty)");
+    } else {
+      lines.push(content);
+    }
   }
 
   return lines.join("\n");

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 
-import { StoredHistoryNotice } from "./StoredHistoryNotice";
+import { StoredHistoryNotice, type NoticeError } from "./StoredHistoryNotice";
 
 describe("StoredHistoryNotice", () => {
   it("renders the count and both buttons", () => {
@@ -11,7 +11,7 @@ describe("StoredHistoryNotice", () => {
     render(
       <StoredHistoryNotice
         count={3}
-        error={false}
+        error={null}
         onDownload={onDownload}
         onDiscard={onDiscard}
       />,
@@ -28,7 +28,7 @@ describe("StoredHistoryNotice", () => {
     render(
       <StoredHistoryNotice
         count={1}
-        error={false}
+        error={null}
         onDownload={vi.fn()}
         onDiscard={vi.fn()}
       />,
@@ -44,7 +44,7 @@ describe("StoredHistoryNotice", () => {
     render(
       <StoredHistoryNotice
         count={2}
-        error={false}
+        error={null}
         onDownload={onDownload}
         onDiscard={vi.fn()}
       />,
@@ -59,7 +59,7 @@ describe("StoredHistoryNotice", () => {
     render(
       <StoredHistoryNotice
         count={2}
-        error={false}
+        error={null}
         onDownload={vi.fn()}
         onDiscard={onDiscard}
       />,
@@ -69,11 +69,11 @@ describe("StoredHistoryNotice", () => {
     expect(onDiscard).toHaveBeenCalledTimes(1);
   });
 
-  it("shows the error line when error is true", () => {
+  it("shows the discard error text when error is 'discard'", () => {
     render(
       <StoredHistoryNotice
         count={2}
-        error={true}
+        error={"discard" as NoticeError}
         onDownload={vi.fn()}
         onDiscard={vi.fn()}
       />,
@@ -84,13 +84,36 @@ describe("StoredHistoryNotice", () => {
         /The stored messages could not be removed\. Try again\./,
       ),
     ).toBeTruthy();
+    expect(
+      screen.queryByText(/The messages could not be prepared for download\./),
+    ).toBeNull();
   });
 
-  it("does not show the error line when error is false", () => {
+  it("shows the download error text when error is 'download'", () => {
     render(
       <StoredHistoryNotice
         count={2}
-        error={false}
+        error={"download" as NoticeError}
+        onDownload={vi.fn()}
+        onDiscard={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getByText(/The messages could not be prepared for download\./),
+    ).toBeTruthy();
+    expect(
+      screen.queryByText(
+        /The stored messages could not be removed\. Try again\./,
+      ),
+    ).toBeNull();
+  });
+
+  it("does not show any error text when error is null", () => {
+    render(
+      <StoredHistoryNotice
+        count={2}
+        error={null}
         onDownload={vi.fn()}
         onDiscard={vi.fn()}
       />,
@@ -101,13 +124,16 @@ describe("StoredHistoryNotice", () => {
         /The stored messages could not be removed\. Try again\./,
       ),
     ).toBeNull();
+    expect(
+      screen.queryByText(/The messages could not be prepared for download\./),
+    ).toBeNull();
   });
 
   it("renders the title 'Stored assistant messages'", () => {
     render(
       <StoredHistoryNotice
         count={1}
-        error={false}
+        error={null}
         onDownload={vi.fn()}
         onDiscard={vi.fn()}
       />,

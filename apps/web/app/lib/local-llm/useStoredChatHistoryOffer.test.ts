@@ -57,7 +57,8 @@ describe("useStoredChatHistoryOffer", () => {
 
     await waitFor(() => expect(result.current).toBeDefined());
     await waitFor(() => expect(result.current?.count).toBe(3));
-    expect(result.current?.error).toBeFalsy();
+    await waitFor(() => expect(result.current?.error).toBe(null));
+    expect(loadChatHistory).toHaveBeenCalledTimes(1);
   });
 
   it("exposes null when stored list is empty", async () => {
@@ -73,9 +74,9 @@ describe("useStoredChatHistoryOffer", () => {
       }),
     );
 
-    // Let the async load settle before asserting
     await new Promise((resolve) => setTimeout(resolve, 50));
     await waitFor(() => expect(result.current).toBeNull());
+    expect(loadChatHistory).toHaveBeenCalledTimes(1);
   });
 
   it("exposes null when load fails and does not call clearChatHistory", async () => {
@@ -88,18 +89,17 @@ describe("useStoredChatHistoryOffer", () => {
       }),
     );
 
-    // Let the async load settle before asserting
     await new Promise((resolve) => setTimeout(resolve, 50));
     await waitFor(() => expect(result.current).toBeNull());
     expect(clearChatHistory).not.toHaveBeenCalled();
+    expect(loadChatHistory).toHaveBeenCalledTimes(1);
   });
 
-  it("download calls the file function with the transcript and filename, then clears, then offer becomes null", async () => {
+  it("download calls the file function with the transcript and filename, does NOT clear, offer stays with same count", async () => {
     loadChatHistory.mockResolvedValue({
       success: true,
       value: threeMessages,
     });
-    clearChatHistory.mockResolvedValue(okResult);
 
     const { result } = renderHook(() =>
       useStoredChatHistoryOffer({
@@ -124,19 +124,18 @@ describe("useStoredChatHistoryOffer", () => {
     expect(filename).toMatch(
       /^hexagen-assistant-messages-\d{4}-\d{2}-\d{2}\.md$/,
     );
-    expect(clearChatHistory).toHaveBeenCalledTimes(1);
 
-    await waitFor(() => expect(result.current).toBeNull());
+    // CRITICAL: download must NOT clear the stored messages
+    expect(clearChatHistory).not.toHaveBeenCalled();
+
+    // The offer stays with the same count (no re-render that changes it)
+    expect(result.current?.count).toBe(3);
   });
 
-  it("download does NOT clear when the file function throws", async () => {
+  it("calling download twice calls the file function twice", async () => {
     loadChatHistory.mockResolvedValue({
       success: true,
       value: threeMessages,
-    });
-    clearChatHistory.mockResolvedValue(okResult);
-    downloadFile.mockImplementation(() => {
-      throw new Error("download failed");
     });
 
     const { result } = renderHook(() =>
@@ -149,13 +148,14 @@ describe("useStoredChatHistoryOffer", () => {
     await waitFor(() => expect(result.current?.count).toBe(3));
 
     await act(async () => {
-      await expect(result.current!.download()).rejects.toThrow(
-        "download failed",
-      );
+      await result.current!.download();
+    });
+    await act(async () => {
+      await result.current!.download();
     });
 
+    expect(downloadFile).toHaveBeenCalledTimes(2);
     expect(clearChatHistory).not.toHaveBeenCalled();
-    expect(result.current?.count).toBe(3);
   });
 
   it("discard clears the stored list and the offer becomes null", async () => {
@@ -182,7 +182,40 @@ describe("useStoredChatHistoryOffer", () => {
     await waitFor(() => expect(result.current).toBeNull());
   });
 
-  it("when clearChatHistory fails during download, the offer stays with error flag true", async () => {
+  it("discard after download clears and the offer becomes null", async () => {
+    loadChatHistory.mockResolvedValue({
+      success: true,
+      value: threeMessages,
+    });
+    clearChatHistory.mockResolvedValue(okResult);
+
+    const { result } = renderHook(() =>
+      useStoredChatHistoryOffer({
+        persistencePort: port,
+        downloadFile: downloadFile as unknown as DownloadFileFn,
+      }),
+    );
+
+    await waitFor(() => expect(result.current?.count).toBe(3));
+
+    // Download first (should not clear)
+    await act(async () => {
+      await result.current!.download();
+    });
+    expect(clearChatHistory).not.toHaveBeenCalled();
+    expect(result.current?.count).toBe(3);
+
+    // Then discard (should clear)
+    await act(async () => {
+      await result.current!.discard();
+    });
+    expect(clearChatHistory).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(result.current).toBeNull());
+  });
+
+  it("when clearChatHistory fails during download, download does not clear and error is null", async () => {
+    // Download no longer calls clearChatHistory, so a failing clear should
+    // never be reached by download.
     loadChatHistory.mockResolvedValue({
       success: true,
       value: threeMessages,
@@ -205,12 +238,13 @@ describe("useStoredChatHistoryOffer", () => {
       await result.current!.download();
     });
 
-    expect(clearChatHistory).toHaveBeenCalledTimes(1);
-    expect(result.current?.error).toBe(true);
+    // Download never calls clearChatHistory
+    expect(clearChatHistory).not.toHaveBeenCalled();
+    // Offer stays, no error from download
     expect(result.current?.count).toBe(3);
   });
 
-  it("when clearChatHistory fails during discard, the offer stays with error flag true", async () => {
+  it("when clearChatHistory fails during discard, the offer stays with discard error", async () => {
     loadChatHistory.mockResolvedValue({
       success: true,
       value: threeMessages,
@@ -234,7 +268,34 @@ describe("useStoredChatHistoryOffer", () => {
     });
 
     expect(clearChatHistory).toHaveBeenCalledTimes(1);
-    expect(result.current?.error).toBe(true);
+    expect(result.current?.error).toBe("discard");
+    expect(result.current?.count).toBe(3);
+  });
+
+  it("when download throws, the offer stays with download error and clear is not called", async () => {
+    loadChatHistory.mockResolvedValue({
+      success: true,
+      value: threeMessages,
+    });
+    downloadFile = vi.fn().mockImplementation(() => {
+      throw new Error("download failed");
+    });
+
+    const { result } = renderHook(() =>
+      useStoredChatHistoryOffer({
+        persistencePort: port,
+        downloadFile: downloadFile as unknown as DownloadFileFn,
+      }),
+    );
+
+    await waitFor(() => expect(result.current?.count).toBe(3));
+
+    await act(async () => {
+      await result.current!.download();
+    });
+
+    expect(clearChatHistory).not.toHaveBeenCalled();
+    expect(result.current?.error).toBe("download");
     expect(result.current?.count).toBe(3);
   });
 
@@ -251,26 +312,9 @@ describe("useStoredChatHistoryOffer", () => {
       }),
     );
 
-    // Let the async load settle before asserting
     await new Promise((resolve) => setTimeout(resolve, 50));
     await waitFor(() => expect(result.current).toBeNull());
     expect(clearChatHistory).not.toHaveBeenCalled();
-  });
-
-  it("does not expose error flag before any failing clear", async () => {
-    loadChatHistory.mockResolvedValue({
-      success: true,
-      value: threeMessages,
-    });
-
-    const { result } = renderHook(() =>
-      useStoredChatHistoryOffer({
-        persistencePort: port,
-        downloadFile: downloadFile as unknown as DownloadFileFn,
-      }),
-    );
-
-    await waitFor(() => expect(result.current?.count).toBe(3));
-    expect(result.current?.error).toBeFalsy();
+    expect(loadChatHistory).toHaveBeenCalledTimes(1);
   });
 });
