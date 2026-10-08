@@ -1,5 +1,5 @@
-import { prepareShareRevokeAllForProject } from "./project-shares-store";
-import type Database from "better-sqlite3";
+import type { PlatformDb } from "./db";
+import { revokeSharesForProject } from "./project-shares-store";
 import type {
   PersistenceError,
   Result,
@@ -124,29 +124,26 @@ export interface SavedProjectsStore extends SavedProjectsPersistencePort {
 }
 
 export function createSavedProjectsStore(
-  db: Database.Database,
+  db: PlatformDb,
   ownerId: string,
 ): SavedProjectsStore {
-  const selectAll = db.prepare(
-    "SELECT id, name, payload, created_at, updated_at, ord, rev, updated_by FROM saved_projects WHERE owner_id = ? ORDER BY ord ASC",
-  );
-  const selectOne = db.prepare(
-    "SELECT id, name, payload, created_at, updated_at, ord, rev, updated_by FROM saved_projects WHERE owner_id = ? AND id = ?",
-  );
-  const minOrd = db.prepare(
-    "SELECT COALESCE(MIN(ord), 0) AS min_ord FROM saved_projects WHERE owner_id = ?",
-  );
-  const insert = db.prepare(`
+  const selectAll =
+    "SELECT id, name, payload, created_at, updated_at, ord, rev, updated_by FROM saved_projects WHERE owner_id = ? ORDER BY ord ASC";
+  const selectOne =
+    "SELECT id, name, payload, created_at, updated_at, ord, rev, updated_by FROM saved_projects WHERE owner_id = ? AND id = ?";
+  const minOrd =
+    "SELECT COALESCE(MIN(ord), 0) AS min_ord FROM saved_projects WHERE owner_id = ?";
+  const insert = `
     INSERT INTO saved_projects (id, owner_id, name, payload, created_at, updated_at, ord)
     VALUES (@id, @owner_id, @name, @payload, @created_at, @updated_at, @ord)
-  `);
+  `;
   /**
    * Bulk replace used to DELETE + INSERT, which reset `rev` to the column
    * default of 1 (ABA: a stale `rev:1` If-Match became valid again). UPSERT
    * increments existing rows and inserts new ids at 1. `updated_by` is left
    * alone: this path has no actor.
    */
-  const upsert = db.prepare(`
+  const upsert = `
     INSERT INTO saved_projects (id, owner_id, name, payload, created_at, updated_at, ord)
     VALUES (@id, @owner_id, @name, @payload, @created_at, @updated_at, @ord)
     ON CONFLICT (owner_id, id) DO UPDATE SET
@@ -156,7 +153,7 @@ export function createSavedProjectsStore(
       updated_at = excluded.updated_at,
       ord = excluded.ord,
       rev = saved_projects.rev + 1
-  `);
+  `;
   /**
    * H1.4: the ONE update path. It always increments `rev` and stamps
    * `updated_by`, and both preconditions are optional columns of the same
@@ -170,7 +167,7 @@ export function createSavedProjectsStore(
    * row whose rev did not move is a lost update that no precondition can
    * afterwards detect.
    */
-  const updateProject = db.prepare(`
+  const updateProject = `
     UPDATE saved_projects
        SET name = @name,
            payload = @payload,
@@ -181,64 +178,64 @@ export function createSavedProjectsStore(
        AND id = @id
        AND (@expected_rev IS NULL OR rev = @expected_rev)
        AND (@expected_updated_at IS NULL OR updated_at = @expected_updated_at)
-  `);
-  const remove = db.prepare(
-    "DELETE FROM saved_projects WHERE owner_id = ? AND id = ?",
-  );
-  const clear = db.prepare("DELETE FROM saved_projects WHERE owner_id = ?");
+  `;
+  const remove =
+    "DELETE FROM saved_projects WHERE owner_id = ? AND id = ?";
+  const clear = "DELETE FROM saved_projects WHERE owner_id = ?";
+  const selectIds =
+    "SELECT id FROM saved_projects WHERE owner_id = ?";
 
-  const revokeSharesFor = prepareShareRevokeAllForProject(db);
-  const selectIds = db.prepare(
-    "SELECT id FROM saved_projects WHERE owner_id = ?",
-  );
+  const removeWithShares = (id: string): Promise<void> =>
+    db.transaction(async (tx) => {
+      await revokeSharesForProject(tx, ownerId, id);
+      await tx.run(remove, [ownerId, id]);
+    });
 
-  const removeWithShares = db.transaction((id: string) => {
-    revokeSharesFor(ownerId, id);
-    remove.run(ownerId, id);
-  });
+  const replaceAll = (projects: SavedProject[]): Promise<void> =>
+    db.transaction(async (tx) => {
+      // Grants on projects that do NOT survive the replacement are revoked in
+      // the same transaction; surviving ids keep their grants. Without this a
+      // dropped project's live grants re-apply to any future project reusing
+      // its id (ghost grants — review flag on #652).
+      const surviving = new Set(projects.map((p) => p.id));
+      const existing = await tx.all<{ id: string }>(selectIds, [ownerId]);
+      for (const row of existing) {
+        if (!surviving.has(row.id))
+          await revokeSharesForProject(tx, ownerId, row.id);
+      }
+      // Delete ONLY the non-surviving rows. A clear + reinsert would reset
+      // `rev` to the column default on every surviving project, making a stale
+      // If-Match token valid again (the ABA the H1.4 contract exists to stop);
+      // survivors go through the UPSERT below, which increments their rev.
+      const incomingIds = projects.map((p) => p.id);
+      if (projects.length === 0) {
+        await tx.run(clear, [ownerId]);
+        return;
+      }
+      await tx.run(
+        `DELETE FROM saved_projects
+          WHERE owner_id = ? AND id NOT IN (${incomingIds.map(() => "?").join(",")})`,
+        [ownerId, ...incomingIds],
+      );
+      for (let i = 0; i < projects.length; i += 1) {
+        const project = projects[i];
+        await tx.run(upsert, {
+          id: project.id,
+          owner_id: ownerId,
+          name: project.name,
+          payload: JSON.stringify(project),
+          created_at: project.createdAt,
+          updated_at: project.updatedAt,
+          ord: i,
+        });
+      }
+    });
 
-  const replaceAll = db.transaction((projects: SavedProject[]) => {
-    // Grants on projects that do NOT survive the replacement are revoked in
-    // the same transaction; surviving ids keep their grants. Without this a
-    // dropped project's live grants re-apply to any future project reusing
-    // its id (ghost grants — review flag on #652).
-    const surviving = new Set(projects.map((p) => p.id));
-    const existing = selectIds.all(ownerId) as { id: string }[];
-    for (const row of existing) {
-      if (!surviving.has(row.id)) revokeSharesFor(ownerId, row.id);
-    }
-    // Delete ONLY the non-surviving rows. A clear + reinsert would reset
-    // `rev` to the column default on every surviving project, making a stale
-    // If-Match token valid again (the ABA the H1.4 contract exists to stop);
-    // survivors go through the UPSERT below, which increments their rev.
-    const incomingIds = projects.map((p) => p.id);
-    if (projects.length === 0) {
-      clear.run(ownerId);
-      return;
-    }
-    db.prepare(
-      `DELETE FROM saved_projects
-        WHERE owner_id = ? AND id NOT IN (${incomingIds.map(() => "?").join(",")})`,
-    ).run(ownerId, ...incomingIds);
-    for (let i = 0; i < projects.length; i += 1) {
-      const project = projects[i];
-      upsert.run({
-        id: project.id,
-        owner_id: ownerId,
-        name: project.name,
-        payload: JSON.stringify(project),
-        created_at: project.createdAt,
-        updated_at: project.updatedAt,
-        ord: i,
-      });
-    }
-  });
-
-  function readProjectWithRev(
+  async function readProjectWithRev(
     id: string,
-  ): Result<ProjectWriteResult | null, PersistenceError> {
+  ): Promise<Result<ProjectWriteResult | null, PersistenceError>> {
     try {
-      const row = selectOne.get(ownerId, id) as ProjectRow | undefined;
+      const row = await db.get<ProjectRow>(selectOne, [ownerId, id]);
       if (!row) return { success: true, value: null };
       const parsed = parsePayload(row);
       if (!parsed.success) return parsed;
@@ -257,7 +254,7 @@ export function createSavedProjectsStore(
 
   return {
     async getProject(id: string) {
-      const found = readProjectWithRev(id);
+      const found = await readProjectWithRev(id);
       if (!found.success) return found;
       return { success: true, value: found.value?.project ?? null };
     },
@@ -268,7 +265,7 @@ export function createSavedProjectsStore(
 
     async loadProjects() {
       try {
-        const rows = selectAll.all(ownerId) as ProjectRow[];
+        const rows = await db.all<ProjectRow>(selectAll, [ownerId]);
         const projects: SavedProject[] = [];
         for (const row of rows) {
           const parsed = parsePayload(row);
@@ -290,7 +287,7 @@ export function createSavedProjectsStore(
 
     async saveProjects(projects) {
       try {
-        replaceAll(projects);
+        await replaceAll(projects);
         return { success: true, value: undefined };
       } catch (cause) {
         return {
@@ -306,9 +303,10 @@ export function createSavedProjectsStore(
 
     async createProjectRecord(project) {
       try {
-        const existing = selectOne.get(ownerId, project.id) as
-          | ProjectRow
-          | undefined;
+        const existing = await db.get<ProjectRow>(selectOne, [
+          ownerId,
+          project.id,
+        ]);
         if (existing) {
           return {
             success: false,
@@ -318,8 +316,10 @@ export function createSavedProjectsStore(
             ),
           };
         }
-        const { min_ord } = minOrd.get(ownerId) as { min_ord: number };
-        insert.run({
+        const { min_ord } = (await db.get<{ min_ord: number }>(minOrd, [
+          ownerId,
+        ]))!;
+        await db.run(insert, {
           id: project.id,
           owner_id: ownerId,
           name: project.name,
@@ -343,7 +343,7 @@ export function createSavedProjectsStore(
 
     async updateProjectRecord(id, updater) {
       try {
-        const row = selectOne.get(ownerId, id) as ProjectRow | undefined;
+        const row = await db.get<ProjectRow>(selectOne, [ownerId, id]);
         if (!row) {
           return {
             success: false,
@@ -356,7 +356,7 @@ export function createSavedProjectsStore(
         if (updated === parsed.value) {
           return { success: true, value: parsed.value };
         }
-        const written = updateProject.run({
+        const written = await db.run(updateProject, {
           id,
           owner_id: ownerId,
           name: updated.name,
@@ -392,8 +392,8 @@ export function createSavedProjectsStore(
     async deleteProjectRecord(id) {
       try {
         // One transaction: the row and its live grants go together, or
-        // neither does. See prepareShareRevokeAllForProject for why.
-        removeWithShares(id);
+        // neither does. See revokeSharesForProject for why.
+        await removeWithShares(id);
         return { success: true, value: undefined };
       } catch (cause) {
         return {
@@ -409,9 +409,10 @@ export function createSavedProjectsStore(
 
     async putProject(project, precondition, actorUserId) {
       try {
-        const existing = selectOne.get(ownerId, project.id) as
-          | ProjectRow
-          | undefined;
+        const existing = await db.get<ProjectRow>(selectOne, [
+          ownerId,
+          project.id,
+        ]);
         if (!existing) {
           return {
             success: false,
@@ -421,7 +422,7 @@ export function createSavedProjectsStore(
             ),
           };
         }
-        const written = updateProject.run({
+        const written = await db.run(updateProject, {
           id: project.id,
           owner_id: ownerId,
           name: project.name,

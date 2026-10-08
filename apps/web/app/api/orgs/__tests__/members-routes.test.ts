@@ -86,8 +86,8 @@ async function seedUser(login: string): Promise<string> {
 }
 
 describe("H1.2 — POST /api/orgs/[orgId]/members", () => {
-  beforeEach(() => {
-    closePlatformStore();
+  beforeEach(async () => {
+    await closePlatformStore();
     vi.mocked(getToken).mockReset();
   });
   afterEach(() => closePlatformStore());
@@ -225,8 +225,8 @@ describe("H1.2 — POST /api/orgs/[orgId]/members", () => {
 });
 
 describe("H1.2 — DELETE /api/orgs/[orgId]/members/[userId]", () => {
-  beforeEach(() => {
-    closePlatformStore();
+  beforeEach(async () => {
+    await closePlatformStore();
     vi.mocked(getToken).mockReset();
   });
   afterEach(() => closePlatformStore());
@@ -343,8 +343,8 @@ describe("H1.2 — DELETE /api/orgs/[orgId]/members/[userId]", () => {
 });
 
 describe("H1.2 — PATCH /api/orgs/[orgId]/members/[userId]", () => {
-  beforeEach(() => {
-    closePlatformStore();
+  beforeEach(async () => {
+    await closePlatformStore();
     vi.mocked(getToken).mockReset();
   });
   afterEach(() => closePlatformStore());
@@ -439,13 +439,13 @@ describe("H1.2 — PATCH /api/orgs/[orgId]/members/[userId]", () => {
 describe("P-U0b — GET /api/orgs/[orgId]/members", () => {
   let previousDbPath: string | undefined;
 
-  beforeEach(() => {
-    closePlatformStore();
+  beforeEach(async () => {
+    await closePlatformStore();
     vi.mocked(getToken).mockReset();
     previousDbPath = process.env.PLATFORM_DB_PATH;
   });
-  afterEach(() => {
-    closePlatformStore();
+  afterEach(async () => {
+    await closePlatformStore();
     if (previousDbPath === undefined) delete process.env.PLATFORM_DB_PATH;
     else process.env.PLATFORM_DB_PATH = previousDbPath;
   });

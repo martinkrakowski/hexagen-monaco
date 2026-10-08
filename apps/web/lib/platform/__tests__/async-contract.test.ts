@@ -4,6 +4,7 @@ import type { AdapterAccount } from "next-auth/adapters";
 import type { SavedProject } from "@hexagen/shared";
 import { createPlatformStore } from "../store";
 import { openPlatformDb } from "../platform-db";
+import { createSqlitePlatformDb } from "../sqlite-db";
 import { createRepairTelemetryStore } from "../repair-telemetry-store";
 
 /**
@@ -223,7 +224,7 @@ describe("async contract — 60 store methods return Promises", () => {
 
   it("each RepairTelemetryStore method returns a Promise", async () => {
     const db = openPlatformDb(":memory:");
-    const telemetry = createRepairTelemetryStore(db, OWNER);
+    const telemetry = createRepairTelemetryStore(createSqlitePlatformDb(db), OWNER);
 
     const recordResult = telemetry.record({
       surface: "client-deterministic",
@@ -488,11 +489,18 @@ describe("async contract — 60 store methods return Promises", () => {
         result instanceof Promise,
         `${name} must return a Promise, got ${typeof result}`,
       );
-      try {
-        await result;
-      } catch {
-        // some cases may reject; the contract only requires a Promise
-      }
-    }
+       try {
+         await result;
+       } catch {
+         // some cases may reject; the contract only requires a Promise
+       }
+     }
+   });
+
+  it("close returns a Promise", async () => {
+    const store = createPlatformStore(":memory:");
+    const result = store.close();
+    assert.ok(result instanceof Promise, "close must return a Promise");
+    await result;
   });
 });

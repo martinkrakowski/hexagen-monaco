@@ -67,8 +67,8 @@ async function assertProjectExists(): Promise<void> {
 }
 
 describe("P-A3 — /api/tenants/[ownerId]/projects/[projectId]", () => {
-  beforeEach(() => {
-    closePlatformStore();
+  beforeEach(async () => {
+    await closePlatformStore();
     signedInAs(OWNER);
   });
   afterEach(() => closePlatformStore());

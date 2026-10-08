@@ -411,4 +411,12 @@ describe("sqlite-db", () => {
     expect(count.n).toBe(1);
     await runPromise;
   });
+
+  it("close is safe to call twice: the second call resolves without throwing", async () => {
+    await db.close();
+    // Second close must not reject — better-sqlite3 throws on a closed handle.
+    const second = db.close();
+    expect(second).toBeInstanceOf(Promise);
+    await expect(second).resolves.toBeUndefined();
+  });
 });

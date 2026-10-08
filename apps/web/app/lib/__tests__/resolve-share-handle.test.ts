@@ -4,11 +4,11 @@ import { closePlatformStore, getPlatformStore } from "../../../lib/platform";
 import { resolveShareHandle } from "../share-handles";
 
 describe("resolveShareHandle — async guard (P-A4)", () => {
-  beforeEach(() => {
-    closePlatformStore();
+  beforeEach(async () => {
+    await closePlatformStore();
   });
-  afterEach(() => {
-    closePlatformStore();
+  afterEach(async () => {
+    await closePlatformStore();
   });
 
   it("resolves @nobody to null, not to a hit, when no user holds that login", async () => {

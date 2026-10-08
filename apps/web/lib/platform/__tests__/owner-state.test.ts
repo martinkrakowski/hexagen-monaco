@@ -9,6 +9,6 @@ describe("project owner initialized flag", () => {
     await store.markProjectsInitialized("owner-a");
     assert.equal(await store.isProjectsInitialized("owner-a"), true);
     assert.equal(await store.isProjectsInitialized("owner-b"), false);
-    store.close();
+    await store.close();
   });
 });

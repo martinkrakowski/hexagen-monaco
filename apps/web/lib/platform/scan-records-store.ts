@@ -1,5 +1,5 @@
-import type Database from "better-sqlite3";
-import { isAbsolute, join, relative, resolve } from "node:path";
+import type { PlatformDb } from "./db";
+import { join, relative, resolve, isAbsolute } from "node:path";
 import type { PersistenceError, Result } from "@hexagen/shared";
 import type { ScanVerdict } from "@/lib/project-scan/types";
 import {
@@ -191,7 +191,7 @@ interface ScanRecordRow {
   created_at: number;
 }
 
-interface ScanRecordInsertParams {
+type ScanRecordInsertParams = {
   id: string;
   owner_id: string;
   schema_version: number;
@@ -435,11 +435,11 @@ function rowToRecord(row: ScanRecordRow): ScanRecord | null {
 }
 
 export function createScanRecordsStore(
-  db: Database.Database,
+  db: PlatformDb,
   ownerId: string,
   artifactsRoot: string,
 ): ScanRecordsStore {
-  const insert = db.prepare(`
+  const insert = `
     INSERT INTO scan_records (
       id, owner_id, schema_version, project_name, repo_ref, tier, verdict,
       exit_code, files_scanned, findings_fresh, findings_baselined,
@@ -452,35 +452,34 @@ export function createScanRecordsStore(
       @error_message, @findings_sample, @artifact_path, @artifact_bytes,
       @created_at
     )
-  `);
+  `;
 
   // Retention is version-BLIND on purpose. Gating eviction on schema_version
   // would make foreign-version rows immortal, so a version bump would leave the
   // table growing forever behind an invisible wall.
-  const selectEvictable = db.prepare(`
+  const selectEvictable = `
     SELECT id, artifact_path FROM scan_records
      WHERE owner_id = @owner_id
      ORDER BY created_at DESC, rowid DESC
      LIMIT -1 OFFSET @keep
-  `);
-  const deleteById = db.prepare(
-    "DELETE FROM scan_records WHERE owner_id = ? AND id = ?",
-  );
+  `;
+  const deleteById =
+    "DELETE FROM scan_records WHERE owner_id = ? AND id = ?";
 
-  const selectMany = db.prepare(`
+  const selectMany = `
     SELECT ${RECORD_COLUMNS} FROM scan_records
      WHERE owner_id = @owner_id
        AND schema_version = @schema_version
        AND (@repo_ref IS NULL OR repo_ref = @repo_ref)
      ORDER BY created_at DESC, rowid DESC
      LIMIT @limit
-  `);
-  const selectOne = db.prepare(`
+  `;
+  const selectOne = `
     SELECT ${RECORD_COLUMNS} FROM scan_records
      WHERE owner_id = @owner_id
        AND id = @id
        AND schema_version = @schema_version
-  `);
+  `;
   // rowid must be SELECTED here, aliased: the outer query reads from a
   // subquery result, which is not a table and therefore has no rowid of its
   // own. Ordering the outer query by a bare `rowid` fails with
@@ -495,7 +494,7 @@ export function createScanRecordsStore(
   // Newest `limit` rows, then flipped to oldest-first. A bare ORDER BY ASC
   // with a LIMIT would return the OLDEST n instead, i.e. a chart that stops
   // updating once an owner passes the limit.
-  const selectTrend = db.prepare(`
+  const selectTrend = `
     SELECT * FROM (
       SELECT id, created_at, verdict, findings_fresh, findings_baselined,
              rowid AS insertion_seq
@@ -507,23 +506,27 @@ export function createScanRecordsStore(
        LIMIT @limit
     )
     ORDER BY created_at ASC, insertion_seq ASC
-  `);
+  `;
 
-  const writeWithRetention = db.transaction(
-    (params: ScanRecordInsertParams): string[] => {
-      insert.run(params);
-      const evictable = selectEvictable.all({
+  const writeWithRetention = (
+    params: ScanRecordInsertParams,
+  ): Promise<string[]> =>
+    db.transaction(async (tx) => {
+      await tx.run(insert, params);
+      const evictable = await tx.all<{
+        id: string;
+        artifact_path: string | null;
+      }>(selectEvictable, {
         owner_id: ownerId,
         keep: MAX_SCAN_RECORDS_PER_OWNER,
-      }) as Array<{ id: string; artifact_path: string | null }>;
+      });
       const paths: string[] = [];
       for (const row of evictable) {
-        deleteById.run(ownerId, row.id);
+        await tx.run(deleteById, [ownerId, row.id]);
         if (row.artifact_path !== null) paths.push(row.artifact_path);
       }
       return paths;
-    },
-  );
+    });
 
   function clampSample(
     sample: readonly ScanFindingEntry[] | undefined,
@@ -619,7 +622,7 @@ export function createScanRecordsStore(
       };
 
       try {
-        const evictedArtifactPaths = writeWithRetention({
+         const evictedArtifactPaths = await writeWithRetention({
           id: record.id,
           owner_id: ownerId,
           schema_version: SCAN_RECORD_SCHEMA_VERSION,
@@ -646,10 +649,12 @@ export function createScanRecordsStore(
         });
         return { success: true, value: { record, evictedArtifactPaths } };
       } catch (cause) {
-        const duplicate =
-          cause instanceof Error &&
-          /UNIQUE constraint|PRIMARY KEY/i.test(cause.message);
-        if (duplicate) {
+        // B2: match the constraint name instead of the driver's message text.
+        if (
+          db.isUniqueViolation(cause) ||
+          (cause instanceof Error &&
+            /UNIQUE constraint|PRIMARY KEY/i.test(cause.message))
+        ) {
           return {
             success: false,
             error: persistError(
@@ -671,7 +676,7 @@ export function createScanRecordsStore(
 
     async list(options = {}) {
       try {
-        const rows = selectMany.all({
+        const rows = await db.all<ScanRecordRow>(selectMany, {
           owner_id: ownerId,
           schema_version: SCAN_RECORD_SCHEMA_VERSION,
           repo_ref: options.repoRef ?? null,
@@ -701,7 +706,7 @@ export function createScanRecordsStore(
 
     async get(id) {
       try {
-        const row = selectOne.get({
+        const row = await db.get<ScanRecordRow>(selectOne, {
           owner_id: ownerId,
           id,
           schema_version: SCAN_RECORD_SCHEMA_VERSION,
@@ -738,7 +743,7 @@ export function createScanRecordsStore(
 
     async trend(options = {}) {
       try {
-        const rows = selectTrend.all({
+        const rows = await db.all<ScanTrendRow>(selectTrend, {
           owner_id: ownerId,
           schema_version: SCAN_RECORD_SCHEMA_VERSION,
           repo_ref: options.repoRef ?? null,

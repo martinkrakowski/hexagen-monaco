@@ -60,8 +60,8 @@ async function seedOrg(role: "owner" | "member", userId: string) {
 }
 
 describe("P-A2 — /api/orgs/[orgId]/teams", () => {
-  beforeEach(() => {
-    closePlatformStore();
+  beforeEach(async () => {
+    await closePlatformStore();
     vi.mocked(getToken).mockReset();
   });
   afterEach(() => closePlatformStore());

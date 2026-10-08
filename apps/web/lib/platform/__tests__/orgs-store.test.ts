@@ -42,7 +42,7 @@ describe("OrgsRepository.listOrgsForUser", () => {
       const forStranger = await store.orgs.listOrgsForUser("nobody");
       assert.equal(forStranger.length, 0);
     } finally {
-      store.close();
+      await store.close();
     }
   });
 });
@@ -94,7 +94,7 @@ describe("OrgsRepository — typed error refusals", () => {
         "the failed create must not write an audit row",
       );
     } finally {
-      store.close();
+      await store.close();
     }
   });
 
@@ -127,7 +127,7 @@ describe("OrgsRepository — typed error refusals", () => {
       );
       assert.equal(await store.orgs.memberRole(org.id, "founder"), "owner");
     } finally {
-      store.close();
+      await store.close();
     }
   });
 
@@ -179,7 +179,7 @@ describe("OrgsRepository — typed error refusals", () => {
       assert.equal(teams.length, 1, "team must survive the refusal");
       assert.equal(teams[0]?.id, team.id);
     } finally {
-      store.close();
+      await store.close();
     }
   });
 });

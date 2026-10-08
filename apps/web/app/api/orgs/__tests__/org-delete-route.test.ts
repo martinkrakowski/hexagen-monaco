@@ -37,8 +37,8 @@ async function seedOrg(role: "owner" | "member", userId: string) {
 }
 
 describe("tenancy hygiene — DELETE /api/orgs/[orgId]", () => {
-  beforeEach(() => {
-    closePlatformStore();
+  beforeEach(async () => {
+    await closePlatformStore();
     vi.mocked(getToken).mockReset();
   });
   afterEach(() => closePlatformStore());

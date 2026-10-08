@@ -1,4 +1,3 @@
-import type Database from "better-sqlite3";
 import type { PlatformDb, PlatformDbSession } from "./db";
 
 /**
@@ -17,10 +16,8 @@ import type { PlatformDb, PlatformDbSession } from "./db";
  * the table directly, which is deliberate — a reader added only to satisfy a
  * test is a reader with no product behind it.
  *
- * ASYNC BY DECISION (D-A9), as with `orgs-store` and `teams-store` — but see
- * `prepareAuditAppend` for the synchronous form the stores enlist in their own
- * transactions.
- */
+  * ASYNC BY DECISION (D-A9), as with `orgs-store` and `teams-store`.
+  */
 
 /** v1 vocabulary (D-A6): org and team management, plus share grant/revoke from P-A4. */
 export type AuditAction =
@@ -91,43 +88,6 @@ export async function appendAudit(
     grantee_id: entry.granteeId ?? null,
     created_at: new Date().toISOString(),
   });
-}
-
-// Removed when the last raw-handle store is converted (same PR).
-/**
- * The SYNCHRONOUS appender, for callers that must write the audit row inside
- * the same better-sqlite3 transaction as the mutation it records.
- *
- * A separate `await audit.append(...)` after an awaited mutation commits
- * independently: the mutation can succeed while the audit write throws,
- * leaving an unaudited change — which is precisely the event an audit log
- * exists to make impossible to miss. Enlisting both in one transaction means
- * a failed append rolls the mutation back.
- */
-export function prepareAuditAppend(
-  db: Database.Database,
-): (entry: AuditEntry) => void {
-  const insert = db.prepare(`
-    INSERT INTO audit_log (
-      id, actor_id, action, subject_owner_id, subject_id,
-      grantee_type, grantee_id, created_at
-    ) VALUES (
-      @id, @actor_id, @action, @subject_owner_id, @subject_id,
-      @grantee_type, @grantee_id, @created_at
-    )
-  `);
-  return (entry) => {
-    insert.run({
-      id: crypto.randomUUID(),
-      actor_id: entry.actorId,
-      action: entry.action,
-      subject_owner_id: entry.subjectOwnerId ?? null,
-      subject_id: entry.subjectId ?? null,
-      grantee_type: entry.granteeType ?? null,
-      grantee_id: entry.granteeId ?? null,
-      created_at: new Date().toISOString(),
-    });
-  };
 }
 
 export function createAuditLogRepository(

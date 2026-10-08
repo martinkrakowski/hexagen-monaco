@@ -174,7 +174,7 @@ async function seedUser(id: string, login: string): Promise<void> {
 
 describe("P-A4 — share and revoke", () => {
   beforeEach(async () => {
-    closePlatformStore();
+    await closePlatformStore();
     previousDbPath = process.env.PLATFORM_DB_PATH;
     dbPath = join(mkdtempSync(join(tmpdir(), "hexagen-shares-")), "p.db");
     process.env.PLATFORM_DB_PATH = dbPath;
@@ -184,8 +184,8 @@ describe("P-A4 — share and revoke", () => {
     await seedUser(OUTSIDER, "outsider");
   });
 
-  afterEach(() => {
-    closePlatformStore();
+  afterEach(async () => {
+    await closePlatformStore();
     if (previousDbPath === undefined) delete process.env.PLATFORM_DB_PATH;
     else process.env.PLATFORM_DB_PATH = previousDbPath;
   });
@@ -492,7 +492,7 @@ describe("P-A4 — share and revoke", () => {
   });
 
   it("a failing audit insert rolls back the grant", async () => {
-    closePlatformStore();
+    await closePlatformStore();
     const db = openPlatformDb(dbPath);
     db.exec(`
       CREATE TRIGGER audit_log_block_insert

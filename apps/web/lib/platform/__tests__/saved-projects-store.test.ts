@@ -2,6 +2,9 @@ import { describe, it } from "vitest";
 import assert from "node:assert/strict";
 import type { SavedProject } from "@hexagen/shared";
 import { createPlatformStore } from "../store";
+import { openPlatformDb } from "../platform-db";
+import { createSqlitePlatformDb } from "../sqlite-db";
+import { createSavedProjectsStore } from "../saved-projects-store";
 
 function project(id: string, name = id): SavedProject {
   return {
@@ -67,7 +70,7 @@ describe("sqlite SavedProjectsPersistencePort", () => {
         [b.id],
       );
     }
-    store.close();
+    await store.close();
   });
 
   it("saveProjects replaces the whole list in the given order", async () => {
@@ -86,7 +89,7 @@ describe("sqlite SavedProjectsPersistencePort", () => {
         ["a", "b"],
       );
     }
-    store.close();
+    await store.close();
   });
 
   it("does not leak one owner's projects to another", async () => {
@@ -96,7 +99,7 @@ describe("sqlite SavedProjectsPersistencePort", () => {
     const other = await store.projectsFor("owner-b").loadProjects();
     assert.equal(other.success, true);
     if (other.success) assert.deepEqual(other.value, []);
-    store.close();
+    await store.close();
   });
 
   it("putProject rejects a stale If-Match without clobbering the stored row", async () => {
@@ -118,6 +121,45 @@ describe("sqlite SavedProjectsPersistencePort", () => {
     const loaded = await projects.loadProjects();
     assert.equal(loaded.success, true);
     if (loaded.success) assert.equal(loaded.value[0]?.name, "first");
-    store.close();
+    await store.close();
+  });
+
+  it("deleting a project whose share revoke fails leaves the project in place", async () => {
+    const db = openPlatformDb(":memory:");
+    const platformDb = createSqlitePlatformDb(db);
+    const store = createSavedProjectsStore(platformDb, "owner-a");
+
+    const proj = project("11111111-1111-4111-8111-111111111111", "shared");
+    const created = await store.createProjectRecord(proj);
+    assert.equal(created.success, true);
+
+    // Plant a live share grant so the delete path has something to revoke.
+    db.prepare(
+      `INSERT INTO project_shares (owner_id, project_id, grantee_type, grantee_id, role, granted_by, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    ).run("owner-a", proj.id, "user", "grantee-1", "read", "owner-a", "2026-01-01T00:00:00Z");
+
+    // Force the share revoke UPDATE to fail inside the transaction. The delete
+    // and the revoke share one transaction; a rollback must restore the project
+    // row even though the trigger never touched it.
+    db.exec(`
+      CREATE TRIGGER share_revoke_boom BEFORE UPDATE ON project_shares
+      WHEN NEW.revoked_at IS NOT NULL AND OLD.revoked_at IS NULL
+      BEGIN SELECT RAISE(ABORT, 'share revoke blocked'); END;
+    `);
+
+    const deleted = await store.deleteProjectRecord(proj.id);
+    assert.equal(deleted.success, false);
+    if (!deleted.success) {
+      assert.equal(deleted.error.kind, "SerializationFailed");
+    }
+
+    const loaded = await store.loadProjects();
+    assert.equal(loaded.success, true);
+    if (loaded.success) {
+      assert.equal(loaded.value.length, 1);
+      assert.equal(loaded.value[0]?.id, proj.id);
+    }
+    db.close();
   });
 });

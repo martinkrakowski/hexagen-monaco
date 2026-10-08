@@ -79,7 +79,7 @@ describe("run history + price table", () => {
     assert.equal(trend.length, 1);
     assert.equal(trend[0]?.runs, 2);
     assert.equal((await store.runsFor("owner-b").list()).length, 0);
-    store.close();
+    await store.close();
   });
 
   it("upserts the same owner/run/stage so reconnects do not double cost", async () => {
@@ -103,6 +103,6 @@ describe("run history + price table", () => {
     assert.equal(trend.length, 1);
     assert.equal(trend[0]?.runs, 1);
     assert.equal(trend[0]?.costCents, 75);
-    store.close();
+    await store.close();
   });
 });
