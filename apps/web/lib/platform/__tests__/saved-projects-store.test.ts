@@ -7,6 +7,7 @@ import { openPlatformDb } from "../platform-db";
 import { createSqlitePlatformDb } from "../sqlite-db";
 import { createSavedProjectsStore } from "../saved-projects-store";
 import { createOwnerDocumentsStore } from "../owner-documents-store";
+import { createOrgsRepository } from "../orgs-store";
 
 function project(id: string, name = id): SavedProject {
   return {
@@ -238,6 +239,15 @@ describe("saved_projects delete — owner_documents cascade", () => {
   it("deleting a project deletes every author's documents attached to it, and no document of another project or with no project", async () => {
     const db = openPlatformDb(":memory:");
     const platformDb = createSqlitePlatformDb(db);
+    const orgs = createOrgsRepository(platformDb);
+    await orgs.createOrg({
+      id: "owner-1",
+      slug: "test",
+      name: "Test",
+      createdBy: "user-a",
+    });
+    await orgs.addMember("owner-1", "user-a", "member");
+    await orgs.addMember("owner-1", "user-b", "member");
     const projects = createSavedProjectsStore(platformDb, "owner-1");
     const docsA = createOwnerDocumentsStore(platformDb, "owner-1", "user-a");
     const docsB = createOwnerDocumentsStore(platformDb, "owner-1", "user-b");
@@ -316,8 +326,8 @@ describe("saved_projects delete — owner_documents cascade", () => {
   it("replacing the project list deletes the documents of the projects that were dropped and keeps the survivors'", async () => {
     const db = openPlatformDb(":memory:");
     const platformDb = createSqlitePlatformDb(db);
-    const projects = createSavedProjectsStore(platformDb, "owner-1");
-    const docs = createOwnerDocumentsStore(platformDb, "owner-1", "user-a");
+    const projects = createSavedProjectsStore(platformDb, "user-a");
+    const docs = createOwnerDocumentsStore(platformDb, "user-a", "user-a");
     try {
       const p1: SavedProject = {
         id: "keep-1",
@@ -372,22 +382,22 @@ describe("saved_projects delete — owner_documents cascade", () => {
       assert.equal(replaced.success, true);
 
       assert.equal(
-        countDocs(db, "owner-1", "keep-1"),
+        countDocs(db, "user-a", "keep-1"),
         1,
         "survivor docs must remain",
       );
       assert.equal(
-        countDocs(db, "owner-1", "drop-2"),
+        countDocs(db, "user-a", "drop-2"),
         0,
         "dropped project docs must be gone",
       );
       assert.equal(
-        countDocs(db, "owner-1", "drop-3"),
+        countDocs(db, "user-a", "drop-3"),
         0,
         "dropped project docs must be gone",
       );
       assert.equal(
-        countDocs(db, "owner-1", null),
+        countDocs(db, "user-a", null),
         1,
         "detached docs must survive",
       );
@@ -397,17 +407,17 @@ describe("saved_projects delete — owner_documents cascade", () => {
       assert.equal(emptied.success, true);
 
       assert.equal(
-        countDocs(db, "owner-1", "keep-1"),
+        countDocs(db, "user-a", "keep-1"),
         0,
         "survivor docs gone after empty replace",
       );
       assert.equal(
-        countDocs(db, "owner-1", "drop-2"),
+        countDocs(db, "user-a", "drop-2"),
         0,
         "dropped docs gone after empty replace",
       );
       assert.equal(
-        countDocs(db, "owner-1", null),
+        countDocs(db, "user-a", null),
         1,
         "detached docs survive an empty replace — they are not 'documents of a project'",
       );

@@ -500,7 +500,7 @@ describe("async contract — 64 store methods return Promises", () => {
   });
 
   it("each OwnerDocumentsStore method returns a Promise", async () => {
-    const documents = store.documentsFor(OWNER, "doc-user");
+    const documents = store.documentsFor("doc-user", "doc-user");
 
     const cases: { name: string; result: unknown }[] = [
       { name: "list", result: documents.list() },

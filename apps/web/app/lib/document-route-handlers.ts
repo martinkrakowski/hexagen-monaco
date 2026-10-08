@@ -201,6 +201,16 @@ function mapStoreError(error: OwnerDocumentsError): NextResponse {
       { status: 409 },
     );
   }
+  if (error.kind === "NotAMember") {
+    return NextResponse.json(
+      {
+        error: "forbidden",
+        message: "You do not have access to this tenant",
+        statusCode: 403,
+      },
+      { status: 403 },
+    );
+  }
   if (error.kind === "NotFound") {
     return notFound();
   }

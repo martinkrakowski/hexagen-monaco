@@ -31,7 +31,8 @@ export type OwnerDocumentSummary = Omit<OwnerDocument, "payload">;
 export type OwnerDocumentsError =
   | PersistenceError
   | { kind: "InvalidInput"; message: string }
-  | { kind: "UnknownProject"; message: string };
+  | { kind: "UnknownProject"; message: string }
+  | { kind: "NotAMember"; message: string };
 
 export interface OwnerDocumentsStore {
   list(filter?: {
@@ -172,6 +173,8 @@ export function createOwnerDocumentsStore(
     DELETE FROM owner_documents
      WHERE owner_id = ? AND user_id = ? AND kind = ? AND id = ?
   `;
+  const membershipCheck =
+    "SELECT 1 AS ok FROM org_members WHERE org_id = ? AND user_id = ?";
   const projectExists = `
     SELECT 1 AS ok FROM saved_projects
      WHERE owner_id = ? AND id = ?
@@ -298,6 +301,21 @@ export function createOwnerDocumentsStore(
           // stamped when it writes, so `updated_at` orders writes as they
           // landed.
           const now = Date.now();
+          if (ownerId !== userId) {
+            const member = await tx.get<{ ok: number }>(membershipCheck, [
+              ownerId,
+              userId,
+            ]);
+            if (!member) {
+              return {
+                success: false,
+                error: persistError(
+                  "NotAMember",
+                  "author is not a member of this tenant",
+                ),
+              };
+            }
+          }
           if (typeof input.projectId === "string") {
             const exists = await tx.get<{ ok: number }>(projectExists, [
               ownerId,

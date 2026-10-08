@@ -384,14 +384,18 @@ describe("org member removal — owner_documents cleanup", () => {
       const docs1 = f.docs(org.id, "member-1");
       await docs1.put({ kind: "workspace", id: "doc-1", payload: {} });
 
-      // A row under the org written by someone with no membership row (the
-      // store does not check membership; the route does). The removal must
-      // find no membership and so delete nothing, this row included.
-      await f.docs(org.id, "stranger").put({
-        kind: "workspace",
-        id: "doc-s",
-        payload: {},
-      });
+      // A row under the org written by someone with no membership row. The
+      // store now checks membership inside its transaction, so the stranger
+      // cannot use `put`; insert the row via raw SQL to plant the fixture
+      // (the point of this test is that a removal which removes no membership
+      // deletes nothing, this row included).
+      f.db
+        .prepare(
+          `INSERT INTO owner_documents
+            (owner_id, user_id, kind, id, rev, payload, updated_at)
+           VALUES (?, ?, ?, ?, 1, ?, ?)`,
+        )
+        .run(org.id, "stranger", "workspace", "doc-s", "{}", Date.now());
 
       await f.orgs.removeMember(org.id, "stranger", { actorId: "owner-1" });
 
@@ -457,6 +461,8 @@ describe("org deletion — owner_documents cleanup", () => {
         { slug: "acme", name: "Acme", createdBy: "owner-1" },
         { actorId: "owner-1" },
       );
+      await f.orgs.addMember(org.id, "user-1", "member");
+      await f.orgs.addMember(org.id, "user-2", "member");
 
       await f.docs(org.id, "user-1").put({
         kind: "workspace",
@@ -468,8 +474,8 @@ describe("org deletion — owner_documents cleanup", () => {
         id: "doc-2",
         payload: {},
       });
-      // A different tenant's document must survive.
-      await f.docs("other-owner", "user-3").put({
+      // A different tenant's document must survive. Personal tenant: owner === author.
+      await f.docs("user-3", "user-3").put({
         kind: "workspace",
         id: "doc-3",
         payload: {},
@@ -491,7 +497,7 @@ describe("org deletion — owner_documents cleanup", () => {
       );
       assert.equal(docCount(f.db, org.id, "user-2"), 0);
       assert.equal(
-        docCount(f.db, "other-owner", "user-3"),
+        docCount(f.db, "user-3", "user-3"),
         1,
         "another owner's documents must survive",
       );
@@ -507,6 +513,7 @@ describe("org deletion — owner_documents cleanup", () => {
         { slug: "acme", name: "Acme", createdBy: "owner-1" },
         { actorId: "owner-1" },
       );
+      await f.orgs.addMember(org.id, "user-1", "member");
 
       const projects = createSavedProjectsStore(f.platformDb, org.id);
       await projects.createProjectRecord({

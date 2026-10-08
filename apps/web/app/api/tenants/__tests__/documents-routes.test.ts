@@ -634,6 +634,39 @@ describe("document routes", () => {
     if (left.success) assert.equal(left.value.length, 0);
   });
 
+  it("a PUT by a member whose membership ends before the write is 403 and writes nothing", async () => {
+    await seedOrg(ORG, FOUNDER, [
+      { id: MEMBER_A, role: "member" },
+      { id: MEMBER_B, role: "member" },
+    ]);
+
+    signedInAs(MEMBER_B);
+    const request = putReq(
+      ORG,
+      KIND,
+      DOC_ID,
+      JSON.stringify({ payload: { v: "B" } }),
+    );
+    const params = detailParams(ORG, KIND, DOC_ID);
+
+    // Start removal and PUT in one tick, removal first: the removal's
+    // transaction commits before the PUT's requireTenant reads, so requireTenant
+    // returns 403 before the write lands.
+    const [, putResponse] = await Promise.all([
+      getPlatformStore().orgs.removeMember(ORG, MEMBER_B, {
+        actorId: FOUNDER,
+      }),
+      DETAIL_PUT(request, params),
+    ]);
+
+    assert.equal(putResponse.status, 403);
+
+    // No row for B under the org may survive, regardless of which 403 body returned.
+    const listed = await getPlatformStore().documentsFor(ORG, MEMBER_B).list();
+    assert.equal(listed.success, true);
+    if (listed.success) assert.equal(listed.value.length, 0);
+  });
+
   it("an unknown kind or a bad id is 400 and writes nothing", async () => {
     signedInAs(OWNER);
 
