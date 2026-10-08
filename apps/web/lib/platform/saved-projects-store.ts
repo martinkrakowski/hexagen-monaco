@@ -301,11 +301,31 @@ export function createSavedProjectsStore(
 
     async createProjectRecord(project) {
       try {
-        const existing = await db.get<ProjectRow>(selectOne, [
-          ownerId,
-          project.id,
-        ]);
-        if (existing) {
+        // One transaction: the existence check, the position read and the
+        // insert ran back to back on the synchronous driver, so nothing could
+        // come between them. With awaits between them another request can, and
+        // two creates would read the same MIN(ord).
+        const conflict = await db.transaction(async (tx) => {
+          const existing = await tx.get<ProjectRow>(selectOne, [
+            ownerId,
+            project.id,
+          ]);
+          if (existing) return true;
+          const { min_ord } = (await tx.get<{ min_ord: number }>(minOrd, [
+            ownerId,
+          ]))!;
+          await tx.run(insert, {
+            id: project.id,
+            owner_id: ownerId,
+            name: project.name,
+            payload: JSON.stringify(project),
+            created_at: project.createdAt,
+            updated_at: project.updatedAt,
+            ord: min_ord - 1,
+          });
+          return false;
+        });
+        if (conflict) {
           return {
             success: false,
             error: persistError(
@@ -314,18 +334,6 @@ export function createSavedProjectsStore(
             ),
           };
         }
-        const { min_ord } = (await db.get<{ min_ord: number }>(minOrd, [
-          ownerId,
-        ]))!;
-        await db.run(insert, {
-          id: project.id,
-          owner_id: ownerId,
-          name: project.name,
-          payload: JSON.stringify(project),
-          created_at: project.createdAt,
-          updated_at: project.updatedAt,
-          ord: min_ord - 1,
-        });
         return { success: true, value: project };
       } catch (cause) {
         return {

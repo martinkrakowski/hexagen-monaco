@@ -313,8 +313,19 @@ export function createOrgsRepository(db: PlatformDb): OrgsRepository {
   // Org, owner membership and audit row in ONE transaction. An org whose
   // owner insert failed is administerable by nobody and refused by
   // requireTenant for everybody — a row that exists and cannot be used.
+  const assertNotAUserId = async (
+    session: PlatformDbSession,
+    id: string,
+  ): Promise<void> => {
+    const taken = await session.get<{ ok: number }>(userIdTaken, [id]);
+    if (taken) throw new Error("org id collides with an existing user");
+  };
+
   const createOrgWithOwnerTx = (row: OrgRow, actorId: string): Promise<Org> =>
     db.transaction(async (tx) => {
+      // The id check belongs with the insert it guards: on the synchronous
+      // driver nothing could come between the two.
+      await assertNotAUserId(tx, row.id);
       try {
         await tx.run(insertOrg, {
           id: row.id,
@@ -662,10 +673,6 @@ export function createOrgsRepository(db: PlatformDb): OrgsRepository {
   return {
     async createOrg(input) {
       const id = input.id ?? crypto.randomUUID();
-      const taken = await db.get<{ ok: number }>(userIdTaken, [id]);
-      if (taken) {
-        throw new Error("org id collides with an existing user");
-      }
       const org: OrgRow = {
         id,
         slug: input.slug,
@@ -673,21 +680,20 @@ export function createOrgsRepository(db: PlatformDb): OrgsRepository {
         created_by: input.createdBy,
         created_at: new Date().toISOString(),
       };
-      await db.run(insertOrg, {
-        id: org.id,
-        slug: org.slug,
-        name: org.name,
-        created_by: org.created_by,
-        created_at: org.created_at,
+      await db.transaction(async (tx) => {
+        await assertNotAUserId(tx, id);
+        await tx.run(insertOrg, {
+          id: org.id,
+          slug: org.slug,
+          name: org.name,
+          created_by: org.created_by,
+          created_at: org.created_at,
+        });
       });
       return toOrg(org);
     },
     async createOrgWithOwner(input, actor) {
       const id = input.id ?? crypto.randomUUID();
-      const taken = await db.get<{ ok: number }>(userIdTaken, [id]);
-      if (taken) {
-        throw new Error("org id collides with an existing user");
-      }
       return createOrgWithOwnerTx(
         {
           id,

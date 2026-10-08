@@ -170,4 +170,41 @@ describe("sqlite SavedProjectsPersistencePort", () => {
     }
     db.close();
   });
+
+  it("two creates started together get different positions, and a repeated id conflicts once", async () => {
+    const db = openPlatformDb(":memory:");
+    const store = createSavedProjectsStore(
+      createSqlitePlatformDb(db),
+      "owner-a",
+    );
+    const ids = [1, 2, 3, 4].map(
+      (n) => `2222222${n}-2222-4222-8222-222222222222`,
+    );
+    // Started in one tick, so their statements would interleave if the check,
+    // the MIN(ord) read and the insert were not one transaction.
+    const results = await Promise.all(
+      ids.map((id) => store.createProjectRecord(project(id))),
+    );
+    assert.deepEqual(
+      results.map((r) => r.success),
+      [true, true, true, true],
+    );
+    const rows = db
+      .prepare("SELECT ord FROM saved_projects WHERE owner_id = ?")
+      .all("owner-a") as Array<{ ord: number }>;
+    assert.equal(new Set(rows.map((r) => r.ord)).size, 4);
+
+    const twice = await Promise.all([
+      store.createProjectRecord(
+        project("33333333-3333-4333-8333-333333333333"),
+      ),
+      store.createProjectRecord(
+        project("33333333-3333-4333-8333-333333333333"),
+      ),
+    ]);
+    assert.deepEqual(twice.map((r) => r.success).sort(), [false, true]);
+    const loser = twice.find((r) => !r.success);
+    assert.equal(loser && !loser.success && loser.error.kind, "Conflict");
+    db.close();
+  });
 });

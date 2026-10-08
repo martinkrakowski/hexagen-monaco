@@ -417,4 +417,15 @@ describe("sqlite-db", () => {
     expect(second).toBeInstanceOf(Promise);
     await expect(second).resolves.toBeUndefined();
   });
+
+  it("the statement cache is bounded: many distinct statements still run, old and new", async () => {
+    const first = "SELECT 0 AS n";
+    expect((await db.get<{ n: number }>(first))?.n).toBe(0);
+    for (let i = 1; i <= 400; i++) {
+      const row = await db.get<{ n: number }>(`SELECT ${i} AS n`);
+      expect(row?.n).toBe(i);
+    }
+    // Evicted long ago, and prepared again without complaint.
+    expect((await db.get<{ n: number }>(first))?.n).toBe(0);
+  });
 });

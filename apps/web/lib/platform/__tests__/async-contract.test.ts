@@ -13,6 +13,34 @@ import { createRepairTelemetryStore } from "../repair-telemetry-store";
  * test pins each signature at runtime so a future revert to synchronous breaks
  * the suite before it breaks callers.
  */
+/**
+ * Each case must be a Promise, and must settle the way the test says: a method
+ * that rejects when it was expected to resolve is a failure, so a broken
+ * statement cannot hide behind "it returned a Promise".
+ */
+async function assertPromisesSettle(
+  cases: ReadonlyArray<{ name: string; result: unknown }>,
+  expectedRejections: readonly string[],
+): Promise<void> {
+  for (const { name, result } of cases) {
+    assert.ok(
+      result instanceof Promise,
+      `${name} must return a Promise, got ${typeof result}`,
+    );
+  }
+  const settled = await Promise.allSettled(
+    cases.map((c) => c.result as Promise<unknown>),
+  );
+  const rejected = cases
+    .filter((_, i) => settled[i]?.status === "rejected")
+    .map((c) => c.name);
+  assert.deepEqual(rejected, [...expectedRejections]);
+}
+
+const EXPECTED_REJECTIONS_1: readonly string[] = [];
+const EXPECTED_REJECTIONS_2: readonly string[] = [];
+const EXPECTED_REJECTIONS_3: readonly string[] = [];
+
 describe("async contract — 60 store methods return Promises", () => {
   const store = createPlatformStore(":memory:");
   const OWNER = "user-owner";
@@ -341,17 +369,7 @@ describe("async contract — 60 store methods return Promises", () => {
       },
     ];
 
-    for (const { name, result } of cases) {
-      assert.ok(
-        result instanceof Promise,
-        `${name} must return a Promise, got ${typeof result}`,
-      );
-      try {
-        await result;
-      } catch {
-        // some cases may reject; the contract only requires a Promise
-      }
-    }
+    await assertPromisesSettle(cases, EXPECTED_REJECTIONS_1);
   });
 
   it("each TeamsRepository method returns a Promise", async () => {
@@ -409,17 +427,7 @@ describe("async contract — 60 store methods return Promises", () => {
       },
     ];
 
-    for (const { name, result } of cases) {
-      assert.ok(
-        result instanceof Promise,
-        `${name} must return a Promise, got ${typeof result}`,
-      );
-      try {
-        await result;
-      } catch {
-        // some cases may reject; the contract only requires a Promise
-      }
-    }
+    await assertPromisesSettle(cases, EXPECTED_REJECTIONS_2);
   });
 
   it("each ProjectSharesRepository method returns a Promise", async () => {
@@ -487,17 +495,7 @@ describe("async contract — 60 store methods return Promises", () => {
       },
     ];
 
-    for (const { name, result } of cases) {
-      assert.ok(
-        result instanceof Promise,
-        `${name} must return a Promise, got ${typeof result}`,
-      );
-      try {
-        await result;
-      } catch {
-        // some cases may reject; the contract only requires a Promise
-      }
-    }
+    await assertPromisesSettle(cases, EXPECTED_REJECTIONS_3);
   });
 
   it("close returns a Promise", async () => {
