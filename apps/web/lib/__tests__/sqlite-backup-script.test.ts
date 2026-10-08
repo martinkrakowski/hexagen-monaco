@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import {
   mkdtempSync,
   mkdirSync,
+  readFileSync,
   readdirSync,
   rmSync,
   utimesSync,
@@ -177,6 +178,26 @@ describe("sqlite-backup.cjs", () => {
     expect(run().status).toBe(0);
 
     expect(readdirSync(dest)).toContain(active);
+  });
+
+  it("does not replace a backup another run already wrote under the same name", () => {
+    seed("platform", 2);
+    expect(run().status).toBe(0);
+    const [first] = backups("platform");
+    // A second run in the same second, forced by giving it the first run's
+    // stamp, after the live database has changed.
+    const before = readFileSync(join(dest, first));
+    const live = new Database(join(src, "platform.db"));
+    live.prepare("INSERT INTO things (label) VALUES ('later')").run();
+    live.close();
+    const stamp = first.slice("platform-".length, -".db".length);
+
+    const result = run([], { BACKUP_TEST_STAMP: stamp });
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain("already written by another run");
+    expect(readFileSync(join(dest, first)).equals(before)).toBe(true);
+    expect(readdirSync(dest)).toEqual([first]);
   });
 
   it("keeps only the newest BACKUP_KEEP copies of each database", () => {

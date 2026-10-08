@@ -101,7 +101,19 @@ async function copyAndCheck(name, source, part, final) {
   } finally {
     copy.close();
   }
-  fs.renameSync(part, final);
+  // A hard link fails if the name is taken, where a rename would silently
+  // replace it: two runs in the same second must not overwrite each other.
+  try {
+    fs.linkSync(part, final);
+  } catch (error) {
+    if (error.code !== "EEXIST") throw error;
+    fs.rmSync(part, { force: true });
+    log(
+      `${name}: ${path.basename(final)} already written by another run this second, kept`,
+    );
+    return "done";
+  }
+  fs.rmSync(part, { force: true });
   log(
     `${name}: ${path.basename(final)} ${fs.statSync(final).size} bytes, ${tables} tables, integrity ok`,
   );
@@ -113,7 +125,8 @@ function prune(name, justWritten) {
   // clock that was once wrong, an older file can carry a later stamp.
   const candidates = backupsOf(name).filter((file) => file !== justWritten);
   const old = candidates.slice(0, Math.max(0, candidates.length - (KEEP - 1)));
-  for (const file of old) fs.rmSync(path.join(DEST, file));
+  // force: another run may be pruning the same file.
+  for (const file of old) fs.rmSync(path.join(DEST, file), { force: true });
   if (old.length > 0) log(`${name}: pruned ${old.length}, kept ${KEEP}`);
 }
 
@@ -138,10 +151,13 @@ async function runBackup() {
       `BACKUP_KEEP must be a whole number of 1 or more: ${process.env.BACKUP_KEEP}`,
     );
   removeLeftovers();
-  const stamp = new Date()
-    .toISOString()
-    .replace(/[-:]/g, "")
-    .replace(/\.\d+Z$/, "Z");
+  // BACKUP_TEST_STAMP lets a test put two runs in the same second.
+  const stamp =
+    process.env.BACKUP_TEST_STAMP ||
+    new Date()
+      .toISOString()
+      .replace(/[-:]/g, "")
+      .replace(/\.\d+Z$/, "Z");
   let done = 0;
   let failed = 0;
   for (const name of DATABASES) {
@@ -153,6 +169,8 @@ async function runBackup() {
     } catch (error) {
       failed += 1;
       log(`${name}: FAILED: ${error.message}`);
+      // The stack says which step failed: open, copy, check, name or prune.
+      process.stderr.write(`${error.stack}\n`);
     }
   }
   // A run that copied nothing is a failure, not a quiet success: the volume
@@ -198,6 +216,6 @@ if (!run) {
   process.exit(64);
 }
 run().catch((error) => {
-  process.stderr.write(`sqlite-backup: ${error.message}\n`);
+  process.stderr.write(`sqlite-backup: ${error.message}\n${error.stack}\n`);
   process.exit(1);
 });
