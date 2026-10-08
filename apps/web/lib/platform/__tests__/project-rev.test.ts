@@ -160,6 +160,33 @@ describe("H1.4 — saved_projects.rev and updated_by", () => {
     }
   });
 
+  it("tells each of two unconditional writers the rev its own write produced", async () => {
+    const db = openPlatformDb(tmpDbPath("hexagen-rev-two-writers-"));
+    const platformDb = createSqlitePlatformDb(db);
+    try {
+      const store = createSavedProjectsStore(platformDb, OWNER);
+      const p = project("55555555-5555-4555-8555-555555555555", "alpha");
+      await store.createProjectRecord(p);
+
+      // Started in one tick with no precondition: both read rev 1 before
+      // either writes. A rev computed from that read would be 2 for both.
+      const [a, b] = await Promise.all([
+        store.putProject({ ...p, name: "a", updatedAt: 2 }, undefined, "u-a"),
+        store.putProject({ ...p, name: "b", updatedAt: 3 }, undefined, "u-b"),
+      ]);
+      assert.equal(a.success, true);
+      assert.equal(b.success, true);
+      const revs = [a, b].map((r) => (r.success ? r.value.rev : -1)).sort();
+      assert.deepEqual(revs, [2, 3]);
+      const stored = db
+        .prepare("SELECT rev FROM saved_projects WHERE owner_id = ? AND id = ?")
+        .get(OWNER, p.id) as { rev: number };
+      assert.equal(stored.rev, 3);
+    } finally {
+      db.close();
+    }
+  });
+
   it("refuses a stale rev and leaves the stored row untouched", async () => {
     const db = openPlatformDb(tmpDbPath("hexagen-rev-stale-"));
     const platformDb = createSqlitePlatformDb(db);

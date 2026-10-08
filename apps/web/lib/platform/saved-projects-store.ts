@@ -178,6 +178,7 @@ export function createSavedProjectsStore(
        AND id = @id
        AND (@expected_rev IS NULL OR rev = @expected_rev)
        AND (@expected_updated_at IS NULL OR updated_at = @expected_updated_at)
+    RETURNING rev
   `;
   const remove = "DELETE FROM saved_projects WHERE owner_id = ? AND id = ?";
   const clear = "DELETE FROM saved_projects WHERE owner_id = ?";
@@ -303,8 +304,12 @@ export function createSavedProjectsStore(
       try {
         // One transaction: the existence check, the position read and the
         // insert ran back to back on the synchronous driver, so nothing could
-        // come between them. With awaits between them another request can, and
-        // two creates would read the same MIN(ord).
+        // come between them. With awaits between them, two creates issued in
+        // the same tick can interleave on this one-connection seam, and any
+        // two requests can on a pooled backend; both would read the same
+        // MIN(ord). The transaction serialises them here. A pooled backend
+        // does not by itself, which is why the catch below still maps a
+        // unique violation to Conflict.
         const conflict = await db.transaction(async (tx) => {
           const existing = await tx.get<ProjectRow>(selectOne, [
             ownerId,
@@ -336,6 +341,15 @@ export function createSavedProjectsStore(
         }
         return { success: true, value: project };
       } catch (cause) {
+        if (db.isUniqueViolation(cause)) {
+          return {
+            success: false,
+            error: persistError(
+              "Conflict",
+              `A saved project with id ${project.id} already exists`,
+            ),
+          };
+        }
         return {
           success: false,
           error: persistError(
@@ -362,7 +376,7 @@ export function createSavedProjectsStore(
         if (updated === parsed.value) {
           return { success: true, value: parsed.value };
         }
-        const written = await db.run(updateProject, {
+        const written = await db.get<{ rev: number }>(updateProject, {
           id,
           owner_id: ownerId,
           name: updated.name,
@@ -376,7 +390,7 @@ export function createSavedProjectsStore(
           expected_rev: row.rev,
           expected_updated_at: null,
         });
-        if (written.changes === 0) {
+        if (!written) {
           return {
             success: false,
             error: persistError("Conflict", "Project was updated elsewhere"),
@@ -428,7 +442,11 @@ export function createSavedProjectsStore(
             ),
           };
         }
-        const written = await db.run(updateProject, {
+        // The UPDATE returns the rev it wrote. The rev read above is only good
+        // for telling NotFound from Conflict: two writers without a
+        // precondition can both read the same rev, and each must be told the
+        // rev its own write produced.
+        const written = await db.get<{ rev: number }>(updateProject, {
           id: project.id,
           owner_id: ownerId,
           name: project.name,
@@ -437,7 +455,7 @@ export function createSavedProjectsStore(
           updated_by: actorUserId ?? null,
           ...preconditionParams(precondition),
         });
-        if (written.changes === 0) {
+        if (!written) {
           // The row exists (checked above), so a zero-row write can only mean
           // the precondition did not match: a Conflict, never a NotFound.
           return {
@@ -452,7 +470,7 @@ export function createSavedProjectsStore(
         }
         return {
           success: true,
-          value: { project, rev: existing.rev + 1 },
+          value: { project, rev: written.rev },
         };
       } catch (cause) {
         return {
