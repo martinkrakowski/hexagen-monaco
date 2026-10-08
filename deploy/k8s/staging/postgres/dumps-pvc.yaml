@@ -1,0 +1,16 @@
+# Where the nightly dump lands. A second claim, so that deleting the Cluster (or
+# its claim) does not take the dumps with it. It is still local-path on the same
+# disk with reclaimPolicy: Delete: it does not survive the loss of that disk, of
+# this claim, or of the namespace. See ../README.md, "What the dumps do not cover".
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: hexagen-pg-dumps
+  labels:
+    app: hexagen-pg
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 2Gi

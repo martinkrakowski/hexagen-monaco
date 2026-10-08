@@ -83,6 +83,82 @@ effectively immutable. Back up before risky changes, either with `kubectl cp`
 while the pod is quiescent, or with `sqlite3 <db> ".backup <file>"` in a debug
 pod that mounts the claim.
 
+## Postgres (staging database)
+
+`deploy/k8s/staging/postgres/` holds a one-instance Postgres 18 cluster,
+`hexagen-pg`, for the CloudNativePG operator already installed on the node. It
+is a separate kustomization: `yarn deploy:staging` never renders it, so an app
+deploy cannot change or delete the database.
+
+**The app does not use it yet.** Nothing in the web app reads `DATABASE_URL`
+today; the SQLite files under `/data` remain the only store until the Postgres
+implementation lands (packet B2 of
+`docs/planning/2026-10-07_indexeddb-to-postgres-migration-plan.md`) and the
+staging data has been carried over (packet B4). The Deployment is therefore
+not wired to the database in this change. When B4 is ready, add this to the
+`env:` list in `deployment.yaml`:
+
+```yaml
+- name: DATABASE_URL
+  valueFrom:
+    secretKeyRef:
+      name: hexagen-pg-app
+      key: uri
+```
+
+The operator creates Secret `hexagen-pg-app` and Service `hexagen-pg-rw` in
+`webapps`. The repo and the scripts never hold the password.
+
+### Apply
+
+By hand, from the repository root, and only when the owner says so. The first
+command changes nothing; read its output before running the second.
+
+```sh
+kubectl kustomize deploy/k8s/staging/postgres | ssh m 'KUBECONFIG=$HOME/.kube/config kubectl apply --dry-run=server -f -'
+kubectl kustomize deploy/k8s/staging/postgres | ssh m 'KUBECONFIG=$HOME/.kube/config kubectl apply -f -'
+ssh m 'KUBECONFIG=$HOME/.kube/config kubectl -n webapps wait --for=condition=Ready cluster/hexagen-pg --timeout=5m'
+```
+
+It creates three objects: Cluster `hexagen-pg` (requests 100m CPU and 256Mi,
+memory limit 1Gi, a 5Gi claim), PersistentVolumeClaim `hexagen-pg-dumps` (2Gi)
+and CronJob `hexagen-pg-dump`.
+
+### Backup
+
+CronJob `hexagen-pg-dump` runs `pg_dump --format=custom` at 03:17 UTC every
+day into `hexagen-pg-dumps`, reads the whole dump back with `pg_restore`
+before giving it its final name, and keeps the seven newest. Run one now (the
+name carries the time, so the command can be repeated; a finished job can be
+deleted, its dump stays):
+
+```sh
+ssh m 'KUBECONFIG=$HOME/.kube/config kubectl -n webapps create job --from=cronjob/hexagen-pg-dump hexagen-pg-dump-manual-$(date +%s)'
+```
+
+**What the dumps do not cover.** Both claims are `local-path` on the node's one
+disk, with `reclaimPolicy: Delete`. The dumps survive a bad migration, a
+dropped table, and the deletion of the Cluster or of its own claim. They do
+not survive the loss of that disk, the deletion of `hexagen-pg-dumps`, or the
+deletion of the namespace. A copy off the node is a host decision and is not
+made here. Until one exists, treat staging data as rebuildable: it can be
+re-created from the SQLite files by re-running the B4 carry-over.
+
+There is no point-in-time recovery: a restore returns the database to the
+last nightly dump.
+
+### Restore drill
+
+Restore the newest dump into a scratch database on the same cluster and count
+a table; drop the scratch database afterwards. Record the date of the last
+drill here: _none yet_.
+
+### Remove
+
+Deleting the Cluster deletes its claim and its data. Take a dump first, and
+never run `kubectl delete -k deploy/k8s/staging/postgres`: that removes the
+dumps claim as well.
+
 ## TLS
 
 cert-manager issues `hexagen-web-tls` from ClusterIssuer `midnight-ca`. A

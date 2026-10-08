@@ -1,0 +1,10 @@
+# The staging database. Kept apart from ../kustomization.yaml on purpose:
+# `yarn deploy:staging` renders only the parent directory, so an app deploy can
+# never change or delete the database. Apply this one by hand (see ../README.md).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: webapps
+resources:
+  - cluster.yaml
+  - dumps-pvc.yaml
+  - dump-cronjob.yaml
