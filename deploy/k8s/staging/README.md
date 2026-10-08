@@ -80,9 +80,49 @@ mode, add a root initContainer limited to `chown 1001:1001 /data`.
 
 The StorageClass has `reclaimPolicy: Delete`: deleting the PVC, the
 kustomization or the namespace destroys the databases. The 1Gi size is
-effectively immutable. Back up before risky changes, either with `kubectl cp`
-while the pod is quiescent, or with `sqlite3 <db> ".backup <file>"` in a debug
-pod that mounts the claim.
+effectively immutable.
+
+### SQLite backup
+
+CronJob `hexagen-sqlite-backup` copies the SQLite files at 02:47 UTC every day
+into a second claim, `hexagen-web-backups` (1Gi), and keeps the seven newest of
+each. It runs the app's own image (the deploy script gives it the same tag as
+the app) and `sqlite-backup/sqlite-backup.cjs`, mounted from a ConfigMap. The
+script uses the SQLite driver's online backup, so the copy is a consistent
+snapshot while the app keeps writing; it then checks the copy with
+`PRAGMA integrity_check` before giving it its final name. A database file that
+does not exist yet (`quota.db` is created on first use) is reported and
+skipped. A run that copies nothing fails.
+
+Unlike the Postgres cluster below, these objects are part of this
+kustomization: every `yarn deploy:staging` applies them.
+
+Run one now, or compare the live row counts with the newest backup:
+
+```sh
+ssh m 'KUBECONFIG=$HOME/.kube/config kubectl -n webapps create job --from=cronjob/hexagen-sqlite-backup hexagen-sqlite-backup-manual-$(date +%s)'
+```
+
+The `counts` mode of the script prints every table's row count in the live
+file and in the newest backup, side by side. It is the restore drill for these
+files: it opens the backup and reads every table. Run it as a one-off Job with
+the CronJob's pod template and the command
+`node /scripts/sqlite-backup.cjs counts`. Last drill: 2026-10-08, all 21
+tables equal (19 in `platform.db`, 2 in `byok.db`; `quota.db` did not exist).
+
+To restore (written down, not yet rehearsed end to end): scale the Deployment
+to 0, copy the chosen backup over the live file from a pod that mounts both
+claims, remove that file's `-wal` and `-shm`, and scale back to 1.
+
+**What the backups do not cover.** Both claims are `local-path` on the node's
+one disk. The copies survive a bad migration, a damaged file, and the deletion
+of `hexagen-web-data`. They do not survive the loss of that disk, the deletion
+of `hexagen-web-backups`, or the deletion of the namespace. There is no
+point-in-time recovery: a restore returns to the last nightly copy.
+
+Production does not run this job. Production deployments are on hold, and its
+SQLite files hold no user rows; the job goes out with the first production
+deploy after the hold ends.
 
 ## Postgres (staging database)
 

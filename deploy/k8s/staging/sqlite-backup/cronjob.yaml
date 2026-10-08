@@ -1,0 +1,80 @@
+# A nightly online backup of the three SQLite files (platform, byok, quota),
+# seven of each kept. It runs the app's own image, because that is where the
+# SQLite driver is, and mounts the app's volume beside the running pod: both
+# are on the one node, which ReadWriteOnce allows. The backup API copies a
+# consistent snapshot while the app keeps writing.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: hexagen-sqlite-backup
+  labels:
+    # Its own label, not the app's: a delete selected by app=hexagen-web must
+    # not reach the backups.
+    app: hexagen-sqlite-backup
+spec:
+  schedule: "47 2 * * *"
+  timeZone: Etc/UTC
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 600
+      template:
+        metadata:
+          labels:
+            # Not app: hexagen-web, or the Service would select this pod.
+            app: hexagen-sqlite-backup
+        spec:
+          restartPolicy: Never
+          imagePullSecrets:
+            - name: harbor-regcred
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1001
+            runAsGroup: 1001
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: backup
+              # The deploy script rewrites :latest to the commit tag, so the
+              # job always runs the image the app runs.
+              image: registry.midnight.lan/library/hexagen-monaco:latest
+              imagePullPolicy: IfNotPresent
+              command: ["node", "/scripts/sqlite-backup.cjs"]
+              env:
+                - name: BACKUP_SRC_DIR
+                  value: /data
+                - name: BACKUP_DEST_DIR
+                  value: /backups
+              volumeMounts:
+                # Read-write on purpose: reading a WAL database needs its -shm
+                # file. The script opens the databases read-only.
+                - name: data
+                  mountPath: /data
+                - name: backups
+                  mountPath: /backups
+                - name: script
+                  mountPath: /scripts
+                  readOnly: true
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 64Mi
+                limits:
+                  memory: 256Mi
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: ["ALL"]
+          volumes:
+            - name: data
+              persistentVolumeClaim:
+                claimName: hexagen-web-data
+            - name: backups
+              persistentVolumeClaim:
+                claimName: hexagen-web-backups
+            - name: script
+              configMap:
+                name: hexagen-sqlite-backup-script

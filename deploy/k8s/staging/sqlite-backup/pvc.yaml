@@ -1,0 +1,18 @@
+# Where the nightly copies of the SQLite files land. A second claim, so that
+# deleting or damaging hexagen-web-data does not take the copies with it. It is
+# still local-path on the same disk with reclaimPolicy: Delete: it does not
+# survive the loss of that disk, of this claim, or of the namespace.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: hexagen-web-backups
+  labels:
+    # Its own label, not the app's: a delete selected by app=hexagen-web must
+    # not reach the backups.
+    app: hexagen-sqlite-backup
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 1Gi
