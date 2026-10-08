@@ -24,7 +24,8 @@ function orgsOnTempDb() {
     "platform.db",
   );
   const db = openPlatformDb(path);
-  return { db, orgs: createOrgsRepository(db) };
+  const platformDb = createSqlitePlatformDb(db);
+  return { db, orgs: createOrgsRepository(platformDb) };
 }
 
 const req = () => new NextRequest("http://localhost/api/tenants/x/projects");

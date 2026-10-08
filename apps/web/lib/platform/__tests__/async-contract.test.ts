@@ -12,7 +12,7 @@ import { createRepairTelemetryStore } from "../repair-telemetry-store";
  * test pins each signature at runtime so a future revert to synchronous breaks
  * the suite before it breaks callers.
  */
-describe("async contract — 32 store methods return Promises", () => {
+describe("async contract — 46 store methods return Promises", () => {
   const store = createPlatformStore(":memory:");
   const OWNER = "user-owner";
 
@@ -282,5 +282,74 @@ describe("async contract — 32 store methods return Promises", () => {
       "countFor must return a Promise",
     );
     await countResult;
+  });
+
+  it("each OrgsRepository method returns a Promise", async () => {
+    const orgs = store.orgs;
+
+    // Set up: an org with an owner so subsequent methods have valid data.
+    const org = await orgs.createOrgWithOwner(
+      { slug: "test-org", name: "Test Org", createdBy: OWNER },
+      { actorId: OWNER },
+    );
+
+    const cases: { name: string; result: unknown }[] = [
+      {
+        name: "createOrg",
+        result: orgs.createOrg({
+          slug: "other-org",
+          name: "Other",
+          createdBy: OWNER,
+        }),
+      },
+      {
+        name: "createOrgWithOwner",
+        result: orgs.createOrgWithOwner(
+          { slug: "second-org", name: "Second", createdBy: "user-2" },
+          { actorId: "user-2" },
+        ),
+      },
+      { name: "getOrg", result: orgs.getOrg(org.id) },
+      { name: "getOrgBySlug", result: orgs.getOrgBySlug("test-org") },
+      {
+        name: "addMember",
+        result: orgs.addMember(org.id, "user-2", "member"),
+      },
+      {
+        name: "removeMember",
+        result: orgs.removeMember(org.id, "user-2", { actorId: OWNER }),
+      },
+      { name: "memberRole", result: orgs.memberRole(org.id, OWNER) },
+      { name: "listOrgIdsForUser", result: orgs.listOrgIdsForUser(OWNER) },
+      { name: "listMembers", result: orgs.listMembers(org.id) },
+      {
+        name: "invite",
+        result: orgs.invite(org.id, "github-user", "member", {
+          actorId: OWNER,
+        }),
+      },
+      { name: "listPendingInvites", result: orgs.listPendingInvites(org.id) },
+      {
+        name: "acceptInvitesForLogin",
+        result: orgs.acceptInvitesForLogin("id-1", "github-user"),
+      },
+      { name: "listOrgsForUser", result: orgs.listOrgsForUser(OWNER) },
+      {
+        name: "deleteOrg",
+        result: orgs.deleteOrg("nonexistent-org", { actorId: OWNER }),
+      },
+    ];
+
+    for (const { name, result } of cases) {
+      assert.ok(
+        result instanceof Promise,
+        `${name} must return a Promise, got ${typeof result}`,
+      );
+      try {
+        await result;
+      } catch {
+        // some cases may reject; the contract only requires a Promise
+      }
+    }
   });
 });

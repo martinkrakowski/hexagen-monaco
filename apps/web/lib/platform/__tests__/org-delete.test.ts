@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { openPlatformDb } from "../platform-db";
+import { createSqlitePlatformDb } from "../sqlite-db";
 import { createOrgsRepository, OrgOwnsProjectsError } from "../orgs-store";
 import { createTeamsRepository } from "../teams-store";
 import { createProjectSharesRepository } from "../project-shares-store";
@@ -12,9 +13,10 @@ import { createProjectSharesRepository } from "../project-shares-store";
 function fixture() {
   const path = join(mkdtempSync(join(tmpdir(), "hexagen-org-delete-")), "p.db");
   const db = openPlatformDb(path);
+  const platformDb = createSqlitePlatformDb(db);
   return {
     db,
-    orgs: createOrgsRepository(db),
+    orgs: createOrgsRepository(platformDb),
     teams: createTeamsRepository(db),
     shares: createProjectSharesRepository(db),
   };

@@ -23,7 +23,7 @@ function fixture() {
   const platformDb = createSqlitePlatformDb(db);
   return {
     db,
-    orgs: createOrgsRepository(db),
+    orgs: createOrgsRepository(platformDb),
     teams: createTeamsRepository(db),
     audit: createAuditLogRepository(platformDb),
   };

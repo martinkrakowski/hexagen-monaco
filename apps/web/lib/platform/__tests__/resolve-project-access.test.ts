@@ -9,6 +9,7 @@ vi.mock("next-auth/jwt", () => ({ getToken: vi.fn() }));
 
 import { getToken } from "next-auth/jwt";
 import { openPlatformDb } from "../platform-db";
+import { createSqlitePlatformDb } from "../sqlite-db";
 import { createOrgsRepository } from "../orgs-store";
 import { createTeamsRepository } from "../teams-store";
 import { createProjectSharesRepository } from "../project-shares-store";
@@ -39,7 +40,8 @@ function fixture() {
     "platform.db",
   );
   const db = openPlatformDb(path);
-  const orgs = createOrgsRepository(db);
+  const platformDb = createSqlitePlatformDb(db);
+  const orgs = createOrgsRepository(platformDb);
   const teams = createTeamsRepository(db);
   const shares = createProjectSharesRepository(db);
   const readers: ProjectAccessReaders = {

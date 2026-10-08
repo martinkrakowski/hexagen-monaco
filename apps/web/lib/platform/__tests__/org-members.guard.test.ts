@@ -19,7 +19,7 @@ function fixture() {
   const platformDb = createSqlitePlatformDb(db);
   return {
     db,
-    orgs: createOrgsRepository(db),
+    orgs: createOrgsRepository(platformDb),
     teams: createTeamsRepository(db),
     audit: createAuditLogRepository(platformDb),
   };
@@ -478,8 +478,9 @@ describe("H1.2 — invite expiry", () => {
       fx.db.close();
 
       const db = openPlatformDb(path);
+      const platformDb = createSqlitePlatformDb(db);
       try {
-        const orgs = createOrgsRepository(db);
+        const orgs = createOrgsRepository(platformDb);
         const [pending] = await orgs.listPendingInvites("org-acme");
         assert.ok(pending, "the migrated invite must still be redeemable");
         assert.match(
@@ -517,8 +518,9 @@ describe("H1.2 — invite expiry", () => {
       fx.db.close();
 
       const db = openPlatformDb(path);
+      const platformDb = createSqlitePlatformDb(db);
       try {
-        const orgs = createOrgsRepository(db);
+        const orgs = createOrgsRepository(platformDb);
         const [pending] = await orgs.listPendingInvites("org-acme");
         assert.ok(pending, "the repaired invite must still be redeemable");
         assert.match(

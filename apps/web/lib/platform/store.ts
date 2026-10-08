@@ -72,7 +72,7 @@ export function createPlatformStore(
     scanArtifactsDir: artifactsDir,
     auth: createAuthRepository(platformDb),
     billing: createEntitlementRepository(platformDb),
-    orgs: createOrgsRepository(db),
+    orgs: createOrgsRepository(platformDb),
     teams: createTeamsRepository(db),
     audit: createAuditLogRepository(platformDb),
     shares: createProjectSharesRepository(db),
