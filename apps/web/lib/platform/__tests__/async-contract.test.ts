@@ -12,7 +12,7 @@ import { createRepairTelemetryStore } from "../repair-telemetry-store";
  * test pins each signature at runtime so a future revert to synchronous breaks
  * the suite before it breaks callers.
  */
-describe("async contract — 30 store methods return Promises", () => {
+describe("async contract — 32 store methods return Promises", () => {
   const store = createPlatformStore(":memory:");
   const OWNER = "user-owner";
 
@@ -260,5 +260,27 @@ describe("async contract — 30 store methods return Promises", () => {
     await classStatsResult;
 
     db.close();
+  });
+
+  it("each AuditLogRepository method returns a Promise", async () => {
+    const audit = store.audit;
+
+    const appendResult = audit.append({
+      actorId: "actor-1",
+      action: "team.member.add",
+      subjectOwnerId: "org-1",
+      subjectId: "team-1",
+      granteeType: "user",
+      granteeId: "user-1",
+    });
+    assert.ok(appendResult instanceof Promise, "append must return a Promise");
+    await appendResult;
+
+    const countResult = audit.countFor("team.member.add", "team-1");
+    assert.ok(
+      countResult instanceof Promise,
+      "countFor must return a Promise",
+    );
+    await countResult;
   });
 });

@@ -70,17 +70,17 @@ export function createPlatformStore(
   const ownerState = createOwnerStateStore(platformDb);
   return {
     scanArtifactsDir: artifactsDir,
-    auth: createAuthRepository(db),
-    billing: createEntitlementRepository(db),
+    auth: createAuthRepository(platformDb),
+    billing: createEntitlementRepository(platformDb),
     orgs: createOrgsRepository(db),
     teams: createTeamsRepository(db),
-    audit: createAuditLogRepository(db),
+    audit: createAuditLogRepository(platformDb),
     shares: createProjectSharesRepository(db),
     projectsFor(ownerId) {
       return createSavedProjectsStore(db, ownerId);
     },
     runsFor(ownerId) {
-      return createRunHistoryRepository(db, ownerId);
+      return createRunHistoryRepository(platformDb, ownerId);
     },
     scansFor(ownerId) {
       return createScanRecordsStore(db, ownerId, artifactsDir);

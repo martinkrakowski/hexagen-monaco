@@ -337,4 +337,78 @@ describe("sqlite-db", () => {
     const rows = await db.all<{ id: number }>("SELECT * FROM test");
     expect(rows).toHaveLength(1);
   });
+
+  it("a plain call from a context that outlived its transaction is accepted", async () => {
+    let later: Promise<void> = Promise.resolve();
+    await db.transaction(async (tx) => {
+      await tx.run("INSERT INTO test (id, name, val) VALUES (?, ?, ?)", [
+        1,
+        "a",
+        10,
+      ]);
+      later = new Promise<void>((resolve, reject) =>
+        setTimeout(() => {
+          db.get("SELECT 1 AS one").then(() => resolve(), reject);
+        }, 20),
+      );
+    });
+    await later;
+  });
+
+  it("a plain call made in the same tick as a transaction waits for it", async () => {
+    const t = db.transaction(async (tx) => {
+      await tx.run("INSERT INTO test (id, name, val) VALUES (?, ?, ?)", [
+        1,
+        "a",
+        10,
+      ]);
+    });
+    const q = db.get<{ n: number }>("SELECT COUNT(*) AS n FROM test");
+    await t;
+    const result = await q;
+    expect(result?.n).toBe(1);
+  });
+
+  it("after a transaction commits, a plain call runs at once", async () => {
+    await db.transaction(async (tx) => {
+      await tx.run("INSERT INTO test (id, name, val) VALUES (?, ?, ?)", [
+        1,
+        "a",
+        10,
+      ]);
+    });
+    const runPromise = db.run("INSERT INTO test (id, name, val) VALUES (?, ?, ?)", [
+      2,
+      "b",
+      20,
+    ]);
+    const count = handle
+      .prepare("SELECT COUNT(*) AS n FROM test")
+      .get() as { n: number };
+    expect(count.n).toBe(2);
+    await runPromise;
+  });
+
+  it("after a transaction rolls back, a plain call runs at once", async () => {
+    await expect(
+      db.transaction(async (tx) => {
+        await tx.run("INSERT INTO test (id, name, val) VALUES (?, ?, ?)", [
+          1,
+          "a",
+          10,
+        ]);
+        throw new Error("rollback");
+      }),
+    ).rejects.toThrow("rollback");
+    const runPromise = db.run("INSERT INTO test (id, name, val) VALUES (?, ?, ?)", [
+      2,
+      "b",
+      20,
+    ]);
+    const count = handle
+      .prepare("SELECT COUNT(*) AS n FROM test")
+      .get() as { n: number };
+    expect(count.n).toBe(1);
+    await runPromise;
+  });
 });

@@ -87,7 +87,8 @@ export function createSqlitePlatformDb(handle: Database.Database): PlatformDb {
     return next;
   };
 
-  const nestedGuard = new AsyncLocalStorage<boolean>();
+  type TxToken = { active: boolean };
+  const nestedGuard = new AsyncLocalStorage<TxToken>();
   const plainInTxError = () =>
     new Error(
       "plain db call inside a transaction: use the tx session passed to the callback",
@@ -96,7 +97,7 @@ export function createSqlitePlatformDb(handle: Database.Database): PlatformDb {
   // is, it enqueues so it never lands inside an in-flight transaction. Inside a
   // callback's async-local scope a plain call is always rejected (item 1).
   const immediateOrEnqueue = <T>(work: () => Promise<T>): Promise<T> => {
-    if (nestedGuard.getStore()) return Promise.reject(plainInTxError());
+    if (nestedGuard.getStore()?.active) return Promise.reject(plainInTxError());
     if (txCount > 0) return enqueue(work);
     return work();
   };
@@ -106,7 +107,7 @@ export function createSqlitePlatformDb(handle: Database.Database): PlatformDb {
     get: (sql, params) => immediateOrEnqueue(() => getSync(sql, params)),
     all: (sql, params) => immediateOrEnqueue(() => allSync(sql, params)),
     transaction: <T>(fn: (tx: PlatformDbSession) => Promise<T>): Promise<T> => {
-      if (nestedGuard.getStore()) {
+      if (nestedGuard.getStore()?.active) {
         return Promise.reject(
           new Error(
             "Nested transactions are not supported: start one transaction and compose statements within it",
@@ -126,13 +127,14 @@ export function createSqlitePlatformDb(handle: Database.Database): PlatformDb {
           run: (sql, params) =>
             finished ? Promise.reject(finishedErr) : runSync(sql, params),
         };
+        const token: TxToken = { active: true };
         try {
           if (handle.inTransaction) {
             throw new Error("a transaction is already open on this connection");
           }
           handle.exec("BEGIN IMMEDIATE");
           begun = true;
-          const result = await nestedGuard.run(true, () => fn(tx));
+          const result = await nestedGuard.run(token, () => fn(tx));
           handle.exec("COMMIT");
           finished = true;
           return result;
@@ -146,9 +148,10 @@ export function createSqlitePlatformDb(handle: Database.Database): PlatformDb {
           }
           finished = true;
           throw e;
-        } finally {
-          txCount--;
-        }
+      } finally {
+        token.active = false;
+        txCount--;
+      }
       });
     },
     close: () =>

@@ -1,4 +1,5 @@
 import type Database from "better-sqlite3";
+import type { PlatformDb, PlatformDbSession } from "./db";
 
 /**
  * The audit trail (D-A6): narrow, and APPEND-ONLY.
@@ -66,6 +67,33 @@ export interface AuditLogRepository {
   countFor(action: AuditAction, subjectId: string): Promise<number>;
 }
 
+const INSERT_AUDIT = `
+    INSERT INTO audit_log (
+      id, actor_id, action, subject_owner_id, subject_id,
+      grantee_type, grantee_id, created_at
+    ) VALUES (
+      @id, @actor_id, @action, @subject_owner_id, @subject_id,
+      @grantee_type, @grantee_id, @created_at
+    )
+  `;
+
+export async function appendAudit(
+  session: PlatformDbSession,
+  entry: AuditEntry,
+): Promise<void> {
+  await session.run(INSERT_AUDIT, {
+    id: crypto.randomUUID(),
+    actor_id: entry.actorId,
+    action: entry.action,
+    subject_owner_id: entry.subjectOwnerId ?? null,
+    subject_id: entry.subjectId ?? null,
+    grantee_type: entry.granteeType ?? null,
+    grantee_id: entry.granteeId ?? null,
+    created_at: new Date().toISOString(),
+  });
+}
+
+// Removed when the last raw-handle store is converted (same PR).
 /**
  * The SYNCHRONOUS appender, for callers that must write the audit row inside
  * the same better-sqlite3 transaction as the mutation it records.
@@ -103,18 +131,18 @@ export function prepareAuditAppend(
 }
 
 export function createAuditLogRepository(
-  db: Database.Database,
+  db: PlatformDb,
 ): AuditLogRepository {
-  const append = prepareAuditAppend(db);
-  const count = db.prepare(
-    "SELECT COUNT(*) AS n FROM audit_log WHERE action = ? AND subject_id = ?",
-  );
   return {
     async append(entry) {
-      append(entry);
+      await appendAudit(db, entry);
     },
     async countFor(action, subjectId) {
-      return (count.get(action, subjectId) as { n: number }).n;
+      const row = await db.get<{ n: number }>(
+        "SELECT COUNT(*) AS n FROM audit_log WHERE action = ? AND subject_id = ?",
+        [action, subjectId],
+      );
+      return row ? row.n : 0;
     },
   };
 }

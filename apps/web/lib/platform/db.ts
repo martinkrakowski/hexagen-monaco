@@ -50,6 +50,11 @@ export interface PlatformDb extends PlatformDbSession {
    * A callback must only `await` the `tx` session and short local work. A
    * callback that awaits something that never resolves holds the seam's queue
    * open; no timeout is applied, so never do that.
+   *
+   * Work that touches the database must be started inside the callback, on `tx`.
+   * A plain `db` call started before or outside the transaction and awaited
+   * inside the callback is queued behind this transaction and never resolves:
+   * a deadlock.
    */
   transaction<T>(fn: (tx: PlatformDbSession) => Promise<T>): Promise<T>;
   /** True when `error` is a SQLite unique / primary-key constraint violation. */

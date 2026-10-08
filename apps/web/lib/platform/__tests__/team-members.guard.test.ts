@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { openPlatformDb } from "../platform-db";
+import { createSqlitePlatformDb } from "../sqlite-db";
 import { createOrgsRepository } from "../orgs-store";
 import {
   createTeamsRepository,
@@ -19,11 +20,12 @@ function fixture() {
     "p.db",
   );
   const db = openPlatformDb(path);
+  const platformDb = createSqlitePlatformDb(db);
   return {
     db,
     orgs: createOrgsRepository(db),
     teams: createTeamsRepository(db),
-    audit: createAuditLogRepository(db),
+    audit: createAuditLogRepository(platformDb),
   };
 }
 
