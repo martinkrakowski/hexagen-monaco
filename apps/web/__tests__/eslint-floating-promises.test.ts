@@ -47,12 +47,17 @@ const probes = {
       "async function takesAny(arr: any) {}",
       "function generic<T>(body: T): void {}",
       "function identity<T>(x: T): T { return x; }",
+      "function sinkWithThis<T>(this: void, value: T): void {}",
+      "function assertUser(value: unknown): void {}",
       "async function go() {",
       "  void takesUnknown({ initialized: check() });",
       "  void takesAny([check()]);",
       "  void takesUnknown(check());",
       "  void generic(check());",
       "  void generic([check()]);",
+      "  void generic({ initialized: check() });",
+      "  void sinkWithThis(check());",
+      "  void assertUser(check());",
       "  void identity(check());",
       "  `${check()}`;",
       "}",
@@ -212,19 +217,27 @@ describe("server floating-promises lint block", () => {
 });
 
 describe("no-promise-in-untyped-position rule", () => {
-  it("reports all four invalid cases with the rule id", () => {
+  it("reports every invalid line of the probe, with the rule id", () => {
     const r = resultFor(probes.typed_invalid.rel);
     const msgs = myRuleMessages(r);
-    assert.ok(
-      msgs.length >= 7,
-      `expected >= 7 reports, got ${msgs.length}: ${JSON.stringify(messagesOf(r))}`,
-    );
-    for (const m of msgs) {
-      assert.equal(
-        m.ruleId,
-        MY_RULE,
-        `expected ruleId ${MY_RULE}; got ${m.ruleId}`,
+    // One report per statement inside go(): each such line is one invalid
+    // shape, so a shape that stops being caught names itself here.
+    const lines = probes.typed_invalid.code.split("\n");
+    const expected = lines
+      .map((text, index) => ({ text, line: index + 1 }))
+      .filter(
+        ({ text }) => text.startsWith("  void ") || text.startsWith("  `"),
       );
+    assert.ok(expected.length >= 10, `probe has ${expected.length} cases`);
+    const reported = new Set(msgs.map((m) => m.line));
+    for (const { text, line } of expected) {
+      assert.ok(
+        reported.has(line),
+        `no report for line ${line}: ${text.trim()} (got ${JSON.stringify(messagesOf(r))})`,
+      );
+    }
+    for (const m of msgs) {
+      assert.equal(m.ruleId, MY_RULE);
     }
   });
 

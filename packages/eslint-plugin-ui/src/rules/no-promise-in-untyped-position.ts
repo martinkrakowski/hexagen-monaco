@@ -32,22 +32,18 @@ function isUntypedContext(contextualType: ts.Type | undefined): boolean {
 }
 
 /**
- * True when the call's callee is a test helper whose parameters are `unknown`:
- * `expect(...)` or `assert*(...)` / `assert.equal(...)` etc.
+ * True when the call's callee is a test assertion whose parameters are
+ * `unknown`: `expect(...)`, `assert(...)`, or a member of either
+ * (`assert.equal(...)`, `expect.soft(...)`). Only those two names: an
+ * application function called `assertUser(value: unknown)` is an ordinary sink
+ * and is checked like any other.
  */
 function isTestHelper(callee: TSESTree.Expression): boolean {
-  if (callee.type === "Identifier") {
-    return callee.name === "expect" || callee.name.startsWith("assert");
-  }
+  const isAssertion = (name: string) => name === "expect" || name === "assert";
+  if (callee.type === "Identifier") return isAssertion(callee.name);
   if (callee.type === "MemberExpression") {
     const obj = callee.object;
-    if (obj.type === "Identifier") {
-      return (
-        obj.name === "expect" ||
-        obj.name === "assert" ||
-        obj.name.startsWith("assert")
-      );
-    }
+    return obj.type === "Identifier" && isAssertion(obj.name);
   }
   return false;
 }
@@ -120,7 +116,11 @@ const rule: TSESLint.RuleModule<MessageIds> = {
       const signature = checker.getResolvedSignature(call);
       const declaration = signature?.getDeclaration();
       if (!declaration) return false;
-      const param = declaration.parameters[argIndex];
+      // A declared `this` parameter is not an argument position.
+      const params = declaration.parameters.filter(
+        (p) => !(ts.isIdentifier(p.name) && p.name.text === "this"),
+      );
+      const param = params[argIndex];
       if (!param || !param.type || param.dotDotDotToken) return false;
       const declared = checker.getTypeFromTypeNode(param.type);
       if (!declared.isTypeParameter()) return false;
