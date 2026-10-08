@@ -11,7 +11,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { delimiter, dirname, join, resolve } from "node:path";
 
 /**
  * F8: `init` and `doctor` bound to the current directory.
@@ -67,8 +67,28 @@ function repository(overlay: readonly string[]): { root: string; sub: string } {
   return { root, sub };
 }
 
-const run = (name: string, cwd: string) =>
-  spawnSync(process.execPath, [bin(name)], { cwd, encoding: "utf8" });
+const run = (name: string, cwd: string, env?: NodeJS.ProcessEnv) =>
+  spawnSync(process.execPath, [bin(name)], { cwd, encoding: "utf8", env });
+
+/**
+ * A PATH on which the tools the doctor looks for (`gh`, `yarn`) always exist,
+ * as stubs in a directory of the test's own, ahead of the host's PATH. A test
+ * that asserts on "is not on PATH" must not pass or fail by what the host
+ * happens to have installed.
+ */
+function pathWithDoctorTools(): NodeJS.ProcessEnv {
+  const stubs = mkdtempSync(join(tmpdir(), "orchestration-stubs-"));
+  dirs.push(stubs);
+  for (const tool of ["gh", "yarn"]) {
+    writeFileSync(join(stubs, tool), "#!/bin/sh\nexit 0\n");
+    chmodSync(join(stubs, tool), 0o755);
+  }
+  return {
+    ...process.env,
+    // eslint-disable-next-line turbo/no-undeclared-env-vars -- PATH is this test's own way of putting its stubs ahead of the host's tools; it is not a build input.
+    PATH: `${stubs}${delimiter}${process.env.PATH ?? ""}`,
+  };
+}
 
 beforeAll(() => {
   expect(existsSync(bin("doctor")), "run `yarn build` first").toBe(true);
@@ -137,13 +157,34 @@ describe("F8: the bins find the repository root from a subdirectory", () => {
         "",
       ].join("\n"),
     );
-    const result = run("doctor", sub);
+    // With the doctor's own tools stubbed onto PATH, the only thing left that
+    // can be "not on PATH" is the dispatch command this test is about.
+    const env = pathWithDoctorTools();
+    const result = run("doctor", sub, env);
     const out = `${result.stdout}${result.stderr}`;
     expect(out, "doctor did not walk the host `here`").toContain(
       "WARN  [lane-host here]",
     );
     expect(out, "dispatch[0] was resolved from the subdirectory").not.toContain(
       "is not on PATH",
+    );
+
+    // And the assertion can fail: the same run with a dispatch command that
+    // exists nowhere says so, by name.
+    writeFileSync(
+      join(root, ".agents/orchestration/config.yaml"),
+      [
+        "repo: acme/demo",
+        "laneHosts:",
+        "  - name: here",
+        "    dispatch: [./scripts/absent]",
+        "    gate: full",
+        "",
+      ].join("\n"),
+    );
+    const broken = run("doctor", sub, env);
+    expect(`${broken.stdout}${broken.stderr}`).toContain(
+      "dispatch[0] (./scripts/absent) is not on PATH",
     );
   });
 
