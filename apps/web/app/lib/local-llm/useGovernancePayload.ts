@@ -81,10 +81,13 @@ export function useGovernancePayload(): UseGovernancePayloadReturn {
 
   // Run once on mount
   useEffect(() => {
-    fetchGovernance();
+    // fire-and-forget: fetchGovernance catches its own fetch errors
+    void fetchGovernance();
   }, [fetchGovernance]);
 
-  const retry = useCallback(() => fetchGovernance(true), [fetchGovernance]);
+  const retry = useCallback(() => {
+    void fetchGovernance(true);
+  }, [fetchGovernance]);
 
   return { governancePayload, editorStateRef, error, retry };
 }

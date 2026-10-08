@@ -1,6 +1,10 @@
 import next from "@next/eslint-plugin-next";
 import tseslint from "typescript-eslint";
 import hexagenUi from "@hexagen/eslint-plugin-ui";
+import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 /** @type {import('eslint').Linter.Config} */
 export default [
@@ -616,6 +620,31 @@ export default [
     },
     rules: {
       "hexagen-ui/population-guard": "warn",
+    },
+  },
+  {
+    // B1L: the stores in lib/platform are migrating from sync to async. A call
+    // like store.markInitialised(id) that drops its promise is a logic bug and,
+    // in an ownership guard, a security bug, so catch it with type-aware
+    // rules. Server-side code only: not .tsx, not tests.
+    files: [
+      "lib/**/*.ts",
+      "app/api/**/*.ts",
+      "app/lib/**/*.ts",
+      "middleware.ts",
+      "instrumentation.ts",
+    ],
+    ignores: ["**/*.test.ts", "**/*.test.tsx", "**/__tests__/**"],
+    languageOptions: {
+      parserOptions: {
+        projectService: true,
+        tsconfigRootDir: __dirname,
+      },
+    },
+    rules: {
+      "@typescript-eslint/no-floating-promises": "error",
+      "@typescript-eslint/no-misused-promises": "error",
+      "@typescript-eslint/await-thenable": "error",
     },
   },
 ];
