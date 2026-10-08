@@ -554,6 +554,15 @@ describe("owner-documents store", () => {
       await createSavedProjectsStore(platformDb, "owner-2").createProjectRecord(
         project("proj-other"),
       );
+      // Positive control: its own tenant can attach a document to it, so the
+      // refusals below are about the tenant and not about the project id.
+      const own = await otherStore.put({
+        kind: "workspace",
+        id: "doc-own",
+        payload: {},
+        projectId: "proj-other",
+      });
+      assert.equal(own.success, true);
 
       // projectId that names no project in this tenant: UnknownProject.
       const missing = await store.put({
@@ -577,8 +586,8 @@ describe("owner-documents store", () => {
       if (!foreign.success) assert.equal(foreign.error.kind, "UnknownProject");
       assert.equal(docCount(db, "owner-1", "user-1"), 0);
 
-      // Sanity: the project under owner-2 is untouched.
-      assert.equal(docCount(db, "owner-2", "user-2"), 0);
+      // The other tenant holds its one control document and nothing else.
+      assert.equal(docCount(db, "owner-2", "user-2"), 1);
     } finally {
       db.close();
     }
