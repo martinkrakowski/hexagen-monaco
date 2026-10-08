@@ -21,6 +21,17 @@ export const ORG_MUTATION_GUARD = {
   keyPrefix: "orgs",
 } as const;
 
+/**
+ * Per-person documents are lighter than projects but still chatty in live
+ * sessions. Isolated namespace so a burst of document writes cannot starve or
+ * be starved by the project-write budget.
+ */
+export const DOCUMENT_MUTATION_GUARD = {
+  maxRequests: 240,
+  windowMs: 60_000,
+  keyPrefix: "documents",
+} as const;
+
 export type OwnerResolution =
   | { ok: true; ownerId: string }
   | { ok: false; response: NextResponse };

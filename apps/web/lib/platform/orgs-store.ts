@@ -1,5 +1,9 @@
 import type { PlatformDb, PlatformDbSession } from "./db";
 import { appendAudit, type AuditEntry } from "./audit-log-store";
+import {
+  deleteDocumentsOfMember,
+  deleteDocumentsOfOwner,
+} from "./owner-documents-store";
 import { ORG_INVITE_TTL_MS } from "./platform-db";
 
 /**
@@ -499,7 +503,8 @@ export function createOrgsRepository(db: PlatformDb): OrgsRepository {
       // Gate on affected rows: an audit row for a removal that hit nothing
       // records an event that did not happen, and a reader cannot tell it from
       // a real removal.
-      if (removed.changes > 0)
+      if (removed.changes > 0) {
+        await deleteDocumentsOfMember(tx, orgId, userId);
         await audited(tx, audit, {
           action: "org.member.remove",
           subjectOwnerId: orgId,
@@ -507,6 +512,7 @@ export function createOrgsRepository(db: PlatformDb): OrgsRepository {
           granteeType: "user",
           granteeId: userId,
         });
+      }
     });
 
   const inviteTx = (
@@ -661,6 +667,9 @@ export function createOrgsRepository(db: PlatformDb): OrgsRepository {
       // Gate on affected rows (P-A2's rule): an org.delete row for an org that
       // did not exist would be a record of an event that never happened.
       if (removed.changes > 0) {
+        // Only for an org that existed: an id that is not an org (a user id,
+        // for one) deletes no document of anybody's.
+        await deleteDocumentsOfOwner(tx, orgId);
         await appendAudit(tx, {
           actorId,
           action: "org.delete",

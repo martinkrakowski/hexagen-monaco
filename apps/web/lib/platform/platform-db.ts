@@ -257,6 +257,29 @@ export function openPlatformDb(dbPath: string): Database.Database {
       initialized INTEGER NOT NULL
     );
 
+    -- Column types follow SQLite here; the Postgres schema chooses its own.
+    CREATE TABLE IF NOT EXISTS owner_documents (
+      owner_id   TEXT NOT NULL,
+      user_id    TEXT NOT NULL,
+      kind       TEXT NOT NULL,
+      id         TEXT NOT NULL,
+      project_id TEXT,
+      rev        INTEGER NOT NULL,
+      payload    TEXT NOT NULL,
+      updated_at INTEGER NOT NULL,
+      updated_by TEXT,
+      PRIMARY KEY (owner_id, user_id, kind, id),
+      -- A document may belong to no project (NULL). When it does, the project
+      -- must exist in the same tenant, and deleting the project deletes the
+      -- document. The Postgres schema carries the same constraint. Any future
+      -- rebuild of saved_projects must run under PRAGMA foreign_keys = OFF, or
+      -- its DROP TABLE cascades into this table.
+      FOREIGN KEY (owner_id, project_id)
+        REFERENCES saved_projects (owner_id, id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_owner_documents_project
+      ON owner_documents (owner_id, project_id);
+
     CREATE TABLE IF NOT EXISTS entitlements (
       user_id TEXT PRIMARY KEY,
       plan TEXT NOT NULL,

@@ -1,10 +1,13 @@
 import { describe, it } from "vitest";
 import assert from "node:assert/strict";
+import Database from "better-sqlite3";
 import type { SavedProject } from "@hexagen/shared";
 import { createPlatformStore } from "../store";
 import { openPlatformDb } from "../platform-db";
 import { createSqlitePlatformDb } from "../sqlite-db";
 import { createSavedProjectsStore } from "../saved-projects-store";
+import { createOwnerDocumentsStore } from "../owner-documents-store";
+import { createOrgsRepository } from "../orgs-store";
 
 function project(id: string, name = id): SavedProject {
   return {
@@ -206,5 +209,220 @@ describe("sqlite SavedProjectsPersistencePort", () => {
     const loser = twice.find((r) => !r.success);
     assert.equal(loser && !loser.success && loser.error.kind, "Conflict");
     db.close();
+  });
+});
+
+function countDocs(
+  db: Database.Database,
+  ownerId: string,
+  projectId: string | null = null,
+): number {
+  if (projectId === null) {
+    return (
+      db
+        .prepare(
+          "SELECT COUNT(*) AS n FROM owner_documents WHERE owner_id = ? AND project_id IS NULL",
+        )
+        .get(ownerId) as { n: number }
+    ).n;
+  }
+  return (
+    db
+      .prepare(
+        "SELECT COUNT(*) AS n FROM owner_documents WHERE owner_id = ? AND project_id = ?",
+      )
+      .get(ownerId, projectId) as { n: number }
+  ).n;
+}
+
+describe("saved_projects delete — owner_documents cascade", () => {
+  it("deleting a project deletes every author's documents attached to it, and no document of another project or with no project", async () => {
+    const db = openPlatformDb(":memory:");
+    const platformDb = createSqlitePlatformDb(db);
+    const orgs = createOrgsRepository(platformDb);
+    await orgs.createOrg({
+      id: "owner-1",
+      slug: "test",
+      name: "Test",
+      createdBy: "user-a",
+    });
+    await orgs.addMember("owner-1", "user-a", "member");
+    await orgs.addMember("owner-1", "user-b", "member");
+    const projects = createSavedProjectsStore(platformDb, "owner-1");
+    const docsA = createOwnerDocumentsStore(platformDb, "owner-1", "user-a");
+    const docsB = createOwnerDocumentsStore(platformDb, "owner-1", "user-b");
+    try {
+      const p1: SavedProject = {
+        id: "proj-1",
+        name: "p1",
+        createdAt: 1,
+        updatedAt: 1,
+        formState: {},
+        manifestYaml: "",
+      } as unknown as SavedProject;
+      const p2: SavedProject = {
+        id: "proj-2",
+        name: "p2",
+        createdAt: 1,
+        updatedAt: 1,
+        formState: {},
+        manifestYaml: "",
+      } as unknown as SavedProject;
+      await projects.createProjectRecord(p1);
+      await projects.createProjectRecord(p2);
+
+      // Documents attached to proj-1, by two different authors.
+      await docsA.put({
+        kind: "workspace",
+        id: "da-1",
+        payload: {},
+        projectId: "proj-1",
+      });
+      await docsB.put({
+        kind: "workspace",
+        id: "db-1",
+        payload: {},
+        projectId: "proj-1",
+      });
+      // A document attached to proj-2 — must survive.
+      await docsA.put({
+        kind: "workspace",
+        id: "da-2",
+        payload: {},
+        projectId: "proj-2",
+      });
+      // A detached document — must survive.
+      await docsA.put({ kind: "workspace", id: "detached", payload: {} });
+
+      assert.equal(
+        countDocs(db, "owner-1", "proj-1"),
+        2,
+        "setup: 2 docs on proj-1",
+      );
+
+      const deleted = await projects.deleteProjectRecord("proj-1");
+      assert.equal(deleted.success, true);
+
+      assert.equal(
+        countDocs(db, "owner-1", "proj-1"),
+        0,
+        "docs on proj-1 must be gone",
+      );
+      assert.equal(
+        countDocs(db, "owner-1", "proj-2"),
+        1,
+        "docs on proj-2 must survive",
+      );
+      assert.equal(
+        countDocs(db, "owner-1", null),
+        1,
+        "detached docs must survive",
+      );
+    } finally {
+      db.close();
+    }
+  });
+
+  it("replacing the project list deletes the documents of the projects that were dropped and keeps the survivors'", async () => {
+    const db = openPlatformDb(":memory:");
+    const platformDb = createSqlitePlatformDb(db);
+    const projects = createSavedProjectsStore(platformDb, "user-a");
+    const docs = createOwnerDocumentsStore(platformDb, "user-a", "user-a");
+    try {
+      const p1: SavedProject = {
+        id: "keep-1",
+        name: "keep-1",
+        createdAt: 1,
+        updatedAt: 1,
+        formState: {},
+        manifestYaml: "",
+      } as unknown as SavedProject;
+      const p2: SavedProject = {
+        id: "drop-2",
+        name: "drop-2",
+        createdAt: 1,
+        updatedAt: 1,
+        formState: {},
+        manifestYaml: "",
+      } as unknown as SavedProject;
+      const p3: SavedProject = {
+        id: "drop-3",
+        name: "drop-3",
+        createdAt: 1,
+        updatedAt: 1,
+        formState: {},
+        manifestYaml: "",
+      } as unknown as SavedProject;
+      await projects.createProjectRecord(p1);
+      await projects.createProjectRecord(p2);
+      await projects.createProjectRecord(p3);
+
+      await docs.put({
+        kind: "workspace",
+        id: "d1",
+        payload: {},
+        projectId: "keep-1",
+      });
+      await docs.put({
+        kind: "workspace",
+        id: "d2",
+        payload: {},
+        projectId: "drop-2",
+      });
+      await docs.put({
+        kind: "workspace",
+        id: "d3",
+        payload: {},
+        projectId: "drop-3",
+      });
+      await docs.put({ kind: "workspace", id: "detached", payload: {} });
+
+      // Replace with only keep-1: drop-2 and drop-3 are removed.
+      const replaced = await projects.saveProjects([p1]);
+      assert.equal(replaced.success, true);
+
+      assert.equal(
+        countDocs(db, "user-a", "keep-1"),
+        1,
+        "survivor docs must remain",
+      );
+      assert.equal(
+        countDocs(db, "user-a", "drop-2"),
+        0,
+        "dropped project docs must be gone",
+      );
+      assert.equal(
+        countDocs(db, "user-a", "drop-3"),
+        0,
+        "dropped project docs must be gone",
+      );
+      assert.equal(
+        countDocs(db, "user-a", null),
+        1,
+        "detached docs must survive",
+      );
+
+      // Replace with an empty list: all attached docs go, detached doc remains.
+      const emptied = await projects.saveProjects([]);
+      assert.equal(emptied.success, true);
+
+      assert.equal(
+        countDocs(db, "user-a", "keep-1"),
+        0,
+        "survivor docs gone after empty replace",
+      );
+      assert.equal(
+        countDocs(db, "user-a", "drop-2"),
+        0,
+        "dropped docs gone after empty replace",
+      );
+      assert.equal(
+        countDocs(db, "user-a", null),
+        1,
+        "detached docs survive an empty replace — they are not 'documents of a project'",
+      );
+    } finally {
+      db.close();
+    }
   });
 });

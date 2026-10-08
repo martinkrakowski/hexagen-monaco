@@ -40,8 +40,9 @@ async function assertPromisesSettle(
 const EXPECTED_REJECTIONS_1: readonly string[] = [];
 const EXPECTED_REJECTIONS_2: readonly string[] = [];
 const EXPECTED_REJECTIONS_3: readonly string[] = [];
+const EXPECTED_REJECTIONS_4: readonly string[] = [];
 
-describe("async contract — 60 store methods return Promises", () => {
+describe("async contract — 64 store methods return Promises", () => {
   const store = createPlatformStore(":memory:");
   const OWNER = "user-owner";
 
@@ -496,6 +497,29 @@ describe("async contract — 60 store methods return Promises", () => {
     ];
 
     await assertPromisesSettle(cases, EXPECTED_REJECTIONS_3);
+  });
+
+  it("each OwnerDocumentsStore method returns a Promise", async () => {
+    const documents = store.documentsFor("doc-user", "doc-user");
+
+    const cases: { name: string; result: unknown }[] = [
+      { name: "list", result: documents.list() },
+      { name: "get", result: documents.get("workspace", "missing") },
+      {
+        name: "put",
+        result: documents.put({
+          kind: "workspace",
+          id: "doc-1",
+          payload: {},
+        }),
+      },
+      {
+        name: "delete",
+        result: documents.delete("workspace", "doc-1"),
+      },
+    ];
+
+    await assertPromisesSettle(cases, EXPECTED_REJECTIONS_4);
   });
 
   it("close returns a Promise", async () => {
