@@ -1,4 +1,4 @@
-import { get, set, del } from "idb-keyval";
+import { createStore, del, get, promisifyRequest, set } from "idb-keyval";
 import type { Result } from "@hexagen/shared";
 import type { ChatPersistencePort } from "../../domain/ports/index.js";
 import type { ChatMessage } from "../../domain/value-objects/index.js";
@@ -10,8 +10,7 @@ const WIZARD_DRAFT_PREFIX = "hexagen:wizard-draft:";
 const WORKSPACE_PREFIX = "hexagen:workspace:";
 const GENERATION_PREFIX = "hexagen:generation:";
 
-const IDB_DATABASE_NAME = "keyval-store";
-const IDB_STORE_NAME = "keyval";
+const keyvalStore = createStore("keyval-store", "keyval");
 
 export class IDBChatPersistenceAdapter implements ChatPersistencePort {
   async loadChatHistory(): Promise<Result<ChatMessage[]>> {
@@ -107,40 +106,31 @@ export class IDBChatPersistenceAdapter implements ChatPersistencePort {
   }
 }
 
-function openKeyvalStore(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open(IDB_DATABASE_NAME);
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
+/**
+ * Purge every key belonging to `projectId` in ONE read-write transaction.
+ *
+ * `keys()` + `delMany()` would be two transactions (a thread saved between a
+ * listing and the delete survives the purge), so the deletes are issued
+ * directly on a single `store("readwrite", …)` opened via `createStore`. The
+ * trailing `-` on the governance/generation range bounds is what stops `P`
+ * from matching a sibling `P2-…`. (ADR-0029: the deletes are all-or-nothing.)
+ */
+async function purgeProjectDataAtomic(projectId: string): Promise<void> {
+  return keyvalStore("readwrite", (objectStore) => {
+    objectStore.delete(`${WIZARD_DRAFT_PREFIX}${projectId}`);
+    objectStore.delete(`${WORKSPACE_PREFIX}${projectId}`);
+    objectStore.delete(
+      IDBKeyRange.bound(
+        `${GOVERNANCE_PREFIX}${projectId}-`,
+        `${GOVERNANCE_PREFIX}${projectId}-\uffff`,
+      ),
+    );
+    objectStore.delete(
+      IDBKeyRange.bound(
+        `${GENERATION_PREFIX}${projectId}-`,
+        `${GENERATION_PREFIX}${projectId}-\uffff`,
+      ),
+    );
+    return promisifyRequest(objectStore.transaction);
   });
-}
-
-function purgeProjectDataAtomic(projectId: string): Promise<void> {
-  return openKeyvalStore().then(
-    (db) =>
-      new Promise<void>((resolve, reject) => {
-        const tx = db.transaction(IDB_STORE_NAME, "readwrite");
-        const store = tx.objectStore(IDB_STORE_NAME);
-
-        store.delete(`${WIZARD_DRAFT_PREFIX}${projectId}`);
-        store.delete(`${WORKSPACE_PREFIX}${projectId}`);
-
-        const govLower = `${GOVERNANCE_PREFIX}${projectId}-`;
-        const govUpper = `${GOVERNANCE_PREFIX}${projectId}-\uffff`;
-        store.delete(IDBKeyRange.bound(govLower, govUpper));
-
-        const genLower = `${GENERATION_PREFIX}${projectId}-`;
-        const genUpper = `${GENERATION_PREFIX}${projectId}-\uffff`;
-        store.delete(IDBKeyRange.bound(genLower, genUpper));
-
-        tx.oncomplete = () => {
-          db.close();
-          resolve();
-        };
-        tx.onerror = () => {
-          db.close();
-          reject(tx.error);
-        };
-      }),
-  );
 }

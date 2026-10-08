@@ -36,6 +36,8 @@ export interface GovernanceAssistantPanelProps {
   suggestions: AISuggestion[];
   onRefresh: () => void;
   isLoading: boolean;
+  /** Active project id (null when working on an unsaved project). */
+  projectId?: string | null;
 }
 
 export type PanelView = "main" | "model-settings";

@@ -24,6 +24,7 @@ export const GovernancePanelWrapper = React.memo(
   }: GovernancePanelWrapperProps) {
     const wizardData = useWizardData();
     const { activeWorkspace } = useActiveWorkspace();
+    const projectId = activeWorkspace?.projectId ?? null;
     const {
       data,
       isLoading: isGovernanceLoading,
@@ -54,6 +55,7 @@ export const GovernancePanelWrapper = React.memo(
               <GovernanceAssistantPanel
                 wizardData={wizardData}
                 currentStepIndex={currentStepIndex}
+                projectId={projectId}
                 violations={data.violations}
                 suggestions={data.suggestions}
                 onRefresh={handleRefresh}

@@ -51,6 +51,7 @@ export function GovernanceAssistantPanel({
   currentStepIndex,
   violations,
   suggestions,
+  projectId = null,
 }: GovernanceAssistantPanelProps) {
   // `onRefresh` and `isLoading` are deliberately not destructured: nothing in
   // this panel reads them. They were threaded through `ModeWrapper` and
@@ -75,7 +76,11 @@ export function GovernanceAssistantPanel({
     regeneratingEntryId,
     regenerateAnswer,
     threadLoaded,
-  } = useGovernanceAssistant(wizardData as WizardData, currentStepIndex);
+  } = useGovernanceAssistant(
+    wizardData as WizardData,
+    currentStepIndex,
+    projectId,
+  );
 
   const { messages } = useLocalLLMStreaming();
 
