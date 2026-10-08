@@ -1,4 +1,4 @@
-import { del, delMany, get, keys, set } from "idb-keyval";
+import { createStore, del, get, promisifyRequest, set } from "idb-keyval";
 import type { Result } from "@hexagen/shared";
 import type { ChatPersistencePort } from "../../domain/ports/index.js";
 import type { ChatMessage } from "../../domain/value-objects/index.js";
@@ -9,6 +9,8 @@ const GOVERNANCE_PREFIX = "hexagen:governance:";
 const WIZARD_DRAFT_PREFIX = "hexagen:wizard-draft:";
 const WORKSPACE_PREFIX = "hexagen:workspace:";
 const GENERATION_PREFIX = "hexagen:generation:";
+
+const keyvalStore = createStore("keyval-store", "keyval");
 
 export class IDBChatPersistenceAdapter implements ChatPersistencePort {
   async loadChatHistory(): Promise<Result<ChatMessage[]>> {
@@ -105,29 +107,30 @@ export class IDBChatPersistenceAdapter implements ChatPersistencePort {
 }
 
 /**
- * Purge every key belonging to `projectId` in one transaction.
+ * Purge every key belonging to `projectId` in ONE read-write transaction.
  *
- * Built on idb-keyval's `keys()` + a single `delMany(...)` so the whole
- * delete set commits atomically (ADR-0029: the deletes are all-or-nothing,
- * not a sequence of independent `del` calls). The trailing `-` on the
- * governance/generation range prefixes is what stops `P` from matching a
- * sibling `P2-...`.
+ * `keys()` + `delMany()` would be two transactions (a thread saved between a
+ * listing and the delete survives the purge), so the deletes are issued
+ * directly on a single `store("readwrite", …)` opened via `createStore`. The
+ * trailing `-` on the governance/generation range bounds is what stops `P`
+ * from matching a sibling `P2-…`. (ADR-0029: the deletes are all-or-nothing.)
  */
 async function purgeProjectDataAtomic(projectId: string): Promise<void> {
-  const allKeys = await keys();
-  const toDelete: string[] = [];
-  for (const key of allKeys) {
-    if (typeof key !== "string") continue;
-    if (
-      key === `${WIZARD_DRAFT_PREFIX}${projectId}` ||
-      key === `${WORKSPACE_PREFIX}${projectId}` ||
-      key.startsWith(`${GOVERNANCE_PREFIX}${projectId}-`) ||
-      key.startsWith(`${GENERATION_PREFIX}${projectId}-`)
-    ) {
-      toDelete.push(key);
-    }
-  }
-  if (toDelete.length > 0) {
-    await delMany(toDelete);
-  }
+  return keyvalStore("readwrite", (objectStore) => {
+    objectStore.delete(`${WIZARD_DRAFT_PREFIX}${projectId}`);
+    objectStore.delete(`${WORKSPACE_PREFIX}${projectId}`);
+    objectStore.delete(
+      IDBKeyRange.bound(
+        `${GOVERNANCE_PREFIX}${projectId}-`,
+        `${GOVERNANCE_PREFIX}${projectId}-\uffff`,
+      ),
+    );
+    objectStore.delete(
+      IDBKeyRange.bound(
+        `${GENERATION_PREFIX}${projectId}-`,
+        `${GENERATION_PREFIX}${projectId}-\uffff`,
+      ),
+    );
+    return promisifyRequest(objectStore.transaction);
+  });
 }

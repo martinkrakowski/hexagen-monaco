@@ -23,8 +23,13 @@ export interface GovernanceKeys {
   stepQuestions: PrebakedQuestion[];
   /** Scoped storage key (`projectId`-prefixed); what the store + IDB use. */
   contextKey: string | null;
-  /** Bare key, only used to adopt a thread written before this change. */
-  legacyContextKey: string | null;
+  /**
+   * Bare keys to try, in priority order, when the scoped thread is empty —
+   * i.e. threads written before scoping. The unsaved session's thread comes
+   * first, then the bare pre-change key. Empty for the `unsaved` scope itself,
+   * which never adopts (see useGovernanceThread).
+   */
+  adoptionSources: string[];
 }
 
 export function useGovernanceKeys({
@@ -54,10 +59,10 @@ export function useGovernanceKeys({
     return scopeGovernanceKey(projectId, bareContextKey);
   }, [bareContextKey, projectId]);
 
-  const legacyContextKey = useMemo<string | null>(() => {
-    if (projectId === null || bareContextKey === null) return null;
-    return bareContextKey;
+  const adoptionSources = useMemo<string[]>(() => {
+    if (projectId === null || bareContextKey === null) return [];
+    return [scopeGovernanceKey(null, bareContextKey), bareContextKey];
   }, [projectId, bareContextKey]);
 
-  return { currentStepId, stepQuestions, contextKey, legacyContextKey };
+  return { currentStepId, stepQuestions, contextKey, adoptionSources };
 }

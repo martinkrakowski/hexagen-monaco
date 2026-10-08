@@ -29,4 +29,13 @@ describe("scopeGovernanceKey", () => {
     expect(saved).not.toMatch(/^unsaved-/);
     expect(unsaved).not.toMatch(/^projA-/);
   });
+
+  it("joins the project id and context key with exactly one '-' (the purge separator)", () => {
+    // The purge deletes the range `hexagen:governance:<projectId>-...` — the
+    // single '-' between the id and the key is what makes that range, and what
+    // stops `P` matching a sibling `P2-...`.
+    expect(scopeGovernanceKey("P", "q")).toBe("P-q");
+    expect(scopeGovernanceKey("P", "q")).toMatch(/^P-/);
+    expect(scopeGovernanceKey("P2", "q")).not.toMatch(/^P-/);
+  });
 });

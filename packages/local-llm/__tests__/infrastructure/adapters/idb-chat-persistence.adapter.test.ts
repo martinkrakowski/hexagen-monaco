@@ -1,12 +1,16 @@
-import { describe, it, vi, beforeEach } from "vitest";
+import { describe, it, vi, beforeEach, afterEach } from "vitest";
 import assert from "node:assert/strict";
 
-// In-memory idb-keyval, mirroring apps/web's idb-saved-projects.adapter.test.ts
-// pattern. `idb` is hoisted so the (hoisted) vi.mock factory and the test bodies
-// share one store + one delMany call log.
+// In-memory idb-keyval + a fake object store, so purgeProjectData can be
+// exercised without a real IndexedDB. `idb` is hoisted so the (hoisted)
+// vi.mock factory and the test bodies share one store + one call log.
 const idb = vi.hoisted(() => ({
   store: new Map<string, unknown>(),
-  delManyCalls: [] as Array<string[]>,
+  keys: vi.fn(),
+  delMany: vi.fn(),
+  deleteCalls: [] as unknown[],
+  storeCallLog: { count: 0, mode: null as string | null },
+  boundCalls: [] as Array<{ lower: string; upper: string }>,
 }));
 
 vi.mock("idb-keyval", () => ({
@@ -17,11 +21,29 @@ vi.mock("idb-keyval", () => ({
   del: vi.fn(async (key: string) => {
     idb.store.delete(key);
   }),
-  keys: vi.fn(async () => Array.from(idb.store.keys())),
-  delMany: vi.fn(async (keysToDelete: string[]) => {
-    idb.delManyCalls.push([...keysToDelete]);
-    keysToDelete.forEach((k) => idb.store.delete(k));
-  }),
+  keys: idb.keys,
+  delMany: idb.delMany,
+  createStore: vi.fn(
+    () =>
+      (
+        txMode: string,
+        callback: (os: {
+          delete: (k: unknown) => void;
+          transaction: unknown;
+        }) => unknown,
+      ) => {
+        idb.storeCallLog.count++;
+        idb.storeCallLog.mode = txMode;
+        const objectStore = {
+          delete: (key: unknown) => {
+            idb.deleteCalls.push(key);
+          },
+          transaction: {},
+        };
+        return Promise.resolve(callback(objectStore));
+      },
+  ),
+  promisifyRequest: vi.fn(async (request: unknown) => request),
 }));
 
 import { IDBChatPersistenceAdapter } from "../../../src/infrastructure/adapters/idb-chat-persistence.adapter.js";
@@ -31,12 +53,10 @@ const GOVERNANCE_PREFIX = "hexagen:governance:";
 const WIZARD_DRAFT_PREFIX = "hexagen:wizard-draft:";
 const WORKSPACE_PREFIX = "hexagen:workspace:";
 const GENERATION_PREFIX = "hexagen:generation:";
-const CHAT_HISTORY_KEY = "hexagen:chat-history";
 
 describe("IDBChatPersistenceAdapter — governance key prefix", () => {
   beforeEach(() => {
     idb.store.clear();
-    idb.delManyCalls.length = 0;
   });
 
   it("load/save/clear all address hexagen:governance:<contextKey>", async () => {
@@ -52,9 +72,10 @@ describe("IDBChatPersistenceAdapter — governance key prefix", () => {
 
     const saved = await adapter.saveGovernanceThread(contextKey, entries);
     assert.strictEqual(saved.success, true);
-
-    const raw = idb.store.get(`${GOVERNANCE_PREFIX}${contextKey}`);
-    assert.deepStrictEqual(raw, entries);
+    assert.deepStrictEqual(
+      idb.store.get(`${GOVERNANCE_PREFIX}${contextKey}`),
+      entries,
+    );
 
     const loaded = await adapter.loadGovernanceThread(contextKey);
     assert.strictEqual(loaded.success, true);
@@ -69,156 +90,96 @@ describe("IDBChatPersistenceAdapter — governance key prefix", () => {
   });
 });
 
-describe("IDBChatPersistenceAdapter.purgeProjectData", () => {
+describe("IDBChatPersistenceAdapter.purgeProjectData — one transaction", () => {
   const P = "projX";
+
+  let originalIDBKeyRange: typeof globalThis.IDBKeyRange;
 
   beforeEach(() => {
     idb.store.clear();
-    idb.delManyCalls.length = 0;
+    idb.deleteCalls.length = 0;
+    idb.storeCallLog.count = 0;
+    idb.storeCallLog.mode = null;
+    idb.boundCalls.length = 0;
+    idb.keys.mockClear();
+    idb.delMany.mockClear();
+    // Stub IDBKeyRange.bound so purge uses it but we can inspect the bounds.
+    originalIDBKeyRange = globalThis.IDBKeyRange;
+    globalThis.IDBKeyRange = {
+      bound: (lower: string, upper: string) => {
+        const range = { lower, upper };
+        idb.boundCalls.push(range);
+        return range;
+      },
+    } as unknown as typeof IDBKeyRange;
   });
 
-  /** Seed storage with P's keys, sibling keys, a bare old-style key, and chat. */
-  function seedStorage() {
-    // P — four key shapes (plus a second governance key to prove the range).
-    idb.store.set(`${WIZARD_DRAFT_PREFIX}${P}`, { draft: 1 });
-    idb.store.set(`${WORKSPACE_PREFIX}${P}`, { ws: 1 });
-    idb.store.set(`${GOVERNANCE_PREFIX}${P}-step:foo:q:bar`, [
-      { id: "e1", questionLabel: "q", answer: "a" },
-    ]);
-    idb.store.set(`${GOVERNANCE_PREFIX}${P}-violation:v-1:q:follow`, [
-      { id: "e2", questionLabel: "q2", answer: "a2" },
-    ]);
-    idb.store.set(`${GENERATION_PREFIX}${P}-gen-1`, { result: true });
+  afterEach(() => {
+    globalThis.IDBKeyRange = originalIDBKeyRange;
+  });
 
-    // Sibling project P2 (a project whose id is a prefix-extension of P).
-    idb.store.set(`${WIZARD_DRAFT_PREFIX}${P}2`, { draft: 2 });
-    idb.store.set(`${WORKSPACE_PREFIX}${P}2`, { ws: 2 });
-    idb.store.set(`${GOVERNANCE_PREFIX}${P}2-step:foo:q:bar`, [
-      { id: "sib", questionLabel: "q", answer: "a" },
-    ]);
-    idb.store.set(`${GENERATION_PREFIX}${P}2-gen-1`, { result: true });
-
-    // An unrelated project.
-    idb.store.set(`${GOVERNANCE_PREFIX}projY-step:bar:q:1`, [
-      { id: "u", questionLabel: "q", answer: "a" },
-    ]);
-
-    // The bare, old-style governance key (no project) — must survive.
-    idb.store.set(`${GOVERNANCE_PREFIX}step:foo:q:bar`, [
-      { id: "legacy", questionLabel: "q", answer: "a" },
-    ]);
-
-    // The chat-history key — must survive (not in scope for this lane).
-    idb.store.set(CHAT_HISTORY_KEY, []);
-  }
-
-  it("deletes all four key shapes belonging to P", async () => {
-    seedStorage();
+  it("opens exactly one readwrite store() call", async () => {
     const adapter = new IDBChatPersistenceAdapter();
+    await adapter.purgeProjectData(P);
 
-    const result = await adapter.purgeProjectData(P);
-    assert.strictEqual(result.success, true);
+    assert.strictEqual(idb.storeCallLog.count, 1, "exactly one store() call");
+    assert.strictEqual(idb.storeCallLog.mode, "readwrite");
+  });
 
-    assert.strictEqual(
-      idb.store.has(`${WIZARD_DRAFT_PREFIX}${P}`),
-      false,
-      "wizard draft for P removed",
-    );
-    assert.strictEqual(
-      idb.store.has(`${WORKSPACE_PREFIX}${P}`),
-      false,
-      "workspace for P removed",
-    );
-    for (const key of idb.store.keys()) {
-      assert.ok(
-        !(
-          key.startsWith(`${GOVERNANCE_PREFIX}${P}-`) ||
-          key.startsWith(`${GENERATION_PREFIX}${P}-`)
-        ),
-        `unexpected P key left behind: ${key}`,
+  it("deletes the two exact keys and the two range bounds, each with the - after the id", async () => {
+    const adapter = new IDBChatPersistenceAdapter();
+    await adapter.purgeProjectData(P);
+
+    const deletes = idb.deleteCalls;
+    assert.strictEqual(deletes.length, 4, "two exact keys + two ranges");
+
+    const exact = deletes.filter((d) => typeof d === "string");
+    // Two exact keys: wizard-draft and workspace.
+    assert.ok(exact.includes(`${WIZARD_DRAFT_PREFIX}${P}`));
+    assert.ok(exact.includes(`${WORKSPACE_PREFIX}${P}`));
+
+    const ranges = deletes.filter((d) => typeof d === "object");
+    assert.strictEqual(ranges.length, 2);
+
+    const lowers = (ranges as Array<{ lower: string }>)
+      .map((r) => r.lower)
+      .sort();
+    assert.deepStrictEqual(lowers, [
+      `${GENERATION_PREFIX}${P}-`,
+      `${GOVERNANCE_PREFIX}${P}-`,
+    ]);
+
+    const uppers = (ranges as Array<{ upper: string }>)
+      .map((r) => r.upper)
+      .sort();
+    assert.deepStrictEqual(uppers, [
+      `${GENERATION_PREFIX}${P}-\uffff`,
+      `${GOVERNANCE_PREFIX}${P}-\uffff`,
+    ]);
+  });
+
+  it("a sibling id that merely starts with P is outside both range bounds", async () => {
+    const adapter = new IDBChatPersistenceAdapter();
+    await adapter.purgeProjectData(P);
+
+    assert.ok(idb.boundCalls.length >= 2, "both ranges were constructed");
+    const sibling = `${GOVERNANCE_PREFIX}${P}2-step:foo:q:bar`;
+    for (const { lower, upper } of idb.boundCalls) {
+      // [lower, upper] is "...P-" .. "...P-\uffff". A "...P2-..." key sorts
+      // above upper, so it is excluded — the trailing - protects it.
+      assert.equal(
+        sibling > lower && sibling <= upper,
+        false,
+        `${sibling} must not fall within [${lower}, ${upper}]`,
       );
     }
   });
 
-  it("leaves P2, a bare old-style governance key and chat-history untouched", async () => {
-    seedStorage();
+  it("never calls keys() or delMany()", async () => {
     const adapter = new IDBChatPersistenceAdapter();
     await adapter.purgeProjectData(P);
 
-    // Sibling project P2 survives — the `-` after P must not match P2.
-    assert.strictEqual(idb.store.has(`${WIZARD_DRAFT_PREFIX}${P}2`), true);
-    assert.strictEqual(idb.store.has(`${WORKSPACE_PREFIX}${P}2`), true);
-    assert.deepStrictEqual(
-      idb.store.get(`${GOVERNANCE_PREFIX}${P}2-step:foo:q:bar`),
-      [{ id: "sib", questionLabel: "q", answer: "a" }],
-    );
-    assert.strictEqual(idb.store.has(`${GENERATION_PREFIX}${P}2-gen-1`), true);
-
-    // Unrelated project survives.
-    assert.strictEqual(
-      idb.store.has(`${GOVERNANCE_PREFIX}projY-step:bar:q:1`),
-      true,
-    );
-
-    // Bare old-style governance key survives (no project attribution).
-    assert.strictEqual(
-      idb.store.has(`${GOVERNANCE_PREFIX}step:foo:q:bar`),
-      true,
-      "bare pre-change governance key survives",
-    );
-
-    // Chat history survives — out of scope for this lane.
-    assert.strictEqual(idb.store.has(CHAT_HISTORY_KEY), true);
-  });
-
-  it("makes exactly one delMany call containing exactly P's keys", async () => {
-    seedStorage();
-    const adapter = new IDBChatPersistenceAdapter();
-    await adapter.purgeProjectData(P);
-
-    assert.strictEqual(idb.delManyCalls.length, 1, "exactly one delMany call");
-    const deleted = idb.delManyCalls[0];
-
-    // Every deleted key belongs to P (one of the four shapes).
-    for (const key of deleted) {
-      assert.ok(
-        key === `${WIZARD_DRAFT_PREFIX}${P}` ||
-          key === `${WORKSPACE_PREFIX}${P}` ||
-          key.startsWith(`${GOVERNANCE_PREFIX}${P}-`) ||
-          key.startsWith(`${GENERATION_PREFIX}${P}-`),
-        `delMany deleted a key that is not P's: ${key}`,
-      );
-    }
-
-    // No P2 / sibling / bare / chat-history key was passed to delMany.
-    assert.equal(
-      deleted.find((k) => k.includes(`${P}2`) || k.includes("projY")),
-      undefined,
-    );
-    assert.equal(
-      deleted.find((k) => k === `${GOVERNANCE_PREFIX}step:foo:q:bar`),
-      undefined,
-    );
-    assert.equal(
-      deleted.find((k) => k === CHAT_HISTORY_KEY),
-      undefined,
-    );
-
-    // Counts match: 1 wizard + 1 workspace + 2 governance + 1 generation.
-    assert.strictEqual(deleted.length, 5);
-  });
-
-  it("is a no-op (no delMany) when the project has no keys", async () => {
-    idb.store.set(CHAT_HISTORY_KEY, []);
-    idb.store.set(`${GOVERNANCE_PREFIX}step:foo:q:bar`, []);
-    const adapter = new IDBChatPersistenceAdapter();
-    await adapter.purgeProjectData(P);
-
-    assert.strictEqual(
-      idb.delManyCalls.length,
-      0,
-      "no delMany when nothing to delete",
-    );
-    assert.strictEqual(idb.store.size, 2, "only the unrelated keys remain");
+    assert.strictEqual(idb.keys.mock.calls.length, 0, "no listing step");
+    assert.strictEqual(idb.delMany.mock.calls.length, 0);
   });
 });

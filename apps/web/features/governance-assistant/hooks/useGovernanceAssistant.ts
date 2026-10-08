@@ -61,7 +61,7 @@ export function useGovernanceAssistant(
 
   const wizardContext = serializeWizardContext(wizardData);
 
-  const { currentStepId, stepQuestions, contextKey, legacyContextKey } =
+  const { currentStepId, stepQuestions, contextKey, adoptionSources } =
     useGovernanceKeys({
       currentStepIndex,
       activeItem,
@@ -71,7 +71,7 @@ export function useGovernanceAssistant(
 
   const thread = useGovernanceThread({
     contextKey,
-    legacyContextKey,
+    adoptionSources,
     messages,
     isStreaming,
   });
