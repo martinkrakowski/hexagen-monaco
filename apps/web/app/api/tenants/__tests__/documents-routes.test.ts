@@ -733,6 +733,37 @@ describe("document routes", () => {
     assert.equal(listBody.documents.length, 0);
   });
 
+  it("a body sent in chunks with no Content-Length is cut off at the limit and writes nothing", async () => {
+    signedInAs(OWNER);
+    const chunk = new TextEncoder().encode("x".repeat(1024 * 1024));
+    let sent = 0;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        sent += 1;
+        // Far more than the limit if nothing stops the read.
+        if (sent > 64) controller.close();
+        else controller.enqueue(chunk);
+      },
+    });
+    const request = new NextRequest(detailUrl(OWNER, KIND, "doc-stream"), {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body,
+      // Node's fetch requires this for a streamed request body.
+      duplex: "half",
+    } as ConstructorParameters<typeof NextRequest>[1]);
+    const response = await DETAIL_PUT(
+      request,
+      detailParams(OWNER, KIND, "doc-stream"),
+    );
+    assert.equal(response.status, 413);
+    assert.ok(sent < 20, `the read stopped early (pulled ${sent} chunks)`);
+    const got = await getPlatformStore()
+      .documentsFor(OWNER, OWNER)
+      .get(KIND, "doc-stream");
+    assert.equal(got.success && got.value, null);
+  });
+
   it("a cross-origin PUT is refused", async () => {
     signedInAs(OWNER);
     const res = await DETAIL_PUT(

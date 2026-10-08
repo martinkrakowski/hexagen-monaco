@@ -87,6 +87,36 @@ function malformedIfMatch(): { ok: false; response: NextResponse } {
 /** The payload cap plus room for the envelope around it. */
 const DOCUMENT_BODY_LIMIT = DOCUMENT_MAX_PAYLOAD_LENGTH + 1024;
 
+/**
+ * The same limit in bytes. A UTF-16 code unit is at most three UTF-8 bytes, so
+ * no body within the character limit is longer than this.
+ */
+const DOCUMENT_BODY_BYTE_LIMIT = DOCUMENT_BODY_LIMIT * 3;
+
+/**
+ * Reads the body as text, giving up as soon as it has seen more bytes than any
+ * allowed body can have. A body sent without a Content-Length (chunked) is
+ * therefore never held in memory beyond the limit. Returns null when it gave up.
+ */
+async function readBodyBounded(request: NextRequest): Promise<string | null> {
+  const reader = request.body?.getReader();
+  if (!reader) return "";
+  const decoder = new TextDecoder();
+  let seen = 0;
+  let text = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    seen += value.byteLength;
+    if (seen > DOCUMENT_BODY_BYTE_LIMIT) {
+      await reader.cancel();
+      return null;
+    }
+    text += decoder.decode(value, { stream: true });
+  }
+  return text + decoder.decode();
+}
+
 function payloadTooLarge(): NextResponse {
   return NextResponse.json(
     {
@@ -307,11 +337,11 @@ export async function handleDocumentPut(
   // the cap also bounds memory; then read once and check the real length,
   // which is what covers a body sent without a Content-Length.
   const declared = Number(request.headers.get("content-length") ?? 0);
-  if (Number.isFinite(declared) && declared > DOCUMENT_BODY_LIMIT) {
+  if (Number.isFinite(declared) && declared > DOCUMENT_BODY_BYTE_LIMIT) {
     return payloadTooLarge();
   }
-  const rawBody = await request.text();
-  if (rawBody.length > DOCUMENT_BODY_LIMIT) {
+  const rawBody = await readBodyBounded(request);
+  if (rawBody === null || rawBody.length > DOCUMENT_BODY_LIMIT) {
     return payloadTooLarge();
   }
 
