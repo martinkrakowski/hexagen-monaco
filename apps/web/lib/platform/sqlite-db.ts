@@ -38,11 +38,20 @@ type PreparedStmt = {
  *     no BEGIN is issued, so a later COMMIT/ROLLBACK cannot silently undo it.
  */
 export function createSqlitePlatformDb(handle: Database.Database): PlatformDb {
-  // Bounded: three stores build SQL whose text depends on how many ids are
-  // bound (an IN list), so the set of distinct texts is not fixed. The oldest
-  // entry goes first; a Map iterates in insertion order.
   const CACHE_LIMIT = 256;
   const cache = new Map<string, PreparedStmt>();
+
+  // Register the hx_* SQL functions exactly once per handle. Constructing the
+  // seam twice on the same handle must not throw, so guard on a property.
+  if (!(handle as unknown as { __hxRegistered?: boolean }).__hxRegistered) {
+    const opts = { deterministic: true } as const;
+    handle.function("hx_ts", opts, (x: number) => x);
+    handle.function("hx_ms", opts, (x: number) => x);
+    handle.function("hx_day", opts, (ms: number | null): string | null =>
+      ms === null ? null : new Date(ms).toISOString().slice(0, 10),
+    );
+    (handle as unknown as { __hxRegistered: boolean }).__hxRegistered = true;
+  }
   const prepare = (sql: string): PreparedStmt => {
     let stmt = cache.get(sql);
     if (!stmt) {
@@ -177,5 +186,11 @@ export function createSqlitePlatformDb(handle: Database.Database): PlatformDb {
         code === "SQLITE_CONSTRAINT_PRIMARYKEY"
       );
     },
+    isForeignKeyViolation: (error: unknown): boolean => {
+      if (error === null || typeof error !== "object") return false;
+      const code = (error as { code?: unknown }).code;
+      return code === "SQLITE_CONSTRAINT_FOREIGNKEY";
+    },
+    dialect: "sqlite" as const,
   };
 }
