@@ -22,6 +22,8 @@ import { hasServerLLMAccessKey } from "../../../app/lib/wire";
 
 import { ModeWrapper } from "./view/ModeWrapper";
 import { GovernanceQaView } from "./view/GovernanceQaView";
+import { StoredHistoryNotice } from "./view/StoredHistoryNotice";
+import { useStoredChatHistoryOffer } from "@/lib/local-llm/useStoredChatHistoryOffer";
 import { selectLocalLifecycle, lifecycleOwnsThePanel } from "./lifecycle";
 import type {
   GovernanceAssistantPanelProps,
@@ -100,6 +102,7 @@ export function GovernanceAssistantPanel({
   const [followUpQuestions, setFollowUpQuestions] = useState<
     PrebakedQuestion[]
   >([]);
+  const localLLMOffer = useStoredChatHistoryOffer();
   const [mode, setMode] = useState<LLMMode>("local");
   const autoNavigatedToSettings = useRef(false);
 
@@ -307,30 +310,42 @@ export function GovernanceAssistantPanel({
   }
 
   return (
-    <GovernanceQaView
-      currentStepIndex={currentStepIndex}
-      violations={violations}
-      suggestions={suggestions}
-      activeItem={activeItem}
-      onSelectViolation={(v) => selectItem({ type: "violation", item: v })}
-      onSelectSuggestion={(s) => selectItem({ type: "suggestion", item: s })}
-      displayQuestions={displayQuestions}
-      isStreaming={isStreaming}
-      isExpanded={(id) => expandedQuestionId === id}
-      onQuestionClick={handleQuestionClick}
-      conversationThread={conversationThread}
-      lastAssistantMessage={lastAssistantMessage}
-      regeneratingEntryId={regeneratingEntryId}
-      onRegenerate={regenerateAnswer}
-      followUpQuestions={followUpQuestions}
-      onFollowUpClick={handleFollowUpClick}
-      threadLoaded={threadLoaded}
-      footerModelId={llmEngineState.loadedModelId}
-      footerModelLabel={
-        serverAssistantAvailable ? capabilities.chatModelName : undefined
-      }
-      footerIsLoading={engineBusy}
-      onOpenSettings={handleOpenSettings}
-    />
+    <div>
+      {localLLMOffer && (
+        <div className="p-3">
+          <StoredHistoryNotice
+            count={localLLMOffer.count}
+            error={localLLMOffer.error}
+            onDownload={() => void localLLMOffer.download()}
+            onDiscard={() => void localLLMOffer.discard()}
+          />
+        </div>
+      )}
+      <GovernanceQaView
+        currentStepIndex={currentStepIndex}
+        violations={violations}
+        suggestions={suggestions}
+        activeItem={activeItem}
+        onSelectViolation={(v) => selectItem({ type: "violation", item: v })}
+        onSelectSuggestion={(s) => selectItem({ type: "suggestion", item: s })}
+        displayQuestions={displayQuestions}
+        isStreaming={isStreaming}
+        isExpanded={(id) => expandedQuestionId === id}
+        onQuestionClick={handleQuestionClick}
+        conversationThread={conversationThread}
+        lastAssistantMessage={lastAssistantMessage}
+        regeneratingEntryId={regeneratingEntryId}
+        onRegenerate={regenerateAnswer}
+        followUpQuestions={followUpQuestions}
+        onFollowUpClick={handleFollowUpClick}
+        threadLoaded={threadLoaded}
+        footerModelId={llmEngineState.loadedModelId}
+        footerModelLabel={
+          serverAssistantAvailable ? capabilities.chatModelName : undefined
+        }
+        footerIsLoading={engineBusy}
+        onOpenSettings={handleOpenSettings}
+      />
+    </div>
   );
 }
