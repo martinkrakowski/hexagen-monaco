@@ -12,9 +12,7 @@ import {
   DEFAULT_TUNING_CONFIG,
   FreeFormStringSchema,
 } from "@hexagen/local-llm";
-import type { Result } from "@hexagen/shared";
-
-import { getChatPersistence, hasServerLLMAccessKey } from "@/lib/wire";
+import { hasServerLLMAccessKey } from "@/lib/wire";
 import {
   buildGroundedSystemPrompt,
   chunkEditorBuffer,
@@ -59,7 +57,6 @@ export function useChatMessages({
 }: UseChatMessagesOptions): UseChatMessagesReturn {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
-  const [isHistoryLoaded, setIsHistoryLoaded] = useState(false);
 
   const messagesRef = useRef<ChatMessage[]>([]);
   const isStreamingRef = useRef(false);
@@ -68,30 +65,6 @@ export function useChatMessages({
   useEffect(() => {
     messagesRef.current = messages;
   }, [messages]);
-
-  useEffect(() => {
-    if (isHistoryLoaded) return;
-    const port = getChatPersistence();
-    port
-      .loadChatHistory()
-      .then((result: Result<ChatMessage[]>) => {
-        if (result.success && result.value.length > 0) {
-          setMessages(result.value);
-        }
-        setIsHistoryLoaded(true);
-      })
-      .catch(() => {
-        setIsHistoryLoaded(true);
-      });
-  }, [isHistoryLoaded]);
-
-  useEffect(() => {
-    if (!isHistoryLoaded || isStreaming || messages.length === 0) return;
-    const port = getChatPersistence();
-    port.saveChatHistory(messages).catch(() => {
-      // Silently handle chat history save failures to avoid blocking user interaction
-    });
-  }, [isHistoryLoaded, isStreaming, messages]);
 
   const appendUserAndPlaceholder = useCallback((content: string): string => {
     const now = Date.now();
