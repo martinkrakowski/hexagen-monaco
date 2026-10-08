@@ -60,6 +60,7 @@ import {
   SavedProjectsV3MigrationStep,
   SavedProjectsV4MigrationStep,
   EditorWorkspaceMigrationStep,
+  RemoveUnusedSecretKeysStep,
 } from "@hexagen/web-driver";
 import { IDBWizardDraftAdapter } from "./adapters/idb-wizard-draft.adapter";
 import { IDBSavedProjectsAdapter } from "./adapters/idb-saved-projects.adapter";
@@ -254,6 +255,7 @@ export const wireDependencies = () => {
     new SavedProjectsV3MigrationStep(savedProjectsAdapter),
     new SavedProjectsV4MigrationStep(savedProjectsAdapter),
     new EditorWorkspaceMigrationStep(editorWorkspaceAdapter, domainRegistry),
+    new RemoveUnusedSecretKeysStep(),
   ]);
   void migrationOrchestrator
     .runPending()

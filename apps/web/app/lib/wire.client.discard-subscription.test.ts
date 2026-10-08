@@ -13,18 +13,39 @@
  * event on the real event bus and asserts the registered adapters are not
  * touched as a side effect of wiring.
  */
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { PROJECT_DISCARDED_EVENT } from "@hexagen/monaco-orchestration";
 import {
   getEventBus,
   getChatPersistence,
   getGenerationResultPersistence,
+  getMigrationReady,
 } from "./wire.client";
 import { useGovernanceThreadStore } from "../../features/governance-assistant/stores/useGovernanceThreadStore";
 
 describe("wire.client — ProjectDiscarded is not subscribed at the composition root", () => {
   afterEach(() => {
     useGovernanceThreadStore.getState().clearAllThreads();
+  });
+
+  // The start-up steps run once, when wire.client is first imported, and their
+  // record lives in localStorage, which other tests and teardowns may clear.
+  // Read it once here, before any test in this file runs, so the assertion
+  // below does not depend on the order of the tests.
+  let completedStepsAtStart: string[] = [];
+  beforeAll(async () => {
+    await getMigrationReady();
+    const raw = localStorage.getItem("hexagen:migration:status");
+    completedStepsAtStart = raw
+      ? (JSON.parse(raw) as { completedSteps: string[] }).completedSteps
+      : [];
+  });
+
+  it("registers a remove-unused-secret-keys migration step at the composition root", () => {
+    // If the step were dropped from wire.client.ts, the clean-up of the two
+    // removed secret stores' keys would silently stop; nothing else observes
+    // the step list.
+    expect(completedStepsAtStart).toContain("remove-unused-secret-keys");
   });
 
   it("publishing ProjectDiscarded purges nothing and clears no thread", () => {

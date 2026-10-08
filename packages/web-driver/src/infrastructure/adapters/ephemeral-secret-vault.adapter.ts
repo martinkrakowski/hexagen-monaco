@@ -18,7 +18,8 @@ import type { UserSecretVaultPort } from "../../application/ports/user-secret-va
  * - Cleared by garbage collection when this adapter instance is disposed
  *
  * This adapter is suitable for ephemeral trust models but does not persist
- * across sessions. For session persistence, use EncryptedSessionVaultAdapter.
+ * across sessions. There is no persisting vault; the key lives in memory for
+ * the session.
  */
 export class EphemeralSecretVaultAdapter implements UserSecretVaultPort {
   private inMemoryKey: string | null = null;
@@ -48,7 +49,7 @@ export class EphemeralSecretVaultAdapter implements UserSecretVaultPort {
     }
 
     // For ephemeral adapter, persist flag is ignored; always store in memory only
-    // The persist flag would be respected by EncryptedSessionVaultAdapter
+    // There is no persisting vault; the key lives in memory for the session.
     // (persistOrPassword is either a boolean persist flag or legacy password string)
     this.inMemoryKey = apiKey;
 

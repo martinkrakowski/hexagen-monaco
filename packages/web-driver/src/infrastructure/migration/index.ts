@@ -9,3 +9,4 @@ export { SavedProjectsMigrationStep } from "./saved-projects-migration-step.js";
 export { SavedProjectsV3MigrationStep } from "./saved-projects-v3-migration-step.js";
 export { SavedProjectsV4MigrationStep } from "./saved-projects-v4-migration-step.js";
 export { EditorWorkspaceMigrationStep } from "./editor-workspace-migration-step.js";
+export { RemoveUnusedSecretKeysStep } from "./remove-unused-secret-keys-step.js";
