@@ -304,6 +304,11 @@ export function createProjectSharesRepository(
   ): Promise<void> =>
     db.transaction(async (tx) => {
       // "The project exists" and "the grant is written" are decided together.
+      // This read-then-write RELIES ON THE SEAM'S ISOLATION: it is correct
+      // only because nothing can delete the project between the read and the
+      // write (one connection today; SERIALIZABLE with retry on Postgres). On
+      // a weaker isolation it needs a lock on the project row
+      // (`SELECT … FOR KEY SHARE`).
       // A route that checked existence first and granted afterwards left a
       // window: a delete landing in between revoked nothing (there was no
       // grant yet) and the grant then went live on a project that was gone,

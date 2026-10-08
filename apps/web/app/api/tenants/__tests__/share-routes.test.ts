@@ -538,6 +538,10 @@ describe("P-A4 — share and revoke", () => {
       grantedBy: OWNER,
     };
 
+    // On this one-connection seam the two transactions run in the order they
+    // were started, so each half below has one outcome. On a pooled backend
+    // either side may commit first; the claim that holds everywhere is the
+    // count of live grants.
     // Deletion first: the grant's transaction runs second and finds no project.
     const [, late] = await Promise.allSettled([
       store.projectsFor(OWNER).deleteProjectRecord(PROJECT),
@@ -559,6 +563,48 @@ describe("P-A4 — share and revoke", () => {
     assert.equal(early.status, "fulfilled");
     assert.equal(deleted.status, "fulfilled");
     assert.equal(liveGrantCount(PROJECT), 0);
+  });
+
+  it("a project created under an id that still carries a live grant starts with no grants", async () => {
+    const store = getPlatformStore();
+    const ghost = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
+    // Planted with the fixture form of grant, which does not check the
+    // project: the state a request can no longer produce.
+    await store.shares.grant({
+      ownerId: OWNER,
+      projectId: ghost,
+      granteeType: "user",
+      granteeId: GRANTEE,
+      role: "write",
+      grantedBy: OWNER,
+    });
+    assert.equal(liveGrantCount(ghost), 1, "the leftover grant is there");
+
+    const created = await store
+      .projectsFor(OWNER)
+      .createProjectRecord(sample(ghost));
+    assert.equal(created.success, true);
+    assert.equal(liveGrantCount(ghost), 0, "create revoked it");
+
+    // The same through the whole-list save.
+    const other = "abababab-abab-4bab-8bab-abababababab";
+    await store.shares.grant({
+      ownerId: OWNER,
+      projectId: other,
+      granteeType: "user",
+      granteeId: GRANTEE,
+      role: "read",
+      grantedBy: OWNER,
+    });
+    const saved = await store
+      .projectsFor(OWNER)
+      .saveProjects([sample(PROJECT), sample(ghost), sample(other)]);
+    assert.equal(saved.success, true);
+    assert.equal(
+      liveGrantCount(other),
+      0,
+      "a new id in the list has no grants",
+    );
   });
 
   it("a failing audit insert rolls back the grant", async () => {
