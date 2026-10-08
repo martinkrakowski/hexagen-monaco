@@ -94,13 +94,13 @@ function rawInsert(
 }
 
 describe("scan records store", () => {
-  it("round-trips a record and keeps owners isolated", () => {
+  it("round-trips a record and keeps owners isolated", async () => {
     const { store, other } = harness();
-    const written = store.record(base);
+    const written = await store.record(base);
     expect(written.success).toBe(true);
     if (!written.success) return;
 
-    const listed = store.list();
+    const listed = await store.list();
     expect(listed.success).toBe(true);
     if (!listed.success) return;
     expect(listed.value.length).toBe(1);
@@ -114,23 +114,23 @@ describe("scan records store", () => {
     expect(record?.findingsSample.length).toBe(1);
     expect(record?.artifact).toBe(null);
 
-    const foreign = other.list();
+    const foreign = await other.list();
     expect(foreign.success).toBe(true);
     if (foreign.success) expect(foreign.value.length).toBe(0);
   });
 
-  it("returns NotFound rather than throwing for a missing id", () => {
+  it("returns NotFound rather than throwing for a missing id", async () => {
     const { store } = harness();
-    const found = store.get("nope");
+    const found = await store.get("nope");
     expect(found.success).toBe(false);
     if (!found.success) expect(found.error.kind).toBe("NotFound");
   });
 
-  it("filters by repoRef", () => {
+  it("filters by repoRef", async () => {
     const { store } = harness();
-    store.record(base);
-    store.record({ ...base, repoRef: "acme/other", now: NOW + 1 });
-    const filtered = store.list({ repoRef: "acme/other" });
+    await store.record(base);
+    await store.record({ ...base, repoRef: "acme/other", now: NOW + 1 });
+    const filtered = await store.list({ repoRef: "acme/other" });
     expect(filtered.success).toBe(true);
     if (filtered.success) {
       expect(filtered.value.length).toBe(1);
@@ -140,9 +140,9 @@ describe("scan records store", () => {
 });
 
 describe("scan records store — bulk containment", () => {
-  it("clips oversized text to the shared scan limits", () => {
+  it("clips oversized text to the shared scan limits", async () => {
     const { store } = harness();
-    const written = store.record({
+    const written = await store.record({
       ...base,
       reportMarkdown: "r".repeat(MAX_SCAN_REPORT_CHARS + 500),
       layoutExcerpt: "l".repeat(MAX_SCAN_LAYOUT_EXCERPT_CHARS + 500),
@@ -161,14 +161,14 @@ describe("scan records store — bulk containment", () => {
     );
   });
 
-  it("caps the inline findings sample but preserves the real total", () => {
+  it("caps the inline findings sample but preserves the real total", async () => {
     const { store } = harness();
     const sample = Array.from({ length: 400 }, (_, i) => ({
       rule: "x".repeat(1000),
       file: `f${i}.ts`,
       specifier: "s",
     }));
-    const written = store.record({
+    const written = await store.record({
       ...base,
       findingsSample: sample,
       findingsTotal: 400,
@@ -181,9 +181,9 @@ describe("scan records store — bulk containment", () => {
     expect(record.findingsSample[0]?.rule.length).toBe(300);
   });
 
-  it("never lets the stated total undercount the stored sample", () => {
+  it("never lets the stated total undercount the stored sample", async () => {
     const { store } = harness();
-    const written = store.record({
+    const written = await store.record({
       ...base,
       findingsSample: [
         { rule: "a", file: "a.ts", specifier: "s" },
@@ -197,10 +197,10 @@ describe("scan records store — bulk containment", () => {
 });
 
 describe("scan records store — artifact paths", () => {
-  it("stores a path derived by scanArtifactPath with its size", () => {
+  it("stores a path derived by scanArtifactPath with its size", async () => {
     const { store } = harness();
     const path = scanArtifactPath(ARTIFACTS_ROOT, "owner-a", "scan-1");
-    const written = store.record({
+    const written = await store.record({
       ...base,
       artifact: { path, bytes: 2048 },
     });
@@ -210,10 +210,10 @@ describe("scan records store — artifact paths", () => {
     expect(written.value.record.artifact?.bytes).toBe(2048);
   });
 
-  it("rejects an artifact path outside the artifacts root", () => {
+  it("rejects an artifact path outside the artifacts root", async () => {
     const { store } = harness();
     const escape = join(ARTIFACTS_ROOT, "..", "..", "etc", "passwd");
-    const written = store.record({
+    const written = await store.record({
       ...base,
       artifact: { path: escape, bytes: 10 },
     });
@@ -223,15 +223,18 @@ describe("scan records store — artifact paths", () => {
         /outside this owner's artifacts directory/,
       );
     }
-    const listed = store.list();
+    const listed = await store.list();
     if (listed.success) expect(listed.value.length).toBe(0);
   });
 
-  it("rejects an out-of-range artifact size", () => {
+  it("rejects an out-of-range artifact size", async () => {
     const { store } = harness();
     const path = scanArtifactPath(ARTIFACTS_ROOT, "owner-a", "scan-2");
     for (const bytes of [-1, Number.NaN, 1024 ** 4]) {
-      const written = store.record({ ...base, artifact: { path, bytes } });
+      const written = await store.record({
+        ...base,
+        artifact: { path, bytes },
+      });
       expect(written.success).toBe(false);
       if (!written.success) {
         expect(written.error.message).toMatch(/size is out of range/);
@@ -257,7 +260,7 @@ describe("scan records store — artifact paths", () => {
     }
   });
 
-  it("refuses another owner's artifact path", () => {
+  it("refuses another owner's artifact path", async () => {
     // The containment check used to compare against the SHARED root, so owner
     // A could record a path naming owner B's artifact. record() hands
     // evictedArtifactPaths back for the caller to unlink, so retention would
@@ -266,7 +269,7 @@ describe("scan records store — artifact paths", () => {
     const { db, store } = harness("attacker");
     const victimPath = scanArtifactPath(ARTIFACTS_ROOT, "victim", "s1");
 
-    const outcome = store.record({
+    const outcome = await store.record({
       ...base,
       artifact: { path: victimPath, bytes: 10 },
     });
@@ -311,91 +314,93 @@ describe("scan records store — artifact paths", () => {
 });
 
 describe("scan records store — untrusted enum + name input", () => {
-  it("rejects an unknown tier or verdict instead of coercing it", () => {
+  it("rejects an unknown tier or verdict instead of coercing it", async () => {
     const { store } = harness();
-    const badTier = store.record({
+    const badTier = await store.record({
       ...base,
       tier: "Z" as unknown as "A",
     });
     expect(badTier.success).toBe(false);
-    const badVerdict = store.record({
+    const badVerdict = await store.record({
       ...base,
       verdict: "green" as unknown as "pass",
     });
     expect(badVerdict.success).toBe(false);
   });
 
-  it("rejects an empty or oversized project name", () => {
+  it("rejects an empty or oversized project name", async () => {
     const { store } = harness();
-    expect(store.record({ ...base, projectName: "   " }).success).toBe(false);
+    expect((await store.record({ ...base, projectName: "   " })).success).toBe(
+      false,
+    );
     expect(
-      store.record({ ...base, projectName: "n".repeat(500) }).success,
+      (await store.record({ ...base, projectName: "n".repeat(500) })).success,
     ).toBe(false);
   });
 });
 
 describe("scan records store — versioning is discard, not migrate", () => {
-  it("hides a row written under a different schema_version", () => {
+  it("hides a row written under a different schema_version", async () => {
     const { db, store } = harness();
     rawInsert(db, { id: "future", schema_version: 99 });
     rawInsert(db, { id: "current" });
 
-    const listed = store.list();
+    const listed = await store.list();
     expect(listed.success).toBe(true);
     if (listed.success) {
       expect(listed.value.map((r) => r.id)).toEqual(["current"]);
     }
-    const found = store.get("future");
+    const found = await store.get("future");
     expect(found.success).toBe(false);
     if (!found.success) expect(found.error.kind).toBe("NotFound");
   });
 
-  it("does not delete a foreign-version row on read (rollback safety)", () => {
+  it("does not delete a foreign-version row on read (rollback safety)", async () => {
     const { db, store } = harness();
     rawInsert(db, { id: "future", schema_version: 99 });
-    store.list();
-    store.get("future");
+    await store.list();
+    await store.get("future");
     const remaining = db
       .prepare("SELECT COUNT(*) AS n FROM scan_records")
       .get() as { n: number };
     expect(remaining.n).toBe(1);
   });
 
-  it("drops a row whose findings blob no longer parses, rather than reading it as empty", () => {
+  it("drops a row whose findings blob no longer parses, rather than reading it as empty", async () => {
     const { db, store } = harness();
     rawInsert(db, { id: "corrupt", findings_sample: "{not json" });
     rawInsert(db, { id: "shaped-wrong", findings_sample: '{"entries":42}' });
     rawInsert(db, { id: "ok" });
 
-    const listed = store.list();
+    const listed = await store.list();
     expect(listed.success).toBe(true);
     if (listed.success) expect(listed.value.map((r) => r.id)).toEqual(["ok"]);
   });
 
-  it("reports an unreadable row by id as DeserializationFailed, not NotFound", () => {
+  it("reports an unreadable row by id as DeserializationFailed, not NotFound", async () => {
     const { db, store } = harness();
     rawInsert(db, { id: "corrupt", findings_sample: "{not json" });
-    const found = store.get("corrupt");
+    const found = await store.get("corrupt");
     expect(found.success).toBe(false);
     if (!found.success) expect(found.error.kind).toBe("DeserializationFailed");
   });
 
-  it("drops a row whose stored enum is no longer recognised", () => {
+  it("drops a row whose stored enum is no longer recognised", async () => {
     const { db, store } = harness();
     rawInsert(db, { id: "alien", verdict: "maybe" });
-    const listed = store.list();
+    const listed = await store.list();
     if (listed.success) expect(listed.value.length).toBe(0);
   });
 });
 
 describe("scan records store — retention", () => {
-  it("evicts the oldest rows past the per-owner cap and names their artifacts", () => {
+  it("evicts the oldest rows past the per-owner cap and names their artifacts", async () => {
     const { store } = harness();
     const total = MAX_SCAN_RECORDS_PER_OWNER + 2;
     const evicted: string[] = [];
     for (let i = 0; i < total; i += 1) {
       const id = `scan-${String(i).padStart(4, "0")}`;
-      const written = store.record({
+      const written = await store.record({
         ...base,
         id,
         artifact: {
@@ -408,7 +413,7 @@ describe("scan records store — retention", () => {
       if (written.success) evicted.push(...written.value.evictedArtifactPaths);
     }
 
-    const listed = store.list({ limit: MAX_SCAN_RECORDS_PER_OWNER });
+    const listed = await store.list({ limit: MAX_SCAN_RECORDS_PER_OWNER });
     expect(listed.success).toBe(true);
     if (listed.success) {
       expect(listed.value.length).toBe(MAX_SCAN_RECORDS_PER_OWNER);
@@ -417,10 +422,10 @@ describe("scan records store — retention", () => {
     expect(evicted[0]).toBe(
       scanArtifactPath(ARTIFACTS_ROOT, "owner-a", "scan-0000"),
     );
-    expect(store.get("scan-0000").success).toBe(false);
+    expect((await store.get("scan-0000")).success).toBe(false);
   });
 
-  it("reclaims foreign-version rows too, so a version bump cannot leak storage", () => {
+  it("reclaims foreign-version rows too, so a version bump cannot leak storage", async () => {
     const { db, store } = harness();
     for (let i = 0; i < MAX_SCAN_RECORDS_PER_OWNER; i += 1) {
       rawInsert(db, {
@@ -429,7 +434,7 @@ describe("scan records store — retention", () => {
         created_at: i,
       });
     }
-    const written = store.record({ ...base, id: "new", now: 9_000_000 });
+    const written = await store.record({ ...base, id: "new", now: 9_000_000 });
     expect(written.success).toBe(true);
     const remaining = db
       .prepare("SELECT COUNT(*) AS n FROM scan_records")
@@ -439,31 +444,31 @@ describe("scan records store — retention", () => {
 });
 
 describe("scan records store — trend", () => {
-  it("returns the newest window oldest-first", () => {
+  it("returns the newest window oldest-first", async () => {
     const { store } = harness();
     for (let i = 0; i < 5; i += 1) {
-      store.record({
+      await store.record({
         ...base,
         id: `t-${i}`,
         findings: { fresh: i, baselined: 0, stale: 0, expired: 0 },
         now: NOW + i,
       });
     }
-    const trend = store.trend({ limit: 3 });
+    const trend = await store.trend({ limit: 3 });
     expect(trend.success).toBe(true);
     if (!trend.success) return;
     expect(trend.value.map((p) => p.id)).toEqual(["t-2", "t-3", "t-4"]);
     expect(trend.value.map((p) => p.fresh)).toEqual([2, 3, 4]);
   });
 
-  it("survives a corrupt findings blob because it never reads one", () => {
+  it("survives a corrupt findings blob because it never reads one", async () => {
     const { db, store } = harness();
     rawInsert(db, {
       id: "corrupt",
       findings_sample: "{not json",
       created_at: 1,
     });
-    const trend = store.trend();
+    const trend = await store.trend();
     expect(trend.success).toBe(true);
     if (trend.success)
       expect(trend.value.map((p) => p.id)).toEqual(["corrupt"]);

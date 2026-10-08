@@ -238,19 +238,19 @@ describe("classifyFinding", () => {
 });
 
 describe("repair telemetry store", () => {
-  it("persists a run and its attempts together", () => {
+  it("persists a run and its attempts together", async () => {
     const { db, store } = openStore();
-    const written = store.record(run());
+    const written = await store.record(run());
     assert.equal(written.success, true);
     assert.ok(written.success && written.value.attemptsTotal === 1);
     assert.ok(written.success && written.value.attemptsApplied === 1);
 
-    const runs = store.listRuns();
+    const runs = await store.listRuns();
     assert.ok(runs.success);
     assert.equal(runs.success && runs.value.length, 1);
     assert.equal(runs.success && runs.value[0]?.outcome, "deterministic-fixed");
 
-    const attempts = store.listAttempts(RUN_ID);
+    const attempts = await store.listAttempts(RUN_ID);
     assert.ok(attempts.success);
     assert.equal(attempts.success && attempts.value.length, 1);
     assert.equal(
@@ -260,25 +260,25 @@ describe("repair telemetry store", () => {
     db.close();
   });
 
-  it("scopes rows to the owner", () => {
+  it("scopes rows to the owner", async () => {
     const db = openPlatformDb(":memory:");
     const a = createRepairTelemetryStore(db, "owner-a");
     const b = createRepairTelemetryStore(db, "owner-b");
     // Asserted, not discarded: `record` returns a Result rather than throwing,
     // so a fixture that stopped validating would make "b sees 0 rows" pass for
     // the wrong reason -- b sees nothing because nothing exists.
-    assert.equal(a.record(run()).success, true);
-    const seen = b.listRuns();
+    assert.equal((await a.record(run())).success, true);
+    const seen = await b.listRuns();
     assert.ok(seen.success);
     assert.equal(seen.success && seen.value.length, 0);
     db.close();
   });
 
-  it("records eligible-but-unapplied as its own state", () => {
+  it("records eligible-but-unapplied as its own state", async () => {
     // The whole reason the two flags are separate columns: this is the class a
     // tuned fixer must not inherit, and today it is silent.
     const { db, store } = openStore();
-    store.record(
+    await store.record(
       run({
         outcome: "unfixable",
         violationsRemaining: 1,
@@ -292,7 +292,7 @@ describe("repair telemetry store", () => {
         ],
       }),
     );
-    const attempts = store.listAttempts(RUN_ID);
+    const attempts = await store.listAttempts(RUN_ID);
     assert.ok(attempts.success);
     const row = attempts.success ? attempts.value[0] : undefined;
     assert.equal(row?.eligible, true);
@@ -301,11 +301,11 @@ describe("repair telemetry store", () => {
     db.close();
   });
 
-  it("keeps unfixable and abandoned distinguishable", () => {
+  it("keeps unfixable and abandoned distinguishable", async () => {
     const { db, store } = openStore();
-    store.record(run({ runId: RUN_ID, outcome: "unfixable" }));
-    store.record(run({ runId: OTHER_RUN_ID, outcome: "abandoned" }));
-    const runs = store.listRuns();
+    await store.record(run({ runId: RUN_ID, outcome: "unfixable" }));
+    await store.record(run({ runId: OTHER_RUN_ID, outcome: "abandoned" }));
+    const runs = await store.listRuns();
     assert.ok(runs.success);
     const outcomes = runs.success
       ? runs.value.map((r) => r.outcome).sort()
@@ -314,11 +314,11 @@ describe("repair telemetry store", () => {
     db.close();
   });
 
-  it("upserts on (owner, run_id) so a reconnect does not double-count", () => {
+  it("upserts on (owner, run_id) so a reconnect does not double-count", async () => {
     const { db, store } = openStore();
-    const first = store.record(run({ rounds: 1 }));
-    const second = store.record(run({ rounds: 4, durationMs: 900 }));
-    const runs = store.listRuns();
+    const first = await store.record(run({ rounds: 1 }));
+    const second = await store.record(run({ rounds: 4, durationMs: 900 }));
+    const runs = await store.listRuns();
     assert.ok(runs.success);
     assert.equal(runs.success && runs.value.length, 1);
     assert.equal(runs.success && runs.value[0]?.rounds, 4);
@@ -337,9 +337,9 @@ describe("repair telemetry store", () => {
     db.close();
   });
 
-  it("replaces the attempt set wholesale on re-record", () => {
+  it("replaces the attempt set wholesale on re-record", async () => {
     const { db, store } = openStore();
-    store.record(
+    await store.record(
       run({
         attempts: [
           attempt({ round: 1, seq: 0 }),
@@ -348,62 +348,76 @@ describe("repair telemetry store", () => {
         ],
       }),
     );
-    store.record(run({ attempts: [attempt({ round: 1, seq: 0 })] }));
-    const attempts = store.listAttempts(RUN_ID);
+    await store.record(run({ attempts: [attempt({ round: 1, seq: 0 })] }));
+    const attempts = await store.listAttempts(RUN_ID);
     assert.ok(attempts.success);
     // Orphans from the longer previous loop would make attempts_total lie.
     assert.equal(attempts.success && attempts.value.length, 1);
-    const runs = store.listRuns();
+    const runs = await store.listRuns();
     assert.equal(runs.success && runs.value[0]?.attemptsTotal, 1);
     db.close();
   });
 
-  it("rejects a non-opaque run id instead of storing it", () => {
+  it("rejects a non-opaque run id instead of storing it", async () => {
     const { db, store } = openStore();
-    const bad = store.record(run({ runId: "acme/billing-service" }));
+    const bad = await store.record(run({ runId: "acme/billing-service" }));
     assert.equal(bad.success, false);
     // The rejection message must not echo the value it refused.
     assert.ok(!bad.success && !bad.error.message.includes("acme"));
-    const runs = store.listRuns();
+    const runs = await store.listRuns();
     assert.ok(runs.success, "listRuns succeeds after a rejected record");
     assert.equal(runs.value.length, 0);
     db.close();
   });
 
-  it("rejects unknown enum values rather than coercing them", () => {
+  it("rejects unknown enum values rather than coercing them", async () => {
     const { db, store } = openStore();
-    const loose = store.record as unknown as (i: Record<string, unknown>) => {
-      success: boolean;
-    };
-    assert.equal(loose({ ...run(), surface: "smuggled-text" }).success, false);
-    assert.equal(loose({ ...run(), outcome: "probably-fine" }).success, false);
+    const loose = store.record as unknown as (
+      i: Record<string, unknown>,
+    ) => Promise<{ success: boolean }>;
     assert.equal(
-      loose({
-        ...run(),
-        attempts: [{ ...attempt(), violationClass: 'Context Name "Billing"' }],
-      }).success,
+      (await loose({ ...run(), surface: "smuggled-text" })).success,
       false,
     );
     assert.equal(
-      loose({
-        ...run(),
-        attempts: [{ ...attempt(), path: "magic" }],
-      }).success,
+      (await loose({ ...run(), outcome: "probably-fine" })).success,
       false,
     );
     assert.equal(
-      loose({
-        ...run(),
-        attempts: [{ ...attempt(), gateReason: "because" }],
-      }).success,
+      (
+        await loose({
+          ...run(),
+          attempts: [
+            { ...attempt(), violationClass: 'Context Name "Billing"' },
+          ],
+        })
+      ).success,
+      false,
+    );
+    assert.equal(
+      (
+        await loose({
+          ...run(),
+          attempts: [{ ...attempt(), path: "magic" }],
+        })
+      ).success,
+      false,
+    );
+    assert.equal(
+      (
+        await loose({
+          ...run(),
+          attempts: [{ ...attempt(), gateReason: "because" }],
+        })
+      ).success,
       false,
     );
     db.close();
   });
 
-  it("rejects a duplicate round/seq pair rather than losing an attempt", () => {
+  it("rejects a duplicate round/seq pair rather than losing an attempt", async () => {
     const { db, store } = openStore();
-    const dup = store.record({
+    const dup = await store.record({
       ...run(),
       attempts: [attempt({ round: 1, seq: 0 }), attempt({ round: 1, seq: 0 })],
     });
@@ -411,9 +425,9 @@ describe("repair telemetry store", () => {
     db.close();
   });
 
-  it("aggregates per violation class with a median duration", () => {
+  it("aggregates per violation class with a median duration", async () => {
     const { db, store } = openStore();
-    store.record(
+    await store.record(
       run({
         attempts: [
           attempt({
@@ -452,7 +466,7 @@ describe("repair telemetry store", () => {
         ],
       }),
     );
-    const stats = store.classStats();
+    const stats = await store.classStats();
     assert.ok(stats.success);
     const byClass = new Map(
       (stats.success ? stats.value : []).map((s) => [s.violationClass, s]),
@@ -469,10 +483,10 @@ describe("repair telemetry store", () => {
     db.close();
   });
 
-  it("filters class stats by surface", () => {
+  it("filters class stats by surface", async () => {
     const { db, store } = openStore();
-    store.record(run({ runId: RUN_ID, surface: "client-deterministic" }));
-    store.record(
+    await store.record(run({ runId: RUN_ID, surface: "client-deterministic" }));
+    await store.record(
       run({
         runId: OTHER_RUN_ID,
         surface: "server-staged",
@@ -482,7 +496,7 @@ describe("repair telemetry store", () => {
         ],
       }),
     );
-    const server = store.classStats({ surface: "server-staged" });
+    const server = await store.classStats({ surface: "server-staged" });
     assert.ok(server.success);
     assert.deepEqual(
       server.success ? server.value.map((s) => s.violationClass) : [],
@@ -491,14 +505,14 @@ describe("repair telemetry store", () => {
     db.close();
   });
 
-  it("evicts the oldest runs and their attempts past the per-owner cap", () => {
+  it("evicts the oldest runs and their attempts past the per-owner cap", async () => {
     const { db, store } = openStore();
     const total = MAX_REPAIR_RUNS_PER_OWNER + 3;
     for (let i = 0; i < total; i++) {
       const id = `33333333-3333-4333-8333-${String(i).padStart(12, "0")}`;
-      store.record(run({ runId: id, now: 1_700_000_000_000 + i }));
+      await store.record(run({ runId: id, now: 1_700_000_000_000 + i }));
     }
-    const runs = store.listRuns({ limit: MAX_REPAIR_RUNS_PER_OWNER });
+    const runs = await store.listRuns({ limit: MAX_REPAIR_RUNS_PER_OWNER });
     assert.ok(runs.success);
     assert.equal(runs.success && runs.value.length, MAX_REPAIR_RUNS_PER_OWNER);
     // Attempts must go with their run: a surviving orphan is a row the
@@ -515,33 +529,72 @@ describe("repair telemetry store", () => {
     db.close();
   });
 
-  it("hides rows written under a foreign schema_version instead of decoding them", () => {
+  it("writes the new run and evicts the oldest with its attempts in one record call", async () => {
+    // Retention lives inside `record`'s synchronous writeWithRetention
+    // transaction: a single call past the cap must both persist the new row and
+    // drop the oldest run + its attempts together, not in a later sweep.
     const { db, store } = openStore();
-    assert.equal(store.record(run()).success, true);
+    for (let i = 0; i < MAX_REPAIR_RUNS_PER_OWNER; i++) {
+      const id = `33333333-3333-4333-8333-${String(i).padStart(12, "0")}`;
+      await store.record(run({ runId: id, now: 1_700_000_000_000 + i }));
+    }
+    const overwritten = `33333333-3333-4333-8333-000000000000`;
+
+    const overflow = await store.record(
+      run({ runId: OTHER_RUN_ID, now: 2_000_000_000_000 }),
+    );
+    assert.equal(overflow.success, true);
+
+    const runs = await store.listRuns({ limit: MAX_REPAIR_RUNS_PER_OWNER });
+    assert.ok(runs.success);
+    assert.equal(runs.success && runs.value.length, MAX_REPAIR_RUNS_PER_OWNER);
+    // Newest run is present and is first (newest first).
+    assert.equal(runs.success && runs.value[0]?.runId, OTHER_RUN_ID);
+    // Oldest run evicted in the same transaction that wrote the new one.
+    assert.equal(
+      runs.success ? runs.value.some((r) => r.runId === overwritten) : false,
+      false,
+    );
+    // Its attempts went with it: no orphan attempts survive.
+    const orphans = db
+      .prepare(
+        `SELECT COUNT(*) AS n FROM repair_attempts a
+          WHERE NOT EXISTS (
+            SELECT 1 FROM repair_runs r
+             WHERE r.owner_id = a.owner_id AND r.run_id = a.run_id)`,
+      )
+      .get() as { n: number };
+    assert.equal(orphans.n, 0);
+    db.close();
+  });
+
+  it("hides rows written under a foreign schema_version instead of decoding them", async () => {
+    const { db, store } = openStore();
+    assert.equal((await store.record(run())).success, true);
     db.prepare("UPDATE repair_runs SET schema_version = 99").run();
-    const runs = store.listRuns();
+    const runs = await store.listRuns();
     assert.ok(runs.success);
     assert.equal(runs.success && runs.value.length, 0);
     db.close();
   });
 
-  it("drops a row whose stored enum no longer parses", () => {
+  it("drops a row whose stored enum no longer parses", async () => {
     const { db, store } = openStore();
-    assert.equal(store.record(run()).success, true);
+    assert.equal((await store.record(run())).success, true);
     db.prepare("UPDATE repair_runs SET outcome = 'from-the-future'").run();
-    const runs = store.listRuns();
+    const runs = await store.listRuns();
     assert.ok(runs.success);
     // Coercing to a default would be a silently skewed baseline.
     assert.equal(runs.success && runs.value.length, 0);
     db.close();
   });
 
-  it("stores nothing outside the closed value sets", () => {
+  it("stores nothing outside the closed value sets", async () => {
     // Belt to the guards: read every column back raw and assert that no cell
     // holds a string that isn't an enum member or the opaque run id. This is
     // the test that would fail if someone later added a `title` column.
     const { db, store } = openStore();
-    assert.equal(store.record(run()).success, true);
+    assert.equal((await store.record(run())).success, true);
     const allowed = new Set<string>([
       ...REPAIR_VIOLATION_CLASSES,
       "client-deterministic",
@@ -590,7 +643,7 @@ describe("repair telemetry store", () => {
 });
 
 describe("repair telemetry migration", () => {
-  it("is additive on an existing database and idempotent on re-open", () => {
+  it("is additive on an existing database and idempotent on re-open", async () => {
     const dir = mkdtempSync(join(tmpdir(), "hexagen-repair-db-"));
     const path = join(dir, "platform.db");
 
@@ -613,14 +666,14 @@ describe("repair telemetry migration", () => {
       .get("proj-1") as { name: string } | undefined;
     assert.equal(kept?.name, "shop");
     const store = createRepairTelemetryStore(upgraded, "owner-a");
-    assert.equal(store.record(run()).success, true);
+    assert.equal((await store.record(run())).success, true);
     upgraded.close();
 
     // Re-open twice more: every statement is IF NOT EXISTS, so the telemetry
     // row written above must still be there.
     openPlatformDb(path).close();
     const third = openPlatformDb(path);
-    const again = createRepairTelemetryStore(third, "owner-a").listRuns();
+    const again = await createRepairTelemetryStore(third, "owner-a").listRuns();
     assert.ok(again.success);
     assert.equal(again.success && again.value.length, 1);
     third.close();

@@ -594,18 +594,20 @@ export interface RepairTelemetryStore {
    */
   record(
     input: RecordRepairRunInput,
-  ): Result<RepairRunRecord, PersistenceError>;
+  ): Promise<Result<RepairRunRecord, PersistenceError>>;
   /** Newest first. */
   listRuns(options?: {
     surface?: RepairSurface;
     limit?: number;
-  }): Result<RepairRunRecord[], PersistenceError>;
+  }): Promise<Result<RepairRunRecord[], PersistenceError>>;
   /** Attempts for one run, in loop order. */
-  listAttempts(runId: string): Result<RepairAttemptRecord[], PersistenceError>;
+  listAttempts(
+    runId: string,
+  ): Promise<Result<RepairAttemptRecord[], PersistenceError>>;
   /** The eval read: per-class attempt / eligibility / success counts. */
   classStats(options?: {
     surface?: RepairSurface;
-  }): Result<RepairClassStat[], PersistenceError>;
+  }): Promise<Result<RepairClassStat[], PersistenceError>>;
 }
 
 export function createRepairTelemetryStore(
@@ -773,7 +775,7 @@ export function createRepairTelemetryStore(
   );
 
   return {
-    record(input) {
+    async record(input) {
       if (!isRepairSurface(input?.surface)) {
         return rejected("surface is not a known repair surface");
       }
@@ -900,7 +902,7 @@ export function createRepairTelemetryStore(
       return { success: true, value: record };
     },
 
-    listRuns(options = {}) {
+    async listRuns(options = {}) {
       const rows = selectRuns.all({
         owner_id: ownerId,
         schema_version: REPAIR_TELEMETRY_SCHEMA_VERSION,
@@ -915,7 +917,7 @@ export function createRepairTelemetryStore(
       return { success: true, value: records };
     },
 
-    listAttempts(runId) {
+    async listAttempts(runId) {
       if (!OPAQUE_ID.test(typeof runId === "string" ? runId : "")) {
         return rejected("runId must be an opaque UUID");
       }
@@ -932,7 +934,7 @@ export function createRepairTelemetryStore(
       return { success: true, value: records };
     },
 
-    classStats(options = {}) {
+    async classStats(options = {}) {
       const rows = selectClassStats.all({
         owner_id: ownerId,
         schema_version: REPAIR_TELEMETRY_SCHEMA_VERSION,
