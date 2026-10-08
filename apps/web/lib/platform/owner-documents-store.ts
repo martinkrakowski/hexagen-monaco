@@ -291,10 +291,13 @@ export function createOwnerDocumentsStore(
         return { success: false, error: validation.error };
 
       const payloadJson = validation.payloadJson;
-      const now = Date.now();
 
       try {
         return await db.transaction(async (tx) => {
+          // Read inside the transaction: a put that waited in the queue is
+          // stamped when it writes, so `updated_at` orders writes as they
+          // landed.
+          const now = Date.now();
           if (typeof input.projectId === "string") {
             const exists = await tx.get<{ ok: number }>(projectExists, [
               ownerId,

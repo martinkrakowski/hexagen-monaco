@@ -291,6 +291,15 @@ describe("document routes", () => {
       role: "write",
       grantedBy: OWNER,
     });
+    // The grant is real: without this the 403s below would prove nothing.
+    assert.equal(
+      await getPlatformStore().shares.accessFor(OWNER, PROJECT_ID, {
+        userId: GRANTEE,
+        orgIds: [],
+        teamIds: [],
+      }),
+      "write",
+    );
 
     signedInAs(GRANTEE);
     assert.equal(
@@ -617,6 +626,12 @@ describe("document routes", () => {
       detailParams(ORG, KIND, "doc-a"),
     );
     assert.equal(fetched.status, 200, "A's document must survive B's removal");
+
+    // ...and B's are gone. Read through the store: B is no longer a member, so
+    // the route would answer 403 whether or not the rows were deleted.
+    const left = await getPlatformStore().documentsFor(ORG, MEMBER_B).list();
+    assert.equal(left.success, true);
+    if (left.success) assert.equal(left.value.length, 0);
   });
 
   it("an unknown kind or a bad id is 400 and writes nothing", async () => {

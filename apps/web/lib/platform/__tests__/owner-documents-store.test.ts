@@ -619,6 +619,17 @@ describe("owner-documents store", () => {
       assert.equal(detached.success, true);
       if (!detached.success) return;
       assert.equal(detached.value.projectId, null);
+      // The returned value echoes the input; the row is what must have changed.
+      const row = db
+        .prepare(
+          "SELECT project_id FROM owner_documents WHERE owner_id = ? AND user_id = ? AND kind = ? AND id = ?",
+        )
+        .get("owner-1", "user-1", "workspace", "doc-1") as {
+        project_id: string | null;
+      };
+      assert.equal(row.project_id, null);
+      const reread = await store.get("workspace", "doc-1");
+      assert.equal(reread.success && reread.value?.projectId, null);
     } finally {
       db.close();
     }

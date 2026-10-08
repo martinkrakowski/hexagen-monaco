@@ -328,6 +328,29 @@ describe("org member removal — owner_documents cleanup", () => {
     }
   });
 
+  it("deleteOrg with a user id as the org id deletes no personal document", async () => {
+    const f = fixture();
+    try {
+      const userId = "user-self";
+      await f.docs(userId, userId).put({
+        kind: "workspace",
+        id: "doc-personal",
+        payload: {},
+      });
+
+      // Not an org: no org row is removed, so nothing of this id's may go.
+      await f.orgs.deleteOrg(userId, { actorId: userId });
+
+      assert.equal(
+        docCount(f.db, userId, userId),
+        1,
+        "deleteOrg(userId) must not delete personal documents",
+      );
+    } finally {
+      f.db.close();
+    }
+  });
+
   it("removeMember with a user id as the org id deletes no personal document", async () => {
     const f = fixture();
     try {
@@ -361,12 +384,26 @@ describe("org member removal — owner_documents cleanup", () => {
       const docs1 = f.docs(org.id, "member-1");
       await docs1.put({ kind: "workspace", id: "doc-1", payload: {} });
 
+      // A row under the org written by someone with no membership row (the
+      // store does not check membership; the route does). The removal must
+      // find no membership and so delete nothing, this row included.
+      await f.docs(org.id, "stranger").put({
+        kind: "workspace",
+        id: "doc-s",
+        payload: {},
+      });
+
       await f.orgs.removeMember(org.id, "stranger", { actorId: "owner-1" });
 
       assert.equal(
         docCount(f.db, org.id, "member-1"),
         1,
         "non-member removal must not touch existing documents",
+      );
+      assert.equal(
+        docCount(f.db, org.id, "stranger"),
+        1,
+        "a removal that removed no membership deletes no document",
       );
     } finally {
       f.db.close();

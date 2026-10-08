@@ -183,10 +183,38 @@ describe("owner_documents schema", () => {
         now,
       );
 
+      // A second project with its own document: it must survive.
+      db.prepare(
+        `INSERT INTO saved_projects
+          (owner_id, id, name, payload, created_at, updated_at, ord)
+         VALUES (?, ?, ?, ?, ?, ?, 1)`,
+      ).run("owner-1", "proj-b", "Beta", "{}", now, now);
+      db.prepare(
+        `INSERT INTO owner_documents
+          (owner_id, user_id, kind, id, project_id, rev, payload, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).run(
+        "owner-1",
+        "user-1",
+        "workspace",
+        "doc-on-b",
+        "proj-b",
+        1,
+        "{}",
+        now,
+      );
+
       // Deleting the project row cascades to its documents.
       db.prepare(
         "DELETE FROM saved_projects WHERE owner_id = ? AND id = ?",
       ).run("owner-1", "proj-a");
+
+      const other = db
+        .prepare(
+          "SELECT 1 AS ok FROM owner_documents WHERE owner_id = ? AND project_id = ?",
+        )
+        .get("owner-1", "proj-b") as { ok: number } | undefined;
+      assert.ok(other, "documents of another project must survive");
 
       const gone = db
         .prepare(

@@ -659,7 +659,6 @@ export function createOrgsRepository(db: PlatformDb): OrgsRepository {
         revoked_at: revokedAt,
       });
       await tx.run(deleteRunEvents, [orgId]);
-      await deleteDocumentsOfOwner(tx, orgId);
       await tx.run(deleteOrgTeamMembers, [orgId]);
       await tx.run(deleteOrgTeams, [orgId]);
       await tx.run(deleteOrgInvites, [orgId]);
@@ -668,6 +667,9 @@ export function createOrgsRepository(db: PlatformDb): OrgsRepository {
       // Gate on affected rows (P-A2's rule): an org.delete row for an org that
       // did not exist would be a record of an event that never happened.
       if (removed.changes > 0) {
+        // Only for an org that existed: an id that is not an org (a user id,
+        // for one) deletes no document of anybody's.
+        await deleteDocumentsOfOwner(tx, orgId);
         await appendAudit(tx, {
           actorId,
           action: "org.delete",

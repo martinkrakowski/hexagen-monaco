@@ -84,6 +84,20 @@ function malformedIfMatch(): { ok: false; response: NextResponse } {
   };
 }
 
+/** The payload cap plus room for the envelope around it. */
+const DOCUMENT_BODY_LIMIT = DOCUMENT_MAX_PAYLOAD_LENGTH + 1024;
+
+function payloadTooLarge(): NextResponse {
+  return NextResponse.json(
+    {
+      error: "payload_too_large",
+      message: `Document exceeds ${DOCUMENT_MAX_PAYLOAD_LENGTH} characters`,
+      statusCode: 413,
+    },
+    { status: 413 },
+  );
+}
+
 // --- shared validators ---
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -289,17 +303,16 @@ export async function handleDocumentPut(
   const tenant = await requireTenant(request, ownerId);
   if (!tenant.ok) return tenant.response;
 
-  // 4. Read body once.
+  // 4. Refuse an oversized body by its declared length before reading it, so
+  // the cap also bounds memory; then read once and check the real length,
+  // which is what covers a body sent without a Content-Length.
+  const declared = Number(request.headers.get("content-length") ?? 0);
+  if (Number.isFinite(declared) && declared > DOCUMENT_BODY_LIMIT) {
+    return payloadTooLarge();
+  }
   const rawBody = await request.text();
-  if (rawBody.length > DOCUMENT_MAX_PAYLOAD_LENGTH + 1024) {
-    return NextResponse.json(
-      {
-        error: "payload_too_large",
-        message: `Document exceeds ${DOCUMENT_MAX_PAYLOAD_LENGTH} characters`,
-        statusCode: 413,
-      },
-      { status: 413 },
-    );
+  if (rawBody.length > DOCUMENT_BODY_LIMIT) {
+    return payloadTooLarge();
   }
 
   let body: unknown;
