@@ -26,8 +26,8 @@ function postReq(): NextRequest {
 }
 
 /** `createUser` mints its own id; the JWT `sub` must be what came back. */
-function seedUser(): string {
-  const user = getPlatformStore().auth.createUser({
+async function seedUser(): Promise<string> {
+  const user = await getPlatformStore().auth.createUser({
     name: "Octo Cat",
     email: "octo@example.test",
     emailVerified: null,
@@ -54,7 +54,7 @@ describe("P-U0b — /api/account/onboarding", () => {
   });
 
   it("GET reads null before onboarding ever completed", async () => {
-    const userId = seedUser();
+    const userId = await seedUser();
     signedInAs(userId);
     const res = await GET(getReq());
     assert.equal(res.status, 200);
@@ -62,7 +62,7 @@ describe("P-U0b — /api/account/onboarding", () => {
   });
 
   it("POST stamps completion, and GET reads the same instant back", async () => {
-    const userId = seedUser();
+    const userId = await seedUser();
     signedInAs(userId);
 
     const posted = await POST(postReq());
@@ -79,7 +79,7 @@ describe("P-U0b — /api/account/onboarding", () => {
   });
 
   it("a second POST is 200 with the ORIGINAL timestamp — the stamp never advances", async () => {
-    const userId = seedUser();
+    const userId = await seedUser();
     signedInAs(userId);
 
     const first = await POST(postReq());

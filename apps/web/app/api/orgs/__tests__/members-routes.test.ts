@@ -76,7 +76,7 @@ async function seedOrg(role: "owner" | "member", userId: string) {
  */
 async function seedUser(login: string): Promise<string> {
   const store = getPlatformStore();
-  const user = store.auth.createUser({
+  const user = await store.auth.createUser({
     name: login,
     email: `${login}@example.test`,
     emailVerified: null,

@@ -132,9 +132,11 @@ async function lookup(sub: string, projectId: string): Promise<Lookup> {
   const projects: SavedProject[] = [];
   let failure: Lookup | null = null;
   for (const ownerId of candidates) {
-    let got: ReturnType<ReturnType<typeof store.projectsFor>["getProject"]>;
+    let got: Awaited<
+      ReturnType<ReturnType<typeof store.projectsFor>["getProject"]>
+    >;
     try {
-      got = store.projectsFor(ownerId).getProject(projectId);
+      got = await store.projectsFor(ownerId).getProject(projectId);
     } catch (e) {
       failure ??= { kind: "error", cause: e };
       continue;

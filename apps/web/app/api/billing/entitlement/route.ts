@@ -14,7 +14,7 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   const session = await getServerSession(authOptions);
   const userId = session?.user?.sub ?? null;
-  const entitlement = getPlatformStore().billing.resolve(userId);
+  const entitlement = await getPlatformStore().billing.resolve(userId);
   const plan = entitlement.plan === "repo" ? REPO_PLAN : FREE_PLAN;
   return NextResponse.json({
     entitlement,

@@ -167,7 +167,7 @@ describe("H1.2 — requireTenant", () => {
     const { db, orgs } = orgsOnTempDb();
     try {
       const auth = createAuthRepository(db);
-      const victim = auth.createUser({
+      const victim = await auth.createUser({
         name: "Victim",
         email: "victim@example.com",
         emailVerified: null,

@@ -104,9 +104,15 @@ describe("sqlite SavedProjectsPersistencePort", () => {
     const a = project("11111111-1111-4111-8111-111111111111", "alpha");
     const projects = store.projectsFor("owner-a");
     await projects.createProjectRecord(a);
-    const first = projects.putProject({ ...a, name: "first", updatedAt: 2 }, 1);
+    const first = await projects.putProject(
+      { ...a, name: "first", updatedAt: 2 },
+      1,
+    );
     assert.equal(first.success, true);
-    const stale = projects.putProject({ ...a, name: "stale", updatedAt: 3 }, 1);
+    const stale = await projects.putProject(
+      { ...a, name: "stale", updatedAt: 3 },
+      1,
+    );
     assert.equal(stale.success, false);
     if (!stale.success) assert.equal(stale.error.kind, "Conflict");
     const loaded = await projects.loadProjects();

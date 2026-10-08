@@ -15,7 +15,7 @@ describe("auth store + NextAuth adapter", () => {
     // future signatures, so through that type the id is demanded; the
     // repository is the precisely-typed write surface. Reads below go through
     // the adapter (Awaitable) to prove the delegation.
-    const user = store.auth.createUser({
+    const user = await store.auth.createUser({
       name: "Octo Cat",
       email: "octo@example.com",
       emailVerified: null,
@@ -47,7 +47,7 @@ describe("auth store + NextAuth adapter", () => {
 
   it("markOnboarded stamps once; a replay never moves the timestamp (P-U0b)", async () => {
     const store = createPlatformStore(":memory:");
-    const user = store.auth.createUser({
+    const user = await store.auth.createUser({
       name: "Octo Cat",
       email: "octo@example.com",
       emailVerified: null,

@@ -47,11 +47,11 @@ describe("run history + price table", () => {
     assert.equal(computeCostCents(10, 10, null), null);
   });
 
-  it("persists telemetry and groups a daily trend", () => {
+  it("persists telemetry and groups a daily trend", async () => {
     const store = createPlatformStore(":memory:");
     const runs = store.runsFor("owner-a");
     const day = noonUtcDaysAgo(1);
-    const first = runs.record({
+    const first = await runs.record({
       runId: "run-1",
       projectId: "11111111-1111-4111-8111-111111111111",
       telemetry,
@@ -59,47 +59,47 @@ describe("run history + price table", () => {
     });
     assert.equal(first.model, "mercury-2");
     assert.equal(first.costCents, 75);
-    runs.record({
+    await runs.record({
       runId: "run-1",
       telemetry: { ...telemetry, stage: 4, label: "Adapter Assignment" },
       now: day + 1,
     });
-    runs.record({
+    await runs.record({
       runId: "run-2",
       telemetry: { ...telemetry, modelName: "unknown-model" },
       now: day + 2,
     });
 
-    const listed = runs.list({ limit: 10 });
+    const listed = await runs.list({ limit: 10 });
     assert.equal(listed.length, 3);
     assert.equal(listed[0]?.runId, "run-2");
     assert.equal(listed[0]?.costCents, null);
 
-    const trend = runs.trend(30);
+    const trend = await runs.trend(30);
     assert.equal(trend.length, 1);
     assert.equal(trend[0]?.runs, 2);
-    assert.equal(store.runsFor("owner-b").list().length, 0);
+    assert.equal((await store.runsFor("owner-b").list()).length, 0);
     store.close();
   });
 
-  it("upserts the same owner/run/stage so reconnects do not double cost", () => {
+  it("upserts the same owner/run/stage so reconnects do not double cost", async () => {
     const store = createPlatformStore(":memory:");
     const runs = store.runsFor("owner-a");
     const day = noonUtcDaysAgo(1);
-    runs.record({
+    await runs.record({
       runId: "run-1",
       telemetry,
       now: day,
     });
-    runs.record({
+    await runs.record({
       runId: "run-1",
       telemetry: { ...telemetry, durationMs: 2400 },
       now: day + 10,
     });
-    const listed = runs.list({ limit: 10 });
+    const listed = await runs.list({ limit: 10 });
     assert.equal(listed.length, 1);
     assert.equal(listed[0]?.durationMs, 2400);
-    const trend = runs.trend(30);
+    const trend = await runs.trend(30);
     assert.equal(trend.length, 1);
     assert.equal(trend[0]?.runs, 1);
     assert.equal(trend[0]?.costCents, 75);

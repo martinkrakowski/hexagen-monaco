@@ -111,11 +111,13 @@ async function gateShareMutation(
   return guardMutation(request, PROJECT_MUTATION_GUARD);
 }
 
-function requireExistingProject(
+async function requireExistingProject(
   ownerId: string,
   projectId: string,
-): NextResponse | null {
-  const found = getPlatformStore().projectsFor(ownerId).getProject(projectId);
+): Promise<NextResponse | null> {
+  const found = await getPlatformStore()
+    .projectsFor(ownerId)
+    .getProject(projectId);
   if (!found.success) {
     return persistenceError("persistence", found.error.message);
   }
@@ -165,7 +167,7 @@ export async function handleShareCreate(
   if (!access.ok) return access.response;
   if (access.role !== "owner") return ownerOnly();
 
-  const missing = requireExistingProject(access.ownerId, parsedId.data);
+  const missing = await requireExistingProject(access.ownerId, parsedId.data);
   if (missing) return missing;
 
   const body = await readJsonBody(request);
@@ -227,7 +229,7 @@ export async function handleShareRevoke(
   if (!access.ok) return access.response;
   if (access.role !== "owner") return ownerOnly();
 
-  const missing = requireExistingProject(access.ownerId, parsedId.data);
+  const missing = await requireExistingProject(access.ownerId, parsedId.data);
   if (missing) return missing;
 
   if (!GRANTEE_TYPES.includes(granteeType) || granteeId.trim() === "") {
@@ -265,7 +267,7 @@ export async function handleSharesList(
   if (!access.ok) return access.response;
   if (access.role !== "owner") return ownerOnly();
 
-  const missing = requireExistingProject(access.ownerId, parsedId.data);
+  const missing = await requireExistingProject(access.ownerId, parsedId.data);
   if (missing) return missing;
 
   const shares = await getPlatformStore().shares.listForProject(

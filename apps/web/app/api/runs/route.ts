@@ -85,9 +85,11 @@ export async function GET(request: NextRequest) {
     }
   }
   const runs = getPlatformStore().runsFor(owner.ownerId);
+  const events = await runs.list({ projectId, limit: 100 });
+  const trend = await runs.trend(14);
   return NextResponse.json({
-    events: runs.list({ projectId, limit: 100 }),
-    trend: runs.trend(14),
+    events,
+    trend,
   });
 }
 
@@ -116,7 +118,7 @@ export async function POST(request: NextRequest) {
 
   // PersistRunEventInput has no tenantId; pick the recorded fields so a
   // future spread of parsed.data cannot write the tenant onto the event.
-  const recorded = getPlatformStore().runsFor(owner.ownerId).record({
+  const recorded = await getPlatformStore().runsFor(owner.ownerId).record({
     runId: parsed.data.runId,
     projectId: parsed.data.projectId,
     telemetry: parsed.data.telemetry,

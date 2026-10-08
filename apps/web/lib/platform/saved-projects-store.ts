@@ -99,7 +99,7 @@ export interface SavedProjectsStore extends SavedProjectsPersistencePort {
     project: SavedProject,
     precondition?: ProjectPrecondition,
     actorUserId?: string,
-  ): Result<ProjectWriteResult, PersistenceError>;
+  ): Promise<Result<ProjectWriteResult, PersistenceError>>;
 
   /**
    * One row by id, or `null` when this owner has no such project.
@@ -110,7 +110,9 @@ export interface SavedProjectsStore extends SavedProjectsPersistencePort {
    * `null` is a normal answer, not an error — the route decides what a miss
    * means, and for a cross-tenant request that answer is 403, never 404.
    */
-  getProject(id: string): Result<SavedProject | null, PersistenceError>;
+  getProject(
+    id: string,
+  ): Promise<Result<SavedProject | null, PersistenceError>>;
 
   /**
    * Same row as `getProject`, plus the monotonic `rev` used as the GET ETag.
@@ -118,7 +120,7 @@ export interface SavedProjectsStore extends SavedProjectsPersistencePort {
    */
   getProjectWithRev(
     id: string,
-  ): Result<ProjectWriteResult | null, PersistenceError>;
+  ): Promise<Result<ProjectWriteResult | null, PersistenceError>>;
 }
 
 export function createSavedProjectsStore(
@@ -254,13 +256,13 @@ export function createSavedProjectsStore(
   }
 
   return {
-    getProject(id: string) {
+    async getProject(id: string) {
       const found = readProjectWithRev(id);
       if (!found.success) return found;
       return { success: true, value: found.value?.project ?? null };
     },
 
-    getProjectWithRev(id: string) {
+    async getProjectWithRev(id: string) {
       return readProjectWithRev(id);
     },
 
@@ -405,7 +407,7 @@ export function createSavedProjectsStore(
       }
     },
 
-    putProject(project, precondition, actorUserId) {
+    async putProject(project, precondition, actorUserId) {
       try {
         const existing = selectOne.get(ownerId, project.id) as
           | ProjectRow

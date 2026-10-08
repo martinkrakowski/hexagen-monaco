@@ -130,7 +130,7 @@ describe("H1.4 — saved_projects.rev and updated_by", () => {
       // Non-vacuous: prove it was 1 BEFORE the write, not merely 2 after.
       assert.equal(readRev(), 1, "a fresh row starts at rev 1");
 
-      const first = store.putProject(
+      const first = await store.putProject(
         { ...p, name: "second", updatedAt: 2 },
         { rev: 1 },
         "user-writer",
@@ -146,7 +146,7 @@ describe("H1.4 — saved_projects.rev and updated_by", () => {
         .get(OWNER, p.id) as { updated_by: string | null };
       assert.equal(stamped.updated_by, "user-writer");
 
-      const second = store.putProject(
+      const second = await store.putProject(
         { ...p, name: "third", updatedAt: 3 },
         { rev: 2 },
         "user-writer",
@@ -165,7 +165,7 @@ describe("H1.4 — saved_projects.rev and updated_by", () => {
       const p = project("33333333-3333-4333-8333-333333333333", "alpha");
       await store.createProjectRecord(p);
 
-      const ok = store.putProject(
+      const ok = await store.putProject(
         { ...p, name: "winner", updatedAt: 2 },
         { rev: 1 },
         "user-a",
@@ -173,7 +173,7 @@ describe("H1.4 — saved_projects.rev and updated_by", () => {
       assert.equal(ok.success, true, "the first write must land");
 
       // A second seat still holding rev 1.
-      const stale = store.putProject(
+      const stale = await store.putProject(
         { ...p, name: "loser", updatedAt: 3 },
         { rev: 1 },
         "user-b",
@@ -209,10 +209,13 @@ describe("H1.4 — saved_projects.rev and updated_by", () => {
 
       // A bare number is the pre-H1.4 form and must keep working, so an
       // already-loaded personal-tenant tab is not 409'd until it reloads.
-      const ok = store.putProject({ ...p, name: "b", updatedAt: 2 }, 1);
+      const ok = await store.putProject({ ...p, name: "b", updatedAt: 2 }, 1);
       assert.equal(ok.success, true);
 
-      const stale = store.putProject({ ...p, name: "c", updatedAt: 3 }, 1);
+      const stale = await store.putProject(
+        { ...p, name: "c", updatedAt: 3 },
+        1,
+      );
       assert.equal(stale.success, false);
       if (!stale.success) assert.equal(stale.error.kind, "Conflict");
     } finally {
@@ -228,13 +231,13 @@ describe("H1.4 — saved_projects.rev and updated_by", () => {
       const added = project("66666666-6666-4666-8666-666666666666", "added");
       await store.createProjectRecord(kept);
 
-      const first = store.putProject(
+      const first = await store.putProject(
         { ...kept, name: "second", updatedAt: 2 },
         { rev: 1 },
         "user-writer",
       );
       assert.equal(first.success, true, "the setup write must land");
-      const second = store.putProject(
+      const second = await store.putProject(
         { ...kept, name: "third", updatedAt: 3 },
         { rev: 2 },
         "user-writer",
@@ -291,7 +294,7 @@ describe("H1.4 — saved_projects.rev and updated_by", () => {
       assert.equal(addedRow.rev, 1, "a genuinely new id starts at rev 1");
       assert.equal(addedRow.updated_by, null);
 
-      const stale = store.putProject(
+      const stale = await store.putProject(
         { ...kept, name: "aba", updatedAt: 5 },
         { rev: 1 },
         "user-stale",

@@ -116,9 +116,12 @@ function rowToRecord(row: RunEventRow): RunEventRecord {
 }
 
 export interface RunHistoryRepository {
-  record(input: PersistRunEventInput): RunEventRecord;
-  list(options?: { projectId?: string; limit?: number }): RunEventRecord[];
-  trend(days?: number): DailyRunCount[];
+  record(input: PersistRunEventInput): Promise<RunEventRecord>;
+  list(options?: {
+    projectId?: string;
+    limit?: number;
+  }): Promise<RunEventRecord[]>;
+  trend(days?: number): Promise<DailyRunCount[]>;
 }
 
 export function createRunHistoryRepository(
@@ -195,7 +198,7 @@ export function createRunHistoryRepository(
   }
 
   return {
-    record(input) {
+    async record(input) {
       const now = input.now ?? Date.now();
       const telemetry = input.telemetry;
       const costCents = computeCostCents(
@@ -242,7 +245,7 @@ export function createRunHistoryRepository(
       }) as RunEventRow;
       return rowToRecord(stored);
     },
-    list(options = {}) {
+    async list(options = {}) {
       const rows = selectRecent.all({
         owner_id: ownerId,
         project_id: options.projectId ?? null,
@@ -250,7 +253,7 @@ export function createRunHistoryRepository(
       }) as RunEventRow[];
       return rows.map(rowToRecord);
     },
-    trend(days = 14) {
+    async trend(days = 14) {
       const since = Date.now() - days * 24 * 60 * 60 * 1000;
       const rows = selectTrend.all({ owner_id: ownerId, since }) as Array<{
         day: string;
