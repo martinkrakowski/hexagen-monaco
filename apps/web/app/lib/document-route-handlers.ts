@@ -257,9 +257,9 @@ export async function handleDocumentGet(
  * PUT /api/tenants/[ownerId]/documents/[kind]/[id]
  *
  * Creates or replaces a document. A `projectId` of `undefined` or `null`
- * detaches the document from any project: it lives under (tenant, author) and
- * deleting a project will not reach it, so a canvas layout that outlives the
- * project it was drafted from is not lost with the project row.
+ * detaches the document from any project: it then lives under (tenant, author)
+ * only, and deleting a project will not reach it. A caller that wants a
+ * document deleted with its project sends `projectId` on every PUT.
  *
  * The mutation gate authenticates first (401) then rate-limits / origin-checks,
  * so unsigned traffic cannot exhaust the IP-keyed write budget (same rationale
@@ -295,7 +295,7 @@ export async function handleDocumentPut(
     return NextResponse.json(
       {
         error: "payload_too_large",
-        message: `Document exceeds ${DOCUMENT_MAX_PAYLOAD_LENGTH + 1024} characters`,
+        message: `Document exceeds ${DOCUMENT_MAX_PAYLOAD_LENGTH} characters`,
         statusCode: 413,
       },
       { status: 413 },
