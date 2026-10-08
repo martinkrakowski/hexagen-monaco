@@ -291,6 +291,7 @@ Tests run against in-memory or temp-file SQLite today, with no service container
 - **Lane registration.** Proposed role `hx_test` and database prefix `hx_`, with one kept database `hx_concurrency` for the B3 two-writer tests. The project's lane values change from `TEST_DB_ROLE=none` at B2, not before. These are host steps for the owner: register the role, open the lane container's egress to the test server, and install a Postgres client in the container for the verification step.
 - **Harness shape**, taken from a sibling project that has already made this move: a fresh database per test file cloned from a migrated template, and a real server only for tests about two writers.
 - Lanes run targeted suites only. GitHub CI remains the source of truth.
+- **A standing step for any packet that moves SQL** (added 2026-10-08, after B1c). Before the pull request is opened, every SQL string literal in the files the packet touched is compared, base against head, mechanically, and each statement built at run time is read by hand. The pre-merge review is then asked by name for what that comparison cannot see: a condition dropped from the code around a statement (an early return, a `changes` check, a guard before a write). The reason: in B1c a conversion dropped the `WHERE` clause from the `UPDATE` that marks an invite accepted, and the whole suite passed. B2, which rewrites statements for a second dialect, and A2 are the packets this applies to next.
 
 ## 10. Risks
 
