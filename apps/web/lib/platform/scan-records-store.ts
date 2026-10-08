@@ -154,18 +154,20 @@ export interface ScanTrendPoint {
 }
 
 export interface ScanRecordsStore {
-  record(input: RecordScanInput): Result<RecordScanOutcome, PersistenceError>;
+  record(
+    input: RecordScanInput,
+  ): Promise<Result<RecordScanOutcome, PersistenceError>>;
   /** Newest first. */
   list(options?: {
     repoRef?: string;
     limit?: number;
-  }): Result<ScanRecord[], PersistenceError>;
-  get(id: string): Result<ScanRecord, PersistenceError>;
+  }): Promise<Result<ScanRecord[], PersistenceError>>;
+  get(id: string): Promise<Result<ScanRecord, PersistenceError>>;
   /** The newest `limit` scans, returned oldest-first for a left-to-right chart. */
   trend(options?: {
     repoRef?: string;
     limit?: number;
-  }): Result<ScanTrendPoint[], PersistenceError>;
+  }): Promise<Result<ScanTrendPoint[], PersistenceError>>;
 }
 
 interface ScanRecordRow {
@@ -541,7 +543,7 @@ export function createScanRecordsStore(
   }
 
   return {
-    record(input) {
+    async record(input) {
       const projectName = (input.projectName ?? "").trim();
       if (projectName.length === 0) {
         return rejected("projectName is required");
@@ -667,7 +669,7 @@ export function createScanRecordsStore(
       }
     },
 
-    list(options = {}) {
+    async list(options = {}) {
       try {
         const rows = selectMany.all({
           owner_id: ownerId,
@@ -697,7 +699,7 @@ export function createScanRecordsStore(
       }
     },
 
-    get(id) {
+    async get(id) {
       try {
         const row = selectOne.get({
           owner_id: ownerId,
@@ -734,7 +736,7 @@ export function createScanRecordsStore(
       }
     },
 
-    trend(options = {}) {
+    async trend(options = {}) {
       try {
         const rows = selectTrend.all({
           owner_id: ownerId,

@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import type { AdapterAccount } from "next-auth/adapters";
 import type { SavedProject } from "@hexagen/shared";
 import { createPlatformStore } from "../store";
+import { openPlatformDb } from "../platform-db";
+import { createRepairTelemetryStore } from "../repair-telemetry-store";
 
 /**
  * Every store method that application code (routes, guards, handlers) calls must
@@ -10,7 +12,7 @@ import { createPlatformStore } from "../store";
  * test pins each signature at runtime so a future revert to synchronous breaks
  * the suite before it breaks callers.
  */
-describe("async contract — 22 store methods return Promises", () => {
+describe("async contract — 30 store methods return Promises", () => {
   const store = createPlatformStore(":memory:");
   const OWNER = "user-owner";
 
@@ -193,5 +195,70 @@ describe("async contract — 22 store methods return Promises", () => {
       "getProjectWithRev must return a Promise",
     );
     await getWithRev;
+  });
+
+  it("each ScanRecordsStore method returns a Promise", async () => {
+    const scans = store.scansFor(OWNER);
+
+    const recordResult = scans.record({
+      projectName: "shop",
+      tier: "B",
+      verdict: "violations",
+    });
+    assert.ok(recordResult instanceof Promise, "record must return a Promise");
+    await recordResult;
+
+    const listResult = scans.list();
+    assert.ok(listResult instanceof Promise, "list must return a Promise");
+    await listResult;
+
+    const getResult = scans.get("missing");
+    assert.ok(getResult instanceof Promise, "get must return a Promise");
+    await getResult;
+
+    const trendResult = scans.trend();
+    assert.ok(trendResult instanceof Promise, "trend must return a Promise");
+    await trendResult;
+  });
+
+  it("each RepairTelemetryStore method returns a Promise", async () => {
+    const db = openPlatformDb(":memory:");
+    const telemetry = createRepairTelemetryStore(db, OWNER);
+
+    const recordResult = telemetry.record({
+      surface: "client-deterministic",
+      outcome: "deterministic-fixed",
+      rounds: 1,
+      violationsInitial: 1,
+      violationsRemaining: 0,
+      durationMs: 12,
+    });
+    assert.ok(recordResult instanceof Promise, "record must return a Promise");
+    await recordResult;
+
+    const listRunsResult = telemetry.listRuns();
+    assert.ok(
+      listRunsResult instanceof Promise,
+      "listRuns must return a Promise",
+    );
+    await listRunsResult;
+
+    const listAttemptsResult = telemetry.listAttempts(
+      "11111111-1111-4111-8111-111111111111",
+    );
+    assert.ok(
+      listAttemptsResult instanceof Promise,
+      "listAttempts must return a Promise",
+    );
+    await listAttemptsResult;
+
+    const classStatsResult = telemetry.classStats();
+    assert.ok(
+      classStatsResult instanceof Promise,
+      "classStats must return a Promise",
+    );
+    await classStatsResult;
+
+    db.close();
   });
 });
