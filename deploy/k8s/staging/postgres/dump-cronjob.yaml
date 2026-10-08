@@ -1,0 +1,72 @@
+# A nightly logical dump of the staging database, seven kept. The dump is
+# written under a temporary name, read back with pg_restore --list, and only
+# then given its final name, so a file named *.dump is always a readable one.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: hexagen-pg-dump
+  labels:
+    app: hexagen-pg
+spec:
+  schedule: "17 3 * * *"
+  timeZone: Etc/UTC
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 900
+      template:
+        metadata:
+          labels:
+            app: hexagen-pg-dump
+        spec:
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 26
+            runAsGroup: 26
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: dump
+              # The cluster's own image, so pg_dump matches the server version.
+              image: ghcr.io/cloudnative-pg/postgresql:18.6-system-trixie
+              imagePullPolicy: IfNotPresent
+              env:
+                - name: PGURI
+                  valueFrom:
+                    secretKeyRef:
+                      name: hexagen-pg-app
+                      key: uri
+              command:
+                - /bin/sh
+                - -euc
+                - |
+                  stamp=$(date -u +%Y%m%dT%H%M%SZ)
+                  final=/dumps/hexagen-$stamp.dump
+                  pg_dump --format=custom --no-owner --file="$final.part" "$PGURI"
+                  pg_restore --list "$final.part" > /dev/null
+                  mv "$final.part" "$final"
+                  # Keep the seven newest; a leftover *.part from a failed run is removed too.
+                  ls -1t /dumps/hexagen-*.dump | tail -n +8 | xargs -r rm -f
+                  find /dumps -name '*.part' -mmin +60 -delete
+                  ls -l /dumps
+              volumeMounts:
+                - name: dumps
+                  mountPath: /dumps
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 64Mi
+                limits:
+                  memory: 256Mi
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: ["ALL"]
+          volumes:
+            - name: dumps
+              persistentVolumeClaim:
+                claimName: hexagen-pg-dumps
