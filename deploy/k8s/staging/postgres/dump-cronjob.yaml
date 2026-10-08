@@ -44,18 +44,21 @@ spec:
                 - /bin/sh
                 - -euc
                 - |
-                  # Jobs never overlap (concurrencyPolicy: Forbid), so any *.part
-                  # here is what a failed run left. Remove it first, and remove
-                  # this run's own if it fails, so a failure never eats the disk.
-                  rm -f /dumps/*.part
+                  # A scheduled run and a hand-started one can overlap, so each
+                  # run writes to its own temporary name, and only a *.part older
+                  # than a run can live (the 900 s deadline, with margin) is
+                  # treated as left behind by a killed run. This run removes its
+                  # own on any failure, so a failure never eats the disk.
+                  find /dumps -name '*.part' -mmin +20 -delete
                   stamp=$(date -u +%Y%m%dT%H%M%SZ)
                   final=/dumps/hexagen-$stamp.dump
-                  trap 'rm -f "$final.part"' EXIT
-                  pg_dump --format=custom --no-owner --file="$final.part" "$PGURI"
+                  part=$(mktemp "/dumps/hexagen-$stamp.XXXXXX.part")
+                  trap 'rm -f "$part"' EXIT
+                  pg_dump --format=custom --no-owner --file="$part" "$PGURI"
                   # Read the whole archive, data included, not only its table of
                   # contents. This proves it is readable, not that it restores.
-                  pg_restore --file=/dev/null "$final.part"
-                  mv "$final.part" "$final"
+                  pg_restore --file=/dev/null "$part"
+                  mv "$part" "$final"
                   # Keep the seven newest.
                   ls -1t /dumps/hexagen-*.dump | tail -n +8 | xargs -r rm -f
                   ls -l /dumps
