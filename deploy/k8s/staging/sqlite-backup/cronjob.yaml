@@ -8,7 +8,9 @@ kind: CronJob
 metadata:
   name: hexagen-sqlite-backup
   labels:
-    app: hexagen-web
+    # Its own label, not the app's: a delete selected by app=hexagen-web must
+    # not reach the backups.
+    app: hexagen-sqlite-backup
 spec:
   schedule: "47 2 * * *"
   timeZone: Etc/UTC

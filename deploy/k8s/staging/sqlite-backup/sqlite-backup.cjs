@@ -86,13 +86,18 @@ async function copyAndCheck(name, source, part, final) {
   const copy = new Database(part);
   let tables;
   try {
-    copy.pragma("journal_mode = DELETE");
+    const mode = copy.pragma("journal_mode = DELETE", { simple: true });
+    if (mode !== "delete")
+      throw new Error(`the copy stayed in ${mode} journal mode`);
     const verdict = copy.pragma("integrity_check", { simple: true });
     if (verdict !== "ok")
       throw new Error(`integrity_check on the copy said: ${verdict}`);
     tables = copy
       .prepare("SELECT count(*) AS n FROM sqlite_master WHERE type = 'table'")
       .get().n;
+    // Every store creates its tables when it opens the file, so a database
+    // with none is not a state the app can leave: it is an empty or stray file.
+    if (tables === 0) throw new Error("the copy has no tables");
   } finally {
     copy.close();
   }
@@ -103,8 +108,11 @@ async function copyAndCheck(name, source, part, final) {
   return "done";
 }
 
-function prune(name) {
-  const old = backupsOf(name).slice(0, -KEEP);
+function prune(name, justWritten) {
+  // Never the copy this run just made, whatever the other names say: with a
+  // clock that was once wrong, an older file can carry a later stamp.
+  const candidates = backupsOf(name).filter((file) => file !== justWritten);
+  const old = candidates.slice(0, Math.max(0, candidates.length - (KEEP - 1)));
   for (const file of old) fs.rmSync(path.join(DEST, file));
   if (old.length > 0) log(`${name}: pruned ${old.length}, kept ${KEEP}`);
 }
@@ -117,8 +125,10 @@ function removeLeftovers() {
   for (const file of fs.readdirSync(DEST)) {
     if (!/\.part(-wal|-shm|-journal)?$/.test(file)) continue;
     const full = path.join(DEST, file);
-    if (Date.now() - fs.statSync(full).mtimeMs > LEFTOVER_AFTER_MS)
-      fs.rmSync(full);
+    // Another run may rename or remove its own file between the listing and here.
+    const stat = fs.statSync(full, { throwIfNoEntry: false });
+    if (stat && Date.now() - stat.mtimeMs > LEFTOVER_AFTER_MS)
+      fs.rmSync(full, { force: true });
   }
 }
 
@@ -138,7 +148,7 @@ async function runBackup() {
     try {
       if ((await backupOne(name, stamp)) === "done") {
         done += 1;
-        prune(name);
+        prune(name, `${name}-${stamp}.db`);
       }
     } catch (error) {
       failed += 1;

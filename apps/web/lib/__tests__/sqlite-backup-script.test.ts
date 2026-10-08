@@ -107,7 +107,9 @@ describe("sqlite-backup.cjs", () => {
     copy.prepare("SELECT count(*) FROM things").get();
     copy.close();
 
-    expect(readdirSync(dest)).toEqual(backups("platform"));
+    expect(readdirSync(dest)).toEqual([
+      expect.stringMatching(/^platform-\d{8}T\d{6}Z\.db$/),
+    ]);
   });
 
   it("sees rows written after the last checkpoint (they are still in the WAL)", () => {
@@ -204,13 +206,52 @@ describe("sqlite-backup.cjs", () => {
     expect(backups("platform")).toHaveLength(0);
   });
 
-  it("counts: prints live and backed-up row counts side by side", () => {
+  it("counts: reads the backup, not the live file twice", () => {
     seed("platform", 4);
     expect(run().status).toBe(0);
+    const live = new Database(join(src, "platform.db"));
+    live
+      .prepare("INSERT INTO things (label) VALUES ('written after the backup')")
+      .run();
+    live.close();
 
     const result = run(["counts"]);
 
     expect(result.status, result.stderr).toBe(0);
-    expect(result.stdout).toContain("things: live=4 backup=4");
+    expect(result.stdout).toContain("things: live=5 backup=4");
+  });
+
+  it("fails on a database with no tables: no store leaves one, so it is an empty or stray file", () => {
+    seed("platform", 1);
+    new Database(join(src, "byok.db")).close();
+
+    const result = run();
+
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain("byok: FAILED: the copy has no tables");
+    expect(readdirSync(dest).filter((file) => file.includes("byok"))).toEqual(
+      [],
+    );
+  });
+
+  it("never prunes the copy it just made, even when older files carry later stamps", () => {
+    seed("platform", 1);
+    for (const stamp of ["20990101T000000Z", "20990102T000000Z"]) {
+      writeFileSync(
+        join(dest, `platform-${stamp}.db`),
+        "a backup from a clock that was wrong",
+      );
+    }
+
+    expect(run([], { BACKUP_KEEP: "1" }).status).toBe(0);
+
+    const kept = backups("platform");
+    expect(kept).toHaveLength(1);
+    expect(kept[0]).not.toContain("2099");
+    const copy = new Database(join(dest, kept[0]), { readonly: true });
+    expect(copy.prepare("SELECT count(*) AS n FROM things").get()).toEqual({
+      n: 1,
+    });
+    copy.close();
   });
 });
