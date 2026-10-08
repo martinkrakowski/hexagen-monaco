@@ -13,10 +13,10 @@ interface DiscoveredKey {
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, "../../..");
 
+// The whole web app (minus SKIP_DIRS), so a new top-level folder is covered
+// without anyone remembering to add it here, and the packages that persist.
 const SCAN_DIRS = [
-  "apps/web/app",
-  "apps/web/features",
-  "apps/web/lib",
+  "apps/web",
   "packages/web-driver/src",
   "packages/shared/src",
   "packages/local-llm/src",
@@ -28,6 +28,9 @@ const SKIP_DIRS = new Set([
   "node_modules",
   "dist",
   ".next",
+  ".turbo",
+  "coverage",
+  "public",
   "__tests__",
   "__test__",
 ]);
