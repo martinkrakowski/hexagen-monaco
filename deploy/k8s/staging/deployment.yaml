@@ -58,6 +58,13 @@ spec:
             # uid 1001 can write without a root initContainer or chown.
             - name: data
               mountPath: /data
+            # The nightly SQLite backups, read-only: an off-node copy reads the
+            # finished files through this pod. The backup job is the only
+            # writer of the claim; the app never writes here. Both pods run on
+            # the one node, which is what a ReadWriteOnce claim allows.
+            - name: backups
+              mountPath: /backups
+              readOnly: true
           securityContext:
             # readOnlyRootFilesystem stays off on purpose: repository scans
             # write to /app/.scan-workspaces, and bootstrap and governance
@@ -101,3 +108,7 @@ spec:
         - name: data
           persistentVolumeClaim:
             claimName: hexagen-web-data
+        - name: backups
+          persistentVolumeClaim:
+            claimName: hexagen-web-backups
+            readOnly: true
