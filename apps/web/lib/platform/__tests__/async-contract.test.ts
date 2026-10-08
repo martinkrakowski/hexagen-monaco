@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, it } from "vitest";
 import assert from "node:assert/strict";
 import type { AdapterAccount } from "next-auth/adapters";
 import type { SavedProject } from "@hexagen/shared";
@@ -123,7 +123,8 @@ describe("async contract — 22 store methods return Promises", () => {
         result instanceof Promise,
         `${name} must return a Promise, got ${typeof result}`,
       );
-      await expect(result).resolves.not.toThrow();
+      // Settles without rejecting; what it resolves to is not this test's subject.
+      await result;
     }
 
     // setGithubLogin, getOnboardedAt, markOnboarded are async by prior contract.
