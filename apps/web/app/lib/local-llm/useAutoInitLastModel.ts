@@ -55,7 +55,8 @@ export function useAutoInitLastModel({
 
       hasAttemptedAutoInitRef.current = true;
       setEngineState((prev) => ({ ...prev, autoLoading: true }));
-      initializeModel(modelToLoad);
+      // fire-and-forget: LLM load errors route to engine state; swallow rejections
+      void initializeModel(modelToLoad).catch(() => {});
     } else if (getHasEnabledLocalModels()) {
       hasAttemptedAutoInitRef.current = true;
       setEngineState((prev) => ({

@@ -58,7 +58,8 @@ export function useCurrentModelName(): string | null {
       }
     };
 
-    updateModelName();
+    // fire-and-forget: updateModelName catches its own errors (getCapabilities)
+    void updateModelName();
     return () => {
       active = false;
     };

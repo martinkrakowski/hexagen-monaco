@@ -391,7 +391,8 @@ export function useStagedGenerationStream(
               `[SSE] Timeout: no data received for ${READ_TIMEOUT_MS / 1000}s`,
             );
             timedOut = true;
-            reader.cancel();
+            // best-effort cancel on read timeout; swallow stream errors
+            void reader.cancel().catch(() => {});
           }
         }, 5000);
 
@@ -663,7 +664,7 @@ export function useStagedGenerationStream(
     cancel: () => abortRef.current?.abort(),
     retry: async () => {
       if (lastBodyRef.current) {
-        await reset();
+        reset();
         await generate(lastBodyRef.current);
       }
     },
