@@ -31,11 +31,12 @@ export function formatChatTranscript(
           ? "Assistant"
           : String(msg.role);
 
-    let timeLabel: string;
-    if (typeof msg.timestamp === "number" && !Number.isNaN(msg.timestamp)) {
-      timeLabel = new Date(msg.timestamp).toISOString();
-    } else {
-      timeLabel = "time unknown";
+    // A timestamp that is not finite, or is outside the range a Date can hold,
+    // makes toISOString() throw; one bad entry must not stop the transcript.
+    let timeLabel = "time unknown";
+    if (typeof msg.timestamp === "number" && Number.isFinite(msg.timestamp)) {
+      const date = new Date(msg.timestamp);
+      if (!Number.isNaN(date.getTime())) timeLabel = date.toISOString();
     }
 
     lines.push(`## ${role} — ${timeLabel}`);

@@ -77,6 +77,8 @@ describe("formatChatTranscript", () => {
     const firstIdx = lines.indexOf("first");
     const secondIdx = lines.indexOf("second");
     const thirdIdx = lines.indexOf("third");
+    // indexOf gives -1 for a missing line, which would satisfy the comparisons.
+    assert.ok(firstIdx >= 0 && secondIdx >= 0 && thirdIdx >= 0);
     assert.ok(firstIdx < secondIdx);
     assert.ok(secondIdx < thirdIdx);
   });
@@ -104,6 +106,17 @@ describe("formatChatTranscript", () => {
     const exportedAt = new Date("2026-01-01T12:00:00Z");
     const result = formatChatTranscript(withoutTimestamp, exportedAt);
     assert.ok(result.includes("time unknown"));
+  });
+
+  it("uses 'time unknown' for a timestamp no Date can hold, and still prints the message", () => {
+    for (const timestamp of [Infinity, -Infinity, NaN, 8.64e15 + 1]) {
+      const result = formatChatTranscript(
+        [{ id: "m", role: "user", content: "still here", timestamp }],
+        new Date("2026-01-02T03:04:05.000Z"),
+      );
+      assert.ok(result.includes("time unknown"), String(timestamp));
+      assert.ok(result.includes("still here"), String(timestamp));
+    }
   });
 
   it("uses 'time unknown' when timestamp is not a number", () => {
