@@ -45,10 +45,15 @@ const probes = {
       "async function check(): Promise<boolean> { return true; }",
       "async function takesUnknown(x: unknown) {}",
       "async function takesAny(arr: any) {}",
+      "function generic<T>(body: T): void {}",
+      "function identity<T>(x: T): T { return x; }",
       "async function go() {",
       "  void takesUnknown({ initialized: check() });",
       "  void takesAny([check()]);",
       "  void takesUnknown(check());",
+      "  void generic(check());",
+      "  void generic([check()]);",
+      "  void identity(check());",
       "  `${check()}`;",
       "}",
       "void go();",
@@ -58,10 +63,10 @@ const probes = {
     rel: "lib/platform/__lint_probe_typed_valid__.ts",
     code: [
       "async function check(): Promise<boolean> { return true; }",
+      "function generic<T>(body: T): void {}",
       "async function takesUnknown(x: unknown) {}",
       "async function takesAny(arr: any) {}",
       "async function takesPromise(o: { initialized: Promise<boolean> }) {}",
-      "async function identity<T>(x: T): T { return x; }",
       "async function go() {",
       "  void takesUnknown({ initialized: await check() });",
       "  void takesAny([await check()]);",
@@ -71,7 +76,12 @@ const probes = {
       "  const tasks: Promise<boolean>[] = [check()];",
       "  void takesPromise({ initialized: check() });",
       "  void check();",
-      "  const r = identity(check());",
+      "  const m = new Map<string, Promise<boolean>>();",
+      '  m.set("k", check());',
+      "  const list: Promise<boolean>[] = [];",
+      "  list.push(check());",
+      "  void Promise.race([check()]);",
+      "  void generic<Promise<boolean>>(check());",
       "}",
       "void go();",
     ].join("\n"),
@@ -206,8 +216,8 @@ describe("no-promise-in-untyped-position rule", () => {
     const r = resultFor(probes.typed_invalid.rel);
     const msgs = myRuleMessages(r);
     assert.ok(
-      msgs.length >= 4,
-      `expected >= 4 reports, got ${msgs.length}: ${JSON.stringify(messagesOf(r))}`,
+      msgs.length >= 7,
+      `expected >= 7 reports, got ${msgs.length}: ${JSON.stringify(messagesOf(r))}`,
     );
     for (const m of msgs) {
       assert.equal(

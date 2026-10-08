@@ -32,18 +32,6 @@ function isUntypedContext(contextualType: ts.Type | undefined): boolean {
 }
 
 /**
- * True when `type` is a type parameter whose constraint is permissive
- * (`any` or `unknown`, or unconstrained). An unconstrained type parameter
- * accepts anything, so a promise placed against it is hiding in inference
- * rather than being explicitly accepted.
- */
-function isPermissiveTypeParameter(type: ts.Type): boolean {
-  const constraint = type.getConstraint();
-  if (constraint === undefined) return true;
-  return isUntypedContext(constraint);
-}
-
-/**
  * True when the call's callee is a test helper whose parameters are `unknown`:
  * `expect(...)` or `assert*(...)` / `assert.equal(...)` etc.
  */
@@ -84,6 +72,15 @@ function isTestHelper(callee: TSESTree.Expression): boolean {
  *
  * This rule fills that gap. It is type-aware: when a file is linted without
  * type information it reports nothing and does not throw.
+ *
+ * Known limitation: `identity<T>(x: T)` called with an argument whose type is
+ * thenable is reported, because the rule cannot tell an identity function from
+ * a sink that accepts `T` (a generic type parameter). The same applies to
+ * `Promise.resolve<T>(value: T)` in TS 5.9+ (its parameter is a bare type
+ * parameter on the signature). The fix is to give the target a type or to
+ * `await`. A call with explicit type arguments (e.g.
+ * `identity<Promise<boolean>>(x)`) is treated as deliberate and is not
+ * flagged.
  */
 const rule: TSESLint.RuleModule<MessageIds> = {
   defaultOptions: [],
@@ -107,6 +104,35 @@ const rule: TSESLint.RuleModule<MessageIds> = {
     const checker = program.getTypeChecker();
     const nodeMap = parserServices.esTreeNodeToTSNodeMap;
 
+    /**
+     * True when argument `argIndex` of `call` lands in a parameter whose
+     * declared type is a bare type parameter that (a) accepts anything and
+     * (b) belongs to the called signature itself, so its "expected type" is
+     * only what was inferred from the argument. A class-level type parameter
+     * the receiver has instantiated (Map<K, V>.set) is somebody's deliberate
+     * type and is excluded, as is a call with explicit type arguments.
+     */
+    function isSignatureLevelOpenParam(
+      call: ts.CallExpression | ts.NewExpression,
+      argIndex: number,
+    ): boolean {
+      if (call.typeArguments && call.typeArguments.length > 0) return false;
+      const signature = checker.getResolvedSignature(call);
+      const declaration = signature?.getDeclaration();
+      if (!declaration) return false;
+      const param = declaration.parameters[argIndex];
+      if (!param || !param.type || param.dotDotDotToken) return false;
+      const declared = checker.getTypeFromTypeNode(param.type);
+      if (!declared.isTypeParameter()) return false;
+      const typeParamDecl = declared.symbol?.declarations?.[0];
+      if (!typeParamDecl || typeParamDecl.parent !== declaration) return false;
+      const constraint = declared.getConstraint();
+      return (
+        !constraint ||
+        (constraint.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown)) !== 0
+      );
+    }
+
     function reportUntyped(expr: TSESTree.Node, position: string) {
       context.report({
         node: expr,
@@ -116,18 +142,59 @@ const rule: TSESLint.RuleModule<MessageIds> = {
     }
 
     /**
+     * If `node` is a direct argument of a CallExpression or NewExpression,
+     * return that call's TS node and the argument index.
+     */
+    function getEnclosingCallInfo(node: TSESTree.Node): {
+      tsCall: ts.CallExpression | ts.NewExpression;
+      argIndex: number;
+    } | null {
+      const parent = node.parent;
+      if (
+        !parent ||
+        (parent.type !== "CallExpression" && parent.type !== "NewExpression")
+      ) {
+        return null;
+      }
+      for (let i = 0; i < parent.arguments.length; i++) {
+        if (parent.arguments[i] === node) {
+          return {
+            tsCall: nodeMap.get(parent) as ts.CallExpression | ts.NewExpression,
+            argIndex: i,
+          };
+        }
+      }
+      return null;
+    }
+
+    /**
      * Check an expression in one of the untyped-position sites (object
      * property, array element, call argument, template literal).
      * Reports when the expression is thenable and its contextual type is
      * permissive (undefined, any, or unknown).
      */
-    function checkUntypedExpression(expr: TSESTree.Node, position: string) {
+    function checkUntypedExpression(
+      expr: TSESTree.Node,
+      position: string,
+      tsCall?: ts.CallExpression | ts.NewExpression,
+      argIndex?: number,
+    ) {
       const tsNode = nodeMap.get(expr) as ts.Expression;
       const type = checker.getTypeAtLocation(tsNode);
       if (!isThenable(checker, type)) return;
       const contextualType = checker.getContextualType(tsNode);
-      if (!isUntypedContext(contextualType)) return;
-      reportUntyped(expr, position);
+      if (isUntypedContext(contextualType)) {
+        reportUntyped(expr, position);
+        return;
+      }
+      if (!contextualType) return;
+      if (
+        tsCall !== undefined &&
+        argIndex !== undefined &&
+        isSignatureLevelOpenParam(tsCall, argIndex)
+      ) {
+        reportUntyped(expr, position);
+      }
     }
 
     return {
@@ -137,69 +204,26 @@ const rule: TSESLint.RuleModule<MessageIds> = {
         if (node.parent?.type !== "ObjectExpression") return;
         if (node.kind !== "init" || node.method) return;
         const value = node.value;
-
-        const tsNode = nodeMap.get(value) as ts.Expression;
-        const type = checker.getTypeAtLocation(tsNode);
-        if (!isThenable(checker, type)) return;
-
-        const contextualType = checker.getContextualType(tsNode);
-        if (isUntypedContext(contextualType)) {
-          reportUntyped(value, "object-property");
-          return;
-        }
-        if (!contextualType) return;
-
-        // When the contextual type itself accepts promises (e.g. a field
-        // typed Promise<boolean>) the promise is deliberate -- skip. But when
-        // the contextual type is the *inferred* type of a generic type
-        // parameter (the parameter type is a type parameter whose constraint
-        // is unknown/any), the promise is hiding in the inference: report.
-        if (isThenable(checker, contextualType)) {
-          const objExpr = node.parent;
-          const callExpr = objExpr.parent;
-          if (
-            callExpr &&
-            (callExpr.type === "CallExpression" ||
-              callExpr.type === "NewExpression")
-          ) {
-            const argIndex = callExpr.arguments.indexOf(objExpr);
-            if (argIndex !== -1) {
-              const tsCall = nodeMap.get(callExpr) as ts.CallExpression;
-              const signature = checker.getResolvedSignature(tsCall);
-              if (signature) {
-                const paramSymbols = signature.getParameters();
-                const paramSymbol = paramSymbols[argIndex];
-                if (paramSymbol) {
-                  const paramDecl = paramSymbol.valueDeclaration;
-                  if (
-                    paramDecl &&
-                    ts.isParameter(paramDecl) &&
-                    paramDecl.type
-                  ) {
-                    const refType = checker.getTypeFromTypeNode(paramDecl.type);
-                    if (
-                      refType.isTypeParameter() &&
-                      isPermissiveTypeParameter(refType)
-                    ) {
-                      reportUntyped(value, "object-property");
-                    }
-                  }
-                }
-              }
-            }
-          }
-          return;
-        }
-
-        // Anything else: the position expects a specific non-promise type and
-        // TypeScript already flags the mismatch.
+        const callInfo = getEnclosingCallInfo(node.parent);
+        checkUntypedExpression(
+          value,
+          "object-property",
+          callInfo?.tsCall,
+          callInfo?.argIndex,
+        );
       },
 
       // Position 2: array-literal element.
       ArrayExpression(node: TSESTree.ArrayExpression) {
+        const callInfo = getEnclosingCallInfo(node);
         for (const element of node.elements) {
           if (!element || element.type === "SpreadElement") continue;
-          checkUntypedExpression(element, "array-element");
+          checkUntypedExpression(
+            element,
+            "array-element",
+            callInfo?.tsCall,
+            callInfo?.argIndex,
+          );
         }
       },
 
@@ -207,16 +231,20 @@ const rule: TSESLint.RuleModule<MessageIds> = {
       // Skip test helpers (expect/assert*) whose parameters are unknown.
       CallExpression(node: TSESTree.CallExpression) {
         if (isTestHelper(node.callee)) return;
-        for (const arg of node.arguments) {
+        const tsCall = nodeMap.get(node) as ts.CallExpression;
+        for (let i = 0; i < node.arguments.length; i++) {
+          const arg = node.arguments[i];
           if (arg.type === "SpreadElement") continue;
-          checkUntypedExpression(arg, "call-argument");
+          checkUntypedExpression(arg, "call-argument", tsCall, i);
         }
       },
       NewExpression(node: TSESTree.NewExpression) {
         if (isTestHelper(node.callee)) return;
-        for (const arg of node.arguments) {
-          if (!arg) continue;
-          checkUntypedExpression(arg, "call-argument");
+        const tsCall = nodeMap.get(node) as ts.NewExpression;
+        for (let i = 0; i < node.arguments.length; i++) {
+          const arg = node.arguments[i];
+          if (!arg || arg.type === "SpreadElement") continue;
+          checkUntypedExpression(arg, "call-argument", tsCall, i);
         }
       },
 
