@@ -1,12 +1,17 @@
 import { describe, it } from "vitest";
 import assert from "node:assert/strict";
 import { createPlatformStore } from "../store";
-import type { SavedProject } from "@hexagen/shared";
+import { openPlatformDb } from "../platform-db";
+import { createSqlitePlatformDb } from "../sqlite-db";
 import {
+  createOrgsRepository,
   DuplicateOrgSlugError,
   LastOwnerError,
   OrgOwnsProjectsError,
 } from "../orgs-store";
+import { createOwnerDocumentsStore } from "../owner-documents-store";
+import { createSavedProjectsStore } from "../saved-projects-store";
+import type { SavedProject } from "@hexagen/shared";
 
 describe("OrgsRepository.listOrgsForUser", () => {
   it("returns this caller's orgs with roles, and nobody else's", async () => {
@@ -230,6 +235,269 @@ describe("OrgsRepository.acceptInvitesForLogin", () => {
       assert.equal(await store.orgs.memberRole(beta.id, "grace-user"), "owner");
     } finally {
       await store.close();
+    }
+  });
+});
+
+function docCount(
+  db: ReturnType<typeof openPlatformDb>,
+  ownerId: string,
+  userId: string,
+): number {
+  return (
+    db
+      .prepare(
+        "SELECT COUNT(*) AS n FROM owner_documents WHERE owner_id = ? AND user_id = ?",
+      )
+      .get(ownerId, userId) as { n: number }
+  ).n;
+}
+
+describe("org member removal — owner_documents cleanup", () => {
+  function fixture() {
+    const db = openPlatformDb(":memory:");
+    const platformDb = createSqlitePlatformDb(db);
+    return {
+      db,
+      platformDb,
+      orgs: createOrgsRepository(platformDb),
+      docs: (ownerId: string, userId: string) =>
+        createOwnerDocumentsStore(platformDb, ownerId, userId),
+    };
+  }
+
+  it("removing a member deletes that member's documents under the org and nobody else's", async () => {
+    const f = fixture();
+    try {
+      const org = await f.orgs.createOrgWithOwner(
+        { slug: "acme", name: "Acme", createdBy: "owner-1" },
+        { actorId: "owner-1" },
+      );
+      await f.orgs.addMember(org.id, "member-2", "member");
+      await f.orgs.addMember(org.id, "member-3", "member");
+
+      const docs2 = f.docs(org.id, "member-2");
+      const docs3 = f.docs(org.id, "member-3");
+      const personal2 = f.docs("member-2", "member-2");
+
+      await docs2.put({ kind: "workspace", id: "doc-2a", payload: {} });
+      await docs2.put({ kind: "workspace", id: "doc-2b", payload: {} });
+      await docs3.put({ kind: "workspace", id: "doc-3a", payload: {} });
+      await docs3.put({ kind: "workspace", id: "doc-3b", payload: {} });
+      await personal2.put({
+        kind: "workspace",
+        id: "doc-personal",
+        payload: {},
+      });
+
+      assert.equal(
+        docCount(f.db, org.id, "member-2"),
+        2,
+        "setup: member-2 has 2 org docs",
+      );
+      assert.equal(
+        docCount(f.db, org.id, "member-3"),
+        2,
+        "setup: member-3 has 2 org docs",
+      );
+      assert.equal(
+        docCount(f.db, "member-2", "member-2"),
+        1,
+        "setup: member-2 has 1 personal doc",
+      );
+
+      await f.orgs.removeMember(org.id, "member-2", { actorId: "owner-1" });
+
+      assert.equal(
+        docCount(f.db, org.id, "member-2"),
+        0,
+        "removed member's org documents must be gone",
+      );
+      assert.equal(
+        docCount(f.db, org.id, "member-3"),
+        2,
+        "other member's org documents must remain",
+      );
+      assert.equal(
+        docCount(f.db, "member-2", "member-2"),
+        1,
+        "removed member's personal documents must remain",
+      );
+    } finally {
+      f.db.close();
+    }
+  });
+
+  it("removeMember with a user id as the org id deletes no personal document", async () => {
+    const f = fixture();
+    try {
+      const userId = "user-self";
+      const docs = f.docs(userId, userId);
+      await docs.put({ kind: "workspace", id: "doc-personal", payload: {} });
+
+      // No membership row exists for a user id as org_id: changes will be 0,
+      // so the delete guard never fires.
+      await f.orgs.removeMember(userId, userId);
+
+      assert.equal(
+        docCount(f.db, userId, userId),
+        1,
+        "removeMember(userId, userId) must not delete personal documents",
+      );
+    } finally {
+      f.db.close();
+    }
+  });
+
+  it("removing someone who is not a member deletes no document", async () => {
+    const f = fixture();
+    try {
+      const org = await f.orgs.createOrgWithOwner(
+        { slug: "acme", name: "Acme", createdBy: "owner-1" },
+        { actorId: "owner-1" },
+      );
+      await f.orgs.addMember(org.id, "member-1", "member");
+
+      const docs1 = f.docs(org.id, "member-1");
+      await docs1.put({ kind: "workspace", id: "doc-1", payload: {} });
+
+      await f.orgs.removeMember(org.id, "stranger", { actorId: "owner-1" });
+
+      assert.equal(
+        docCount(f.db, org.id, "member-1"),
+        1,
+        "non-member removal must not touch existing documents",
+      );
+    } finally {
+      f.db.close();
+    }
+  });
+
+  it("a removal refused by the last-owner guard deletes no document", async () => {
+    const f = fixture();
+    try {
+      const org = await f.orgs.createOrgWithOwner(
+        { slug: "acme", name: "Acme", createdBy: "owner-1" },
+        { actorId: "owner-1" },
+      );
+
+      const docs = f.docs(org.id, "owner-1");
+      await docs.put({ kind: "workspace", id: "doc-1", payload: {} });
+
+      await assert.rejects(
+        () => f.orgs.removeMember(org.id, "owner-1"),
+        LastOwnerError,
+      );
+
+      assert.equal(
+        docCount(f.db, org.id, "owner-1"),
+        1,
+        "a refused removal must not delete documents",
+      );
+    } finally {
+      f.db.close();
+    }
+  });
+});
+
+describe("org deletion — owner_documents cleanup", () => {
+  function fixture() {
+    const db = openPlatformDb(":memory:");
+    const platformDb = createSqlitePlatformDb(db);
+    return {
+      db,
+      platformDb,
+      orgs: createOrgsRepository(platformDb),
+      docs: (ownerId: string, userId: string) =>
+        createOwnerDocumentsStore(platformDb, ownerId, userId),
+    };
+  }
+
+  it("deleting an org deletes every document it owns and no other owner's", async () => {
+    const f = fixture();
+    try {
+      const org = await f.orgs.createOrgWithOwner(
+        { slug: "acme", name: "Acme", createdBy: "owner-1" },
+        { actorId: "owner-1" },
+      );
+
+      await f.docs(org.id, "user-1").put({
+        kind: "workspace",
+        id: "doc-1",
+        payload: {},
+      });
+      await f.docs(org.id, "user-2").put({
+        kind: "workspace",
+        id: "doc-2",
+        payload: {},
+      });
+      // A different tenant's document must survive.
+      await f.docs("other-owner", "user-3").put({
+        kind: "workspace",
+        id: "doc-3",
+        payload: {},
+      });
+
+      assert.equal(
+        docCount(f.db, org.id, "user-1"),
+        1,
+        "setup: org has 2 docs",
+      );
+      assert.equal(docCount(f.db, org.id, "user-2"), 1);
+
+      await f.orgs.deleteOrg(org.id, { actorId: "owner-1" });
+
+      assert.equal(
+        docCount(f.db, org.id, "user-1"),
+        0,
+        "deleted org's documents must be gone",
+      );
+      assert.equal(docCount(f.db, org.id, "user-2"), 0);
+      assert.equal(
+        docCount(f.db, "other-owner", "user-3"),
+        1,
+        "another owner's documents must survive",
+      );
+    } finally {
+      f.db.close();
+    }
+  });
+
+  it("a deletion refused because the org owns projects deletes no document", async () => {
+    const f = fixture();
+    try {
+      const org = await f.orgs.createOrgWithOwner(
+        { slug: "acme", name: "Acme", createdBy: "owner-1" },
+        { actorId: "owner-1" },
+      );
+
+      const projects = createSavedProjectsStore(f.platformDb, org.id);
+      await projects.createProjectRecord({
+        id: "p-1",
+        name: "Project",
+        createdAt: 1,
+        updatedAt: 1,
+        formState: {},
+      } as unknown as SavedProject);
+
+      await f.docs(org.id, "user-1").put({
+        kind: "workspace",
+        id: "doc-1",
+        payload: {},
+      });
+
+      await assert.rejects(
+        () => f.orgs.deleteOrg(org.id, { actorId: "owner-1" }),
+        OrgOwnsProjectsError,
+      );
+
+      assert.equal(
+        docCount(f.db, org.id, "user-1"),
+        1,
+        "a refused deletion must not delete documents",
+      );
+    } finally {
+      f.db.close();
     }
   });
 });

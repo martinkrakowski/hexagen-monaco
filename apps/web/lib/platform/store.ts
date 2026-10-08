@@ -32,6 +32,10 @@ import {
   createScanRecordsStore,
   type ScanRecordsStore,
 } from "./scan-records-store";
+import {
+  createOwnerDocumentsStore,
+  type OwnerDocumentsStore,
+} from "./owner-documents-store";
 
 export interface PlatformStore {
   readonly auth: AuthRepository;
@@ -47,6 +51,8 @@ export interface PlatformStore {
   projectsFor(ownerId: string): SavedProjectsStore;
   runsFor(ownerId: string): RunHistoryRepository;
   scansFor(ownerId: string): ScanRecordsStore;
+  /** Per-person working documents: tenant AND author, both from the session. */
+  documentsFor(ownerId: string, userId: string): OwnerDocumentsStore;
   /**
    * Where this store expects scan artifact bytes to live. Exposed so a route
    * can write the file and mkdir the directory -- the row store itself does no
@@ -84,6 +90,9 @@ export function createPlatformStore(
     },
     scansFor(ownerId) {
       return createScanRecordsStore(platformDb, ownerId, artifactsDir);
+    },
+    documentsFor(ownerId, userId) {
+      return createOwnerDocumentsStore(platformDb, ownerId, userId);
     },
     async isProjectsInitialized(ownerId) {
       return ownerState.isInitialized(ownerId);
