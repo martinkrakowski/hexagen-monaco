@@ -58,8 +58,8 @@ async function seedOwnedProject(): Promise<void> {
 }
 
 /** Proves the row is really there, so a later refusal is an authz decision. */
-function assertProjectExists(): void {
-  const found = getPlatformStore().projectsFor(OWNER).getProject(PROJECT);
+async function assertProjectExists(): Promise<void> {
+  const found = await getPlatformStore().projectsFor(OWNER).getProject(PROJECT);
   assert.equal(found.success, true);
   if (found.success) {
     assert.ok(found.value, "the project must exist in the owner's tenant");
@@ -89,7 +89,7 @@ describe("P-A3 — /api/tenants/[ownerId]/projects/[projectId]", () => {
 
   it("an outsider gets 403 — while the project provably exists in the owner's tenant", async () => {
     await seedOwnedProject();
-    assertProjectExists();
+    await assertProjectExists();
 
     signedInAs(GRANTEE);
     const res = await TENANT_GET(new NextRequest(tenantUrl()), tenantParams());
@@ -138,7 +138,9 @@ describe("P-A3 — /api/tenants/[ownerId]/projects/[projectId]", () => {
     assert.equal(res.status, 403, "read-only grants must not write");
 
     // The row must be untouched, not merely the response refused.
-    const after = getPlatformStore().projectsFor(OWNER).getProject(PROJECT);
+    const after = await getPlatformStore()
+      .projectsFor(OWNER)
+      .getProject(PROJECT);
     assert.equal(after.success, true);
     if (after.success) assert.equal(after.value?.name, "owned");
   });
@@ -165,7 +167,9 @@ describe("P-A3 — /api/tenants/[ownerId]/projects/[projectId]", () => {
     );
     assert.equal(res.status, 200);
 
-    const after = getPlatformStore().projectsFor(OWNER).getProject(PROJECT);
+    const after = await getPlatformStore()
+      .projectsFor(OWNER)
+      .getProject(PROJECT);
     assert.equal(after.success, true);
     if (after.success) assert.equal(after.value?.name, "edited");
   });
@@ -197,7 +201,7 @@ describe("P-A3 — /api/tenants/[ownerId]/projects/[projectId]", () => {
     assert.equal(res.status, 404);
     // The row must NOT exist — the 404 above alone would also pass if the
     // insert happened and something else failed.
-    const after = getPlatformStore().projectsFor(OWNER).getProject(GHOST);
+    const after = await getPlatformStore().projectsFor(OWNER).getProject(GHOST);
     assert.equal(after.success, true);
     if (after.success) assert.equal(after.value, null);
   });

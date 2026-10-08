@@ -53,10 +53,11 @@ export async function resolveShareHandle(
   // themselves; an org slug that collides with a login is reachable as itself
   // only if no user holds that login. Both are exact matches either way.
   //
-  // `getUserByGithubLogin` is synchronous (AuthRepository: AdapterUser | null).
-  // Do not await it: a Promise is always truthy, which would treat every
-  // `@login` as a hit even on a miss. `setGithubLogin` is the async sibling.
-  const user = store.auth.getUserByGithubLogin(single[1]);
+  // `getUserByGithubLogin` is async (AuthRepository: the driver is moving to
+  // an asynchronous path). It MUST be awaited: without await the call
+  // returns a Promise, which is always truthy, treating every `@login` as a
+  // hit even on a miss.
+  const user = await store.auth.getUserByGithubLogin(single[1]);
   if (user) return { granteeType: "user", granteeId: user.id };
 
   const org = await store.orgs.getOrgBySlug(single[1]);

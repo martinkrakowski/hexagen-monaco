@@ -194,7 +194,9 @@ describe("P-A4 — share and revoke", () => {
     // Before: refused, and the project provably exists in the owner's tenant.
     const before = await readProject(GRANTEE);
     assert.equal(before.status, 403);
-    const exists = getPlatformStore().projectsFor(OWNER).getProject(PROJECT);
+    const exists = await getPlatformStore()
+      .projectsFor(OWNER)
+      .getProject(PROJECT);
     assert.equal(exists.success && Boolean(exists.value), true);
 
     signedInAs(OWNER);

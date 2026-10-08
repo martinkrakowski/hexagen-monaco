@@ -77,8 +77,8 @@ async function seed(): Promise<{ mine: number; theirs: number }> {
   for (const result of created) {
     assert.ok(result.success, `seeding failed: ${JSON.stringify(result)}`);
   }
-  store.runsFor(OWNER).record({ runId: "run-mine", telemetry });
-  store.runsFor(OTHER).record({ runId: "run-theirs", telemetry });
+  await store.runsFor(OWNER).record({ runId: "run-mine", telemetry });
+  await store.runsFor(OTHER).record({ runId: "run-theirs", telemetry });
   return { mine: 2, theirs: 1 };
 }
 
@@ -131,7 +131,7 @@ describe("GET /api/account/export", () => {
     // nothing — it would just be an empty table.
     const theirs = await store.projectsFor(OTHER).loadProjects();
     assert.ok(theirs.success && theirs.value.length === counts.theirs);
-    assert.ok(store.runsFor(OTHER).list().length > 0);
+    assert.ok((await store.runsFor(OTHER).list()).length > 0);
 
     const body = await (await GET(req())).json();
     const serialised = JSON.stringify(body);
@@ -260,26 +260,28 @@ function stubRunList(store: PlatformStore, storedCount: number) {
   const list = vi.fn((options?: { projectId?: string; limit?: number }) => {
     const limit = options?.limit ?? 100;
     const n = Math.min(storedCount, limit);
-    return Array.from(
-      { length: n },
-      (_, i): RunEventRecord => ({
-        id: `id-${i}`,
-        runId: `run-${i}`,
-        projectId: null,
-        stage: 3,
-        label: "Port Mapping",
-        model: "mercury-2",
-        refinerModel: null,
-        durationMs: 1200,
-        retryCount: 1,
-        inputTokens: 1000,
-        outputTokens: 400,
-        servedFromCache: false,
-        usedLlm: true,
-        summary: "mapped 4 ports",
-        costCents: 75,
-        createdAt: 1,
-      }),
+    return Promise.resolve(
+      Array.from(
+        { length: n },
+        (_, i): RunEventRecord => ({
+          id: `id-${i}`,
+          runId: `run-${i}`,
+          projectId: null,
+          stage: 3,
+          label: "Port Mapping",
+          model: "mercury-2",
+          refinerModel: null,
+          durationMs: 1200,
+          retryCount: 1,
+          inputTokens: 1000,
+          outputTokens: 400,
+          servedFromCache: false,
+          usedLlm: true,
+          summary: "mapped 4 ports",
+          costCents: 75,
+          createdAt: 1,
+        }),
+      ),
     );
   });
   vi.spyOn(store, "runsFor").mockImplementation((ownerId: string) => {

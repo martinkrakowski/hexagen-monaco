@@ -112,8 +112,8 @@ function rowToEntitlement(row: EntitlementRow): Entitlement {
 }
 
 export interface EntitlementRepository {
-  resolve(userId: string | null): Entitlement;
-  upsert(entitlement: Entitlement & { userId: string }): Entitlement;
+  resolve(userId: string | null): Promise<Entitlement>;
+  upsert(entitlement: Entitlement & { userId: string }): Promise<Entitlement>;
 }
 
 export function createEntitlementRepository(
@@ -139,7 +139,7 @@ export function createEntitlementRepository(
   `);
 
   return {
-    resolve(userId) {
+    async resolve(userId) {
       if (!userId) return FREE_ENTITLEMENT;
       const row = select.get(userId) as EntitlementRow | undefined;
       if (!row) {
@@ -147,7 +147,7 @@ export function createEntitlementRepository(
       }
       return rowToEntitlement(row);
     },
-    upsert(entitlement) {
+    async upsert(entitlement) {
       upsert.run({
         user_id: entitlement.userId,
         plan: entitlement.plan,

@@ -37,26 +37,26 @@ function canonicalizeGithubLogin(login: string): string {
 }
 
 export interface AuthRepository {
-  createUser(user: Omit<AdapterUser, "id">): AdapterUser;
-  getUser(id: string): AdapterUser | null;
-  getUserByEmail(email: string): AdapterUser | null;
+  createUser(user: Omit<AdapterUser, "id">): Promise<AdapterUser>;
+  getUser(id: string): Promise<AdapterUser | null>;
+  getUserByEmail(email: string): Promise<AdapterUser | null>;
   getUserByAccount(
     provider: string,
     providerAccountId: string,
-  ): AdapterUser | null;
-  updateUser(user: Partial<AdapterUser> & Pick<AdapterUser, "id">): AdapterUser;
+  ): Promise<AdapterUser | null>;
+  updateUser(
+    user: Partial<AdapterUser> & Pick<AdapterUser, "id">,
+  ): Promise<AdapterUser>;
   /**
    * P-A1: persist the GitHub username seen in the OAuth profile.
    *
-   * Async (D-A9) unlike its siblings here, which are sync because NextAuth's
-   * adapter contract calls them. This one is not part of that contract — it is
-   * called from the jwt callback — so it is written in the form every new
-   * store uses, and it costs nothing at its only call site.
+   * All siblings here are async now (D-A9) for parity with the coming driver
+   * migration, so this is written in the same form.
    *
    * Idempotent: re-running a sign-in with the same profile is a no-op.
    */
   setGithubLogin(userId: string, login: string): Promise<void>;
-  getUserByGithubLogin(login: string): AdapterUser | null;
+  getUserByGithubLogin(login: string): Promise<AdapterUser | null>;
   /**
    * P-U0b: when this user completed (or skipped — D-U4) onboarding.
    *
@@ -76,32 +76,32 @@ export interface AuthRepository {
    * completions into two different timestamps, the later one winning.
    */
   markOnboarded(userId: string): Promise<void>;
-  linkAccount(account: AdapterAccount): void;
-  unlinkAccount(provider: string, providerAccountId: string): void;
+  linkAccount(account: AdapterAccount): Promise<void>;
+  unlinkAccount(provider: string, providerAccountId: string): Promise<void>;
   createSession(session: {
     sessionToken: string;
     userId: string;
     expires: Date;
-  }): { sessionToken: string; userId: string; expires: Date };
-  getSessionAndUser(sessionToken: string): {
+  }): Promise<{ sessionToken: string; userId: string; expires: Date }>;
+  getSessionAndUser(sessionToken: string): Promise<{
     session: { sessionToken: string; userId: string; expires: Date };
     user: AdapterUser;
-  } | null;
+  } | null>;
   updateSession(session: {
     sessionToken: string;
     userId?: string;
     expires?: Date;
-  }): { sessionToken: string; userId: string; expires: Date } | null;
-  deleteSession(sessionToken: string): void;
+  }): Promise<{ sessionToken: string; userId: string; expires: Date } | null>;
+  deleteSession(sessionToken: string): Promise<void>;
   createVerificationToken(token: {
     identifier: string;
     token: string;
     expires: Date;
-  }): { identifier: string; token: string; expires: Date };
+  }): Promise<{ identifier: string; token: string; expires: Date }>;
   useVerificationToken(params: {
     identifier: string;
     token: string;
-  }): { identifier: string; token: string; expires: Date } | null;
+  }): Promise<{ identifier: string; token: string; expires: Date } | null>;
 }
 
 export function createAuthRepository(db: Database.Database): AuthRepository {
@@ -175,7 +175,7 @@ export function createAuthRepository(db: Database.Database): AuthRepository {
   `);
 
   return {
-    createUser(user) {
+    async createUser(user) {
       const id = crypto.randomUUID();
       insertUser.run({
         id,
@@ -190,22 +190,22 @@ export function createAuthRepository(db: Database.Database): AuthRepository {
       const row = selectUser.get(id) as UserRow;
       return toAdapterUser(row);
     },
-    getUser(id) {
+    async getUser(id) {
       const row = selectUser.get(id) as UserRow | undefined;
       return row ? toAdapterUser(row) : null;
     },
-    getUserByEmail(email) {
+    async getUserByEmail(email) {
       if (!email) return null;
       const row = selectUserByEmail.get(email) as UserRow | undefined;
       return row ? toAdapterUser(row) : null;
     },
-    getUserByAccount(provider, providerAccountId) {
+    async getUserByAccount(provider, providerAccountId) {
       const row = selectUserByAccount.get(provider, providerAccountId) as
         | UserRow
         | undefined;
       return row ? toAdapterUser(row) : null;
     },
-    updateUser(user) {
+    async updateUser(user) {
       updateUser.run({
         id: user.id,
         name: user.name ?? null,
@@ -226,7 +226,7 @@ export function createAuthRepository(db: Database.Database): AuthRepository {
       if (!canonical) return;
       setGithubLogin.run({ id: userId, github_login: canonical });
     },
-    getUserByGithubLogin(login) {
+    async getUserByGithubLogin(login) {
       const canonical = canonicalizeGithubLogin(login);
       if (!canonical) return null;
       const row = selectUserByGithubLogin.get(canonical) as UserRow | undefined;
@@ -244,7 +244,7 @@ export function createAuthRepository(db: Database.Database): AuthRepository {
         onboarded_at: new Date().toISOString(),
       });
     },
-    linkAccount(account) {
+    async linkAccount(account) {
       insertAccount.run({
         provider: account.provider,
         provider_account_id: account.providerAccountId,
@@ -252,10 +252,10 @@ export function createAuthRepository(db: Database.Database): AuthRepository {
         type: account.type,
       });
     },
-    unlinkAccount(provider, providerAccountId) {
+    async unlinkAccount(provider, providerAccountId) {
       deleteAccount.run(provider, providerAccountId);
     },
-    createSession(session) {
+    async createSession(session) {
       insertSession.run({
         session_token: session.sessionToken,
         user_id: session.userId,
@@ -263,7 +263,7 @@ export function createAuthRepository(db: Database.Database): AuthRepository {
       });
       return session;
     },
-    getSessionAndUser(sessionToken) {
+    async getSessionAndUser(sessionToken) {
       const session = selectSession.get(sessionToken) as SessionRow | undefined;
       if (!session) return null;
       const user = selectUser.get(session.user_id) as UserRow | undefined;
@@ -277,7 +277,7 @@ export function createAuthRepository(db: Database.Database): AuthRepository {
         user: toAdapterUser(user),
       };
     },
-    updateSession(session) {
+    async updateSession(session) {
       updateSession.run({
         session_token: session.sessionToken,
         user_id: session.userId ?? null,
@@ -293,10 +293,10 @@ export function createAuthRepository(db: Database.Database): AuthRepository {
         expires: new Date(row.expires),
       };
     },
-    deleteSession(sessionToken) {
+    async deleteSession(sessionToken) {
       deleteSession.run(sessionToken);
     },
-    createVerificationToken(token) {
+    async createVerificationToken(token) {
       insertVerification.run({
         identifier: token.identifier,
         token: token.token,
@@ -304,7 +304,7 @@ export function createAuthRepository(db: Database.Database): AuthRepository {
       });
       return token;
     },
-    useVerificationToken(params) {
+    async useVerificationToken(params) {
       const row = takeVerification.get(params.identifier, params.token) as
         | VerificationRow
         | undefined;
@@ -334,13 +334,13 @@ export function createNextAuthAdapter(
     updateUser: (user: Partial<AdapterUser> & Pick<AdapterUser, "id">) =>
       resolve().updateUser(user),
     linkAccount: async (account: AdapterAccount) => {
-      resolve().linkAccount(account);
+      await resolve().linkAccount(account);
     },
     unlinkAccount: async ({
       provider,
       providerAccountId,
     }: Pick<AdapterAccount, "provider" | "providerAccountId">) => {
-      resolve().unlinkAccount(provider, providerAccountId);
+      await resolve().unlinkAccount(provider, providerAccountId);
     },
     createSession: (session: {
       sessionToken: string;
@@ -357,7 +357,7 @@ export function createNextAuthAdapter(
       }> & { sessionToken: string },
     ) => resolve().updateSession(session),
     deleteSession: async (sessionToken: string) => {
-      resolve().deleteSession(sessionToken);
+      await resolve().deleteSession(sessionToken);
     },
     createVerificationToken: (token: {
       identifier: string;

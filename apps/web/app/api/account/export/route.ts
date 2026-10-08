@@ -59,15 +59,16 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  // `RunHistoryRepository.list` is synchronous (better-sqlite3 `.all()`).
+  // `RunHistoryRepository.list` is async (the driver is moving to an
+  // asynchronous path), so it is awaited below.
   // Probe one past the ceiling: SQL LIMIT cannot tell "exactly N stored"
   // from "more than N stored" when the result length equals the limit.
-  const listed = store
+  const listed = await store
     .runsFor(owner.ownerId)
     .list({ limit: RUN_EXPORT_LIMIT + 1 });
   const truncated = listed.length > RUN_EXPORT_LIMIT;
   const events = truncated ? listed.slice(0, RUN_EXPORT_LIMIT) : listed;
-  const entitlement = store.billing.resolve(owner.ownerId);
+  const entitlement = await store.billing.resolve(owner.ownerId);
 
   const bundle = {
     schemaVersion: 1 as const,

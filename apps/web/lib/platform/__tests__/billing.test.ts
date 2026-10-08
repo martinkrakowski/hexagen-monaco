@@ -28,17 +28,17 @@ describe("billing / entitlement seam", () => {
     assert.equal(full.secretKey, "sk_test_x");
   });
 
-  it("defaults an unknown user to the existing free quota", () => {
+  it("defaults an unknown user to the existing free quota", async () => {
     const store = createPlatformStore(":memory:");
-    const anon = store.billing.resolve(null);
+    const anon = await store.billing.resolve(null);
     assert.equal(anon.plan, "free");
     assert.equal(shouldUseFreeQuota(anon), true);
 
-    const signedIn = store.billing.resolve("user-1");
+    const signedIn = await store.billing.resolve("user-1");
     assert.equal(signedIn.plan, "free");
     assert.equal(shouldUseFreeQuota(signedIn), true);
 
-    const paid = store.billing.upsert({
+    const paid = await store.billing.upsert({
       userId: "user-1",
       plan: "repo",
       repoLimit: 3,
@@ -49,7 +49,7 @@ describe("billing / entitlement seam", () => {
     });
     assert.equal(paid.plan, "repo");
     assert.equal(shouldUseFreeQuota(paid), false);
-    assert.equal(store.billing.resolve("user-1").repoLimit, 3);
+    assert.equal((await store.billing.resolve("user-1")).repoLimit, 3);
     store.close();
   });
 });

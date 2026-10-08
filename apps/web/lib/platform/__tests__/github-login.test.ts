@@ -22,7 +22,7 @@ describe("P-A1 — users.github_login", () => {
     const db = openPlatformDb(tmpDbPath("hexagen-login-set-"));
     try {
       const auth = createAuthRepository(db);
-      const user = auth.createUser({
+      const user = await auth.createUser({
         name: "Ada",
         email: "ada@example.com",
         emailVerified: null,
@@ -40,9 +40,9 @@ describe("P-A1 — users.github_login", () => {
         .prepare("SELECT github_login FROM users WHERE github_login = ?")
         .all("ada");
       assert.equal(rows.length, 1, "a repeat sign-in must not duplicate");
-      assert.equal(auth.getUserByGithubLogin("ada")?.id, user.id);
+      assert.equal((await auth.getUserByGithubLogin("ada"))?.id, user.id);
 
-      const other = auth.createUser({
+      const other = await auth.createUser({
         name: "Other",
         email: "other@example.com",
         emailVerified: null,
@@ -61,7 +61,7 @@ describe("P-A1 — users.github_login", () => {
     const db = openPlatformDb(tmpDbPath("hexagen-login-case-"));
     try {
       const auth = createAuthRepository(db);
-      const user = auth.createUser({
+      const user = await auth.createUser({
         name: "Ada",
         email: "ada@example.com",
         emailVerified: null,
@@ -71,10 +71,10 @@ describe("P-A1 — users.github_login", () => {
         .prepare("SELECT github_login FROM users WHERE id = ?")
         .get(user.id) as { github_login: string | null };
       assert.equal(stored.github_login, "ada");
-      assert.equal(auth.getUserByGithubLogin("ADA")?.id, user.id);
-      assert.equal(auth.getUserByGithubLogin("Ada")?.id, user.id);
+      assert.equal((await auth.getUserByGithubLogin("ADA"))?.id, user.id);
+      assert.equal((await auth.getUserByGithubLogin("Ada"))?.id, user.id);
 
-      const other = auth.createUser({
+      const other = await auth.createUser({
         name: "Impostor",
         email: "impostor@example.com",
         emailVerified: null,
@@ -88,27 +88,27 @@ describe("P-A1 — users.github_login", () => {
     }
   });
 
-  it("a user with no handle still authenticates (existing accounts)", () => {
+  it("a user with no handle still authenticates (existing accounts)", async () => {
     const db = openPlatformDb(tmpDbPath("hexagen-login-null-"));
     try {
       const auth = createAuthRepository(db);
-      const user = auth.createUser({
+      const user = await auth.createUser({
         name: "Legacy",
         email: "legacy@example.com",
         emailVerified: null,
       });
-      auth.linkAccount({
+      await auth.linkAccount({
         provider: "github",
         providerAccountId: "12345",
         userId: user.id,
         type: "oauth",
       } as never);
 
-      const found = auth.getUserByAccount("github", "12345");
+      const found = await auth.getUserByAccount("github", "12345");
       assert.equal(found?.id, user.id, "sign-in path works without a handle");
-      assert.equal(auth.getUserByGithubLogin("nobody"), null);
+      assert.equal(await auth.getUserByGithubLogin("nobody"), null);
       assert.equal(
-        auth.getUserByAccount("github", "missing"),
+        await auth.getUserByAccount("github", "missing"),
         null,
         "unknown provider account does not authenticate",
       );

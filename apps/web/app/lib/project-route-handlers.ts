@@ -252,7 +252,7 @@ export async function handleProjectGet(
   const access = await resolveProjectAccess(request, ownerId, parsed.data);
   if (!access.ok) return access.response;
 
-  const found = getPlatformStore()
+  const found = await getPlatformStore()
     .projectsFor(access.ownerId)
     .getProjectWithRev(parsed.data);
   if (!found.success) {
@@ -306,7 +306,7 @@ export async function handleProjectPut(
 
   const store = getPlatformStore();
   const port = store.projectsFor(access.ownerId);
-  const updated = port.putProject(
+  const updated = await port.putProject(
     parsedProject.project,
     precondition.expected,
     access.actorUserId,
