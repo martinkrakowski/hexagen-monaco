@@ -83,6 +83,17 @@ export interface ShareAuditActor {
   readonly actorId: string;
 }
 
+/** A grant was asked for on a project that does not exist (any more). */
+export class ShareProjectNotFoundError extends Error {
+  constructor(
+    readonly ownerId: string,
+    readonly projectId: string,
+  ) {
+    super("cannot grant access to a project that does not exist");
+    this.name = "ShareProjectNotFoundError";
+  }
+}
+
 export interface ProjectSharesRepository {
   /**
    * Create or re-open a grant. Re-granting a revoked pair clears `revoked_at`
@@ -91,7 +102,11 @@ export interface ProjectSharesRepository {
    * lives in `audit_log`.
    *
    * When `actor` is set, the upsert and its `share.grant` audit row commit in
-   * one better-sqlite3 transaction; an audit failure rolls the grant back.
+   * one transaction; an audit failure rolls the grant back. That transaction
+   * first re-reads the project: a grant on a project that does not exist is
+   * refused with `ShareProjectNotFoundError` and nothing is written. Every
+   * request path passes an actor. The form without one writes the grant
+   * unconditionally and is for fixtures.
    */
   grant(
     input: {
@@ -273,6 +288,9 @@ export function createProjectSharesRepository(
     ).changes;
   }
 
+  const projectExists =
+    "SELECT 1 AS ok FROM saved_projects WHERE owner_id = ? AND id = ?";
+
   const grantAudited = (
     input: {
       ownerId: string;
@@ -285,6 +303,23 @@ export function createProjectSharesRepository(
     actorId: string,
   ): Promise<void> =>
     db.transaction(async (tx) => {
+      // "The project exists" and "the grant is written" are decided together.
+      // This read-then-write RELIES ON THE SEAM'S ISOLATION: it is correct
+      // only because nothing can delete the project between the read and the
+      // write (one connection today; SERIALIZABLE with retry on Postgres). On
+      // a weaker isolation it needs a lock on the project row
+      // (`SELECT … FOR KEY SHARE`).
+      // A route that checked existence first and granted afterwards left a
+      // window: a delete landing in between revoked nothing (there was no
+      // grant yet) and the grant then went live on a project that was gone,
+      // to re-apply to any project later created under the same id.
+      const project = await tx.get<{ ok: number }>(projectExists, [
+        input.ownerId,
+        input.projectId,
+      ]);
+      if (!project) {
+        throw new ShareProjectNotFoundError(input.ownerId, input.projectId);
+      }
       await grantNow(tx, input);
       await appendAudit(tx, {
         actorId,

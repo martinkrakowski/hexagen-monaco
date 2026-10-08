@@ -434,6 +434,12 @@ describe("async contract — 64 store methods return Promises", () => {
   it("each ProjectSharesRepository method returns a Promise", async () => {
     const shares = store.shares;
 
+    // A grant with an actor is refused on a project that does not exist.
+    const created = await store
+      .projectsFor(OWNER)
+      .createProjectRecord(sampleProject("proj-1"));
+    assert.equal(created.success, true);
+
     // Set up: a live grant to revoke and observe.
     await shares.grant(
       {

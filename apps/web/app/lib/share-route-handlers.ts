@@ -8,9 +8,10 @@ import {
   requirePersistenceOwner,
   resolveProjectAccess,
 } from "../../lib/platform/require-owner";
-import type {
-  GranteeType,
-  ShareRole,
+import {
+  ShareProjectNotFoundError,
+  type GranteeType,
+  type ShareRole,
 } from "../../lib/platform/project-shares-store";
 
 /**
@@ -188,17 +189,24 @@ export async function handleShareCreate(
   }
 
   const store = getPlatformStore();
-  await store.shares.grant(
-    {
-      ownerId: access.ownerId,
-      projectId: parsedId.data,
-      granteeType: resolved.granteeType,
-      granteeId: resolved.granteeId,
-      role: role as ShareRole,
-      grantedBy: access.actorUserId,
-    },
-    { actorId: access.actorUserId },
-  );
+  try {
+    await store.shares.grant(
+      {
+        ownerId: access.ownerId,
+        projectId: parsedId.data,
+        granteeType: resolved.granteeType,
+        granteeId: resolved.granteeId,
+        role: role as ShareRole,
+        grantedBy: access.actorUserId,
+      },
+      { actorId: access.actorUserId },
+    );
+  } catch (error) {
+    // The project was there at the check above and is gone now: the store
+    // re-reads it in the grant's own transaction. Same answer as the check.
+    if (error instanceof ShareProjectNotFoundError) return projectNotFound();
+    throw error;
+  }
 
   return NextResponse.json(
     {
