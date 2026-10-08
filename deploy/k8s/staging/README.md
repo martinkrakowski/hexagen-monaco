@@ -94,6 +94,13 @@ snapshot while the app keeps writing; it then checks the copy with
 does not exist yet (`quota.db` is created on first use) is reported and
 skipped. A run that copies nothing fails.
 
+The same claim is mounted read-only at `/backups` in the `web` container of the
+`hexagen-web` pod, so that a copy off the node can read the finished files
+through that pod. A finished file is named
+`(platform|byok|quota)-<YYYYMMDD>T<HHMMSS>Z.db`; anything else in the directory
+(a `.part` file) is a copy still being written and must not be read. The app
+does not use this mount.
+
 Unlike the Postgres cluster below, these objects are part of this
 kustomization: every `yarn deploy:staging` applies them.
 
