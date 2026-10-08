@@ -3,6 +3,7 @@ import {
   resolvePlatformDbPath,
   resolveScanArtifactsDir,
 } from "./platform-db";
+import { createSqlitePlatformDb } from "./sqlite-db";
 import { createAuthRepository, type AuthRepository } from "./auth-store";
 import {
   createSavedProjectsStore,
@@ -52,8 +53,8 @@ export interface PlatformStore {
    * filesystem I/O.
    */
   readonly scanArtifactsDir: string;
-  isProjectsInitialized(ownerId: string): boolean;
-  markProjectsInitialized(ownerId: string): void;
+  isProjectsInitialized(ownerId: string): Promise<boolean>;
+  markProjectsInitialized(ownerId: string): Promise<void>;
   close(): void;
 }
 
@@ -65,7 +66,8 @@ export function createPlatformStore(
   artifactsDir: string = resolveScanArtifactsDir(),
 ): PlatformStore {
   const db = openPlatformDb(dbPath);
-  const ownerState = createOwnerStateStore(db);
+  const platformDb = createSqlitePlatformDb(db);
+  const ownerState = createOwnerStateStore(platformDb);
   return {
     scanArtifactsDir: artifactsDir,
     auth: createAuthRepository(db),
@@ -83,11 +85,11 @@ export function createPlatformStore(
     scansFor(ownerId) {
       return createScanRecordsStore(db, ownerId, artifactsDir);
     },
-    isProjectsInitialized(ownerId) {
+    async isProjectsInitialized(ownerId) {
       return ownerState.isInitialized(ownerId);
     },
-    markProjectsInitialized(ownerId) {
-      ownerState.markInitialized(ownerId);
+    async markProjectsInitialized(ownerId) {
+      return ownerState.markInitialized(ownerId);
     },
     close() {
       db.close();

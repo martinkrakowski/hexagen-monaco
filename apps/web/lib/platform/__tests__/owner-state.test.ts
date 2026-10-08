@@ -3,12 +3,12 @@ import assert from "node:assert/strict";
 import { createPlatformStore } from "../store";
 
 describe("project owner initialized flag", () => {
-  it("starts unset and is set by markProjectsInitialized", () => {
+  it("starts unset and is set by markProjectsInitialized", async () => {
     const store = createPlatformStore(":memory:");
-    assert.equal(store.isProjectsInitialized("owner-a"), false);
-    store.markProjectsInitialized("owner-a");
-    assert.equal(store.isProjectsInitialized("owner-a"), true);
-    assert.equal(store.isProjectsInitialized("owner-b"), false);
+    assert.equal(await store.isProjectsInitialized("owner-a"), false);
+    await store.markProjectsInitialized("owner-a");
+    assert.equal(await store.isProjectsInitialized("owner-a"), true);
+    assert.equal(await store.isProjectsInitialized("owner-b"), false);
     store.close();
   });
 });
