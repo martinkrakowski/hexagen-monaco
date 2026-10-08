@@ -48,6 +48,7 @@ export type { ActiveItem, ConversationEntry };
 export function useGovernanceAssistant(
   wizardData: WizardData,
   currentStepIndex: number,
+  projectId: string | null = null,
 ) {
   const { messages, sendGovernanceMessage, isStreaming } =
     useLocalLLMStreaming();
@@ -60,14 +61,17 @@ export function useGovernanceAssistant(
 
   const wizardContext = serializeWizardContext(wizardData);
 
-  const { currentStepId, stepQuestions, contextKey } = useGovernanceKeys({
-    currentStepIndex,
-    activeItem,
-    expandedQuestionId,
-  });
+  const { currentStepId, stepQuestions, contextKey, legacyContextKey } =
+    useGovernanceKeys({
+      currentStepIndex,
+      activeItem,
+      expandedQuestionId,
+      projectId,
+    });
 
   const thread = useGovernanceThread({
     contextKey,
+    legacyContextKey,
     messages,
     isStreaming,
   });

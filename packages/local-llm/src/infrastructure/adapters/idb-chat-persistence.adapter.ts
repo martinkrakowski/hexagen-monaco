@@ -1,4 +1,4 @@
-import { get, set, del } from "idb-keyval";
+import { del, delMany, get, keys, set } from "idb-keyval";
 import type { Result } from "@hexagen/shared";
 import type { ChatPersistencePort } from "../../domain/ports/index.js";
 import type { ChatMessage } from "../../domain/value-objects/index.js";
@@ -9,9 +9,6 @@ const GOVERNANCE_PREFIX = "hexagen:governance:";
 const WIZARD_DRAFT_PREFIX = "hexagen:wizard-draft:";
 const WORKSPACE_PREFIX = "hexagen:workspace:";
 const GENERATION_PREFIX = "hexagen:generation:";
-
-const IDB_DATABASE_NAME = "keyval-store";
-const IDB_STORE_NAME = "keyval";
 
 export class IDBChatPersistenceAdapter implements ChatPersistencePort {
   async loadChatHistory(): Promise<Result<ChatMessage[]>> {
@@ -107,40 +104,30 @@ export class IDBChatPersistenceAdapter implements ChatPersistencePort {
   }
 }
 
-function openKeyvalStore(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open(IDB_DATABASE_NAME);
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
-}
-
-function purgeProjectDataAtomic(projectId: string): Promise<void> {
-  return openKeyvalStore().then(
-    (db) =>
-      new Promise<void>((resolve, reject) => {
-        const tx = db.transaction(IDB_STORE_NAME, "readwrite");
-        const store = tx.objectStore(IDB_STORE_NAME);
-
-        store.delete(`${WIZARD_DRAFT_PREFIX}${projectId}`);
-        store.delete(`${WORKSPACE_PREFIX}${projectId}`);
-
-        const govLower = `${GOVERNANCE_PREFIX}${projectId}-`;
-        const govUpper = `${GOVERNANCE_PREFIX}${projectId}-\uffff`;
-        store.delete(IDBKeyRange.bound(govLower, govUpper));
-
-        const genLower = `${GENERATION_PREFIX}${projectId}-`;
-        const genUpper = `${GENERATION_PREFIX}${projectId}-\uffff`;
-        store.delete(IDBKeyRange.bound(genLower, genUpper));
-
-        tx.oncomplete = () => {
-          db.close();
-          resolve();
-        };
-        tx.onerror = () => {
-          db.close();
-          reject(tx.error);
-        };
-      }),
-  );
+/**
+ * Purge every key belonging to `projectId` in one transaction.
+ *
+ * Built on idb-keyval's `keys()` + a single `delMany(...)` so the whole
+ * delete set commits atomically (ADR-0029: the deletes are all-or-nothing,
+ * not a sequence of independent `del` calls). The trailing `-` on the
+ * governance/generation range prefixes is what stops `P` from matching a
+ * sibling `P2-...`.
+ */
+async function purgeProjectDataAtomic(projectId: string): Promise<void> {
+  const allKeys = await keys();
+  const toDelete: string[] = [];
+  for (const key of allKeys) {
+    if (typeof key !== "string") continue;
+    if (
+      key === `${WIZARD_DRAFT_PREFIX}${projectId}` ||
+      key === `${WORKSPACE_PREFIX}${projectId}` ||
+      key.startsWith(`${GOVERNANCE_PREFIX}${projectId}-`) ||
+      key.startsWith(`${GENERATION_PREFIX}${projectId}-`)
+    ) {
+      toDelete.push(key);
+    }
+  }
+  if (toDelete.length > 0) {
+    await delMany(toDelete);
+  }
 }

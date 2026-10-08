@@ -1,8 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { ChatMessage } from "@hexagen/local-llm";
-import type { LLMRequest } from "@hexagen/local-llm";
+import type {
+  ChatMessage,
+  ChatPersistencePort,
+  GovernanceEntry,
+  LLMRequest,
+} from "@hexagen/local-llm";
 
 import { getChatPersistence } from "@/lib/wire";
 import { useGovernanceThreadStore } from "../../stores/useGovernanceThreadStore";
@@ -10,7 +14,15 @@ import { useGovernanceThreadStore } from "../../stores/useGovernanceThreadStore"
 import type { ConversationEntry } from "./types";
 
 interface UseGovernanceThreadOptions {
+  /** Scoped storage key (`projectId`-prefixed) for this thread. */
   contextKey: string | null;
+  /**
+   * Bare key a thread was written under before scoping (the pre-change
+   * `hexagen:governance:<bareKey>` shape). Used ONLY to adopt that thread
+   * into the scoped key; null when there is nothing to adopt (null question
+   * or an unsaved project, which must not steal another project's thread).
+   */
+  legacyContextKey: string | null;
   messages: ChatMessage[];
   isStreaming: boolean;
 }
@@ -70,6 +82,7 @@ export interface UseGovernanceThreadReturn {
  */
 export function useGovernanceThread({
   contextKey,
+  legacyContextKey,
   messages,
   isStreaming,
 }: UseGovernanceThreadOptions): UseGovernanceThreadReturn {
@@ -108,27 +121,38 @@ export function useGovernanceThread({
     const port = getChatPersistence();
     port
       .loadGovernanceThread(contextKey)
-      .then((result) => {
-        if (result.success) {
-          setThread(contextKey, result.value);
-          const rebuilt: LLMRequest["messages"] = [];
-          for (const entry of result.value) {
-            rebuilt.push(
-              { role: "user", content: entry.questionLabel },
-              { role: "assistant", content: entry.answer },
-            );
-          }
-          governanceHistoryRef.current = rebuilt;
+      .then(async (result) => {
+        let entries: GovernanceEntry[];
+
+        if (!result.success) {
+          entries = [];
+        } else if (result.value.length > 0) {
+          entries = result.value;
+        } else if (legacyContextKey) {
+          // Scoped thread is empty: adopt a thread written before this change
+          // (under the bare key), if one exists for a saved project.
+          entries = await adoptLegacyThread(port, contextKey, legacyContextKey);
         } else {
-          setThread(contextKey, []);
-          governanceHistoryRef.current = [];
+          entries = [];
         }
+
+        setThread(contextKey, entries);
+        const rebuilt: LLMRequest["messages"] = [];
+        for (const entry of entries) {
+          rebuilt.push(
+            { role: "user", content: entry.questionLabel },
+            { role: "assistant", content: entry.answer },
+          );
+        }
+        governanceHistoryRef.current = rebuilt;
         pendingQuestionLabelRef.current = null;
         threadLoadingRef.current = false;
         setThreadLoaded(true);
         setLoadCompleteToken((prev) => prev + 1);
       })
       .catch(() => {
+        // A rejected load still ends loaded, on an empty thread — never a
+        // stuck spinner.
         setThread(contextKey, []);
         governanceHistoryRef.current = [];
         pendingQuestionLabelRef.current = null;
@@ -136,7 +160,7 @@ export function useGovernanceThread({
         setThreadLoaded(true);
         setLoadCompleteToken((prev) => prev + 1);
       });
-  }, [contextKey, setThread]);
+  }, [contextKey, legacyContextKey, setThread]);
 
   // Effect: finalize the thread entry when streaming completes.
   useEffect(() => {
@@ -246,4 +270,32 @@ export function useGovernanceThread({
     threadLoadingRef,
     loadCompleteToken,
   };
+}
+
+/**
+ * Migrate a thread written under the pre-change bare key into the new
+ * project-scoped key, using only the port's existing methods.
+ *
+ * The legacy key is cleared ONLY after the scoped save succeeds — a failed
+ * save leaves it in place so the thread is never lost (it may be adopted
+ * again, which is preferable to losing it). The entries are returned
+ * regardless, so a failed save is not silent: the user still sees the thread
+ * this session.
+ */
+async function adoptLegacyThread(
+  port: ChatPersistencePort,
+  scopedKey: string,
+  legacyKey: string,
+): Promise<GovernanceEntry[]> {
+  const legacyResult = await port.loadGovernanceThread(legacyKey);
+  if (!legacyResult.success || legacyResult.value.length === 0) {
+    return [];
+  }
+
+  const entries = legacyResult.value;
+  const saveResult = await port.saveGovernanceThread(scopedKey, entries);
+  if (saveResult.success) {
+    await port.clearGovernanceThread(legacyKey);
+  }
+  return entries;
 }
