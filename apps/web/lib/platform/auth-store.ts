@@ -126,10 +126,8 @@ export function createAuthRepository(db: PlatformDb): AuthRepository {
   `;
   const setGithubLogin =
     "UPDATE users SET github_login = @github_login WHERE id = @id";
-  const selectUserByGithubLogin =
-    "SELECT * FROM users WHERE github_login = ?";
-  const selectOnboardedAt =
-    "SELECT onboarded_at FROM users WHERE id = ?";
+  const selectUserByGithubLogin = "SELECT * FROM users WHERE github_login = ?";
+  const selectOnboardedAt = "SELECT onboarded_at FROM users WHERE id = ?";
   const markOnboarded = `
     UPDATE users
         SET onboarded_at = @onboarded_at
@@ -148,16 +146,14 @@ export function createAuthRepository(db: PlatformDb): AuthRepository {
     INSERT INTO sessions (session_token, user_id, expires)
     VALUES (@session_token, @user_id, @expires)
   `;
-  const selectSession =
-    "SELECT * FROM sessions WHERE session_token = ?";
+  const selectSession = "SELECT * FROM sessions WHERE session_token = ?";
   const updateSession = `
     UPDATE sessions
        SET user_id = COALESCE(@user_id, user_id),
            expires = COALESCE(@expires, expires)
      WHERE session_token = @session_token
   `;
-  const deleteSession =
-    "DELETE FROM sessions WHERE session_token = ?";
+  const deleteSession = "DELETE FROM sessions WHERE session_token = ?";
   const insertVerification = `
     INSERT INTO verification_tokens (identifier, token, expires)
     VALUES (@identifier, @token, @expires)
@@ -190,9 +186,7 @@ export function createAuthRepository(db: PlatformDb): AuthRepository {
     },
     async getUserByEmail(email) {
       if (!email) return null;
-      const row = await db.get<UserRow | undefined>(selectUserByEmail, [
-        email,
-      ]);
+      const row = await db.get<UserRow | undefined>(selectUserByEmail, [email]);
       return row ? toAdapterUser(row) : null;
     },
     async getUserByAccount(provider, providerAccountId) {
@@ -309,10 +303,10 @@ export function createAuthRepository(db: PlatformDb): AuthRepository {
       return token;
     },
     async useVerificationToken(params) {
-      const row = await db.get<VerificationRow | undefined>(
-        takeVerification,
-        [params.identifier, params.token],
-      );
+      const row = await db.get<VerificationRow | undefined>(takeVerification, [
+        params.identifier,
+        params.token,
+      ]);
       if (!row) return null;
       return {
         identifier: row.identifier,

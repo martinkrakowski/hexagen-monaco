@@ -163,9 +163,7 @@ describe("P-A2 — team membership invariants", () => {
       assert.equal(
         (
           db
-            .prepare(
-              "SELECT COUNT(*) AS n FROM team_members WHERE user_id = ?",
-            )
+            .prepare("SELECT COUNT(*) AS n FROM team_members WHERE user_id = ?")
             .get("member-1") as { n: number }
         ).n,
         0,

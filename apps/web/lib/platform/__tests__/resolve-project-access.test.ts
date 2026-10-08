@@ -86,7 +86,7 @@ describe("P-A3 — resolveProjectAccess", () => {
     vi.mocked(getToken).mockReset();
   });
 
-   it("401 without a JWT sub", async () => {
+  it("401 without a JWT sub", async () => {
     const { db, readers } = fixture();
     try {
       signedInAs(null);
@@ -131,9 +131,10 @@ describe("P-A3 — resolveProjectAccess", () => {
 
       // Non-vacuity: prove the row is there before asserting the refusal, so
       // the 403 is an authorization decision and not a 404 in disguise.
-      const owned = await createSavedProjectsStore(platformDb, OWNER).getProject(
-        PROJECT,
-      );
+      const owned = await createSavedProjectsStore(
+        platformDb,
+        OWNER,
+      ).getProject(PROJECT);
       assert.equal(owned.success, true);
       if (owned.success) {
         assert.ok(owned.value, "the project must exist in the owner's tenant");

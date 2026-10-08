@@ -179,11 +179,9 @@ export function createSavedProjectsStore(
        AND (@expected_rev IS NULL OR rev = @expected_rev)
        AND (@expected_updated_at IS NULL OR updated_at = @expected_updated_at)
   `;
-  const remove =
-    "DELETE FROM saved_projects WHERE owner_id = ? AND id = ?";
+  const remove = "DELETE FROM saved_projects WHERE owner_id = ? AND id = ?";
   const clear = "DELETE FROM saved_projects WHERE owner_id = ?";
-  const selectIds =
-    "SELECT id FROM saved_projects WHERE owner_id = ?";
+  const selectIds = "SELECT id FROM saved_projects WHERE owner_id = ?";
 
   const removeWithShares = (id: string): Promise<void> =>
     db.transaction(async (tx) => {

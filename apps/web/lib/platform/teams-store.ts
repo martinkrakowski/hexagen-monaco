@@ -159,8 +159,7 @@ export function createTeamsRepository(db: PlatformDb): TeamsRepository {
   const selectTeamIds =
     "SELECT team_id FROM team_members WHERE user_id = ? ORDER BY team_id";
   const deleteTeamRow = "DELETE FROM teams WHERE id = ?";
-  const deleteAllMembers =
-    "DELETE FROM team_members WHERE team_id = ?";
+  const deleteAllMembers = "DELETE FROM team_members WHERE team_id = ?";
 
   // The audit row is written INSIDE each mutation's transaction, not after it
   // by a separate awaited repository call. Two independent commits mean the

@@ -16,8 +16,8 @@ import type { PlatformDb, PlatformDbSession } from "./db";
  * the table directly, which is deliberate — a reader added only to satisfy a
  * test is a reader with no product behind it.
  *
-  * ASYNC BY DECISION (D-A9), as with `orgs-store` and `teams-store`.
-  */
+ * ASYNC BY DECISION (D-A9), as with `orgs-store` and `teams-store`.
+ */
 
 /** v1 vocabulary (D-A6): org and team management, plus share grant/revoke from P-A4. */
 export type AuditAction =
@@ -74,6 +74,13 @@ const INSERT_AUDIT = `
     )
   `;
 
+/**
+ * Writes one audit row on the caller's session. A store that records a
+ * mutation calls this with its transaction's `tx`, so the row commits with the
+ * mutation or not at all: a separate append after the mutation commits
+ * independently, and an unaudited change is precisely the event an audit log
+ * exists to make impossible to miss.
+ */
 export async function appendAudit(
   session: PlatformDbSession,
   entry: AuditEntry,
@@ -90,9 +97,7 @@ export async function appendAudit(
   });
 }
 
-export function createAuditLogRepository(
-  db: PlatformDb,
-): AuditLogRepository {
+export function createAuditLogRepository(db: PlatformDb): AuditLogRepository {
   return {
     async append(entry) {
       await appendAudit(db, entry);

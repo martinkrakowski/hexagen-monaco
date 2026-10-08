@@ -377,14 +377,13 @@ describe("sqlite-db", () => {
         10,
       ]);
     });
-    const runPromise = db.run("INSERT INTO test (id, name, val) VALUES (?, ?, ?)", [
-      2,
-      "b",
-      20,
-    ]);
-    const count = handle
-      .prepare("SELECT COUNT(*) AS n FROM test")
-      .get() as { n: number };
+    const runPromise = db.run(
+      "INSERT INTO test (id, name, val) VALUES (?, ?, ?)",
+      [2, "b", 20],
+    );
+    const count = handle.prepare("SELECT COUNT(*) AS n FROM test").get() as {
+      n: number;
+    };
     expect(count.n).toBe(2);
     await runPromise;
   });
@@ -400,14 +399,13 @@ describe("sqlite-db", () => {
         throw new Error("rollback");
       }),
     ).rejects.toThrow("rollback");
-    const runPromise = db.run("INSERT INTO test (id, name, val) VALUES (?, ?, ?)", [
-      2,
-      "b",
-      20,
-    ]);
-    const count = handle
-      .prepare("SELECT COUNT(*) AS n FROM test")
-      .get() as { n: number };
+    const runPromise = db.run(
+      "INSERT INTO test (id, name, val) VALUES (?, ?, ?)",
+      [2, "b", 20],
+    );
+    const count = handle.prepare("SELECT COUNT(*) AS n FROM test").get() as {
+      n: number;
+    };
     expect(count.n).toBe(1);
     await runPromise;
   });

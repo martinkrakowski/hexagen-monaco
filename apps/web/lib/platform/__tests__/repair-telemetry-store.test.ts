@@ -670,8 +670,11 @@ describe("repair telemetry migration", () => {
     const kept = upgraded
       .prepare("SELECT name FROM saved_projects WHERE id = ?")
       .get("proj-1") as { name: string } | undefined;
-     assert.equal(kept?.name, "shop");
-    const store = createRepairTelemetryStore(createSqlitePlatformDb(upgraded), "owner-a");
+    assert.equal(kept?.name, "shop");
+    const store = createRepairTelemetryStore(
+      createSqlitePlatformDb(upgraded),
+      "owner-a",
+    );
     assert.equal((await store.record(run())).success, true);
     upgraded.close();
 
@@ -679,7 +682,10 @@ describe("repair telemetry migration", () => {
     // row written above must still be there.
     openPlatformDb(path).close();
     const third = openPlatformDb(path);
-    const again = await createRepairTelemetryStore(createSqlitePlatformDb(third), "owner-a").listRuns();
+    const again = await createRepairTelemetryStore(
+      createSqlitePlatformDb(third),
+      "owner-a",
+    ).listRuns();
     assert.ok(again.success);
     assert.equal(again.success && again.value.length, 1);
     third.close();

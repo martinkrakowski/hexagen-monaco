@@ -224,7 +224,10 @@ describe("async contract — 60 store methods return Promises", () => {
 
   it("each RepairTelemetryStore method returns a Promise", async () => {
     const db = openPlatformDb(":memory:");
-    const telemetry = createRepairTelemetryStore(createSqlitePlatformDb(db), OWNER);
+    const telemetry = createRepairTelemetryStore(
+      createSqlitePlatformDb(db),
+      OWNER,
+    );
 
     const recordResult = telemetry.record({
       surface: "client-deterministic",
@@ -278,10 +281,7 @@ describe("async contract — 60 store methods return Promises", () => {
     await appendResult;
 
     const countResult = audit.countFor("team.member.add", "team-1");
-    assert.ok(
-      countResult instanceof Promise,
-      "countFor must return a Promise",
-    );
+    assert.ok(countResult instanceof Promise, "countFor must return a Promise");
     await countResult;
   });
 
@@ -465,7 +465,10 @@ describe("async contract — 60 store methods return Promises", () => {
           { actorId: OWNER },
         ),
       },
-      { name: "listForProject", result: shares.listForProject(OWNER, "proj-1") },
+      {
+        name: "listForProject",
+        result: shares.listForProject(OWNER, "proj-1"),
+      },
       {
         name: "accessFor",
         result: shares.accessFor(OWNER, "proj-1", {
@@ -489,13 +492,13 @@ describe("async contract — 60 store methods return Promises", () => {
         result instanceof Promise,
         `${name} must return a Promise, got ${typeof result}`,
       );
-       try {
-         await result;
-       } catch {
-         // some cases may reject; the contract only requires a Promise
-       }
-     }
-   });
+      try {
+        await result;
+      } catch {
+        // some cases may reject; the contract only requires a Promise
+      }
+    }
+  });
 
   it("close returns a Promise", async () => {
     const store = createPlatformStore(":memory:");

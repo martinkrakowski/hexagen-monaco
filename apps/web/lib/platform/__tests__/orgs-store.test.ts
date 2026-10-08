@@ -167,7 +167,10 @@ describe("OrgsRepository — typed error refusals", () => {
       );
 
       // Org survives.
-      assert.ok(await store.orgs.getOrg(org.id), "org must survive the refusal");
+      assert.ok(
+        await store.orgs.getOrg(org.id),
+        "org must survive the refusal",
+      );
       // Member survives.
       assert.equal(
         await store.orgs.memberRole(org.id, "member-1"),
@@ -178,6 +181,53 @@ describe("OrgsRepository — typed error refusals", () => {
       const teams = await store.teams.listTeamsForOrg(org.id);
       assert.equal(teams.length, 1, "team must survive the refusal");
       assert.equal(teams[0]?.id, team.id);
+    } finally {
+      await store.close();
+    }
+  });
+});
+
+describe("OrgsRepository.acceptInvitesForLogin", () => {
+  it("accepts only the signing-in login's invites, and leaves every other pending invite pending", async () => {
+    const store = createPlatformStore(":memory:");
+    try {
+      const acme = await store.orgs.createOrg({
+        slug: "acme",
+        name: "Acme",
+        createdBy: "user-1",
+      });
+      const beta = await store.orgs.createOrg({
+        slug: "beta",
+        name: "Beta",
+        createdBy: "user-1",
+      });
+      const audit = { actorId: "user-1" };
+      await store.orgs.invite(acme.id, "ada", "member", audit);
+      await store.orgs.invite(acme.id, "grace", "member", audit);
+      await store.orgs.invite(beta.id, "grace", "owner", audit);
+
+      const joined = await store.orgs.acceptInvitesForLogin("ada-user", "ada");
+      assert.deepEqual(joined, [acme.id]);
+
+      // The UPDATE that stamps an invite accepted is keyed by org AND login.
+      // Without that key it would stamp every invite in the table.
+      const acmePending = await store.orgs.listPendingInvites(acme.id);
+      assert.deepEqual(
+        acmePending.map((i) => i.githubLogin),
+        ["grace"],
+      );
+      const betaPending = await store.orgs.listPendingInvites(beta.id);
+      assert.deepEqual(
+        betaPending.map((i) => i.githubLogin),
+        ["grace"],
+      );
+
+      const later = await store.orgs.acceptInvitesForLogin(
+        "grace-user",
+        "grace",
+      );
+      assert.deepEqual([...later].sort(), [acme.id, beta.id].sort());
+      assert.equal(await store.orgs.memberRole(beta.id, "grace-user"), "owner");
     } finally {
       await store.close();
     }

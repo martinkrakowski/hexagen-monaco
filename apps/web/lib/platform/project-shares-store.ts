@@ -21,9 +21,13 @@ export type GranteeType = "user" | "org" | "team";
 export type ShareRole = "read" | "write";
 
 /**
- * Revoke every live share on one project through the seam.
- *
- * Called by saved-projects-store's seam transactions.
+ * Revokes every live share on one project, on the caller's session, so that
+ * saved-projects-store can do it inside the transaction that deletes the
+ * project. Deleting a project must revoke its grants IN THE SAME TRANSACTION:
+ * project_shares has no FK cascade and accessFor does not join saved_projects,
+ * so a surviving live grant re-applies to any future project recreated under
+ * the same (owner_id, id) — a ghost grant the new project's owner never made
+ * (review flag on #652). Soft revoke, so the audit trail survives.
  */
 export async function revokeSharesForProject(
   session: PlatformDbSession,
@@ -246,7 +250,10 @@ export function createProjectSharesRepository(
       grantedBy: string;
     },
   ): Promise<void> {
-    await session.run(upsert, { ...input, createdAt: new Date().toISOString() });
+    await session.run(upsert, {
+      ...input,
+      createdAt: new Date().toISOString(),
+    });
   }
 
   async function revokeNow(

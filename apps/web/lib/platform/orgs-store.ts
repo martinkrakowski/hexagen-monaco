@@ -313,10 +313,7 @@ export function createOrgsRepository(db: PlatformDb): OrgsRepository {
   // Org, owner membership and audit row in ONE transaction. An org whose
   // owner insert failed is administerable by nobody and refused by
   // requireTenant for everybody — a row that exists and cannot be used.
-  const createOrgWithOwnerTx = (
-    row: OrgRow,
-    actorId: string,
-  ): Promise<Org> =>
+  const createOrgWithOwnerTx = (row: OrgRow, actorId: string): Promise<Org> =>
     db.transaction(async (tx) => {
       try {
         await tx.run(insertOrg, {
@@ -350,7 +347,7 @@ export function createOrgsRepository(db: PlatformDb): OrgsRepository {
   // JOIN orgs so a membership row whose org_id is not an org (the FK
   // constraint, or a connection that forgot PRAGMA foreign_keys) cannot
   // authorize requireTenant against a personal owner id.
-   const selectRole = `
+  const selectRole = `
     SELECT m.role FROM org_members m
      INNER JOIN orgs o ON o.id = m.org_id
      WHERE m.org_id = ? AND m.user_id = ?
@@ -404,7 +401,9 @@ export function createOrgsRepository(db: PlatformDb): OrgsRepository {
     "SELECT * FROM org_invites WHERE org_id = @org_id AND accepted_at IS NULL AND expires_at > @now ORDER BY github_login";
   const markAccepted = `
     UPDATE org_invites SET accepted_at = @accepted_at
-   `;
+     WHERE org_id = @org_id AND github_login = @github_login
+       AND accepted_at IS NULL
+  `;
 
   // The audit row is written INSIDE each mutation's transaction, not after it
   // by a separate awaited repository call. Two independent commits mean the
@@ -438,10 +437,10 @@ export function createOrgsRepository(db: PlatformDb): OrgsRepository {
     audit?: OrgAuditContext,
   ): Promise<void> =>
     db.transaction(async (tx) => {
-      const existing = await tx.get<{ role: OrgRole }>(
-        selectMemberRow,
-        [orgId, userId],
-      );
+      const existing = await tx.get<{ role: OrgRole }>(selectMemberRow, [
+        orgId,
+        userId,
+      ]);
 
       // A re-add at the SAME role changes nothing. `ON CONFLICT DO UPDATE SET
       // role = excluded.role` still reports changes = 1 for it, so the
@@ -472,89 +471,86 @@ export function createOrgsRepository(db: PlatformDb): OrgsRepository {
   // ONE transaction, so a failure in either statement rolls back both: a user
   // dropped from the org but left in its teams is the orphan this prevents,
   // and the reverse (teams cleared, org row surviving) is just as wrong.
-   const removeMemberTx = (
-     orgId: string,
-     userId: string,
-     audit?: OrgAuditContext,
-   ): Promise<void> =>
-     db.transaction(async (tx) => {
-       const existing = await tx.get<{ role: OrgRole }>(
-         selectMemberRow,
-         [orgId, userId],
-       );
-       if (existing) await guardLastOwner(tx, orgId, userId, existing.role);
+  const removeMemberTx = (
+    orgId: string,
+    userId: string,
+    audit?: OrgAuditContext,
+  ): Promise<void> =>
+    db.transaction(async (tx) => {
+      const existing = await tx.get<{ role: OrgRole }>(selectMemberRow, [
+        orgId,
+        userId,
+      ]);
+      if (existing) await guardLastOwner(tx, orgId, userId, existing.role);
 
-       await tx.run(deleteTeamMemberships, [userId, orgId]);
-       const removed = await tx.run(deleteMember, [orgId, userId]);
-       // Gate on affected rows: an audit row for a removal that hit nothing
-       // records an event that did not happen, and a reader cannot tell it from
-       // a real removal.
-       if (removed.changes > 0)
-         await audited(tx, audit, {
-           action: "org.member.remove",
-           subjectOwnerId: orgId,
-           subjectId: orgId,
-           granteeType: "user",
-           granteeId: userId,
-         });
-     });
-
-   const inviteTx = (
-     row: InviteRow,
-     audit: OrgAuditContext,
-   ): Promise<InviteRow> =>
-     db.transaction(async (tx) => {
-       const existing = await tx.get<InviteRow>(selectInvite, [
-         row.org_id,
-         row.github_login,
-       ]);
-
-       // Already accepted — the person is a member; nothing to re-issue, and no
-       // event happened.
-       if (existing?.accepted_at) return existing;
-       // Same pending invite, still live, re-sent: the row is unchanged, so an
-       // audit entry would claim an invitation that was already outstanding is
-       // new. An EXPIRED invite is a different matter — re-inviting is the only
-       // way to revive it, so it falls through, is rewritten with a fresh
-       // deadline, and is audited as the real re-invitation it is.
-       if (
-         existing &&
-         existing.role === row.role &&
-         existing.expires_at > row.created_at
-       ) {
-         return existing;
-       }
-
-        await tx.run(upsertInvite, {
-          org_id: row.org_id,
-          github_login: row.github_login,
-          role: row.role,
-          invited_by: row.invited_by,
-          created_at: row.created_at,
-          expires_at: row.expires_at,
-          accepted_at: row.accepted_at,
+      await tx.run(deleteTeamMemberships, [userId, orgId]);
+      const removed = await tx.run(deleteMember, [orgId, userId]);
+      // Gate on affected rows: an audit row for a removal that hit nothing
+      // records an event that did not happen, and a reader cannot tell it from
+      // a real removal.
+      if (removed.changes > 0)
+        await audited(tx, audit, {
+          action: "org.member.remove",
+          subjectOwnerId: orgId,
+          subjectId: orgId,
+          granteeType: "user",
+          granteeId: userId,
         });
-       await audited(tx, audit, {
-         action: "org.invite",
-         subjectOwnerId: row.org_id,
-         subjectId: row.org_id,
-         // The invitee has no user id yet — that is the whole reason this row
-         // exists — so the grantee is the handle itself.
-         granteeType: "github_login",
-         granteeId: row.github_login,
-       });
-       return row;
-     });
+    });
+
+  const inviteTx = (
+    row: InviteRow,
+    audit: OrgAuditContext,
+  ): Promise<InviteRow> =>
+    db.transaction(async (tx) => {
+      const existing = await tx.get<InviteRow>(selectInvite, [
+        row.org_id,
+        row.github_login,
+      ]);
+
+      // Already accepted — the person is a member; nothing to re-issue, and no
+      // event happened.
+      if (existing?.accepted_at) return existing;
+      // Same pending invite, still live, re-sent: the row is unchanged, so an
+      // audit entry would claim an invitation that was already outstanding is
+      // new. An EXPIRED invite is a different matter — re-inviting is the only
+      // way to revive it, so it falls through, is rewritten with a fresh
+      // deadline, and is audited as the real re-invitation it is.
+      if (
+        existing &&
+        existing.role === row.role &&
+        existing.expires_at > row.created_at
+      ) {
+        return existing;
+      }
+
+      await tx.run(upsertInvite, {
+        org_id: row.org_id,
+        github_login: row.github_login,
+        role: row.role,
+        invited_by: row.invited_by,
+        created_at: row.created_at,
+        expires_at: row.expires_at,
+        accepted_at: row.accepted_at,
+      });
+      await audited(tx, audit, {
+        action: "org.invite",
+        subjectOwnerId: row.org_id,
+        subjectId: row.org_id,
+        // The invitee has no user id yet — that is the whole reason this row
+        // exists — so the grantee is the handle itself.
+        granteeType: "github_login",
+        granteeId: row.github_login,
+      });
+      return row;
+    });
 
   // Membership + acceptance stamp in ONE transaction. Split across two
   // commits, a crash between them leaves either an invite marked accepted with
   // no membership (silently lost access, and never retried because the
   // pending-invite query no longer matches it) or a membership whose invite
   // stays pending and re-grants on every future sign-in.
-  const acceptInvitesTx = (
-    userId: string,
-    login: string,
-  ): Promise<string[]> =>
+  const acceptInvitesTx = (userId: string, login: string): Promise<string[]> =>
     db.transaction(async (tx) => {
       const now = new Date().toISOString();
       const pending = await tx.all<InviteRow>(selectPendingForLogin, {
@@ -600,10 +596,8 @@ export function createOrgsRepository(db: PlatformDb): OrgsRepository {
     WHERE team_id IN (SELECT id FROM teams WHERE org_id = ?)
   `;
   const deleteOrgTeams = "DELETE FROM teams WHERE org_id = ?";
-  const deleteOrgMembers =
-    "DELETE FROM org_members WHERE org_id = ?";
-  const deleteOrgInvites =
-    "DELETE FROM org_invites WHERE org_id = ?";
+  const deleteOrgMembers = "DELETE FROM org_members WHERE org_id = ?";
+  const deleteOrgInvites = "DELETE FROM org_invites WHERE org_id = ?";
   // Soft-revoke, not row deletion: the grant rows are the audit trail of who
   // had access; what must die with the org is the ACCESS, i.e. liveness.
   const revokeGrantsToOrgAndTeams = `
@@ -628,20 +622,15 @@ export function createOrgsRepository(db: PlatformDb): OrgsRepository {
   // Run telemetry is owner-scoped operational data, not an audit trail; with
   // the tenant gone it is unreachable through every access path, so leaving
   // it would be orphaned customer data, not history (review flag on #658).
-  const deleteRunEvents =
-    "DELETE FROM run_events WHERE owner_id = ?";
+  const deleteRunEvents = "DELETE FROM run_events WHERE owner_id = ?";
   const deleteOrgRow = "DELETE FROM orgs WHERE id = ?";
-  const deleteOrgTx = (
-    orgId: string,
-    actorId: string,
-  ): Promise<void> =>
+  const deleteOrgTx = (orgId: string, actorId: string): Promise<void> =>
     db.transaction(async (tx) => {
       // Inside the transaction, so the count and the deletes are one atomic
       // view — a concurrent project create either lands before (refusal) or
       // after (harmless: the owner row no longer exists to authorize writes).
       const owned = await tx.get<{ n: number }>(countOwnedProjects, [orgId]);
-      if (owned && owned.n > 0)
-        throw new OrgOwnsProjectsError(orgId, owned.n);
+      if (owned && owned.n > 0) throw new OrgOwnsProjectsError(orgId, owned.n);
       // Grants revoked BEFORE the teams rows go — the team subquery needs them.
       const revokedAt = new Date().toISOString();
       await tx.run(revokeGrantsToOrgAndTeams, {
@@ -671,7 +660,7 @@ export function createOrgsRepository(db: PlatformDb): OrgsRepository {
     });
 
   return {
-     async createOrg(input) {
+    async createOrg(input) {
       const id = input.id ?? crypto.randomUUID();
       const taken = await db.get<{ ok: number }>(userIdTaken, [id]);
       if (taken) {

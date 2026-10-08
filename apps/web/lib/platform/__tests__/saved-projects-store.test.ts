@@ -137,7 +137,15 @@ describe("sqlite SavedProjectsPersistencePort", () => {
     db.prepare(
       `INSERT INTO project_shares (owner_id, project_id, grantee_type, grantee_id, role, granted_by, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    ).run("owner-a", proj.id, "user", "grantee-1", "read", "owner-a", "2026-01-01T00:00:00Z");
+    ).run(
+      "owner-a",
+      proj.id,
+      "user",
+      "grantee-1",
+      "read",
+      "owner-a",
+      "2026-01-01T00:00:00Z",
+    );
 
     // Force the share revoke UPDATE to fail inside the transaction. The delete
     // and the revoke share one transaction; a rollback must restore the project

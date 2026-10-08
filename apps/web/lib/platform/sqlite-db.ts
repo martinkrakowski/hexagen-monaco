@@ -73,7 +73,7 @@ export function createSqlitePlatformDb(handle: Database.Database): PlatformDb {
     return (params === undefined ? stmt.all() : stmt.all(params)) as Row[];
   };
 
-   // Promise chain serialising transactions and plain `db` calls. See header.
+  // Promise chain serialising transactions and plain `db` calls. See header.
   let tail: Promise<void> = Promise.resolve();
   let closed = false;
   // Transactions currently running or queued; a plain call with txCount === 0
@@ -149,10 +149,10 @@ export function createSqlitePlatformDb(handle: Database.Database): PlatformDb {
           }
           finished = true;
           throw e;
-      } finally {
-        token.active = false;
-        txCount--;
-      }
+        } finally {
+          token.active = false;
+          txCount--;
+        }
       });
     },
     close: () =>

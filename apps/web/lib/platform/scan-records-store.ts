@@ -212,7 +212,7 @@ type ScanRecordInsertParams = {
   artifact_path: string | null;
   artifact_bytes: number | null;
   created_at: number;
-}
+};
 
 interface ScanTrendRow {
   id: string;
@@ -463,8 +463,7 @@ export function createScanRecordsStore(
      ORDER BY created_at DESC, rowid DESC
      LIMIT -1 OFFSET @keep
   `;
-  const deleteById =
-    "DELETE FROM scan_records WHERE owner_id = ? AND id = ?";
+  const deleteById = "DELETE FROM scan_records WHERE owner_id = ? AND id = ?";
 
   const selectMany = `
     SELECT ${RECORD_COLUMNS} FROM scan_records
@@ -622,7 +621,7 @@ export function createScanRecordsStore(
       };
 
       try {
-         const evictedArtifactPaths = await writeWithRetention({
+        const evictedArtifactPaths = await writeWithRetention({
           id: record.id,
           owner_id: ownerId,
           schema_version: SCAN_RECORD_SCHEMA_VERSION,
@@ -676,12 +675,12 @@ export function createScanRecordsStore(
 
     async list(options = {}) {
       try {
-        const rows = await db.all<ScanRecordRow>(selectMany, {
+        const rows = (await db.all<ScanRecordRow>(selectMany, {
           owner_id: ownerId,
           schema_version: SCAN_RECORD_SCHEMA_VERSION,
           repo_ref: options.repoRef ?? null,
           limit: clampLimit(options.limit, 50),
-        }) as ScanRecordRow[];
+        })) as ScanRecordRow[];
         const records: ScanRecord[] = [];
         for (const row of rows) {
           const record = rowToRecord(row);
@@ -706,11 +705,11 @@ export function createScanRecordsStore(
 
     async get(id) {
       try {
-        const row = await db.get<ScanRecordRow>(selectOne, {
+        const row = (await db.get<ScanRecordRow>(selectOne, {
           owner_id: ownerId,
           id,
           schema_version: SCAN_RECORD_SCHEMA_VERSION,
-        }) as ScanRecordRow | undefined;
+        })) as ScanRecordRow | undefined;
         if (!row) {
           return {
             success: false,
@@ -743,12 +742,12 @@ export function createScanRecordsStore(
 
     async trend(options = {}) {
       try {
-        const rows = await db.all<ScanTrendRow>(selectTrend, {
+        const rows = (await db.all<ScanTrendRow>(selectTrend, {
           owner_id: ownerId,
           schema_version: SCAN_RECORD_SCHEMA_VERSION,
           repo_ref: options.repoRef ?? null,
           limit: clampLimit(options.limit, 50),
-        }) as ScanTrendRow[];
+        })) as ScanTrendRow[];
         const points: ScanTrendPoint[] = [];
         for (const row of rows) {
           // The trend never touches findings_sample, so a corrupt blob cannot

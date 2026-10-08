@@ -756,7 +756,10 @@ export function createRepairTelemetryStore(
         insertRun,
         params.run,
       )) as RepairRunRow;
-      await tx.run(deleteAttemptsForRun, [ownerId, params.run.run_id as string]);
+      await tx.run(deleteAttemptsForRun, [
+        ownerId,
+        params.run.run_id as string,
+      ]);
       for (const attempt of params.attempts) {
         await tx.run(insertAttempt, attempt);
       }
@@ -864,7 +867,7 @@ export function createRepairTelemetryStore(
 
       let stored: RepairRunRow;
       try {
-         stored = await writeWithRetention({
+        stored = await writeWithRetention({
           run: {
             id: pending.id,
             owner_id: ownerId,
@@ -903,12 +906,12 @@ export function createRepairTelemetryStore(
     },
 
     async listRuns(options = {}) {
-      const rows = await db.all<RepairRunRow>(selectRuns, {
+      const rows = (await db.all<RepairRunRow>(selectRuns, {
         owner_id: ownerId,
         schema_version: REPAIR_TELEMETRY_SCHEMA_VERSION,
         surface: options.surface ?? null,
         limit: clampLimit(options.limit, 100),
-      }) as RepairRunRow[];
+      })) as RepairRunRow[];
       const records: RepairRunRecord[] = [];
       for (const row of rows) {
         const record = runRowToRecord(row);
@@ -921,11 +924,11 @@ export function createRepairTelemetryStore(
       if (!OPAQUE_ID.test(typeof runId === "string" ? runId : "")) {
         return rejected("runId must be an opaque UUID");
       }
-      const rows = await db.all<RepairAttemptRow>(selectAttempts, {
+      const rows = (await db.all<RepairAttemptRow>(selectAttempts, {
         owner_id: ownerId,
         run_id: runId,
         schema_version: REPAIR_TELEMETRY_SCHEMA_VERSION,
-      }) as RepairAttemptRow[];
+      })) as RepairAttemptRow[];
       const records: RepairAttemptRecord[] = [];
       for (const row of rows) {
         const record = attemptRowToRecord(row);
