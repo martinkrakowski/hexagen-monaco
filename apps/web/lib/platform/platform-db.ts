@@ -505,9 +505,13 @@ function migrateAuditLogDetail(db: Database.Database): void {
  * The table is created in the big exec (IF NOT EXISTS), so it always exists by
  * the time this helper runs. The backfill is keyed on DATA state and runs on
  * EVERY open: a document keeps its rev, and its next write is
- * max(rev, counter)+1 = rev+1. Idempotent: ON CONFLICT DO NOTHING leaves rows
- * already backfilled untouched. `WHERE true` is required by SQLite's parser
- * when an INSERT ... SELECT carries ON CONFLICT.
+ * max(rev, counter)+1 = rev+1.
+ *
+ * It must never LOWER a counter: a process running the old code may have
+ * written a document at rev N after the counter row already existed at a higher
+ * value, so the backfill takes the greater of the existing counter and the
+ * document-derived MAX(rev). `WHERE true` is required by SQLite's parser when
+ * an INSERT ... SELECT carries ON CONFLICT.
  */
 function migrateOwnerDocumentRevs(db: Database.Database): void {
   if (!tableExists(db, "owner_document_revs")) return;
@@ -517,7 +521,8 @@ function migrateOwnerDocumentRevs(db: Database.Database): void {
          FROM owner_documents
          WHERE true
       GROUP BY owner_id, user_id
-      ON CONFLICT (owner_id, user_id) DO NOTHING`,
+      ON CONFLICT (owner_id, user_id) DO UPDATE SET
+        last_rev = max(owner_document_revs.last_rev, excluded.last_rev)`,
   );
 }
 

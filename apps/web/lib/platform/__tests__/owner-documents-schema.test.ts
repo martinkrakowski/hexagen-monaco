@@ -405,4 +405,87 @@ describe("owner_documents schema", () => {
       rmSync(path, { force: true });
     }
   });
+
+  it("opens without lowering an owner_document_revs counter, and repairs one below MAX(rev)", () => {
+    // A file that already has owner_document_revs (new-shaped), with a stale
+    // counter and a document whose rev is higher.
+    const path = tmpDbPath("hexagen-rev-repair-");
+    const file = new Database(path);
+    file.exec(`
+      CREATE TABLE owner_documents (
+        owner_id   TEXT NOT NULL,
+        user_id    TEXT NOT NULL,
+        kind       TEXT NOT NULL,
+        id         TEXT NOT NULL,
+        project_id TEXT,
+        rev        INTEGER NOT NULL,
+        payload    TEXT NOT NULL,
+        updated_at INTEGER NOT NULL,
+        updated_by TEXT,
+        PRIMARY KEY (owner_id, user_id, kind, id)
+      );
+      CREATE TABLE owner_document_revs (
+        owner_id  TEXT NOT NULL,
+        user_id   TEXT NOT NULL,
+        last_rev  INTEGER NOT NULL,
+        PRIMARY KEY (owner_id, user_id)
+      );
+    `);
+    const now = Date.now();
+    file
+      .prepare(
+        `INSERT INTO owner_documents
+           (owner_id, user_id, kind, id, project_id, rev, payload, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run("o-1", "u-1", "workspace", "doc-1", null, 7, "{}", now);
+    // Counter is stale (4 < the document's rev 7).
+    file
+      .prepare(
+        `INSERT INTO owner_document_revs (owner_id, user_id, last_rev) VALUES (?, ?, ?)`,
+      )
+      .run("o-1", "u-1", 4);
+    file.close();
+
+    const handle = openPlatformDb(path);
+    try {
+      const c = handle
+        .prepare(
+          "SELECT last_rev FROM owner_document_revs WHERE owner_id = ? AND user_id = ?",
+        )
+        .get("o-1", "u-1") as { last_rev: number } | undefined;
+      assert.ok(c, "the counter row must still exist");
+      assert.equal(
+        c!.last_rev,
+        7,
+        "a counter below MAX(rev) is repaired up to MAX(rev)",
+      );
+    } finally {
+      handle.close();
+    }
+
+    // A counter that already exceeds MAX(rev) must not be lowered on reopen.
+    const h2 = openPlatformDb(path);
+    h2.prepare(
+      "UPDATE owner_document_revs SET last_rev = ? WHERE owner_id = ? AND user_id = ?",
+    ).run(9, "o-1", "u-1");
+    h2.close();
+    const h3 = openPlatformDb(path);
+    try {
+      const c2 = h3
+        .prepare(
+          "SELECT last_rev FROM owner_document_revs WHERE owner_id = ? AND user_id = ?",
+        )
+        .get("o-1", "u-1") as { last_rev: number } | undefined;
+      assert.ok(c2, "the counter row must survive a reopen");
+      assert.equal(
+        c2!.last_rev,
+        9,
+        "a counter above MAX(rev) is never lowered",
+      );
+    } finally {
+      h3.close();
+      rmSync(path, { force: true });
+    }
+  });
 });
