@@ -35,17 +35,17 @@ export type OwnerDocumentsError =
   | { kind: "UnknownProject"; message: string }
   | { kind: "NotAMember"; message: string }
   | {
-    kind: "Conflict";
-    message: string;
-    currentRev?: number;
-    audited?: boolean;
-  }
+      kind: "Conflict";
+      message: string;
+      currentRev?: number;
+      audited?: boolean;
+    }
   | {
-    kind: "PreconditionFailed";
-    message: string;
-    currentRev: number;
-    audited?: boolean;
-  };
+      kind: "PreconditionFailed";
+      message: string;
+      currentRev: number;
+      audited?: boolean;
+    };
 
 export interface OwnerDocumentsStore {
   list(filter?: {
