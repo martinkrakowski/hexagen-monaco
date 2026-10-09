@@ -119,14 +119,15 @@ export interface EntitlementRepository {
 export function createEntitlementRepository(
   db: PlatformDb,
 ): EntitlementRepository {
-  const select = "SELECT * FROM entitlements WHERE user_id = ?";
+  const select =
+    "SELECT user_id, plan, repo_limit, stripe_customer_id, stripe_subscription_id, status, hx_ms(current_period_end) AS current_period_end FROM entitlements WHERE user_id = ?";
   const upsert = `
     INSERT INTO entitlements (
       user_id, plan, repo_limit, stripe_customer_id, stripe_subscription_id,
       status, current_period_end, updated_at
     ) VALUES (
       @user_id, @plan, @repo_limit, @stripe_customer_id, @stripe_subscription_id,
-      @status, @current_period_end, @updated_at
+      @status, hx_ts(@current_period_end), hx_ts(@updated_at)
     )
     ON CONFLICT(user_id) DO UPDATE SET
       plan = excluded.plan,

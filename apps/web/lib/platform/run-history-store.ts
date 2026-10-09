@@ -82,6 +82,9 @@ interface PriceRow {
   usd_per_1k_output: number;
 }
 
+const RUN_EVENT_COLUMNS =
+  "id, run_id, project_id, stage, label, model, refiner_model, duration_ms, retry_count, input_tokens, output_tokens, served_from_cache, used_llm, summary, cost_cents, hx_ms(created_at) AS created_at";
+
 export function computeCostCents(
   inputTokens: number,
   outputTokens: number,
@@ -136,8 +139,8 @@ export function createRunHistoryRepository(
     ) VALUES (
       @id, @owner_id, @run_id, @project_id, @stage, @label, @model, @refiner_model,
       @duration_ms, @retry_count, @input_tokens, @output_tokens,
-      @served_from_cache, @used_llm, @summary, @cost_cents, @created_at
-    )
+      @served_from_cache, @used_llm, @summary, @cost_cents, hx_ts(@created_at)
+     )
     ON CONFLICT(owner_id, run_id, stage) DO UPDATE SET
       project_id = excluded.project_id,
       label = excluded.label,
@@ -152,24 +155,24 @@ export function createRunHistoryRepository(
       summary = excluded.summary,
       cost_cents = excluded.cost_cents,
       created_at = excluded.created_at
-    RETURNING *
+     RETURNING ${RUN_EVENT_COLUMNS}
   `;
   const selectPrice =
     "SELECT usd_per_1k_input, usd_per_1k_output FROM model_prices WHERE model = ?";
   const selectRecent = `
-    SELECT * FROM run_events
+    SELECT ${RUN_EVENT_COLUMNS} FROM run_events
      WHERE owner_id = @owner_id
-       AND (@project_id IS NULL OR project_id = @project_id)
+       AND (CAST(@project_id AS TEXT) IS NULL OR project_id = @project_id)
      ORDER BY created_at DESC
      LIMIT @limit
   `;
   const selectTrend = `
     SELECT
-      substr(datetime(created_at / 1000, 'unixepoch'), 1, 10) AS day,
+      hx_day(created_at) AS day,
       COUNT(DISTINCT run_id) AS runs,
       COALESCE(SUM(cost_cents), 0) AS cost_cents
     FROM run_events
-     WHERE owner_id = @owner_id AND created_at >= @since
+     WHERE owner_id = @owner_id AND created_at >= hx_ts(@since)
      GROUP BY day
      ORDER BY day ASC
   `;
@@ -232,10 +235,10 @@ export function createRunHistoryRepository(
         label: record.label,
         model: record.model,
         refiner_model: record.refinerModel,
-        duration_ms: record.durationMs,
-        retry_count: record.retryCount,
-        input_tokens: record.inputTokens,
-        output_tokens: record.outputTokens,
+        duration_ms: Math.round(record.durationMs),
+        retry_count: Math.round(record.retryCount),
+        input_tokens: Math.round(record.inputTokens),
+        output_tokens: Math.round(record.outputTokens),
         served_from_cache: record.servedFromCache ? 1 : 0,
         used_llm: record.usedLlm ? 1 : 0,
         summary: record.summary,
