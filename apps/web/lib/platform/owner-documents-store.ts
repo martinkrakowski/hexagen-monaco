@@ -354,15 +354,15 @@ export function createOwnerDocumentsStore(
   `;
   // Per-author-per-tenant rev high-water mark. The counter is read
   // with `counterRead` (on `tx`, one row) before the write, and the write takes
-  // its rev from that read plus `bumpOwnerDocumentRev` raises it on the same tx.
-  // Both the read and the raise happen on `tx` in the same callback, so two
+  // its rev from that read; `bumpOwnerDocumentRev` then raises it on the same
+  // tx. Both the read and the raise happen on `tx` in the same callback, so two
   // writers of different keys in one tenant collide on this row on Postgres.
   //
-  // (The counter is NOT read inside the write statement itself: reusing the
-  // @owner_id / @user_id parameters in a VALUES sub-SELECT makes Postgres infer
-  // the wrong parameter type — 22P02 on the kind/id column — and the failure is
-  // plan-cache dependent, so it is not reliably caught by tests. A separate
-  // read keeps parameter types unambiguous on both backends.)
+  // (The counter is NOT read inside the write statement itself: the value is
+  // needed in JavaScript — for the new row's rev and for raising the counter —
+  // and reading it inside the write statement would not, by itself, change what
+  // keeps two concurrent writers safe, namely that both WRITE this counter row
+  // inside the same transaction.)
   const counterRead = `
     SELECT last_rev FROM owner_document_revs
      WHERE owner_id = ? AND user_id = ?
