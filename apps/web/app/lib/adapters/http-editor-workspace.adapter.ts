@@ -1022,11 +1022,12 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
     const ownStampRev =
       stamp !== null && stamp.ownerId === userId ? stamp.rev : null;
 
-    // Cache clear + stamp removal FIRST.
-    const cacheResult = await this.cache.clearWorkspace(sessionId);
     if (!canDelete) {
-      // Item 4: write a discard marker instead of the stamp.
+      // No own, live stamp to conditionally delete: clear the local copy and
+      // stamp (and keep a discard marker if there was an own rev).
+      const cacheResult = await this.cache.clearWorkspace(sessionId);
       if (ownStampRev !== null) {
+        // Item 4: write a discard marker instead of the stamp.
         await this.tryStamp(sessionId, {
           ownerId: userId,
           rev: ownStampRev,
@@ -1038,36 +1039,45 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
       return cacheResult;
     }
 
-    // ONE conditional DELETE with the stamp's revision.
+    // ONE conditional DELETE with the stamp's revision. The local clear is
+    // deferred to after the DELETE so a 412 (server copy moved) leaves the
+    // browser copy intact instead of discarding it.
     const deleteResult = await this.remote.delete(
       userId,
       sessionId,
       stamp!.rev,
     );
+    if (!deleteResult.ok && deleteResult.reason === "conflict") {
+      // 412: the server copy changed since the stamp, so the discard did not
+      // delete it. Preserve the browser copy; drop the now-stale stamp and
+      // just record the conflict — the local copy is not lost.
+      this.logger.warn(
+        `workspace ${sessionId}: server copy changed on another device, not deleted`,
+      );
+      await this.cache.setLiftStamp(sessionId, null);
+      await this.recordConflictEntry(
+        sessionId,
+        "discard",
+        stamp!.rev,
+        deleteResult.serverRev ?? null,
+      );
+      return { success: true, value: undefined };
+    }
+
+    // Cache clear + stamp removal after a successful (or non-412) DELETE.
+    const cacheResult = await this.cache.clearWorkspace(sessionId);
     if (!deleteResult.ok) {
-      if (deleteResult.reason === "conflict") {
-        this.logger.warn(
-          `workspace ${sessionId}: server copy changed on another device, not deleted`,
-        );
-        await this.recordConflictEntry(
-          sessionId,
-          "discard",
-          stamp!.rev,
-          deleteResult.serverRev ?? null,
-        );
-      } else {
-        // Item 4: skipped/failed DELETE (not 412) → keep a marker.
-        this.logger.warn(
-          `workspace ${sessionId}: server delete failed: ${deleteResult.message}; keeping marker`,
-        );
-        await this.tryStamp(sessionId, {
-          ownerId: userId,
-          rev: stamp!.rev,
-          syncedUpdatedAt: 0,
-          confirmed: false,
-          discarded: true,
-        });
-      }
+      // Item 4: skipped/failed DELETE (not 412) → keep a marker.
+      this.logger.warn(
+        `workspace ${sessionId}: server delete failed: ${deleteResult.message}; keeping marker`,
+      );
+      await this.tryStamp(sessionId, {
+        ownerId: userId,
+        rev: stamp!.rev,
+        syncedUpdatedAt: 0,
+        confirmed: false,
+        discarded: true,
+      });
     }
     return cacheResult;
   }

@@ -977,6 +977,7 @@ describe("CachedEditorWorkspaceAdapter AM2 conflict resolution", () => {
     assert.ok(rec && rec.count === 1);
     assert.equal(rec!.last[0]!.where, "load");
     assert.equal(rec!.last[0]!.stampRev, 5);
+    assert.equal(rec!.last[0]!.serverRev, 9, "load server rev");
 
     const after = await cache.loadWorkspace(UUID);
     assert.ok(after.success && after.value);
@@ -1939,6 +1940,7 @@ describe("CachedEditorWorkspaceAdapter Item 11: first write", () => {
     assert.ok(rec && rec.count === 1);
     assert.equal(rec!.last[0]!.where, "first-save");
     assert.equal(rec!.last[0]!.stampRev, null);
+    assert.equal(rec!.last[0]!.serverRev, 1, "first-save server rev");
 
     assert.equal(
       putCallsOf(fetchImpl).length,
@@ -1948,6 +1950,11 @@ describe("CachedEditorWorkspaceAdapter Item 11: first write", () => {
     // Browser copy byte-identical (save wrote to cache, but server unchanged).
     const after = await cache.loadWorkspace(UUID);
     assert.ok(after.success && after.value);
+    assert.deepEqual(
+      after.value,
+      makeWorkspace(2000),
+      "browser copy unchanged",
+    );
     // Server keeps the other device's value.
     assert.equal(server.get(UUID)!.rev, 1);
 
@@ -1996,10 +2003,12 @@ describe("CachedEditorWorkspaceAdapter Item 14: clearWorkspace", () => {
     assert.ok(rec && rec.count === 1);
     assert.equal(rec!.last[0]!.where, "discard");
     assert.equal(rec!.last[0]!.stampRev, 5);
+    assert.equal(rec!.last[0]!.serverRev, 9, "discard server rev");
     assert.equal(server.has(UUID), true, "server copy preserved");
     assert.equal(await cache.getLiftStamp(UUID), null, "stamp removed");
     const cacheAfter = await cache.loadWorkspace(UUID);
-    assert.equal(cacheAfter.success && cacheAfter.value, null, "cache cleared");
+    assert.ok(cacheAfter.success && cacheAfter.value);
+    assert.deepEqual(cacheAfter.value, ws, "browser copy unchanged");
   });
 
   it("clear cancels a pending save timer so no PUT fires", async () => {
