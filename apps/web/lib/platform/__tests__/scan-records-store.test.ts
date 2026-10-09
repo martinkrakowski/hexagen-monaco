@@ -97,6 +97,15 @@ async function rawInsert(db: PlatformDb, overrides: Record<string, unknown>) {
   );
 }
 
+/** The value of a successful result; fails the test, with the error, when it is not one. */
+function must<T>(
+  r: { success: true; value: T } | { success: false; error: unknown },
+): T {
+  if (!r.success)
+    throw new Error(`expected success, got ${JSON.stringify(r.error)}`);
+  return r.value;
+}
+
 describe("scan records store — pure path math", () => {
   it("scanArtifactPath REJECTS hostile segments rather than sanitising them", () => {
     expect(() =>
@@ -143,12 +152,10 @@ describe.each(BACKENDS)("scan records store (%s)", (kind) => {
     try {
       const written = await store.record(base);
       expect(written.success).toBe(true);
-      if (!written.success) return;
 
-      const listed = await store.list();
-      if (!listed.success) return;
-      expect(listed.value.length).toBe(1);
-      const record = listed.value[0];
+      const listed = must(await store.list());
+      expect(listed.length).toBe(1);
+      const record = listed[0];
       expect(record?.projectName).toBe("shop");
       expect(record?.repoRef).toBe("acme/shop#main");
       expect(record?.tier).toBe("B");
@@ -158,9 +165,8 @@ describe.each(BACKENDS)("scan records store (%s)", (kind) => {
       expect(record?.findingsSample.length).toBe(1);
       expect(record?.artifact).toBe(null);
 
-      const foreign = await other.list();
-      if (!foreign.success) return;
-      expect(foreign.value.length).toBe(0);
+      const foreign = must(await other.list());
+      expect(foreign.length).toBe(0);
     } finally {
       await backend.close();
     }
@@ -182,11 +188,9 @@ describe.each(BACKENDS)("scan records store (%s)", (kind) => {
     try {
       await store.record(base);
       await store.record({ ...base, repoRef: "acme/other", now: NOW + 1 });
-      const filtered = await store.list({ repoRef: "acme/other" });
-      if (filtered.success) {
-        expect(filtered.value.length).toBe(1);
-        expect(filtered.value[0]?.repoRef).toBe("acme/other");
-      }
+      const filtered = must(await store.list({ repoRef: "acme/other" }));
+      expect(filtered.length).toBe(1);
+      expect(filtered[0]?.repoRef).toBe("acme/other");
     } finally {
       await backend.close();
     }
@@ -203,16 +207,10 @@ describe.each(BACKENDS)("scan records store (%s)", (kind) => {
           errorMessage: "e".repeat(MAX_SCAN_ERROR_CHARS + 500),
         });
         expect(written.success).toBe(true);
-        if (!written.success) return;
-        expect(written.value.record.reportMarkdown?.length).toBe(
-          MAX_SCAN_REPORT_CHARS,
-        );
-        expect(written.value.record.layoutExcerpt?.length).toBe(
-          MAX_SCAN_LAYOUT_EXCERPT_CHARS,
-        );
-        expect(written.value.record.errorMessage?.length).toBe(
-          MAX_SCAN_ERROR_CHARS,
-        );
+        const rec = must(written).record;
+        expect(rec.reportMarkdown?.length).toBe(MAX_SCAN_REPORT_CHARS);
+        expect(rec.layoutExcerpt?.length).toBe(MAX_SCAN_LAYOUT_EXCERPT_CHARS);
+        expect(rec.errorMessage?.length).toBe(MAX_SCAN_ERROR_CHARS);
       } finally {
         await backend.close();
       }
@@ -232,8 +230,7 @@ describe.each(BACKENDS)("scan records store (%s)", (kind) => {
           findingsTotal: 400,
         });
         expect(written.success).toBe(true);
-        if (!written.success) return;
-        const record = written.value.record;
+        const record = must(written).record;
         expect(record.findingsSample.length).toBe(MAX_INLINE_FINDING_ENTRIES);
         expect(record.findingsTotal).toBe(400);
         expect(record.findingsSample[0]?.rule.length).toBe(300);
@@ -254,8 +251,7 @@ describe.each(BACKENDS)("scan records store (%s)", (kind) => {
           findingsTotal: 0,
         });
         expect(written.success).toBe(true);
-        if (!written.success) return;
-        expect(written.value.record.findingsTotal).toBe(2);
+        expect(must(written).record.findingsTotal).toBe(2);
       } finally {
         await backend.close();
       }
@@ -272,9 +268,9 @@ describe.each(BACKENDS)("scan records store (%s)", (kind) => {
           artifact: { path, bytes: 2048 },
         });
         expect(written.success).toBe(true);
-        if (!written.success) return;
-        expect(written.value.record.artifact?.path).toBe(path);
-        expect(written.value.record.artifact?.bytes).toBe(2048);
+        const rec = must(written).record;
+        expect(rec.artifact?.path).toBe(path);
+        expect(rec.artifact?.bytes).toBe(2048);
       } finally {
         await backend.close();
       }
@@ -293,8 +289,8 @@ describe.each(BACKENDS)("scan records store (%s)", (kind) => {
         expect(written.error.message).toMatch(
           /outside this owner's artifacts directory/,
         );
-        const listed = await store.list();
-        if (listed.success) expect(listed.value.length).toBe(0);
+        const listed = must(await store.list());
+        expect(listed.length).toBe(0);
       } finally {
         await backend.close();
       }
@@ -377,10 +373,8 @@ describe.each(BACKENDS)("scan records store (%s)", (kind) => {
       try {
         await rawInsert(db, { id: "future", schema_version: 99 });
         await rawInsert(db, { id: "current" });
-        const listed = await store.list();
-        if (listed.success) {
-          expect(listed.value.map((r) => r.id)).toEqual(["current"]);
-        }
+        const listed = must(await store.list());
+        expect(listed.map((r) => r.id)).toEqual(["current"]);
         const found = await store.get("future");
         expect(found.success).toBe(false);
         if (!found.success) expect(found.error.kind).toBe("NotFound");
@@ -404,6 +398,23 @@ describe.each(BACKENDS)("scan records store (%s)", (kind) => {
       }
     });
 
+    it.runIf(kind === "postgres")(
+      "jsonb refuses an invalid JSON findings blob at insert (error 22P02)",
+      async () => {
+        const { backend, db } = await harness(kind);
+        try {
+          await expect(
+            rawInsert(db, {
+              id: "bad-json",
+              findings_sample: "{not json",
+            }),
+          ).rejects.toMatchObject({ code: "22P02" });
+        } finally {
+          await backend.close();
+        }
+      },
+    );
+
     it("drops a row whose findings blob has the wrong shape, rather than reading it as empty", async () => {
       const { backend, db, store } = await harness(kind);
       try {
@@ -412,9 +423,8 @@ describe.each(BACKENDS)("scan records store (%s)", (kind) => {
           findings_sample: '{"entries":42}',
         });
         await rawInsert(db, { id: "ok" });
-        const listed = await store.list();
-        if (listed.success)
-          expect(listed.value.map((r) => r.id)).toEqual(["ok"]);
+        const listed = must(await store.list());
+        expect(listed.map((r) => r.id)).toEqual(["ok"]);
       } finally {
         await backend.close();
       }
@@ -431,9 +441,8 @@ describe.each(BACKENDS)("scan records store (%s)", (kind) => {
             findings_sample: '{"entries":42}',
           });
           await rawInsert(db, { id: "ok" });
-          const listed = await store.list();
-          if (listed.success)
-            expect(listed.value.map((r) => r.id)).toEqual(["ok"]);
+          const listed = must(await store.list());
+          expect(listed.map((r) => r.id)).toEqual(["ok"]);
         } finally {
           await backend.close();
         }
@@ -476,8 +485,8 @@ describe.each(BACKENDS)("scan records store (%s)", (kind) => {
       const { backend, db, store } = await harness(kind);
       try {
         await rawInsert(db, { id: "alien", verdict: "maybe" });
-        const listed = await store.list();
-        if (listed.success) expect(listed.value.length).toBe(0);
+        const listed = must(await store.list());
+        expect(listed.length).toBe(0);
       } finally {
         await backend.close();
       }
@@ -506,10 +515,10 @@ describe.each(BACKENDS)("scan records store (%s)", (kind) => {
             evicted.push(...written.value.evictedArtifactPaths);
         }
 
-        const listed = await store.list({ limit: MAX_SCAN_RECORDS_PER_OWNER });
-        if (listed.success) {
-          expect(listed.value.length).toBe(MAX_SCAN_RECORDS_PER_OWNER);
-        }
+        const listed = must(
+          await store.list({ limit: MAX_SCAN_RECORDS_PER_OWNER }),
+        );
+        expect(listed.length).toBe(MAX_SCAN_RECORDS_PER_OWNER);
         expect(evicted.length).toBe(2);
         expect(evicted[0]).toBe(
           scanArtifactPath(ARTIFACTS_ROOT, "owner-a", "scan-0000"),
@@ -558,10 +567,9 @@ describe.each(BACKENDS)("scan records store (%s)", (kind) => {
             now: NOW + i,
           });
         }
-        const trend = await store.trend({ limit: 3 });
-        if (!trend.success) return;
-        expect(trend.value.map((p) => p.id)).toEqual(["t-2", "t-3", "t-4"]);
-        expect(trend.value.map((p) => p.fresh)).toEqual([2, 3, 4]);
+        const trend = must(await store.trend({ limit: 3 }));
+        expect(trend.map((p) => p.id)).toEqual(["t-2", "t-3", "t-4"]);
+        expect(trend.map((p) => p.fresh)).toEqual([2, 3, 4]);
       } finally {
         await backend.close();
       }
@@ -575,9 +583,8 @@ describe.each(BACKENDS)("scan records store (%s)", (kind) => {
           findings_sample: '{"entries":42}',
           created_at: 1,
         });
-        const trend = await store.trend();
-        if (trend.success)
-          expect(trend.value.map((p) => p.id)).toEqual(["corrupt"]);
+        const trend = must(await store.trend());
+        expect(trend.map((p) => p.id)).toEqual(["corrupt"]);
       } finally {
         await backend.close();
       }
@@ -593,9 +600,8 @@ describe.each(BACKENDS)("scan records store (%s)", (kind) => {
             findings_sample: "{not json",
             created_at: 1,
           });
-          const trend = await store.trend();
-          if (trend.success)
-            expect(trend.value.map((p) => p.id)).toEqual(["corrupt"]);
+          const trend = must(await store.trend());
+          expect(trend.map((p) => p.id)).toEqual(["corrupt"]);
         } finally {
           await backend.close();
         }
@@ -616,29 +622,23 @@ describe.each(BACKENDS)("scan records store (%s)", (kind) => {
           now: NOW,
         });
         expect(recorded.success).toBe(true);
-        if (!recorded.success) return;
-        expect(typeof recorded.value.record.createdAt).toBe("number");
-        expect(recorded.value.record.createdAt).toBe(NOW);
-        expect(typeof recorded.value.record.findingsTotal).toBe("number");
-        expect(typeof recorded.value.record.artifact?.bytes).toBe("number");
+        const rec = must(recorded).record;
+        expect(typeof rec.createdAt).toBe("number");
+        expect(rec.createdAt).toBe(NOW);
+        expect(typeof rec.findingsTotal).toBe("number");
+        expect(typeof rec.artifact?.bytes).toBe("number");
 
-        const got = await store.get("sc1");
-        expect(got.success).toBe(true);
-        if (!got.success) return;
-        expect(typeof got.value.createdAt).toBe("number");
-        expect(got.value.createdAt).toBe(NOW);
+        const got = must(await store.get("sc1"));
+        expect(typeof got.createdAt).toBe("number");
+        expect(got.createdAt).toBe(NOW);
 
-        const listed = await store.list();
-        expect(listed.success).toBe(true);
-        if (!listed.success) return;
-        expect(typeof listed.value[0]?.createdAt).toBe("number");
-        expect(listed.value[0]?.createdAt).toBe(NOW);
+        const listed = must(await store.list());
+        expect(typeof listed[0]?.createdAt).toBe("number");
+        expect(listed[0]?.createdAt).toBe(NOW);
 
-        const trend = await store.trend();
-        expect(trend.success).toBe(true);
-        if (!trend.success) return;
-        expect(typeof trend.value[0]?.createdAt).toBe("number");
-        expect(trend.value[0]?.createdAt).toBe(NOW);
+        const trend = must(await store.trend());
+        expect(typeof trend[0]?.createdAt).toBe("number");
+        expect(trend[0]?.createdAt).toBe(NOW);
       } finally {
         await backend.close();
       }
@@ -651,21 +651,11 @@ describe.each(BACKENDS)("scan records store (%s)", (kind) => {
           const written = await store.record({ ...base, id, now: NOW });
           expect(written.success).toBe(true);
         }
-        const listed = await store.list();
-        if (!listed.success) return;
-        expect(listed.value.map((r) => r.id)).toEqual([
-          "sc2-c",
-          "sc2-b",
-          "sc2-a",
-        ]);
+        const listed = must(await store.list());
+        expect(listed.map((r) => r.id)).toEqual(["sc2-c", "sc2-b", "sc2-a"]);
 
-        const trend = await store.trend();
-        if (!trend.success) return;
-        expect(trend.value.map((r) => r.id)).toEqual([
-          "sc2-a",
-          "sc2-b",
-          "sc2-c",
-        ]);
+        const trend = must(await store.trend());
+        expect(trend.map((r) => r.id)).toEqual(["sc2-a", "sc2-b", "sc2-c"]);
       } finally {
         await backend.close();
       }
@@ -711,23 +701,16 @@ describe.each(BACKENDS)("scan records store (%s)", (kind) => {
           created_at: NOW + 6,
         });
 
-        const filtered = await store.list({ repoRef: "acme/a" });
-        if (!filtered.success) return;
-        expect(filtered.value.map((r) => r.id).sort()).toEqual([
-          "r1",
-          "r3",
-          "r5",
-        ]);
+        const filtered = must(await store.list({ repoRef: "acme/a" }));
+        expect(filtered.map((r) => r.id).sort()).toEqual(["r1", "r3", "r5"]);
 
-        const limited = await store.list({ limit: 2 });
-        if (!limited.success) return;
-        expect(limited.value.length).toBe(2);
+        const limited = must(await store.list({ limit: 2 }));
+        expect(limited.length).toBe(2);
 
         const otherList = await other.list();
-        if (otherList.success) {
-          // population-guard: owner-b has no records of its own
+        // population-guard: owner-b has no records of its own
+        if (otherList.success)
           expect(otherList.value.map((r) => r.id)).not.toContain("r1");
-        }
       } finally {
         await backend.close();
       }
@@ -770,14 +753,15 @@ describe.each(BACKENDS)("scan records store (%s)", (kind) => {
           scanArtifactPath(ARTIFACTS_ROOT, "owner-a", "a-0001"),
         );
 
-        const aList = await store.list({ limit: MAX_SCAN_RECORDS_PER_OWNER });
-        if (aList.success)
-          expect(aList.value.length).toBe(MAX_SCAN_RECORDS_PER_OWNER);
+        const aList = must(
+          await store.list({ limit: MAX_SCAN_RECORDS_PER_OWNER }),
+        );
+        expect(aList.length).toBe(MAX_SCAN_RECORDS_PER_OWNER);
         expect((await store.get("a-0000")).success).toBe(false);
         expect((await store.get("a-0001")).success).toBe(false);
 
-        const bList = await other.list();
-        if (bList.success) expect(bList.value.length).toBe(3);
+        const bList = must(await other.list());
+        expect(bList.length).toBe(3);
       } finally {
         await backend.close();
       }
@@ -788,17 +772,14 @@ describe.each(BACKENDS)("scan records store (%s)", (kind) => {
       try {
         const first = await store.record({ ...base, id: "dup", now: NOW });
         expect(first.success).toBe(true);
-        if (!first.success) return;
 
         const second = await store.record({ ...base, id: "dup", now: NOW + 1 });
         expect(second.success).toBe(false);
         if (second.success) return;
         expect(second.error.kind).toBe("Conflict");
 
-        const got = await store.get("dup");
-        expect(got.success).toBe(true);
-        if (!got.success) return;
-        expect(got.value.createdAt).toBe(NOW);
+        const got = must(await store.get("dup"));
+        expect(got.createdAt).toBe(NOW);
 
         const otherRecorded = await other.record({
           ...base,
@@ -827,13 +808,11 @@ describe.each(BACKENDS)("scan records store (%s)", (kind) => {
           now: NOW,
         });
         expect(written.success).toBe(true);
-        if (!written.success) return;
+        const rec = must(written).record;
 
-        const got = await store.get("sc6");
-        expect(got.success).toBe(true);
-        if (!got.success) return;
-        expect(got.value.findingsSample).toEqual(sample);
-        expect(got.value.findingsTotal).toBe(100);
+        const got = must(await store.get("sc6"));
+        expect(got.findingsSample).toEqual(sample);
+        expect(got.findingsTotal).toBe(100);
       } finally {
         await backend.close();
       }
@@ -853,13 +832,8 @@ describe.each(BACKENDS)("scan records store (%s)", (kind) => {
           });
           expect(written.success).toBe(true);
         }
-        const trend = await store.trend({ limit: 3, repoRef: "acme/a" });
-        if (!trend.success) return;
-        expect(trend.value.map((p) => p.id)).toEqual([
-          "sc7-2",
-          "sc7-4",
-          "sc7-6",
-        ]);
+        const trend = must(await store.trend({ limit: 3, repoRef: "acme/a" }));
+        expect(trend.map((p) => p.id)).toEqual(["sc7-2", "sc7-4", "sc7-6"]);
       } finally {
         await backend.close();
       }
