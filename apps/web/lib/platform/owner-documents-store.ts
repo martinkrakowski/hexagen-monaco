@@ -461,6 +461,9 @@ export function createOwnerDocumentsStore(
       subjectOwnerId: ownerId,
       subjectId,
       detail: { method, sent, current },
+      // The same clock that computed `since` above: the one-per-minute cap
+      // compares rows it wrote itself.
+      createdAt: new Date(now()).toISOString(),
     });
     return true;
   }
