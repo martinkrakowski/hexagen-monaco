@@ -45,6 +45,7 @@ const INVENTORY_KEYS = [
   "hexagen:saved-projects",
   "hexagen:saved-projects-owner",
   "hexagen:workspace:",
+  "hexagen:workspace-lift",
   "hexagen:generation:",
   "hexagen:chat-history",
   "hexagen:governance:",
@@ -239,6 +240,7 @@ export const DATA_KEYS = [
 // or are scheduled for removal.
 export const PREFERENCE_KEYS = [
   "hexagen:saved-projects-owner", // IDB: cache bookkeeping (idb-saved-projects.adapter.ts)
+  "hexagen:workspace-lift", // IDB: lift stamp bookkeeping (idb-editor-workspace.adapter.ts)
   "hexagen:generation:", // IDB: generation-result cache (idb-generation-result.adapter.ts)
   "hexagen:chat-history", // IDB: chat history (idb-chat-persistence.adapter.ts)
   "hexagen:wizard-draft:", // IDB: wizard draft, legacy / scheduled for removal (idb-wizard-draft.adapter.ts)
