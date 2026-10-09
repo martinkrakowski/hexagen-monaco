@@ -206,7 +206,7 @@ describe.each(BACKENDS)("P-A2 — team membership invariants (%s", (kind) => {
         },
       );
       assert.equal(
-        await countTeamRows(backend.db, "member-1"),
+        await countTeamRows(backend.db, "stranger"),
         0,
         "no team_members row must appear for a non-org-member",
       );
