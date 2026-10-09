@@ -37,6 +37,15 @@ async function openStore(kind: BackendKind, ownerId = "owner-a") {
   };
 }
 
+/** The value of a successful result; fails the test, with the error, when it is not one. */
+function must<T>(
+  r: { success: true; value: T } | { success: false; error: unknown },
+): T {
+  if (!r.success)
+    throw new Error(`expected success, got ${JSON.stringify(r.error)}`);
+  return r.value;
+}
+
 const RUN_ID = "11111111-1111-4111-8111-111111111111";
 const OTHER_RUN_ID = "22222222-2222-4222-8222-222222222222";
 
@@ -687,25 +696,19 @@ describe.each(BACKENDS)("repair telemetry store (%s)", (kind) => {
     const { backend, store } = await openStore(kind);
     try {
       const now = Date.UTC(2026, 7, 20, 12, 0, 0);
-      const recorded = await store.record(run({ now }));
-      assert.equal(recorded.success, true);
-      if (!recorded.success) return;
-      assert.equal(typeof recorded.value.createdAt, "number");
-      assert.equal(recorded.value.createdAt, now);
-      assert.equal(typeof recorded.value.durationMs, "number");
+      const recorded = must(await store.record(run({ now })));
+      assert.equal(typeof recorded.createdAt, "number");
+      assert.equal(recorded.createdAt, now);
+      assert.equal(typeof recorded.durationMs, "number");
 
-      const runs = await store.listRuns();
-      assert.equal(runs.success, true);
-      if (!runs.success) return;
-      assert.equal(typeof runs.value[0]?.createdAt, "number");
-      assert.equal(runs.value[0]?.createdAt, now);
+      const runs = must(await store.listRuns());
+      assert.equal(typeof runs[0]?.createdAt, "number");
+      assert.equal(runs[0]?.createdAt, now);
 
-      const attempts = await store.listAttempts(RUN_ID);
-      assert.equal(attempts.success, true);
-      if (!attempts.success) return;
-      assert.equal(typeof attempts.value[0]?.createdAt, "number");
-      assert.equal(attempts.value[0]?.createdAt, now);
-      assert.equal(typeof attempts.value[0]?.durationMs, "number");
+      const attempts = must(await store.listAttempts(RUN_ID));
+      assert.equal(typeof attempts[0]?.createdAt, "number");
+      assert.equal(attempts[0]?.createdAt, now);
+      assert.equal(typeof attempts[0]?.durationMs, "number");
     } finally {
       await backend.close();
     }
@@ -741,19 +744,17 @@ describe.each(BACKENDS)("repair telemetry store (%s)", (kind) => {
           ],
         }),
       );
-      const attempts = await store.listAttempts(RUN_ID);
-      assert.equal(attempts.success, true);
-      if (!attempts.success) return;
-      assert.equal(attempts.value.length, 3);
-      assert.equal(attempts.value[0]?.eligible, true);
-      assert.equal(attempts.value[0]?.applied, false);
-      assert.equal(attempts.value[0]?.changedYaml, true);
-      assert.equal(attempts.value[1]?.eligible, false);
-      assert.equal(attempts.value[1]?.applied, true);
-      assert.equal(attempts.value[1]?.changedYaml, false);
-      assert.equal(attempts.value[2]?.eligible, true);
-      assert.equal(attempts.value[2]?.applied, true);
-      assert.equal(attempts.value[2]?.changedYaml, true);
+      const attempts = must(await store.listAttempts(RUN_ID));
+      assert.equal(attempts.length, 3);
+      assert.equal(attempts[0]?.eligible, true);
+      assert.equal(attempts[0]?.applied, false);
+      assert.equal(attempts[0]?.changedYaml, true);
+      assert.equal(attempts[1]?.eligible, false);
+      assert.equal(attempts[1]?.applied, true);
+      assert.equal(attempts[1]?.changedYaml, false);
+      assert.equal(attempts[2]?.eligible, true);
+      assert.equal(attempts[2]?.applied, true);
+      assert.equal(attempts[2]?.changedYaml, true);
     } finally {
       await backend.close();
     }
@@ -910,18 +911,18 @@ describe.each(BACKENDS)("repair telemetry store (%s)", (kind) => {
         }),
       );
 
-      const stats = await a.classStats();
-      assert.ok(stats.success);
-      if (!stats.success) return;
-      const zero = stats.value.find(
+      const stats = must(await a.classStats());
+      assert.ok(stats.length > 0, "class stats returned rows");
+      const zero = stats.find(
         (s) => s.violationClass === "client-zero-adapters",
       );
       assert.equal(zero?.attempts, 1);
       assert.equal(zero?.eligible, 1);
 
-      const serverStats = await a.classStats({ surface: "server-staged" });
-      if (!serverStats.success) return;
-      assert.equal(serverStats.value.length, 0);
+      const serverStats = must(
+        await a.classStats({ surface: "server-staged" }),
+      );
+      assert.equal(serverStats.length, 0);
 
       await a.record(
         run({
@@ -939,16 +940,23 @@ describe.each(BACKENDS)("repair telemetry store (%s)", (kind) => {
         }),
       );
 
-      const both = await a.classStats();
-      if (!both.success) return;
-      const zeroBoth = both.value.find(
+      const cdRuns = must(
+        await a.listRuns({ surface: "client-deterministic" }),
+      );
+      assert.equal(cdRuns.length, 1);
+      assert.equal(cdRuns[0]?.surface, "client-deterministic");
+      const ssRuns = must(await a.listRuns({ surface: "server-staged" }));
+      assert.equal(ssRuns.length, 1);
+      assert.equal(ssRuns[0]?.surface, "server-staged");
+
+      const both = must(await a.classStats());
+      const zeroBoth = both.find(
         (s) => s.violationClass === "client-zero-adapters",
       );
       assert.equal(zeroBoth?.attempts, 2);
 
-      const serverOnly = await a.classStats({ surface: "server-staged" });
-      if (!serverOnly.success) return;
-      const zeroServer = serverOnly.value.find(
+      const serverOnly = must(await a.classStats({ surface: "server-staged" }));
+      const zeroServer = serverOnly.find(
         (s) => s.violationClass === "client-zero-adapters",
       );
       assert.equal(zeroServer?.attempts, 1);
