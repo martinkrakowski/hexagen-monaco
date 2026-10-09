@@ -41,10 +41,40 @@ export async function revokeSharesForProject(
        SET revoked_at = @revoked_at
      WHERE owner_id = @owner_id AND project_id = @project_id
        AND revoked_at IS NULL
-   `,
+  `,
       {
         owner_id: ownerId,
         project_id: projectId,
+        revoked_at: new Date().toISOString(),
+      },
+    )
+  ).changes;
+}
+
+/**
+ * Soft-revokes every live grant made to one team. Returns the number revoked.
+ *
+ * Used by `teams-store.deleteTeamTx` so that deleting a team does not leave
+ * its `project_shares` rows behind — they give nobody access once the team's
+ * members are gone, but they clutter each owner's share list. Revoked inside
+ * the team's own transaction and gated on the team row actually being deleted,
+ * so an id that is not a team revokes nothing.
+ */
+export async function revokeSharesToTeam(
+  session: PlatformDbSession,
+  teamId: string,
+): Promise<number> {
+  return (
+    await session.run(
+      `
+    UPDATE project_shares
+       SET revoked_at = @revoked_at
+     WHERE grantee_type = 'team'
+       AND grantee_id = @team_id
+       AND revoked_at IS NULL
+  `,
+      {
+        team_id: teamId,
         revoked_at: new Date().toISOString(),
       },
     )

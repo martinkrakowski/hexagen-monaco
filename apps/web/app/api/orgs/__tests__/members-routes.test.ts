@@ -434,6 +434,40 @@ describe("H1.2 — PATCH /api/orgs/[orgId]/members/[userId]", () => {
     assert.equal(res.status, 200);
     assert.equal(await store.orgs.memberRole(ORG, "founder"), "member");
   });
+
+  it("PATCH on a member already gone when the store method runs is 404 and adds nobody", async () => {
+    // The spy removes the member BEFORE calling the real changeMemberRole, so
+    // the method's own read on `tx` finds no row: it returns false, the route
+    // answers 404, and nobody is re-added. This pins the post-fix shape (no
+    // route-level pre-read) rather than the old read-then-addMember window.
+    const store = await seedOrg("owner", "founder");
+    await store.orgs.addMember(ORG, "dev-1", "member");
+
+    signedInAs("founder");
+    const changeMemberRole = store.orgs.changeMemberRole.bind(store.orgs);
+    const spy = vi
+      .spyOn(store.orgs, "changeMemberRole")
+      .mockImplementationOnce(async (orgId, userId, role, audit) => {
+        // The member is removed inside the call that was meant to change their
+        // role: the real method's own read on `tx` must now see no row.
+        await store.orgs.removeMember(orgId, userId);
+        return changeMemberRole(orgId, userId, role, audit);
+      });
+    try {
+      const res = await changeRole(
+        patchMember("dev-1", { role: "member" }),
+        memberParams("dev-1"),
+      );
+      assert.equal(res.status, 404);
+      assert.equal(
+        await store.orgs.memberRole(ORG, "dev-1"),
+        null,
+        "the member must not be re-added by the role change",
+      );
+    } finally {
+      spy.mockRestore();
+    }
+  });
 });
 
 describe("P-U0b — GET /api/orgs/[orgId]/members", () => {

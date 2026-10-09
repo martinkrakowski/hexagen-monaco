@@ -1,4 +1,4 @@
-import { describe, it } from "vitest";
+import { describe, it, vi } from "vitest";
 import assert from "node:assert/strict";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -6,6 +6,7 @@ import { join } from "node:path";
 
 import { openPlatformDb, ORG_INVITE_TTL_DAYS } from "../platform-db";
 import { createSqlitePlatformDb } from "../sqlite-db";
+import type { PlatformDbSession } from "../db";
 import { createOrgsRepository, LastOwnerError } from "../orgs-store";
 import { createTeamsRepository } from "../teams-store";
 import { createAuditLogRepository } from "../audit-log-store";
@@ -19,6 +20,7 @@ function fixture() {
   const platformDb = createSqlitePlatformDb(db);
   return {
     db,
+    platformDb,
     orgs: createOrgsRepository(platformDb),
     teams: createTeamsRepository(platformDb),
     audit: createAuditLogRepository(platformDb),
@@ -532,6 +534,212 @@ describe("H1.2 — invite expiry", () => {
       }
     } finally {
       if (fx.db.open) fx.db.close();
+    }
+  });
+});
+
+describe("H1.2 — changeMemberRole", () => {
+  it("changeMemberRole on a non-member returns false and adds nobody", async () => {
+    const fx = fixture();
+    try {
+      await seedOrg(fx);
+      await fx.orgs.addMember("org-acme", "founder", "owner");
+
+      const result = await fx.orgs.changeMemberRole(
+        "org-acme",
+        "stranger",
+        "member",
+        { actorId: "founder" },
+      );
+      assert.equal(result, false);
+      assert.equal(
+        await fx.orgs.memberRole("org-acme", "stranger"),
+        null,
+        "not a member, so no membership may appear",
+      );
+      assert.equal(
+        await fx.audit.countFor("org.member.add", "org-acme"),
+        0,
+        "a role change must never write an org.member.add row",
+      );
+      assert.equal(
+        await fx.audit.countFor("org.member.role_change", "org-acme"),
+        0,
+      );
+    } finally {
+      fx.db.close();
+    }
+  });
+
+  it("changeMemberRole to the same role writes no audit row", async () => {
+    const fx = fixture();
+    try {
+      await seedOrg(fx);
+      await fx.orgs.addMember("org-acme", "founder", "owner");
+      await fx.orgs.addMember("org-acme", "dev-1", "member", {
+        actorId: "founder",
+      });
+      // One real role change happened in setup (none here yet — addMember wrote
+      // an `add` row, not a `role_change`).
+      assert.equal(
+        await fx.audit.countFor("org.member.role_change", "org-acme"),
+        0,
+      );
+
+      const result = await fx.orgs.changeMemberRole(
+        "org-acme",
+        "dev-1",
+        "member",
+        { actorId: "founder" },
+      );
+      assert.equal(result, true);
+      assert.equal(await fx.orgs.memberRole("org-acme", "dev-1"), "member");
+      assert.equal(
+        await fx.audit.countFor("org.member.role_change", "org-acme"),
+        0,
+        "a role change to the same role writes no audit row",
+      );
+      assert.equal(
+        await fx.audit.countFor("org.member.add", "org-acme"),
+        1,
+        "the original add is untouched",
+      );
+    } finally {
+      fx.db.close();
+    }
+  });
+
+  it("changeMemberRole demoting the last owner throws LastOwnerError and changes nothing", async () => {
+    const fx = fixture();
+    try {
+      await seedOrg(fx);
+      await fx.orgs.addMember("org-acme", "founder", "owner");
+
+      await assert.rejects(
+        () =>
+          fx.orgs.changeMemberRole("org-acme", "founder", "member", {
+            actorId: "founder",
+          }),
+        LastOwnerError,
+      );
+      assert.equal(
+        await fx.orgs.memberRole("org-acme", "founder"),
+        "owner",
+        "the refusal is atomic: the owner's role reads back as owner",
+      );
+      assert.equal(
+        await fx.audit.countFor("org.member.role_change", "org-acme"),
+        0,
+        "a refused demotion writes no role_change row",
+      );
+      assert.equal(
+        await fx.audit.countFor("org.member.add", "org-acme"),
+        0,
+        "a refused demotion must not insert a membership under any isolation",
+      );
+    } finally {
+      fx.db.close();
+    }
+  });
+
+  it("a role change and the member's removal started together never leave the member added back", async () => {
+    // The race this closes: the OLD PATCH pre-read the member (non-atomic) then
+    // called addMember, which INSERTS on conflict. A removal landing between
+    // the read and the write re-adds the member. changeMemberRole reads on `tx`
+    // inside its own transaction, so there is no window to re-add.
+    const fx = fixture();
+    try {
+      await seedOrg(fx);
+      await fx.orgs.addMember("org-acme", "founder", "owner");
+      await fx.orgs.addMember("org-acme", "second", "owner");
+      await fx.orgs.addMember("org-acme", "dev-1", "member");
+
+      // Order 1: removeMember runs first, changeMemberRole second.
+      await Promise.all([
+        fx.orgs.removeMember("org-acme", "dev-1"),
+        fx.orgs.changeMemberRole("org-acme", "dev-1", "owner", {
+          actorId: "founder",
+        }),
+      ]);
+      assert.equal(
+        await fx.orgs.memberRole("org-acme", "dev-1"),
+        null,
+        "remove-then-change: the member is gone, not re-added",
+      );
+
+      // Reset for the other order.
+      await fx.orgs.addMember("org-acme", "dev-1", "member");
+
+      // Order 2: changeMemberRole runs first, removeMember second.
+      await Promise.all([
+        fx.orgs.changeMemberRole("org-acme", "dev-1", "owner", {
+          actorId: "founder",
+        }),
+        fx.orgs.removeMember("org-acme", "dev-1"),
+      ]);
+      assert.equal(
+        await fx.orgs.memberRole("org-acme", "dev-1"),
+        null,
+        "change-then-remove: the member is gone, not left as an owner",
+      );
+    } finally {
+      fx.db.close();
+    }
+  });
+
+  it("changeMemberRole runs an UPDATE and never the member upsert", async () => {
+    // Structural guarantee, not an isolation one: a role change must never
+    // INSERT a row, because an INSERT ... ON CONFLICT would re-create a
+    // membership removed between the caller's check and the write. This test
+    // wraps db.transaction to record every SQL handed to tx.run, so it captures
+    // the statement the store actually issues (upsertMember would surface as
+    // `INSERT INTO org_members`, updateMemberRole as `UPDATE org_members SET
+    // role`) independent of the statement cache, and fails the moment the
+    // upsert comes back.
+    const fx = fixture();
+    try {
+      await seedOrg(fx);
+      await fx.orgs.addMember("org-acme", "founder", "owner");
+      await fx.orgs.addMember("org-acme", "dev-1", "member", {
+        actorId: "founder",
+      });
+
+      const ran: string[] = [];
+      const realTransaction = fx.platformDb.transaction.bind(fx.platformDb);
+      const spy = vi
+        .spyOn(fx.platformDb, "transaction")
+        .mockImplementation((fn) =>
+          realTransaction(async (tx) => {
+            const wrapped: PlatformDbSession = {
+              get: tx.get,
+              all: tx.all,
+              run: (sql, params) => {
+                ran.push(sql);
+                return tx.run(sql, params);
+              },
+            };
+            return fn(wrapped);
+          }),
+        );
+      try {
+        await fx.orgs.changeMemberRole("org-acme", "dev-1", "owner", {
+          actorId: "founder",
+        });
+      } finally {
+        spy.mockRestore();
+      }
+
+      assert.ok(
+        ran.some((s) => s.includes("UPDATE org_members SET role")),
+        "changeMemberRole must run an UPDATE on org_members, not the upsert",
+      );
+      assert.equal(
+        ran.filter((s) => s.includes("INSERT INTO org_members")).length,
+        0,
+        "changeMemberRole must never run the member upsert",
+      );
+    } finally {
+      fx.db.close();
     }
   });
 });

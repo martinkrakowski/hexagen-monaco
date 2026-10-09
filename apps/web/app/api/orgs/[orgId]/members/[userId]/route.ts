@@ -90,17 +90,22 @@ export async function PATCH(
   }
 
   const store = getPlatformStore();
-  if (!(await store.orgs.memberRole(orgId, userId))) {
-    return NextResponse.json(
-      { error: "not_found", message: "No such member", statusCode: 404 },
-      { status: 404 },
-    );
-  }
 
   try {
-    await store.orgs.addMember(orgId, userId, body.role, {
-      actorId: tenant.userId,
-    });
+    const changed = await store.orgs.changeMemberRole(
+      orgId,
+      userId,
+      body.role,
+      {
+        actorId: tenant.userId,
+      },
+    );
+    if (!changed) {
+      return NextResponse.json(
+        { error: "not_found", message: "No such member", statusCode: 404 },
+        { status: 404 },
+      );
+    }
     return NextResponse.json({ member: { userId, role: body.role } });
   } catch (err) {
     if (err instanceof LastOwnerError) {
