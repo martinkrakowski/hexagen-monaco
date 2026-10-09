@@ -9,7 +9,9 @@ import { getToken } from "next-auth/jwt";
 import { GET } from "../route";
 import {
   closePlatformStore,
+  DOCUMENT_KINDS,
   getPlatformStore,
+  type AuthoredDocument,
   type PlatformStore,
   type RunEventRecord,
 } from "../../../../../lib/platform";
@@ -19,6 +21,10 @@ const OTHER = "user-b";
 const THEIR_PROJECT = "99999999-9999-4999-8999-999999999999";
 /** Must match the private ceiling in `route.ts`. */
 const RUN_EXPORT_LIMIT = 10_000;
+/** Must match the private ceiling in `route.ts`. */
+const DOCUMENT_EXPORT_LIMIT = 10_000;
+/** Must match the private ceiling in `route.ts`. */
+const DOCUMENT_EXPORT_MAX_CHARS = 100_000_000;
 
 function project(id: string, name: string): SavedProject {
   return {
@@ -253,6 +259,151 @@ describe("GET /api/account/export", () => {
     );
     logged.mockRestore();
   });
+
+  it("the export has one document of every kind the account authored, asserting on the set of kinds", async () => {
+    const store = getPlatformStore();
+    const docs = store.documentsFor(OWNER, OWNER);
+    for (const kind of DOCUMENT_KINDS) {
+      await docs.put({ kind, id: `own-${kind}`, payload: { kind, n: 1 } });
+    }
+
+    const body = await (await GET(req())).json();
+    const kinds = body.documents.items.map((d: { kind: string }) => d.kind);
+    assert.deepEqual([...kinds].sort(), [...DOCUMENT_KINDS].sort());
+    for (const item of body.documents.items) {
+      assert.deepEqual(item.payload, { kind: item.kind, n: 1 });
+    }
+  });
+
+  it("documents authored in an org are included, with the org as ownerId", async () => {
+    const store = getPlatformStore();
+    const orgId = "org-documents";
+    await store.orgs.createOrgWithOwner(
+      {
+        id: orgId,
+        slug: "org-documents",
+        name: "Org Documents",
+        createdBy: "founder",
+      },
+      { actorId: "founder" },
+    );
+    await store.orgs.addMember(orgId, OWNER, "member");
+
+    await store.documentsFor(orgId, OWNER).put({
+      kind: "workspace",
+      id: "org-doc-1",
+      payload: { inOrg: true },
+    });
+
+    const body = await (await GET(req())).json();
+    const orgItem = body.documents.items.find(
+      (d: { ownerId: string; id: string }) => d.id === "org-doc-1",
+    );
+    assert.ok(orgItem, "an org-authored document must appear in the export");
+    assert.equal(orgItem!.ownerId, orgId);
+    assert.deepEqual(orgItem!.payload, { inOrg: true });
+    assert.equal(
+      body.documents.scope,
+      "authored-in-any-tenant",
+      "documents are authored across any tenant the account belongs to",
+    );
+  });
+
+  it("another member's org documents and another user's personal documents are not included", async () => {
+    const store = getPlatformStore();
+    const orgId = "org-excluded";
+    await store.orgs.createOrgWithOwner(
+      {
+        id: orgId,
+        slug: "org-excluded",
+        name: "Org Excluded",
+        createdBy: "founder",
+      },
+      { actorId: "founder" },
+    );
+    await store.orgs.addMember(orgId, OWNER, "member");
+    await store.orgs.addMember(orgId, OTHER, "member");
+
+    await store.documentsFor(orgId, OWNER).put({
+      kind: "workspace",
+      id: "mine-in-org",
+      payload: {},
+    });
+    // Another member of the same org authored this — must stay absent.
+    await store.documentsFor(orgId, OTHER).put({
+      kind: "workspace",
+      id: "theirs-in-org",
+      payload: {},
+    });
+    // Another user's personal-tenant document — must stay absent.
+    await store.documentsFor(OTHER, OTHER).put({
+      kind: "workspace",
+      id: "theirs-personal",
+      payload: {},
+    });
+
+    const body = await (await GET(req())).json();
+    const ids = body.documents.items.map((d: { id: string }) => d.id);
+    assert.ok(
+      ids.includes("mine-in-org"),
+      "the caller's own org document must be present",
+    );
+    assert.equal(
+      ids.includes("theirs-in-org"),
+      false,
+      "another member's org document must be absent",
+    );
+    assert.equal(
+      ids.includes("theirs-personal"),
+      false,
+      "another user's personal document must be absent",
+    );
+  });
+
+  it("stores the limit and maxChars it asked for, and is not truncated when stored documents equal the ceiling", async () => {
+    const stub = stubDocumentsAuthoredBy(
+      getPlatformStore(),
+      DOCUMENT_EXPORT_LIMIT,
+    );
+    const body = await (await GET(req())).json();
+    // The route passes the real limit (the store owns the +1 probe).
+    assert.deepEqual(stub.mock.calls[0], [
+      OWNER,
+      DOCUMENT_EXPORT_LIMIT,
+      DOCUMENT_EXPORT_MAX_CHARS,
+    ]);
+    assert.equal(body.documents.truncated, false);
+    assert.equal(body.documents.truncatedBy, null);
+    assert.equal(body.documents.items.length, DOCUMENT_EXPORT_LIMIT);
+  });
+
+  it("flags truncated by rows and drops the probe when one more than the limit is stored", async () => {
+    stubDocumentsAuthoredBy(getPlatformStore(), DOCUMENT_EXPORT_LIMIT + 1);
+    const body = await (await GET(req())).json();
+    assert.equal(body.documents.truncated, true);
+    assert.equal(body.documents.truncatedBy, "rows");
+    assert.equal(body.documents.items.length, DOCUMENT_EXPORT_LIMIT);
+    assert.equal(
+      body.documents.items.some(
+        (d: { id: string }) => d.id === `doc-${DOCUMENT_EXPORT_LIMIT}`,
+      ),
+      false,
+      "the probe row must not be included in the archive",
+    );
+  });
+
+  it("returns a 500 when the documents store throws", async () => {
+    const store = getPlatformStore();
+    const documentsAuthoredBy = vi.fn().mockRejectedValue(new Error("boom"));
+    vi.spyOn(store, "documentsAuthoredBy").mockImplementation(
+      documentsAuthoredBy as unknown as PlatformStore["documentsAuthoredBy"],
+    );
+    const res = await GET(req());
+    assert.equal(res.status, 500);
+    const body = await res.json();
+    assert.equal(body.error, "persistence");
+    assert.equal(body.message, "Unable to load documents for export");
+  });
 });
 
 function stubRunList(store: PlatformStore, storedCount: number) {
@@ -290,4 +441,40 @@ function stubRunList(store: PlatformStore, storedCount: number) {
     return { ...inner, list };
   });
   return list;
+}
+
+/**
+ * Stub for `PlatformStore.documentsAuthoredBy`, beside `stubRunList` and in the
+ * same style. The route passes the real limit; the store owns the +1 probe, so
+ * the stub mirrors that and reports `truncatedBy: "rows"` when a probe row was
+ * present. Payloads are tiny, so the size budget never engages here (it is
+ * covered by the store test file).
+ */
+function stubDocumentsAuthoredBy(store: PlatformStore, storedCount: number) {
+  const documentsAuthoredBy = vi.fn(
+    async (ownerId: string, limit: number, _maxChars: number) => {
+      const fetched = Array.from(
+        { length: Math.min(storedCount, limit + 1) },
+        (_, i): AuthoredDocument => ({
+          ownerId,
+          kind: "workspace",
+          id: `doc-${i}`,
+          projectId: null,
+          rev: 1,
+          payload: { i },
+          updatedAt: 1,
+        }),
+      );
+      const rowsTruncated = fetched.length > limit;
+      const items = rowsTruncated ? fetched.slice(0, limit) : fetched;
+      return {
+        items,
+        truncatedBy: rowsTruncated ? ("rows" as const) : null,
+      };
+    },
+  );
+  vi.spyOn(store, "documentsAuthoredBy").mockImplementation(
+    documentsAuthoredBy as unknown as PlatformStore["documentsAuthoredBy"],
+  );
+  return documentsAuthoredBy;
 }

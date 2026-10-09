@@ -55,9 +55,18 @@ export interface PlatformDb extends PlatformDbSession {
    * A plain `db` call started before or outside the transaction and awaited
    * inside the callback is queued behind this transaction and never resolves:
    * a deadlock.
+   *
+   * On Postgres a transaction runs at SERIALIZABLE and the callback may be run
+   * MORE THAN ONCE: when the server reports a serialization failure or a
+   * deadlock, the transaction is rolled back and the callback is called again. A
+   * callback must therefore touch nothing but `tx` and its own local variables.
    */
   transaction<T>(fn: (tx: PlatformDbSession) => Promise<T>): Promise<T>;
+  /** Which SQL dialect the statements run on. */
+  readonly dialect: "sqlite" | "postgres";
   /** True when `error` is a SQLite unique / primary-key constraint violation. */
   isUniqueViolation(error: unknown): boolean;
+  /** True when `error` is a foreign-key constraint violation. */
+  isForeignKeyViolation(error: unknown): boolean;
   close(): Promise<void>;
 }

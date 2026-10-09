@@ -1,5 +1,6 @@
 import type { PlatformDb, PlatformDbSession } from "./db";
 import { appendAudit, type AuditEntry } from "./audit-log-store";
+import { revokeSharesToTeam } from "./project-shares-store";
 
 /**
  * Teams and their membership (P-A2).
@@ -206,12 +207,17 @@ export function createTeamsRepository(db: PlatformDb): TeamsRepository {
       // Gate on affected rows: an audit row for a delete that hit nothing is a
       // record of an event that did not happen, which is worse than a missing
       // one — a reader cannot tell it from a real deletion.
-      if (removed.changes > 0)
+      if (removed.changes > 0) {
+        // Soft-revoke every live grant TO this team. Inside the changes>0 branch
+        // so an id that was not a team revokes nothing — the grants survive
+        // because no team row existed to make them visible in the first place.
+        await revokeSharesToTeam(tx, teamId);
         await audited(tx, audit, {
           action: "team.delete",
           subjectOwnerId: team?.org_id ?? null,
           subjectId: teamId,
         });
+      }
     });
 
   // Check-and-insert in ONE transaction: without it, an org removal
