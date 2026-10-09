@@ -17,8 +17,7 @@ const UUID_PATTERN =
  * structural type lets the cached adapter depend on the interface, not the
  * concrete class.
  */
-export interface EditorWorkspaceCachePort
-  extends EditorWorkspacePersistencePort {
+export interface EditorWorkspaceCachePort extends EditorWorkspacePersistencePort {
   getLiftStamp(sessionId: string): Promise<LiftStamp | null>;
   setLiftStamp(sessionId: string, stamp: LiftStamp | null): Promise<void>;
 }
@@ -48,6 +47,16 @@ export async function defaultUserIdSource(): Promise<string | null> {
   }
 }
 
+/**
+ * Item 15: resets the cached user id so the next call to
+ * `defaultUserIdSource` re-fetches `/api/auth/session`. Called when a remote
+ * response is 401/403 — a tab whose session ended must stop addressing the
+ * old account's URL.
+ */
+export function resetCachedUserId(): void {
+  cachedUserId = undefined;
+}
+
 /** Client copy of the server's id pattern (pinned by test to avoid drift). */
 export const DOCUMENT_ID_PATTERN = /^[A-Za-z0-9._:-]{1,128}$/;
 /** Client copy of the server's payload cap (UTF-16 code units). */
@@ -74,12 +83,14 @@ export interface ReadOk {
   updatedAt: number;
 }
 
-export type ReadResult = ReadOk | {
-  ok: false;
-  reason: "not_found" | "unauthenticated" | "rate_limited" | "error";
-  status?: number;
-  message: string;
-};
+export type ReadResult =
+  | ReadOk
+  | {
+      ok: false;
+      reason: "not_found" | "unauthenticated" | "rate_limited" | "error";
+      status?: number;
+      message: string;
+    };
 
 export interface WriteOk {
   ok: true;
@@ -112,31 +123,22 @@ export type DeleteResult =
     };
 
 export class HttpEditorWorkspaceAdapter {
-  /** Last canonical `rev:<n>` seen per id (GET or PUT ETag). */
-  private readonly revTokens = new Map<string, number>();
-
-  constructor(
-    private readonly fetchImpl: typeof fetch = fetchWithCsrf,
-  ) {}
+  constructor(private readonly fetchImpl: typeof fetch = fetchWithCsrf) {}
 
   private documentUrlFor(ownerId: string, id: string): string {
     return `/api/tenants/${encodeURIComponent(ownerId)}/documents/workspace/${encodeURIComponent(id)}`;
   }
 
   /**
-   * GET the remote workspace document. On 200 the rev is seeded from the ETag
-   * so a subsequent `write` can carry `If-Match`; on 404 the rev map is left
-   * untouched so the first write after a 404 carries no `If-Match`.
+   * GET the remote workspace document. Returns the workspace payload and the
+   * rev from the ETag. A 200 without a parseable ETag is an error. The rev
+   * is NOT stored internally — callers pass it explicitly to `write`.
    */
-  async read(
-    ownerId: string,
-    id: string,
-  ): Promise<ReadResult> {
+  async read(ownerId: string, id: string): Promise<ReadResult> {
     try {
-      const response = await this.fetchImpl(
-        this.documentUrlFor(ownerId, id),
-        { headers: { "Content-Type": "application/json" } },
-      );
+      const response = await this.fetchImpl(this.documentUrlFor(ownerId, id), {
+        headers: { "Content-Type": "application/json" },
+      });
       if (response.status === 401 || response.status === 403) {
         return {
           ok: false,
@@ -172,11 +174,18 @@ export class HttpEditorWorkspaceAdapter {
       };
       const etag = response.headers.get("ETag");
       const rev = revFromEtag(etag);
-      if (rev !== null) this.revTokens.set(id, rev);
+      if (rev === null) {
+        return {
+          ok: false,
+          reason: "error",
+          status: response.status,
+          message: "missing ETag",
+        } as ReadResult;
+      }
       return {
         ok: true,
         workspace: body.payload,
-        rev: rev ?? 0,
+        rev,
         updatedAt: body.updatedAt,
       };
     } catch (cause) {
@@ -191,29 +200,29 @@ export class HttpEditorWorkspaceAdapter {
 
   /**
    * PUT the workspace payload. The body always carries `projectId`. An
-   * `If-Match: rev:<n>` header is sent only when a rev is known for this id
-   * (seeded by a prior successful `read` or `write`); a 409 is returned as a
-   * conflict without retry.
+   * `If-Match: rev:<n>` header is sent only when the caller passes a
+   * non-null `ifMatch`; a 409 is returned as a conflict without retry.
    */
   async write(
     ownerId: string,
     id: string,
     payload: unknown,
     projectId: string,
+    ifMatch: number | null,
   ): Promise<WriteResult> {
     const body = JSON.stringify({ payload, projectId });
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
     };
-    const rev = this.revTokens.get(id);
-    if (rev !== undefined) {
-      headers["If-Match"] = `rev:${rev}`;
+    if (ifMatch !== null) {
+      headers["If-Match"] = `rev:${ifMatch}`;
     }
     try {
-      const response = await this.fetchImpl(
-        this.documentUrlFor(ownerId, id),
-        { method: "PUT", headers, body },
-      );
+      const response = await this.fetchImpl(this.documentUrlFor(ownerId, id), {
+        method: "PUT",
+        headers,
+        body,
+      });
       if (response.status === 401 || response.status === 403) {
         return {
           ok: false,
@@ -261,7 +270,6 @@ export class HttpEditorWorkspaceAdapter {
         };
       }
       const newRev = revFromEtag(response.headers.get("ETag"));
-      if (newRev !== null) this.revTokens.set(id, newRev);
       return { ok: true, rev: newRev ?? 0 };
     } catch (cause) {
       return {
@@ -279,10 +287,9 @@ export class HttpEditorWorkspaceAdapter {
    */
   async delete(ownerId: string, id: string): Promise<DeleteResult> {
     try {
-      const response = await this.fetchImpl(
-        this.documentUrlFor(ownerId, id),
-        { method: "DELETE" },
-      );
+      const response = await this.fetchImpl(this.documentUrlFor(ownerId, id), {
+        method: "DELETE",
+      });
       if (response.status === 401 || response.status === 403) {
         return {
           ok: false,
@@ -323,19 +330,26 @@ export class HttpEditorWorkspaceAdapter {
 /** Milliseconds of quiet the adapter waits after the last save before writing. */
 const REMOTE_DEBOUNCE_MS = 1500;
 
-export class CachedEditorWorkspaceAdapter
-  implements EditorWorkspacePersistencePort
-{
+export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistencePort {
   /** ids for which a 409 conflict was seen; no remote writes until next load. */
   private readonly pausedIds = new Set<string>();
   /** Per-sessionId debounce timer for the trailing server write. */
-  private readonly writeTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private readonly writeTimers = new Map<
+    string,
+    ReturnType<typeof setTimeout>
+  >();
+  /** Per-id epoch; clearWorkspace bumps it to cancel in-flight writes. */
+  private readonly epochs = new Map<string, number>();
+  /** Per-id in-flight remote write, so two PUTs can't self-conflict. */
+  private readonly inFlight = new Map<string, Promise<void>>();
 
   constructor(
     private readonly cache: EditorWorkspaceCachePort,
     private readonly remote: HttpEditorWorkspaceAdapter,
     private readonly tenantIdSource: () => string | null = getActiveTenantId,
-    private readonly userIdSource: () => Promise<string | null> = defaultUserIdSource,
+    private readonly userIdSource: () => Promise<
+      string | null
+    > = defaultUserIdSource,
     private readonly logger: LoggerPort,
   ) {}
 
@@ -350,32 +364,60 @@ export class CachedEditorWorkspaceAdapter
       return this.cache.loadWorkspace(sessionId);
     }
     if (!DOCUMENT_ID_PATTERN.test(sessionId)) {
-      this.logger.warn(
-        `workspace ${sessionId} skipped: id failed pattern`,
-      );
+      this.logger.warn(`workspace ${sessionId} skipped: id failed pattern`);
       return this.cache.loadWorkspace(sessionId);
     }
     if (!UUID_PATTERN.test(sessionId)) {
-      this.logger.warn(
-        `workspace ${sessionId} skipped: id is not a UUID`,
-      );
+      this.logger.warn(`workspace ${sessionId} skipped: id is not a UUID`);
       return this.cache.loadWorkspace(sessionId);
     }
     return this.loadFromRemote(sessionId, userId);
+  }
+
+  private cancelWriteTimer(sessionId: string): void {
+    const existing = this.writeTimers.get(sessionId);
+    if (existing) {
+      clearTimeout(existing);
+      this.writeTimers.delete(sessionId);
+    }
+  }
+
+  private async cacheStaleSince(
+    sessionId: string,
+    firstRead: Result<PersistedEditorWorkspace | null, PersistenceError>,
+  ): Promise<boolean> {
+    const recheck = await this.cache.loadWorkspace(sessionId);
+    if (!recheck.success) return true;
+    if (!firstRead.success || firstRead.value === null) {
+      return recheck.value !== null;
+    }
+    return (
+      recheck.value === null ||
+      recheck.value.updatedAt !== firstRead.value!.updatedAt
+    );
   }
 
   private async loadFromRemote(
     sessionId: string,
     userId: string,
   ): Promise<Result<PersistedEditorWorkspace | null, PersistenceError>> {
+    this.pausedIds.delete(sessionId);
+
     const cacheResult = await this.cache.loadWorkspace(sessionId);
+    if (!cacheResult.success) return cacheResult;
+
     const readResult = await this.remote.read(userId, sessionId);
 
     if (!readResult.ok) {
-      // AM5: any remote failure ends in the cache result.
       if (readResult.reason === "not_found") {
+        if (cacheResult.value !== null) {
+          return this.maybeLift(sessionId, userId, cacheResult);
+        }
         this.firstWriteAfter404.add(sessionId);
-        return this.maybeLift(sessionId, userId, cacheResult);
+        return cacheResult;
+      }
+      if (readResult.reason === "unauthenticated") {
+        resetCachedUserId();
       }
       return cacheResult;
     }
@@ -383,21 +425,22 @@ export class CachedEditorWorkspaceAdapter
     const serverWs = readResult.workspace as PersistedEditorWorkspace;
     const stamp = await this.cache.getLiftStamp(sessionId);
 
-    // Foreign stamp: ignore, return cache untouched (not lifted, not deleted).
     if (stamp !== null && stamp.ownerId !== userId) {
       return cacheResult;
     }
 
-    const hasCache =
-      cacheResult.success && cacheResult.value !== null;
+    const hasCache = cacheResult.value !== null;
 
-    // no entry | any → return server value, write to cache, stamp it.
     if (!hasCache) {
+      if (await this.cacheStaleSince(sessionId, cacheResult)) {
+        return this.cache.loadWorkspace(sessionId);
+      }
       await this.cache.saveWorkspace(sessionId, serverWs);
       await this.tryStamp(sessionId, {
         ownerId: userId,
         rev: readResult.rev,
         syncedUpdatedAt: serverWs.updatedAt,
+        confirmed: true,
       });
       return { success: true, value: serverWs };
     }
@@ -406,15 +449,16 @@ export class CachedEditorWorkspaceAdapter
     const hasStamp = stamp !== null;
 
     if (!hasStamp) {
-      // no stamp: conflict or clean depending on payload equality.
       if (JSON.stringify(cacheEntry) === JSON.stringify(serverWs)) {
         await this.tryStamp(sessionId, {
           ownerId: userId,
           rev: readResult.rev,
           syncedUpdatedAt: cacheEntry.updatedAt,
+          confirmed: true,
         });
         return cacheResult;
       }
+      this.cancelWriteTimer(sessionId);
       this.logger.warn(
         `workspace ${sessionId} conflict: no stamp, cache differs from server`,
       );
@@ -422,24 +466,35 @@ export class CachedEditorWorkspaceAdapter
       return cacheResult;
     }
 
-    // has own stamp (and stamp.ownerId === userId)
     const dirty = cacheEntry.updatedAt !== stamp.syncedUpdatedAt;
     const moved = readResult.rev !== stamp.rev;
 
-    if (!dirty && !moved) return cacheResult;
+    if (!dirty && !moved) {
+      if (
+        readResult.rev === stamp.rev &&
+        JSON.stringify(serverWs) === JSON.stringify(cacheEntry)
+      ) {
+        await this.tryStamp(sessionId, { ...stamp, confirmed: true });
+      }
+      return cacheResult;
+    }
     if (!dirty && moved) {
+      if (await this.cacheStaleSince(sessionId, cacheResult)) {
+        return this.cache.loadWorkspace(sessionId);
+      }
       await this.cache.saveWorkspace(sessionId, serverWs);
       await this.tryStamp(sessionId, {
         ownerId: userId,
         rev: readResult.rev,
         syncedUpdatedAt: serverWs.updatedAt,
+        confirmed: true,
       });
       return { success: true, value: serverWs };
     }
     if (dirty && !moved) {
       return this.catchUp(sessionId, userId, cacheEntry, stamp);
     }
-    // dirty && moved → CONFLICT
+    this.cancelWriteTimer(sessionId);
     this.logger.warn(
       `workspace ${sessionId} conflict: cache dirty and server moved (cache rev=${stamp.rev}, server rev=${readResult.rev})`,
     );
@@ -447,10 +502,7 @@ export class CachedEditorWorkspaceAdapter
     return cacheResult;
   }
 
-  private async tryStamp(
-    sessionId: string,
-    stamp: LiftStamp,
-  ): Promise<void> {
+  private async tryStamp(sessionId: string, stamp: LiftStamp): Promise<void> {
     try {
       await this.cache.setLiftStamp(sessionId, stamp);
     } catch {
@@ -480,6 +532,7 @@ export class CachedEditorWorkspaceAdapter
       sessionId,
       cacheEntry,
       sessionId,
+      null,
     );
     if (!putResult.ok) {
       this.logger.warn(
@@ -488,6 +541,13 @@ export class CachedEditorWorkspaceAdapter
       return cacheResult;
     }
     const putRev = putResult.rev;
+    // Item 10: stamp unconfirmed after PUT.
+    await this.tryStamp(sessionId, {
+      ownerId: userId,
+      rev: putRev,
+      syncedUpdatedAt: cacheEntry.updatedAt,
+      confirmed: false,
+    });
 
     // Confirming GET — must match rev and payload.
     const confirmResult = await this.remote.read(userId, sessionId);
@@ -504,20 +564,18 @@ export class CachedEditorWorkspaceAdapter
       return cacheResult;
     }
     if (
-      JSON.stringify(confirmResult.workspace) !==
-      JSON.stringify(cacheEntry)
+      JSON.stringify(confirmResult.workspace) !== JSON.stringify(cacheEntry)
     ) {
-      this.logger.warn(
-        `workspace ${sessionId} lift payload mismatch`,
-      );
+      this.logger.warn(`workspace ${sessionId} lift payload mismatch`);
       return cacheResult;
     }
 
-    // Lifted: stamp it. syncedUpdatedAt is the cache entry's updatedAt.
+    // Lifted and confirmed: stamp with confirmed: true.
     await this.tryStamp(sessionId, {
       ownerId: userId,
       rev: putRev,
       syncedUpdatedAt: cacheEntry.updatedAt,
+      confirmed: true,
     });
     return cacheResult;
   }
@@ -534,6 +592,7 @@ export class CachedEditorWorkspaceAdapter
       sessionId,
       cacheEntry,
       sessionId,
+      stamp.rev,
     );
     if (!putResult.ok) {
       this.logger.warn(
@@ -543,30 +602,24 @@ export class CachedEditorWorkspaceAdapter
     }
     const confirmResult = await this.remote.read(userId, sessionId);
     if (!confirmResult.ok) {
-      this.logger.warn(
-        `workspace ${sessionId} catch-up confirm failed`,
-      );
+      this.logger.warn(`workspace ${sessionId} catch-up confirm failed`);
       return { success: true, value: cacheEntry };
     }
     if (confirmResult.rev !== putResult.rev) {
-      this.logger.warn(
-        `workspace ${sessionId} catch-up rev mismatch`,
-      );
+      this.logger.warn(`workspace ${sessionId} catch-up rev mismatch`);
       return { success: true, value: cacheEntry };
     }
     if (
-      JSON.stringify(confirmResult.workspace) !==
-      JSON.stringify(cacheEntry)
+      JSON.stringify(confirmResult.workspace) !== JSON.stringify(cacheEntry)
     ) {
-      this.logger.warn(
-        `workspace ${sessionId} catch-up payload mismatch`,
-      );
+      this.logger.warn(`workspace ${sessionId} catch-up payload mismatch`);
       return { success: true, value: cacheEntry };
     }
     await this.tryStamp(sessionId, {
       ownerId: userId,
       rev: putResult.rev,
       syncedUpdatedAt: cacheEntry.updatedAt,
+      confirmed: true,
     });
     return { success: true, value: cacheEntry };
   }
@@ -606,18 +659,19 @@ export class CachedEditorWorkspaceAdapter
 
     const stamp = await this.cache.getLiftStamp(sessionId);
     if (stamp !== null && stamp.ownerId !== userId) return cacheResult;
-    // AM2: after a conflict, no further remote writes until the next load.
     if (this.pausedIds.has(sessionId)) return cacheResult;
     if (stamp === null && !this.firstWriteAfter404.has(sessionId)) {
       return cacheResult;
     }
 
+    // Item 3: capture the rev at schedule time, not at fire time.
+    const ifMatch = stamp !== null ? stamp.rev : null;
     const existing = this.writeTimers.get(sessionId);
     if (existing) clearTimeout(existing);
     this.writeTimers.set(
       sessionId,
       setTimeout(() => {
-        void this.doRemoteWrite(sessionId, workspace, userId);
+        void this.doRemoteWrite(sessionId, workspace, userId, ifMatch);
       }, REMOTE_DEBOUNCE_MS),
     );
 
@@ -630,79 +684,161 @@ export class CachedEditorWorkspaceAdapter
     sessionId: string,
     workspace: PersistedEditorWorkspace,
     userId: string,
+    ifMatch: number | null,
   ): Promise<void> {
+    // Item 6: nothing if paused, org switched in, or epoch changed.
+    if (this.pausedIds.has(sessionId)) return;
+    if (this.tenantIdSource() !== null) return;
+    const epoch = this.epochs.get(sessionId) ?? 0;
+    if (epoch !== (this.epochs.get(sessionId) ?? 0)) return; // epoch captured below
+
     this.writeTimers.delete(sessionId);
-    const result = await this.remote.write(
-      userId,
-      sessionId,
-      workspace,
-      sessionId,
-    );
-    if (!result.ok) {
-      switch (result.reason) {
-        case "conflict":
+    const epochAtStart = this.epochs.get(sessionId) ?? 0;
+
+    const prev = this.inFlight.get(sessionId) ?? Promise.resolve();
+    const current = prev.then(async () => {
+      await this._doRemoteWrite(
+        sessionId,
+        workspace,
+        userId,
+        ifMatch,
+        epochAtStart,
+      );
+    });
+    this.inFlight.set(sessionId, current);
+  }
+
+  private async _doRemoteWrite(
+    sessionId: string,
+    workspace: PersistedEditorWorkspace,
+    userId: string,
+    ifMatch: number | null,
+    epochAtStart: number,
+  ): Promise<void> {
+    try {
+      // Item 6: re-check paused, org, epoch after awaiting inFlight.
+      if (this.pausedIds.has(sessionId)) return;
+      if (this.tenantIdSource() !== null) return;
+      if (epochAtStart !== (this.epochs.get(sessionId) ?? 0)) return;
+
+      // Item 11: first-write-after-404 does a GET first.
+      const putIfMatch = ifMatch;
+      if (ifMatch === null && this.firstWriteAfter404.has(sessionId)) {
+        const probe = await this.remote.read(userId, sessionId);
+        if (probe.ok) {
+          // Another device created it — don't overwrite.
           this.logger.warn(
-            `workspace ${sessionId} save conflict: one PUT, server rev=${result.serverRev ?? "unknown"}`,
+            `workspace ${sessionId} conflict: created elsewhere before the first save`,
           );
           this.pausedIds.add(sessionId);
-          break;
-        case "too_large":
-          this.logger.warn(
-            `workspace ${sessionId} not saved to the server: payload ${result.bodyLength} characters, limit ${MAX_PAYLOAD_LENGTH}`,
-          );
-          break;
-        default:
-          this.logger.warn(
-            `workspace ${sessionId} save failed: ${result.message}`,
-          );
-          break;
+          this.firstWriteAfter404.delete(sessionId);
+          return;
+        }
+        // Still 404 → PUT without If-Match.
       }
-      return;
+
+      const result = await this.remote.write(
+        userId,
+        sessionId,
+        workspace,
+        sessionId,
+        putIfMatch,
+      );
+      if (!result.ok) {
+        switch (result.reason) {
+          case "conflict":
+            this.logger.warn(
+              `workspace ${sessionId} save conflict: one PUT, server rev=${result.serverRev ?? "unknown"}`,
+            );
+            this.pausedIds.add(sessionId);
+            break;
+          case "too_large":
+            this.logger.warn(
+              `workspace ${sessionId} not saved to the server: payload ${result.bodyLength} characters, limit ${MAX_PAYLOAD_LENGTH}`,
+            );
+            break;
+          case "unauthenticated":
+            resetCachedUserId();
+            this.logger.warn(`workspace ${sessionId} save unauthenticated`);
+            break;
+          default:
+            this.logger.warn(
+              `workspace ${sessionId} save failed: ${result.message}`,
+            );
+            break;
+        }
+        return;
+      }
+
+      this.firstWriteAfter404.delete(sessionId);
+      const prevStamp = await this.cache.getLiftStamp(sessionId);
+      await this.tryStamp(sessionId, {
+        ownerId: userId,
+        rev: result.rev,
+        syncedUpdatedAt: workspace.updatedAt,
+        confirmed: prevStamp?.confirmed ?? false,
+      });
+
+      // Item 12: if the epoch changed during this write, delete the copy
+      // (a clear happened while the PUT was in flight).
+      if (epochAtStart !== (this.epochs.get(sessionId) ?? 0)) {
+        await this.remote.delete(userId, sessionId);
+      }
+    } finally {
+      this.inFlight.delete(sessionId);
     }
-    this.firstWriteAfter404.delete(sessionId);
-    await this.tryStamp(sessionId, {
-      ownerId: userId,
-      rev: result.rev,
-      syncedUpdatedAt: workspace.updatedAt,
-    });
   }
 
   async clearWorkspace(
     sessionId: string,
   ): Promise<Result<void, PersistenceError>> {
-    // Clear any pending debounced remote write for this session.
-    const existing = this.writeTimers.get(sessionId);
-    if (existing) {
-      clearTimeout(existing);
-      this.writeTimers.delete(sessionId);
-    }
-    this.firstWriteAfter404.delete(sessionId);
-    this.pausedIds.delete(sessionId);
+    // Item 12: increment epoch before anything else.
+    this.epochs.set(sessionId, (this.epochs.get(sessionId) ?? 0) + 1);
+    // Item 13: await any in-flight write for this id.
+    const inFlight = this.inFlight.get(sessionId);
+    if (inFlight) await inFlight.catch(() => {});
 
+    this.cancelWriteTimer(sessionId);
+    this.firstWriteAfter404.delete(sessionId);
+
+    // AM1: org tenant → cache only.
     if (this.tenantIdSource() !== null) {
       return this.cache.clearWorkspace(sessionId);
     }
 
-    const userId = await this.userIdSource();
+    // Check paused BEFORE removing from pausedIds.
+    const wasPaused = this.pausedIds.has(sessionId);
+    this.pausedIds.delete(sessionId);
 
-    let serverDelete: Promise<unknown> = Promise.resolve();
-    if (userId !== null) {
-      const stamp = await this.cache.getLiftStamp(sessionId);
-      if (stamp !== null && stamp.ownerId === userId) {
-        serverDelete = this.remote
-          .delete(userId, sessionId)
-          .then((result) => {
-            if (!result.ok) {
-              this.logger.warn(
-                `workspace ${sessionId} server delete failed: ${result.message}`,
-              );
-            }
-          });
-      }
+    const userId = await this.userIdSource();
+    if (userId === null) {
+      return this.cache.clearWorkspace(sessionId);
     }
 
+    // Read stamp BEFORE cache clear (server DELETE needs it).
+    const stamp = await this.cache.getLiftStamp(sessionId);
+    const canDelete = stamp !== null && stamp.ownerId === userId && !wasPaused;
+
+    // Cache clear + stamp removal FIRST.
     const cacheResult = await this.cache.clearWorkspace(sessionId);
-    await serverDelete;
+    if (!canDelete) return cacheResult;
+
+    // GET just before DELETE: rev must match stamp.rev.
+    const probe = await this.remote.read(userId, sessionId);
+    if (!probe.ok) return cacheResult;
+    if (probe.rev !== stamp!.rev) {
+      this.logger.warn(
+        `workspace ${sessionId}: server copy changed on another device, not deleted`,
+      );
+      return cacheResult;
+    }
+
+    const deleteResult = await this.remote.delete(userId, sessionId);
+    if (!deleteResult.ok) {
+      this.logger.warn(
+        `workspace ${sessionId} server delete failed: ${deleteResult.message}`,
+      );
+    }
     return cacheResult;
   }
 }

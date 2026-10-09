@@ -19,6 +19,7 @@ export interface LiftStamp {
   ownerId: string;
   rev: number;
   syncedUpdatedAt: number;
+  confirmed: boolean;
 }
 
 export class IDBEditorWorkspaceAdapter implements EditorWorkspacePersistencePort {
@@ -106,11 +107,19 @@ export class IDBEditorWorkspaceAdapter implements EditorWorkspacePersistencePort
     });
   }
 
-  /** Reads the per-id lift stamp, or null when absent / unreadable. */
   async getLiftStamp(sessionId: string): Promise<LiftStamp | null> {
     try {
-      const stamps = await get<Record<string, LiftStamp>>(LIFT_STAMP_KEY);
-      return stamps?.[sessionId] ?? null;
+      const stamps =
+        await get<Record<string, Partial<LiftStamp>>>(LIFT_STAMP_KEY);
+      const entry = stamps?.[sessionId];
+      if (!entry) return null;
+      // Old stamps written before `confirmed` was added read as `false`.
+      return {
+        ownerId: entry.ownerId ?? "",
+        rev: entry.rev ?? 0,
+        syncedUpdatedAt: entry.syncedUpdatedAt ?? 0,
+        confirmed: entry.confirmed ?? false,
+      };
     } catch {
       return null;
     }

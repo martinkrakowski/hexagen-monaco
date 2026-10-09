@@ -41,8 +41,18 @@ describe("IDBEditorWorkspaceAdapter lift stamp", () => {
 
   it("round-trips a lift stamp per session id and leaves other ids alone", async () => {
     const adapter = new IDBEditorWorkspaceAdapter();
-    const stampA = { ownerId: "u1", rev: 5, syncedUpdatedAt: 100 };
-    const stampB = { ownerId: "u1", rev: 9, syncedUpdatedAt: 200 };
+    const stampA = {
+      ownerId: "u1",
+      rev: 5,
+      syncedUpdatedAt: 100,
+      confirmed: true,
+    };
+    const stampB = {
+      ownerId: "u1",
+      rev: 9,
+      syncedUpdatedAt: 200,
+      confirmed: false,
+    };
 
     await adapter.setLiftStamp("s1", stampA);
     await adapter.setLiftStamp("s2", stampB);
@@ -65,8 +75,18 @@ describe("IDBEditorWorkspaceAdapter lift stamp", () => {
     const adapter = new IDBEditorWorkspaceAdapter();
     idb.getDelay = () => new Promise((resolve) => setTimeout(resolve, 10));
 
-    const stampA = { ownerId: "u1", rev: 1, syncedUpdatedAt: 100 };
-    const stampB = { ownerId: "u1", rev: 2, syncedUpdatedAt: 200 };
+    const stampA = {
+      ownerId: "u1",
+      rev: 1,
+      syncedUpdatedAt: 100,
+      confirmed: true,
+    };
+    const stampB = {
+      ownerId: "u1",
+      rev: 2,
+      syncedUpdatedAt: 200,
+      confirmed: true,
+    };
 
     await Promise.all([
       adapter.setLiftStamp("s1", stampA),
@@ -82,8 +102,18 @@ describe("IDBEditorWorkspaceAdapter lift stamp", () => {
 
   it("clearWorkspace removes the stamp entry but not another id's", async () => {
     const adapter = new IDBEditorWorkspaceAdapter();
-    await adapter.setLiftStamp("keep", { ownerId: "u1", rev: 3, syncedUpdatedAt: 100 });
-    await adapter.setLiftStamp("gone", { ownerId: "u1", rev: 7, syncedUpdatedAt: 200 });
+    await adapter.setLiftStamp("keep", {
+      ownerId: "u1",
+      rev: 3,
+      syncedUpdatedAt: 100,
+      confirmed: true,
+    });
+    await adapter.setLiftStamp("gone", {
+      ownerId: "u1",
+      rev: 7,
+      syncedUpdatedAt: 200,
+      confirmed: false,
+    });
     idb.store.set(`${WORKSPACE_KEY}keep`, ws("keep"));
     idb.store.set(`${WORKSPACE_KEY}gone`, ws("gone"));
 
@@ -96,13 +126,24 @@ describe("IDBEditorWorkspaceAdapter lift stamp", () => {
       ownerId: "u1",
       rev: 3,
       syncedUpdatedAt: 100,
+      confirmed: true,
     });
   });
 
   it("setLiftStamp(null) removes only that id's entry", async () => {
     const adapter = new IDBEditorWorkspaceAdapter();
-    await adapter.setLiftStamp("s1", { ownerId: "u1", rev: 1, syncedUpdatedAt: 100 });
-    await adapter.setLiftStamp("s2", { ownerId: "u1", rev: 2, syncedUpdatedAt: 200 });
+    await adapter.setLiftStamp("s1", {
+      ownerId: "u1",
+      rev: 1,
+      syncedUpdatedAt: 100,
+      confirmed: true,
+    });
+    await adapter.setLiftStamp("s2", {
+      ownerId: "u1",
+      rev: 2,
+      syncedUpdatedAt: 200,
+      confirmed: true,
+    });
 
     await adapter.setLiftStamp("s1", null);
 
@@ -111,6 +152,7 @@ describe("IDBEditorWorkspaceAdapter lift stamp", () => {
       ownerId: "u1",
       rev: 2,
       syncedUpdatedAt: 200,
+      confirmed: true,
     });
   });
 });
@@ -126,14 +168,14 @@ describe("IDBEditorWorkspaceAdapter loadWorkspace", () => {
     idb.store.set(`${WORKSPACE_KEY}bad`, { ...ws("bad"), schemaVersion: 2 });
     idb.store.set(`${WORKSPACE_KEY}old`, { ...ws("old"), schemaVersion: 0 });
 
-    assert.deepEqual(
-      await adapter.loadWorkspace("bad"),
-      { success: true, value: null },
-    );
-    assert.deepEqual(
-      await adapter.loadWorkspace("old"),
-      { success: true, value: null },
-    );
+    assert.deepEqual(await adapter.loadWorkspace("bad"), {
+      success: true,
+      value: null,
+    });
+    assert.deepEqual(await adapter.loadWorkspace("old"), {
+      success: true,
+      value: null,
+    });
     // A v1 record is still returned.
     idb.store.set(`${WORKSPACE_KEY}good`, ws("good"));
     const good = await adapter.loadWorkspace("good");
