@@ -70,6 +70,32 @@ describe("pg-migrate", () => {
     expect(names).toEqual([...EXPECTED_TABLES].sort());
   });
 
+  it("migration 0002 backfills owner_document_revs from existing documents", async () => {
+    // Apply only 0001: schema exists but owner_document_revs does not.
+    const first = await runPgMigrations(pool, [PG_MIGRATIONS[0]]);
+    expect(first.applied).toEqual([1]);
+
+    // A document at rev 4 for (o-1, u-1). project_id is NULL, so the FK to
+    // saved_projects is not exercised and no project row is needed.
+    const now = new Date().toISOString();
+    await pool.query(
+      "INSERT INTO owner_documents (owner_id, user_id, kind, id, project_id, rev, payload, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+      ["o-1", "u-1", "workspace", "doc-1", null, 4, "{}", now],
+    );
+
+    // Running the full list now applies 0002, which creates the counter table
+    // and backfills last_rev = MAX(rev) per author.
+    const second = await runPgMigrations(pool);
+    expect(second.applied).toEqual([2]);
+
+    const row = await pool.query<{ last_rev: number }>(
+      "SELECT last_rev FROM owner_document_revs WHERE owner_id = $1 AND user_id = $2",
+      ["o-1", "u-1"],
+    );
+    expect(row.rows).toHaveLength(1, "exactly one counter row is backfilled");
+    expect(row.rows[0].last_rev).toBe(4);
+  });
+
   it("a second run applies nothing", async () => {
     await runPgMigrations(pool);
     const { applied } = await runPgMigrations(pool);
