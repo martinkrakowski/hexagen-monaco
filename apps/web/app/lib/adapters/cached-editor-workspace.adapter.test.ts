@@ -1085,27 +1085,6 @@ describe("CachedEditorWorkspaceAdapter Item 9: deleted-elsewhere", () => {
     assert.ok(after.success && after.value);
     assert.equal(after.value!.updatedAt, 1000, "browser copy preserved");
   });
-
-  it("a deleted-elsewhere with a dirty cache lifts it", async () => {
-    const { adapter, cache, server, fetchImpl } = makeAdapters();
-    const dirtyWs = makeWorkspace(2000);
-    await cache.saveWorkspace(UUID, dirtyWs);
-    await cache.setLiftStamp(UUID, {
-      ownerId: "user-1",
-      rev: 5,
-      syncedUpdatedAt: 1000,
-      confirmed: true,
-    });
-    // Server has no document (404). Cache is dirty (2000 != 1000).
-
-    await adapter.loadWorkspace(UUID);
-
-    // Dirty cache → lift proceeds.
-    const puts = putCallsOf(fetchImpl);
-    assert.equal(puts.length, 1, "one PUT to lift");
-    const headers = new Headers(puts[0]![1]!.headers);
-    assert.equal(headers.get("If-None-Match"), "*", "createOnly lift");
-  });
 });
 
 describe("CachedEditorWorkspaceAdapter tenant + auth", () => {
@@ -2682,27 +2661,6 @@ describe("CachedEditorWorkspaceAdapter Item 3: chained write + discard", () => {
 });
 
 describe("CachedEditorWorkspaceAdapter Item 7: deleted-elsewhere", () => {
-  it("a deleted-elsewhere with a 404 + own clean stamp does not lift", async () => {
-    const { adapter, cache, server, fetchImpl, warns } = makeAdapters();
-    const ws = makeWorkspace(1000);
-    await cache.saveWorkspace(UUID, ws);
-    await cache.setLiftStamp(UUID, {
-      ownerId: "user-1",
-      rev: 5,
-      syncedUpdatedAt: 1000,
-      confirmed: true,
-    });
-
-    await adapter.loadWorkspace(UUID);
-
-    assert.equal(putCallsOf(fetchImpl).length, 0, "no lift");
-    assert.ok(warns.some((w) => /deleted on another device/.test(w)));
-    const rec = await cache.getConflicts();
-    assert.ok(rec && rec.count === 1);
-    assert.equal(rec!.last[0]!.where, "deleted-elsewhere");
-    assert.equal(server.has(UUID), false, "no document on server");
-  });
-
   it("a deleted-elsewhere with a dirty cache lifts it", async () => {
     const { adapter, cache, fetchImpl } = makeAdapters();
     // Cache has dirty workspace (updatedAt 2000), stamp (syncedUpdatedAt 1000).
