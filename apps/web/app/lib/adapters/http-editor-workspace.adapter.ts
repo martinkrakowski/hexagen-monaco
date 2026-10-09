@@ -1053,13 +1053,6 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
       }
 
       const prevStamp = await this.cache.getLiftStamp(sessionId);
-      // Item 2: re-check the epoch immediately before stamping — a discard
-      // may have landed while we waited on the cache read, so stamping now
-      // would resurrect a stamp for a workspace that was just discarded.
-      if (epochAtStart !== (this.epochs.get(sessionId) ?? 0)) {
-        this.pendingPreconditions.delete(sessionId);
-        return;
-      }
       await this.tryStamp(sessionId, {
         ownerId: userId,
         rev: result.rev,

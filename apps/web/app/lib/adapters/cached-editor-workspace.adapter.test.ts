@@ -2147,6 +2147,61 @@ describe("CachedEditorWorkspaceAdapter Item 14: clearWorkspace", () => {
       "server copy deleted by clear's own DELETE",
     );
   });
+
+  it("a clearWorkspace during a save's slow stamp read DELETEs with the new rev", async () => {
+    const { adapter, cache, server, fetchImpl } = makeAdapters();
+    const ws = makeWorkspace(1000);
+    await cache.saveWorkspace(UUID, ws);
+    await cache.setLiftStamp(UUID, {
+      ownerId: "user-1",
+      rev: 5,
+      syncedUpdatedAt: 1000,
+      confirmed: true,
+    });
+    server.set(UUID, { payload: ws, rev: 5, updatedAt: 1000, projectId: UUID });
+    await adapter.loadWorkspace(UUID);
+
+    await adapter.saveWorkspace(UUID, makeWorkspace(2000));
+
+    let resolveGetDelay!: () => void;
+    idb.getDelay = () =>
+      new Promise<void>((resolve) => {
+        resolveGetDelay = resolve;
+      });
+
+    await vi.advanceTimersByTimeAsync(REMOTE_DEBOUNCE_MS);
+    assert.ok(resolveGetDelay, "stamp read blocked on getDelay");
+
+    const clearPromise = adapter.clearWorkspace(UUID);
+
+    resolveGetDelay();
+    idb.getDelay = null;
+
+    await clearPromise;
+
+    const deleteCalls = fetchImpl.mock.calls.filter(
+      (c) => (c[1]?.method ?? "GET").toUpperCase() === "DELETE",
+    );
+    assert.equal(deleteCalls.length, 1, "one DELETE");
+    const delHeaders = new Headers(deleteCalls[0]![1]!.headers);
+    assert.equal(
+      delHeaders.get("If-Match"),
+      '"rev:6"',
+      "DELETE If-Match is the new rev",
+    );
+    assert.equal(server.has(UUID), false, "server copy deleted");
+    assert.equal(
+      await cache.getLiftStamp(UUID),
+      null,
+      "no stamp or marker remains",
+    );
+    const loadResult = await adapter.loadWorkspace(UUID);
+    assert.equal(
+      loadResult.success && loadResult.value,
+      null,
+      "load returns null (discarded content not revived)",
+    );
+  });
 });
 
 describe("CachedEditorWorkspaceAdapter Item 4: discard marker", () => {
