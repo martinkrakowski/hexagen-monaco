@@ -605,4 +605,50 @@ describe.each(BACKENDS)("saved projects stored timestamps (%s)", (kind) => {
       await backend.close();
     }
   });
+
+  it("replaceAll upserts survivors (rev rises), deletes only the dropped ids and lists in the given order", async () => {
+    const backend = await openBackend(kind);
+    try {
+      const projects = backend.store.projectsFor("owner-a");
+      const mk = (id: string, name: string): SavedProject => ({
+        id,
+        name,
+        schemaVersion: 4,
+        createdAt: 1_700_000_000_000,
+        updatedAt: 1_700_000_001_000,
+        formState: {},
+        manifestYaml: "",
+      });
+      const a = mk("11111111-1111-4111-8111-111111111111", "a");
+      const b = mk("22222222-2222-4222-8222-222222222222", "b");
+      const c = mk("33333333-3333-4333-8333-333333333333", "c");
+      must(await projects.createProjectRecord(a));
+      must(await projects.createProjectRecord(b));
+      must(await projects.createProjectRecord(c));
+
+      const d = mk("44444444-4444-4444-8444-444444444444", "d");
+      d.updatedAt = 1_700_000_002_000;
+      must(await projects.saveProjects([b, a, d]));
+
+      const loaded = must(await projects.loadProjects());
+      assert.deepEqual(
+        loaded.map((p) => p.id),
+        [b.id, a.id, d.id],
+      );
+
+      const withRev = await backend.db.all<{ id: string; rev: number }>(
+        "SELECT id, rev FROM saved_projects WHERE owner_id = ? ORDER BY id",
+        ["owner-a"],
+      );
+      const revs = Object.fromEntries(withRev.map((r) => [r.id, r.rev]));
+      assert.equal(revs[b.id], 2);
+      assert.equal(revs[a.id], 2);
+      assert.equal(revs[d.id], 1);
+      assert.equal(revs[c.id], undefined);
+
+      assert.equal(must(await projects.getProject(c.id)), null);
+    } finally {
+      await backend.close();
+    }
+  });
 });
