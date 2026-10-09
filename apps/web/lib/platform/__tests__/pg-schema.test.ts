@@ -285,7 +285,7 @@ describe("pg-schema", () => {
     const versions = await db.all<{ version: number }>(
       "SELECT version FROM schema_migrations ORDER BY version",
     );
-    expect(versions.map((r) => r.version)).toEqual([1, 2]);
+    expect(versions.map((r) => r.version)).toEqual([1, 2, 3]);
     // And A3-00's Postgres-only objects exist on the migrated test database.
     const cols = await db.all<{ column_name: string }>(
       "SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'audit_log' AND column_name = 'detail'",
