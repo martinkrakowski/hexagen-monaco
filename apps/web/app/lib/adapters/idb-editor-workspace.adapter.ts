@@ -164,18 +164,22 @@ export class IDBEditorWorkspaceAdapter implements EditorWorkspacePersistencePort
     stamp: LiftStamp | null,
   ): Promise<void> {
     try {
-      const stamps = await get<Record<string, LiftStamp>>(LIFT_STAMP_KEY);
-      const next: Record<string, LiftStamp> = stamps ? { ...stamps } : {};
-      if (stamp === null) {
-        delete next[sessionId];
-      } else {
-        next[sessionId] = stamp;
-      }
-      if (Object.keys(next).length === 0) {
-        await del(LIFT_STAMP_KEY);
-      } else {
-        await set(LIFT_STAMP_KEY, next);
-      }
+      // Item 4: read-modify-write the single LIFT_STAMP_KEY in ONE
+      // transaction (via idb-keyval's update), so two tabs saving different
+      // documents cannot both read the same pre-state and have the later
+      // set() silently drop the earlier one's stamp.
+      await update<Record<string, LiftStamp> | undefined>(
+        LIFT_STAMP_KEY,
+        (existing) => {
+          const next: Record<string, LiftStamp> = existing ?? {};
+          if (stamp === null) {
+            delete next[sessionId];
+          } else {
+            next[sessionId] = stamp;
+          }
+          return Object.keys(next).length === 0 ? undefined : next;
+        },
+      );
     } catch {
       // Stamp operations are best-effort: a failed lift-stamp write must
       // never surface to the editor.

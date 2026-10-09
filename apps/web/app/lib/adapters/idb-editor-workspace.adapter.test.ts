@@ -170,6 +170,49 @@ describe("IDBEditorWorkspaceAdapter lift stamp", () => {
       discarded: false,
     });
   });
+
+  it("setLiftStamp goes through one update() call and keeps other documents' stamps", async () => {
+    vi.mocked(update).mockClear();
+    // Two tabs (separate write queues) saving different documents: their
+    // read-modify-writes must not clobber each other. With getDelay the old
+    // two-transaction (get + set) form interleaves and one stamp is lost.
+    const a1 = new IDBEditorWorkspaceAdapter();
+    const a2 = new IDBEditorWorkspaceAdapter();
+    idb.getDelay = () => new Promise((resolve) => setTimeout(resolve, 10));
+    const stampA = {
+      ownerId: "u1",
+      rev: 1,
+      syncedUpdatedAt: 100,
+      confirmed: true,
+      discarded: false,
+    };
+    const stampB = {
+      ownerId: "u1",
+      rev: 2,
+      syncedUpdatedAt: 200,
+      confirmed: false,
+      discarded: false,
+    };
+    await Promise.all([
+      a1.setLiftStamp("s1", stampA),
+      a2.setLiftStamp("s2", stampB),
+    ]);
+    idb.getDelay = null;
+
+    const raw = idb.store.get(LIFT_KEY) as Record<string, unknown> | undefined;
+    assert.ok(raw, "stamp map written");
+    assert.ok(
+      "s1" in raw && "s2" in raw,
+      "both ids survived the concurrent writes",
+    );
+    assert.deepEqual((raw!.s1 as { rev: number }).rev, 1);
+    assert.deepEqual((raw!.s2 as { rev: number }).rev, 2);
+    assert.equal(
+      vi.mocked(update).mock.calls.length,
+      2,
+      "each setLiftStamp goes through a single update() call",
+    );
+  });
 });
 
 describe("IDBEditorWorkspaceAdapter loadWorkspace", () => {
