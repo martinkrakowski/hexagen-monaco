@@ -38,6 +38,9 @@ type PreparedStmt = {
  *     no BEGIN is issued, so a later COMMIT/ROLLBACK cannot silently undo it.
  */
 export function createSqlitePlatformDb(handle: Database.Database): PlatformDb {
+  // Bounded: three stores build SQL whose text depends on how many ids are
+  // bound (an IN list), so the set of distinct texts is not fixed. The oldest
+  // entry goes first; a Map iterates in insertion order.
   const CACHE_LIMIT = 256;
   const cache = new Map<string, PreparedStmt>();
 

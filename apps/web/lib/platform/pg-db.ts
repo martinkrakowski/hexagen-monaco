@@ -25,7 +25,10 @@ function isSerializationError(error: unknown): boolean {
   return errorHasCode(error, "40001") || errorHasCode(error, "40P01");
 }
 
-export function createPgPool(connectionString: string): Pool {
+export function createPgPool(
+  connectionString: string,
+  opts: { max?: number } = {},
+): Pool {
   const types = new TypeOverrides();
   const defaultTsParser = pgTypes.getTypeParser(1184) as (text: string) => Date;
   types.setTypeParser(1184, (text: string) =>
@@ -44,7 +47,7 @@ export function createPgPool(connectionString: string): Pool {
     connectionString,
     types,
     options: "-c TimeZone=UTC -c idle_in_transaction_session_timeout=30000",
-    max: 10,
+    max: opts.max ?? 10,
   });
 
   pool.on("error", (error: Error) => {

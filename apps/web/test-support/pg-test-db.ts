@@ -1,45 +1,39 @@
 import { Pool } from "pg";
+import { inject } from "vitest";
 import type { PlatformDb } from "../lib/platform/db";
 import { createPgPool, createPgPlatformDb } from "../lib/platform/pg-db";
 
 let counter = 0;
 
-/** A fresh, empty database cloned from template0; `drop()` ends the pool and drops it. */
-export async function createTestPgDb(): Promise<{
+/** A fresh database; cloned from the migrated template by default, or empty
+ * when `{ empty: true }` is passed. `drop()` ends the pool and drops it. */
+export async function createTestPgDb(opts?: { empty?: boolean }): Promise<{
   pool: Pool;
   db: PlatformDb;
   url: string;
   drop(): Promise<void>;
 }> {
-  const homeUrl = process.env.PLATFORM_TEST_PG_URL;
-  if (!homeUrl) {
-    throw new Error(
-      "PLATFORM_TEST_PG_URL is not set: set it to a postgres:// user-level connection " +
-        "to the home database (e.g. postgres://hx_test@10.60.0.1:5434/hx_home) or " +
-        "start embedded-postgres via the global setup.",
-    );
-  }
+  const homeUrl = inject("pgHomeUrl");
+  const run = inject("pgRun");
+  const template = inject("pgTemplate");
 
-  const stamp = new Date()
-    .toISOString()
-    .replace(/[-:T.]/g, "")
-    .slice(0, 12);
-  const suffix = [...Array(4)]
-    .map(() => Math.floor(Math.random() * 16).toString(16))
-    .join("");
-  const name = `hx_${stamp}${suffix}_${process.pid}_${counter++}`;
+  const name = `hx_${run}_${process.pid}_${counter++}`;
 
   const homePool = new Pool({ connectionString: homeUrl });
   try {
-    await homePool.query(
-      `CREATE DATABASE ${name} TEMPLATE template0 LC_COLLATE 'C' LC_CTYPE 'C' ENCODING 'UTF8'`,
-    );
+    if (opts?.empty) {
+      await homePool.query(
+        `CREATE DATABASE ${name} TEMPLATE template0 LC_COLLATE 'C' LC_CTYPE 'C' ENCODING 'UTF8'`,
+      );
+    } else {
+      await homePool.query(`CREATE DATABASE ${name} TEMPLATE ${template}`);
+    }
   } finally {
     await homePool.end();
   }
 
   const dbUrl = homeUrl.replace(/\/[^/]+$/, `/${name}`);
-  const pool = createPgPool(dbUrl);
+  const pool = createPgPool(dbUrl, { max: 4 });
   const db = createPgPlatformDb(pool);
 
   return {
