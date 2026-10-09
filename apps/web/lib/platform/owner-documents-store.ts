@@ -34,7 +34,12 @@ export type OwnerDocumentsError =
   | { kind: "InvalidInput"; message: string }
   | { kind: "UnknownProject"; message: string }
   | { kind: "NotAMember"; message: string }
-  | { kind: "PreconditionFailed"; message: string; currentRev: number };
+  | { kind: "Conflict"; message: string; currentRev?: number }
+  | {
+    kind: "PreconditionFailed";
+    message: string;
+    currentRev: number;
+  };
 
 export interface OwnerDocumentsStore {
   list(filter?: {
@@ -555,18 +560,11 @@ export function createOwnerDocumentsStore(
                 error: persistError("Conflict", "document write conflicted"),
               };
             }
-            // Reuse grantee_* columns as a detail blob (no schema change).
             await appendAudit(tx, {
               actorId: userId,
               action: "document.precondition_failed",
               subjectOwnerId: ownerId,
               subjectId: `${kind}/${id}`,
-              granteeType: "precondition",
-              granteeId: JSON.stringify({
-                method: "PUT",
-                sent: "*",
-                current: existing.rev,
-              }),
             });
             return {
               success: false,
@@ -641,22 +639,19 @@ export function createOwnerDocumentsStore(
               ),
             };
           }
-          // Reuse grantee_* columns as a detail blob (no schema change).
           await appendAudit(tx, {
             actorId: userId,
             action: "document.precondition_failed",
             subjectOwnerId: ownerId,
             subjectId: `${kind}/${id}`,
-            granteeType: "precondition",
-            granteeId: JSON.stringify({
-              method: "PUT",
-              sent: expectedRev,
-              current: existing.rev,
-            }),
           });
           return {
             success: false,
-            error: persistError("Conflict", "document was updated elsewhere"),
+            error: {
+              kind: "Conflict",
+              message: "document was updated elsewhere",
+              currentRev: existing.rev,
+            },
           };
         });
       } catch (cause) {
@@ -713,18 +708,11 @@ export function createOwnerDocumentsStore(
               ),
             };
           }
-          // Reuse grantee_* columns as a detail blob (no schema change).
           await appendAudit(tx, {
             actorId: userId,
             action: "document.precondition_failed",
             subjectOwnerId: ownerId,
             subjectId: `${kind}/${id}`,
-            granteeType: "precondition",
-            granteeId: JSON.stringify({
-              method: "DELETE",
-              sent: expectedRev,
-              current: existing.rev,
-            }),
           });
           return {
             success: false,

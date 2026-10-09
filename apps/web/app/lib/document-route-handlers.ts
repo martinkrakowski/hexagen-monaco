@@ -489,6 +489,21 @@ export async function handleDocumentPut(
     return documentResponse(result.value);
   }
 
+  const storeErr = result.error;
+  if (
+    storeErr.kind === "PreconditionFailed" ||
+    (storeErr.kind === "Conflict" && storeErr.currentRev !== undefined)
+  ) {
+    // eslint-disable-next-line no-console -- operator-facing diagnostic for repeated refusals
+    console.warn("[documents] precondition failed", {
+      method: "PUT",
+      kind: kind as DocumentKind,
+      id,
+      sent: noneMatch.createOnly ? "*" : precondition.expectedRev,
+      current: storeErr.currentRev,
+    });
+  }
+
   return mapStoreError(result.error);
 }
 
@@ -538,9 +553,20 @@ export async function handleDocumentDelete(
     id,
     precondition.expectedRev,
   );
-  if (!result.success) {
-    return mapStoreError(result.error);
-  }
+   if (!result.success) {
+     const storeErr = result.error;
+     if (storeErr.kind === "PreconditionFailed") {
+       // eslint-disable-next-line no-console -- operator-facing diagnostic for repeated refusals
+       console.warn("[documents] precondition failed", {
+         method: "DELETE",
+         kind: kind as DocumentKind,
+         id,
+         sent: precondition.expectedRev ?? "*",
+         current: storeErr.currentRev,
+       });
+     }
+     return mapStoreError(result.error);
+   }
 
   return new NextResponse(null, { status: 204 });
 }

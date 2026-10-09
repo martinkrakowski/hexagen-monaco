@@ -1366,52 +1366,57 @@ describe("owner-documents store", () => {
       await store.put({ kind: "workspace", id: "doc-1", payload: { v: "b" } });
 
       // Three refusals: stale PUT, create-only, conditional DELETE.
-      await store.put(
+      const stalePut = await store.put(
         { kind: "workspace", id: "doc-1", payload: { v: "stale" } },
         1, // stale rev
       );
-      await store.put(
+      assert.equal(stalePut.success, false);
+      if (!stalePut.success) {
+        assert.equal(stalePut.error.kind, "Conflict");
+        assert.equal(stalePut.error.currentRev, 2);
+      }
+      const createOnly = await store.put(
         { kind: "workspace", id: "doc-1", payload: { v: "create" } },
         undefined,
         { createOnly: true },
       );
-      await store.delete("workspace", "doc-1", 1); // stale rev
+      assert.equal(createOnly.success, false);
+      if (!createOnly.success) {
+        assert.equal(createOnly.error.kind, "PreconditionFailed");
+        assert.equal(createOnly.error.currentRev, 2);
+      }
+      const staleDel = await store.delete("workspace", "doc-1", 1); // stale rev
+      assert.equal(staleDel.success, false);
+      if (!staleDel.success) {
+        assert.equal(staleDel.error.kind, "PreconditionFailed");
+        assert.equal(staleDel.error.currentRev, 2);
+      }
 
       assert.equal(auditCount(db), 3, "three refusals = three audit rows");
 
-      // Verify the detail blob for each.
-      const rows = db
+      // Verify each refusal row by subject + action (not by position), with
+      // NULL grantee columns since the audit row carries no detail.
+      const bySubject = db
         .prepare(
-          `SELECT grantee_type, grantee_id, subject_owner_id, subject_id
-             FROM audit_log WHERE action = ?
-            ORDER BY created_at`,
+          `SELECT subject_owner_id, subject_id, grantee_type, grantee_id
+             FROM audit_log WHERE action = ? AND subject_owner_id = ? AND subject_id = ?`,
         )
-        .all("document.precondition_failed") as Array<{
-        grantee_type: string;
-        grantee_id: string;
+        .all(
+          "document.precondition_failed",
+          "user-1",
+          "workspace/doc-1",
+        ) as Array<{
         subject_owner_id: string;
         subject_id: string;
+        grantee_type: unknown;
+        grantee_id: unknown;
       }>;
-      assert.equal(rows.length, 3);
-      assert.deepEqual(JSON.parse(rows[0]!.grantee_id), {
-        method: "PUT",
-        sent: 1,
-        current: 2,
-      });
-      assert.deepEqual(JSON.parse(rows[1]!.grantee_id), {
-        method: "PUT",
-        sent: "*",
-        current: 2,
-      });
-      assert.deepEqual(JSON.parse(rows[2]!.grantee_id), {
-        method: "DELETE",
-        sent: 1,
-        current: 2,
-      });
-      for (const r of rows) {
-        assert.equal(r.grantee_type, "precondition");
+      assert.equal(bySubject.length, 3, "three rows for workspace/doc-1");
+      for (const r of bySubject) {
         assert.equal(r.subject_owner_id, "user-1");
         assert.equal(r.subject_id, "workspace/doc-1");
+        assert.equal(r.grantee_type, null, "grantee_type must be NULL");
+        assert.equal(r.grantee_id, null, "grantee_id must be NULL");
       }
 
       // A matching-rev PUT, a createOnly on an absent id, a matching DELETE:
