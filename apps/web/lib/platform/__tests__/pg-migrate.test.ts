@@ -2,6 +2,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import type { Pool } from "pg";
 import type { PgMigration } from "../pg-migrations/index";
+import { PG_MIGRATIONS } from "../pg-migrations/index";
 import {
   runPgMigrations,
   checksumOf,
@@ -26,6 +27,7 @@ const EXPECTED_TABLES = [
   "model_prices",
   "project_owner_state",
   "owner_documents",
+  "owner_document_revs",
   "entitlements",
   "scan_records",
   "repair_runs",
@@ -46,22 +48,52 @@ describe("pg-migrate", () => {
     await drop();
   });
 
-  it("a fresh database gets version 1 and all tables", async () => {
+  it("a fresh database gets versions 1 and 2 and all tables", async () => {
     const { applied } = await runPgMigrations(pool);
-    expect(applied).toEqual([1]);
+    expect(applied).toEqual([1, 2]);
 
     const m = await pool.query<{
       version: number;
       name: string;
     }>("SELECT version, name FROM schema_migrations ORDER BY version");
-    expect(m.rows).toHaveLength(1);
+    expect(m.rows).toHaveLength(2);
     expect(m.rows[0]).toMatchObject({ version: 1, name: "initial" });
+    expect(m.rows[1]).toMatchObject({
+      version: 2,
+      name: "owner_document_revs_and_audit_detail",
+    });
 
     const tables = await pool.query<{ tablename: string }>(
       "SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename != 'schema_migrations'",
     );
     const names = tables.rows.map((r) => r.tablename).sort();
     expect(names).toEqual([...EXPECTED_TABLES].sort());
+  });
+
+  it("migration 0002 backfills owner_document_revs from existing documents", async () => {
+    // Apply only 0001: schema exists but owner_document_revs does not.
+    const first = await runPgMigrations(pool, [PG_MIGRATIONS[0]]);
+    expect(first.applied).toEqual([1]);
+
+    // A document at rev 4 for (o-1, u-1). project_id is NULL, so the FK to
+    // saved_projects is not exercised and no project row is needed.
+    const now = new Date().toISOString();
+    await pool.query(
+      "INSERT INTO owner_documents (owner_id, user_id, kind, id, project_id, rev, payload, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+      ["o-1", "u-1", "workspace", "doc-1", null, 4, "{}", now],
+    );
+
+    // Running the full list now applies 0002, which creates the counter table
+    // and backfills last_rev = MAX(rev) per author.
+    const second = await runPgMigrations(pool);
+    expect(second.applied).toEqual([2]);
+
+    const row = await pool.query<{ last_rev: number }>(
+      "SELECT last_rev FROM owner_document_revs WHERE owner_id = $1 AND user_id = $2",
+      ["o-1", "u-1"],
+    );
+    expect(row.rows.length).toBe(1);
+    expect(row.rows[0].last_rev).toBe(4);
   });
 
   it("a second run applies nothing", async () => {
@@ -82,9 +114,9 @@ describe("pg-migrate", () => {
 
   it("a changed checksum is refused and names the version", async () => {
     await runPgMigrations(pool);
-    const modified: PgMigration[] = [
-      { version: 1, name: "initial", sql: "SELECT 42;" },
-    ];
+    const modified: PgMigration[] = PG_MIGRATIONS.map((m) =>
+      m.version === 1 ? { ...m, sql: "SELECT 42;" } : m,
+    );
     await expect(runPgMigrations(pool, modified)).rejects.toThrow("version 1");
   });
 

@@ -799,7 +799,9 @@ describe("owner-documents store", () => {
       ]);
       assert.equal(putResult.success, true, "the put lands before the removal");
       if (!putResult.success) return;
-      assert.equal(putResult.value.rev, 1);
+      // A3-00: "second" is the author's second document; the counter was 1
+      // (from "seed"), so it starts at rev 2, not 1.
+      assert.equal(putResult.value.rev, 2);
       assert.equal(
         docCount(db, "org-1", "user-a"),
         0,
@@ -1349,26 +1351,29 @@ describe("owner-documents store", () => {
       if (!matched.success) return;
       assert.equal(matched.value.deleted, true);
 
-      // Re-seed for the stale-rev case.
-      await store.put(
+      // Re-seed for the stale-rev case. A3-00: the counter was 1 (from the
+      // first doc-1), so re-creating doc-1 starts it at rev 2, not 1.
+      const reseed = await store.put(
         { kind: "workspace", id: "doc-1", payload: { v: "again" } },
         undefined,
         { createOnly: true },
       );
+      assert.equal(reseed.success, true);
+      assert.equal(reseed.success && reseed.value.rev, 2);
 
       // Stale rev: nothing deleted, reports current rev.
       const stale = await store.delete("workspace", "doc-1", 999);
       assert.equal(stale.success, false);
       if (!stale.success) {
         assert.equal(stale.error.kind, "PreconditionFailed");
-        assert.equal(stale.error.currentRev, 1);
+        assert.equal(stale.error.currentRev, 2);
       }
       const untouched = db
         .prepare(
           "SELECT rev FROM owner_documents WHERE owner_id = ? AND user_id = ? AND kind = ? AND id = ?",
         )
         .get("user-1", "user-1", "workspace", "doc-1") as { rev: number };
-      assert.equal(untouched.rev, 1, "a refused delete must not touch the row");
+      assert.equal(untouched.rev, 2, "a refused delete must not touch the row");
 
       // Absent row: NotFound.
       const missing = await store.delete("workspace", "does-not-exist", 1);
@@ -1504,12 +1509,16 @@ describe("owner-documents store", () => {
         { kind: "workspace", id: "doc-1", payload: { v: "ok" } },
         2, // matching
       );
-      await store.put(
+      const absent = await store.put(
         { kind: "workspace", id: "doc-absent", payload: { v: "ok" } },
         undefined,
         { createOnly: true },
       );
-      await store.delete("workspace", "doc-absent", 1); // matching
+      assert.equal(absent.success, true);
+      // A3-00: doc-absent does not start at rev 1; delete at its real rev.
+      if (absent.success) {
+        await store.delete("workspace", "doc-absent", absent.value.rev);
+      }
 
       assert.equal(auditCount(db), 3, "a success must not add an audit row");
 

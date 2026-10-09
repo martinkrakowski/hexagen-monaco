@@ -69,6 +69,7 @@ const jsonbColumns = [
   "saved_projects.payload",
   "owner_documents.payload",
   "scan_records.findings_sample",
+  "audit_log.detail",
 ];
 
 describe("pg-schema", () => {
@@ -89,7 +90,7 @@ describe("pg-schema", () => {
   it("every SQLite table and column exists in Postgres, with matching nullability and type", async () => {
     // A discovery query that returned nothing would make every loop below pass
     // without asserting anything.
-    expect(sqliteTables.length).toBe(20);
+    expect(sqliteTables.length).toBe(21);
     for (const table of sqliteTables) {
       expect(sqliteColumns(table.name).length).toBeGreaterThan(0);
       for (const col of sqliteColumns(table.name)) {
@@ -278,6 +279,22 @@ describe("pg-schema", () => {
       { oid: "own1", id: "d1" },
     );
     expect(doc).toBeUndefined();
+  });
+
+  it("0002 is applied on top of 0001 (schema_migrations has versions 1 and 2)", async () => {
+    const versions = await db.all<{ version: number }>(
+      "SELECT version FROM schema_migrations ORDER BY version",
+    );
+    expect(versions.map((r) => r.version)).toEqual([1, 2]);
+    // And A3-00's Postgres-only objects exist on the migrated test database.
+    const cols = await db.all<{ column_name: string }>(
+      "SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'audit_log' AND column_name = 'detail'",
+    );
+    expect(cols).toHaveLength(1);
+    const tables = await db.all<{ tablename: string }>(
+      "SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename = 'owner_document_revs'",
+    );
+    expect(tables).toHaveLength(1);
   });
 
   it("an upper-case github_login is refused by the CHECK (23514)", async () => {

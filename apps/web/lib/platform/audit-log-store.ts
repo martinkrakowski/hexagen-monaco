@@ -48,6 +48,12 @@ export interface AuditEntry {
   subjectId?: string | null;
   granteeType?: string | null;
   granteeId?: string | null;
+  /**
+   * Structured what-was-refused, JSON-encoded by appendAudit. Present
+   * only on rows a store writes for a refused precondition; NULL on every row
+   * written before this column existed and on every non-refusal row.
+   */
+  detail?: Record<string, unknown>;
 }
 
 export interface AuditLogRepository {
@@ -68,10 +74,10 @@ export interface AuditLogRepository {
 const INSERT_AUDIT = `
     INSERT INTO audit_log (
       id, actor_id, action, subject_owner_id, subject_id,
-      grantee_type, grantee_id, created_at
+      grantee_type, grantee_id, created_at, detail
     ) VALUES (
       @id, @actor_id, @action, @subject_owner_id, @subject_id,
-      @grantee_type, @grantee_id, @created_at
+      @grantee_type, @grantee_id, @created_at, @detail
     )
   `;
 
@@ -95,6 +101,7 @@ export async function appendAudit(
     grantee_type: entry.granteeType ?? null,
     grantee_id: entry.granteeId ?? null,
     created_at: new Date().toISOString(),
+    detail: entry.detail === undefined ? null : JSON.stringify(entry.detail),
   });
 }
 

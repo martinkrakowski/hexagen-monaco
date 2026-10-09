@@ -194,7 +194,8 @@ export function openPlatformDb(dbPath: string): Database.Database {
       subject_id TEXT,
       grantee_type TEXT,
       grantee_id TEXT,
-      created_at TEXT NOT NULL
+      created_at TEXT NOT NULL,
+      detail TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_audit_log_subject
       ON audit_log (subject_owner_id, subject_id);
@@ -279,6 +280,18 @@ export function openPlatformDb(dbPath: string): Database.Database {
     );
     CREATE INDEX IF NOT EXISTS idx_owner_documents_project
       ON owner_documents (owner_id, project_id);
+
+    -- Per-author-per-tenant rev high-water mark. NO foreign key (so the
+    -- saved_projects ON DELETE CASCADE cannot touch it — the reported bug returns
+    -- through the cascade). The counter is moved only by document writes that go
+    -- through the store, so deletes, member removal, org deletion and the
+    -- project cascade all keep working with no change at delete time.
+    CREATE TABLE IF NOT EXISTS owner_document_revs (
+      owner_id  TEXT NOT NULL,
+      user_id   TEXT NOT NULL,
+      last_rev  INTEGER NOT NULL,
+      PRIMARY KEY (owner_id, user_id)
+    );
 
     CREATE TABLE IF NOT EXISTS entitlements (
       user_id TEXT PRIMARY KEY,
@@ -408,6 +421,8 @@ export function openPlatformDb(dbPath: string): Database.Database {
       ON repair_attempts (owner_id, violation_class, schema_version);
   `);
   migrateOrgInvitesExpiry(db);
+  migrateAuditLogDetail(db);
+  migrateOwnerDocumentRevs(db);
   seedModelPrices(db);
   return db;
 }
@@ -469,6 +484,46 @@ function migrateOrgInvitesExpiry(db: Database.Database): void {
             )
       WHERE expires_at = ''`,
   ).run(ORG_INVITE_TTL_DAYS);
+}
+
+/**
+ * `audit_log.detail`, nullable JSON text.
+ *
+ * Fresh files receive `detail TEXT` in the CREATE TABLE above. Old files get it
+ * by ALTER: a column-presence guard makes the add a no-op once present, so it is
+ * safe to run on every open (mirrors migrateUsersGithubLogin / migrateRunEvents).
+ */
+function migrateAuditLogDetail(db: Database.Database): void {
+  if (!tableExists(db, "audit_log")) return;
+  if (tableHasColumn(db, "audit_log", "detail")) return;
+  db.exec("ALTER TABLE audit_log ADD COLUMN detail TEXT");
+}
+
+/**
+ * `owner_document_revs`, backfilled from existing document revs.
+ *
+ * The table is created in the big exec (IF NOT EXISTS), so it always exists by
+ * the time this helper runs. The backfill is keyed on DATA state and runs on
+ * EVERY open: a document keeps its rev, and its next write is
+ * max(rev, counter)+1 = rev+1.
+ *
+ * It must never LOWER a counter: a process running the old code may have
+ * written a document at rev N after the counter row already existed at a higher
+ * value, so the backfill takes the greater of the existing counter and the
+ * document-derived MAX(rev). `WHERE true` is required by SQLite's parser when
+ * an INSERT ... SELECT carries ON CONFLICT.
+ */
+function migrateOwnerDocumentRevs(db: Database.Database): void {
+  if (!tableExists(db, "owner_document_revs")) return;
+  db.exec(
+    `INSERT INTO owner_document_revs (owner_id, user_id, last_rev)
+       SELECT owner_id, user_id, MAX(rev)
+         FROM owner_documents
+         WHERE true
+      GROUP BY owner_id, user_id
+      ON CONFLICT (owner_id, user_id) DO UPDATE SET
+        last_rev = max(owner_document_revs.last_rev, excluded.last_rev)`,
+  );
 }
 
 function tableExists(db: Database.Database, table: string): boolean {
