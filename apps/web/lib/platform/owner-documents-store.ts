@@ -1,5 +1,6 @@
 import type { PlatformDb, PlatformDbSession } from "./db";
 import type { PersistenceError, Result } from "@hexagen/shared";
+import { appendAudit } from "./audit-log-store";
 
 export const DOCUMENT_KINDS = [
   "workspace",
@@ -29,10 +30,22 @@ export interface OwnerDocument {
 export type OwnerDocumentSummary = Omit<OwnerDocument, "payload">;
 
 export type OwnerDocumentsError =
-  | PersistenceError
+  | Exclude<PersistenceError, { kind: "Conflict" }>
   | { kind: "InvalidInput"; message: string }
   | { kind: "UnknownProject"; message: string }
-  | { kind: "NotAMember"; message: string };
+  | { kind: "NotAMember"; message: string }
+  | {
+      kind: "Conflict";
+      message: string;
+      currentRev?: number;
+      audited?: boolean;
+    }
+  | {
+      kind: "PreconditionFailed";
+      message: string;
+      currentRev: number;
+      audited?: boolean;
+    };
 
 export interface OwnerDocumentsStore {
   list(filter?: {
@@ -51,15 +64,17 @@ export interface OwnerDocumentsStore {
       payload: unknown;
     },
     expectedRev?: number,
+    options?: { createOnly?: boolean },
   ): Promise<Result<OwnerDocument, OwnerDocumentsError>>;
   delete(
     kind: DocumentKind,
     id: string,
+    expectedRev?: number,
   ): Promise<Result<{ deleted: boolean }, OwnerDocumentsError>>;
 }
 
 function persistError(
-  kind: OwnerDocumentsError["kind"],
+  kind: Exclude<OwnerDocumentsError["kind"], "PreconditionFailed">,
   message: string,
   cause?: unknown,
 ): OwnerDocumentsError {
@@ -134,6 +149,8 @@ export function deleteDocumentsOfMember(
   ownerId: string,
   userId: string,
 ): Promise<number> {
+  // Deliberately does NOT touch owner_document_revs. A removed member
+  // who is re-added, or a document under a re-created project, must not restart.
   return session
     .run("DELETE FROM owner_documents WHERE owner_id = ? AND user_id = ?", [
       ownerId,
@@ -146,6 +163,8 @@ export function deleteDocumentsOfOwner(
   session: PlatformDbSession,
   ownerId: string,
 ): Promise<number> {
+  // Deliberately does NOT touch owner_document_revs. An org delete (and
+  // the project cascade that follows it) must not restart a member's revs.
   return session
     .run("DELETE FROM owner_documents WHERE owner_id = ?", [ownerId])
     .then((result) => result.changes);
@@ -308,6 +327,7 @@ export function createOwnerDocumentsStore(
   db: PlatformDb,
   ownerId: string,
   userId: string,
+  now: () => number = Date.now,
 ): OwnerDocumentsStore {
   const selectList = `
     SELECT kind, id, project_id, rev, updated_at
@@ -332,12 +352,27 @@ export function createOwnerDocumentsStore(
     SELECT 1 AS ok FROM saved_projects
      WHERE owner_id = ? AND id = ?
   `;
+  // Per-author-per-tenant rev high-water mark. The counter is read
+  // with `counterRead` (on `tx`, one row) before the write, and the write takes
+  // its rev from that read; `bumpOwnerDocumentRev` then raises it on the same
+  // tx. Both the read and the raise happen on `tx` in the same callback, so two
+  // writers of different keys in one tenant collide on this row on Postgres.
+  //
+  // (The counter is NOT read inside the write statement itself: the value is
+  // needed in JavaScript — for the new row's rev and for raising the counter —
+  // and reading it inside the write statement would not, by itself, change what
+  // keeps two concurrent writers safe, namely that both WRITE this counter row
+  // inside the same transaction.)
+  const counterRead = `
+    SELECT last_rev FROM owner_document_revs
+     WHERE owner_id = ? AND user_id = ?
+  `;
   const upsert = `
     INSERT INTO owner_documents
       (owner_id, user_id, kind, id, project_id, rev, payload, updated_at, updated_by)
-    VALUES (@owner_id, @user_id, @kind, @id, @project_id, 1, @payload, @updated_at, @updated_by)
+    VALUES (@owner_id, @user_id, @kind, @id, @project_id, @new_rev, @payload, hx_ts(@updated_at), @updated_by)
     ON CONFLICT (owner_id, user_id, kind, id) DO UPDATE SET
-      rev = owner_documents.rev + 1,
+      rev = CASE WHEN @counter > owner_documents.rev THEN @counter ELSE owner_documents.rev END + 1,
       payload = excluded.payload,
       project_id = excluded.project_id,
       updated_at = excluded.updated_at,
@@ -346,16 +381,106 @@ export function createOwnerDocumentsStore(
   `;
   const updateWithRev = `
     UPDATE owner_documents
-       SET rev = rev + 1, payload = @payload, project_id = @project_id,
-           updated_at = @updated_at, updated_by = @updated_by
+       SET rev = CASE WHEN @counter > owner_documents.rev THEN @counter ELSE owner_documents.rev END + 1,
+           payload = @payload, project_id = @project_id,
+           updated_at = hx_ts(@updated_at), updated_by = @updated_by
      WHERE owner_id = @owner_id AND user_id = @user_id AND kind = @kind AND id = @id
        AND rev = @expected_rev
     RETURNING rev, updated_at
   `;
   const selectKey = `
-    SELECT rev FROM owner_documents
-     WHERE owner_id = ? AND user_id = ? AND kind = ? AND id = ?
+      SELECT rev FROM owner_documents
+       WHERE owner_id = ? AND user_id = ? AND kind = ? AND id = ?
+    `;
+  const insertOnly = `
+      INSERT INTO owner_documents
+        (owner_id, user_id, kind, id, project_id, rev, payload, updated_at, updated_by)
+      VALUES (@owner_id, @user_id, @kind, @id, @project_id, @new_rev, @payload, hx_ts(@updated_at), @updated_by)
+      ON CONFLICT (owner_id, user_id, kind, id) DO NOTHING
+      RETURNING rev, updated_at
+    `;
+  const deleteAtRev = `
+       DELETE FROM owner_documents
+        WHERE owner_id = ? AND user_id = ? AND kind = ? AND id = ? AND rev = ?
+    `;
+  // Raise the per-author counter to the rev a write produced, on the same
+  // tx as the write that produced it. The read (counterRead above) and this
+  // write of the counter row are both in the transaction, so two writers of
+  // different keys in one tenant collide on this row and one is retried on PG.
+  const bumpRev = `
+    INSERT INTO owner_document_revs (owner_id, user_id, last_rev)
+    VALUES (@owner_id, @user_id, @last_rev)
+    ON CONFLICT (owner_id, user_id) DO UPDATE SET
+      last_rev = CASE WHEN excluded.last_rev > owner_document_revs.last_rev
+                      THEN excluded.last_rev
+                      ELSE owner_document_revs.last_rev END
   `;
+  const refusalRecent = `
+    SELECT 1 FROM audit_log
+     WHERE action = ?
+       AND actor_id = ?
+       AND subject_owner_id = ?
+       AND subject_id = ?
+       AND created_at > ?
+     LIMIT 1
+  `;
+
+  /**
+   * Records a precondition-failure audit row, capped at one per
+   * (actor, document) per minute. Returns true when a row was written and
+   * false when the cap suppressed it. The refusal result is unchanged either
+   * way — the cap only bounds audit volume, not the error returned to the
+   * caller.
+   *
+   * The row's `detail` says what was refused, in the route layer's
+   * vocabulary: the HTTP method ("PUT"/"DELETE"), the rev the client sent
+   * ("*" when no If-Match was sent, e.g. a refused createOnly), and the
+   * document's current rev.
+   */
+  async function recordRefusal(
+    tx: PlatformDbSession,
+    kind: DocumentKind,
+    id: string,
+    method: "PUT" | "DELETE",
+    sent: number | "*",
+    current: number | null,
+  ): Promise<boolean> {
+    const since = new Date(now() - 60_000).toISOString();
+    const subjectId = `${kind}/${id}`;
+    const exists = await tx.get<{ n: number } | undefined>(refusalRecent, [
+      "document.precondition_failed",
+      userId,
+      ownerId,
+      subjectId,
+      since,
+    ]);
+    if (exists) return false;
+    await appendAudit(tx, {
+      actorId: userId,
+      action: "document.precondition_failed",
+      subjectOwnerId: ownerId,
+      subjectId,
+      detail: { method, sent, current },
+    });
+    return true;
+  }
+
+  /**
+   * Raises this author's per-tenant counter to `rev`, in the same tx as
+   * the write that produced it. Called only when a write produced a row; refused
+   * writes and conditional deletes do not touch the counter (a removed member, a
+   * member's removal, an org delete, or the project cascade must not restart it).
+   */
+  async function bumpOwnerDocumentRev(
+    tx: PlatformDbSession,
+    rev: number,
+  ): Promise<void> {
+    await tx.run(bumpRev, {
+      owner_id: ownerId,
+      user_id: userId,
+      last_rev: rev,
+    });
+  }
 
   return {
     async list(filter) {
@@ -438,7 +563,17 @@ export function createOwnerDocumentsStore(
       }
     },
 
-    async put(input, expectedRev?) {
+    async put(input, expectedRev?, options?) {
+      const createOnly = options?.createOnly ?? false;
+      if (createOnly && expectedRev !== undefined) {
+        return {
+          success: false,
+          error: persistError(
+            "InvalidInput",
+            "createOnly cannot be combined with expectedRev",
+          ),
+        };
+      }
       const kind = input.kind;
       const id = input.id;
       const projectId = input.projectId === undefined ? null : input.projectId;
@@ -485,16 +620,90 @@ export function createOwnerDocumentsStore(
             }
           }
 
+          const counterRow = await tx.get<{ last_rev: number } | undefined>(
+            counterRead,
+            [ownerId, userId],
+          );
+          const counter = counterRow ? counterRow.last_rev : 0;
           const params = {
             owner_id: ownerId,
             user_id: userId,
             kind,
             id,
             project_id: projectId,
+            new_rev: counter + 1,
+            counter,
             payload: payloadJson,
             updated_at: now,
             updated_by: userId,
           };
+
+          if (createOnly) {
+            const written = await tx.get<{
+              rev: number;
+              updated_at: number;
+            }>(insertOnly, params);
+            if (written) {
+              await bumpOwnerDocumentRev(tx, written.rev);
+              return {
+                success: true,
+                value: {
+                  kind,
+                  id,
+                  projectId,
+                  rev: written.rev,
+                  payload: input.payload,
+                  updatedAt: written.updated_at,
+                },
+              };
+            }
+            // Row already exists (or vanished between the two statements).
+            const existing = await tx.get<{ rev: number }>(selectKey, [
+              ownerId,
+              userId,
+              kind,
+              id,
+            ]);
+            if (!existing) {
+              // The insert saw a conflicting row that this transaction's
+              // snapshot cannot see; not reachable on SQLite; on Postgres under
+              // SERIALIZABLE the seam retries a serialization failure before
+              // this could be observed; pinned by the Postgres store tests.
+              const audited = await recordRefusal(
+                tx,
+                kind,
+                id,
+                "PUT",
+                "*",
+                null,
+              );
+              return {
+                success: false,
+                error: {
+                  kind: "Conflict",
+                  message: "document write conflicted",
+                  audited,
+                },
+              };
+            }
+            const audited = await recordRefusal(
+              tx,
+              kind,
+              id,
+              "PUT",
+              "*",
+              existing.rev,
+            );
+            return {
+              success: false,
+              error: {
+                kind: "PreconditionFailed",
+                message: "document already exists",
+                currentRev: existing.rev,
+                audited,
+              },
+            };
+          }
 
           if (expectedRev === undefined) {
             const written = await tx.get<{
@@ -510,6 +719,7 @@ export function createOwnerDocumentsStore(
                 ),
               };
             }
+            await bumpOwnerDocumentRev(tx, written.rev);
             return {
               success: true,
               value: {
@@ -531,6 +741,7 @@ export function createOwnerDocumentsStore(
             expected_rev: expectedRev,
           });
           if (written) {
+            await bumpOwnerDocumentRev(tx, written.rev);
             return {
               success: true,
               value: {
@@ -559,9 +770,22 @@ export function createOwnerDocumentsStore(
               ),
             };
           }
+          const audited = await recordRefusal(
+            tx,
+            kind,
+            id,
+            "PUT",
+            expectedRev,
+            existing.rev,
+          );
           return {
             success: false,
-            error: persistError("Conflict", "document was updated elsewhere"),
+            error: {
+              kind: "Conflict",
+              message: "document was updated elsewhere",
+              currentRev: existing.rev,
+              audited,
+            },
           };
         });
       } catch (cause) {
@@ -586,10 +810,56 @@ export function createOwnerDocumentsStore(
       }
     },
 
-    async delete(kind, id) {
+    async delete(kind, id, expectedRev?) {
       try {
-        const result = await db.run(deleteDoc, [ownerId, userId, kind, id]);
-        return { success: true, value: { deleted: result.changes > 0 } };
+        if (expectedRev === undefined) {
+          const result = await db.run(deleteDoc, [ownerId, userId, kind, id]);
+          return { success: true, value: { deleted: result.changes > 0 } };
+        }
+        return await db.transaction(async (tx) => {
+          const result = await tx.run(deleteAtRev, [
+            ownerId,
+            userId,
+            kind,
+            id,
+            expectedRev,
+          ]);
+          if (result.changes > 0) {
+            return { success: true, value: { deleted: true } };
+          }
+          const existing = await tx.get<{ rev: number }>(selectKey, [
+            ownerId,
+            userId,
+            kind,
+            id,
+          ]);
+          if (!existing) {
+            return {
+              success: false,
+              error: persistError(
+                "NotFound",
+                `no document ${kind}/${id} for owner ${ownerId}`,
+              ),
+            };
+          }
+          const audited = await recordRefusal(
+            tx,
+            kind,
+            id,
+            "DELETE",
+            expectedRev,
+            existing.rev,
+          );
+          return {
+            success: false,
+            error: {
+              kind: "PreconditionFailed",
+              message: "document was updated elsewhere",
+              currentRev: existing.rev,
+              audited,
+            },
+          };
+        });
       } catch (cause) {
         return {
           success: false,

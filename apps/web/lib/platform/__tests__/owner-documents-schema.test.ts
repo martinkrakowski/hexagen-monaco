@@ -1,10 +1,12 @@
 import { describe, it } from "vitest";
 import assert from "node:assert/strict";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import Database from "better-sqlite3";
 import { openPlatformDb } from "../platform-db";
+import { createSqlitePlatformDb } from "../sqlite-db";
+import { createOwnerDocumentsStore } from "../owner-documents-store";
 
 function columns(db: Database.Database, table: string): string[] {
   const cols = db.pragma(`table_info(${table})`) as Array<{ name: string }>;
@@ -238,6 +240,252 @@ describe("owner_documents schema", () => {
       );
     } finally {
       db.close();
+    }
+  });
+
+  it("opening an old file adds audit_log.detail and owner_document_revs, backfills the counter, and is idempotent", async () => {
+    // Build a file by hand with the PRE-A3-00 schema: audit_log has no `detail`
+    // and owner_document_revs does not exist. Mirrors origin/main's DDL for the
+    // tables that matter here.
+    const path = tmpDbPath("hexagen-owner-docs-old-");
+    const file = new Database(path);
+    file.exec(`
+      CREATE TABLE users (
+        id TEXT PRIMARY KEY, name TEXT, email TEXT, email_verified TEXT,
+        image TEXT, github_login TEXT, onboarded_at TEXT, created_at TEXT NOT NULL
+      );
+      CREATE TABLE orgs (
+        id TEXT PRIMARY KEY, slug TEXT NOT NULL, name TEXT NOT NULL,
+        created_by TEXT NOT NULL, created_at TEXT NOT NULL
+      );
+      CREATE TABLE org_members (
+        org_id TEXT NOT NULL, user_id TEXT NOT NULL, role TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        PRIMARY KEY (org_id, user_id),
+        FOREIGN KEY (org_id) REFERENCES orgs(id) ON DELETE CASCADE
+      );
+      CREATE TABLE saved_projects (
+        id TEXT NOT NULL, owner_id TEXT NOT NULL, name TEXT NOT NULL,
+        payload TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL,
+        ord INTEGER NOT NULL, rev INTEGER NOT NULL DEFAULT 1, updated_by TEXT,
+        PRIMARY KEY (owner_id, id)
+      );
+      CREATE TABLE owner_documents (
+        owner_id   TEXT NOT NULL,
+        user_id    TEXT NOT NULL,
+        kind       TEXT NOT NULL,
+        id         TEXT NOT NULL,
+        project_id TEXT,
+        rev        INTEGER NOT NULL,
+        payload    TEXT NOT NULL,
+        updated_at INTEGER NOT NULL,
+        updated_by TEXT,
+        PRIMARY KEY (owner_id, user_id, kind, id),
+        FOREIGN KEY (owner_id, project_id)
+          REFERENCES saved_projects (owner_id, id) ON DELETE CASCADE
+      );
+      CREATE TABLE audit_log (
+        id TEXT PRIMARY KEY,
+        actor_id TEXT NOT NULL,
+        action TEXT NOT NULL,
+        subject_owner_id TEXT,
+        subject_id TEXT,
+        grantee_type TEXT,
+        grantee_id TEXT,
+        created_at TEXT NOT NULL
+      );
+    `);
+    const now = Date.now();
+    // One document at rev 4, so the backfill sets last_rev = 4.
+    file
+      .prepare(
+        `INSERT INTO owner_documents
+           (owner_id, user_id, kind, id, project_id, rev, payload, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run("user-1", "user-1", "workspace", "doc-1", null, 4, "{}", now);
+    // One audit row, written before `detail` existed.
+    file
+      .prepare(
+        `INSERT INTO audit_log
+           (id, actor_id, action, subject_owner_id, subject_id, created_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        "audit-1",
+        "user-1",
+        "document.precondition_failed",
+        "user-1",
+        "workspace/doc-1",
+        new Date(now).toISOString(),
+      );
+    file.close();
+
+    // Personal tenant (owner_id == user_id): the store skips the membership
+    // check, so this test exercises only the schema migration, not orgs.
+    const handle = openPlatformDb(path);
+    let revAfter = 0;
+    try {
+      // detail column exists now, and the old audit row reads NULL.
+      assert.equal(columns(handle, "audit_log").includes("detail"), true);
+      assert.equal(
+        columns(handle, "owner_document_revs").includes("last_rev"),
+        true,
+      );
+      const audit = handle
+        .prepare("SELECT detail FROM audit_log WHERE id = ?")
+        .get("audit-1") as { detail: unknown };
+      assert.equal(audit.detail, null, "old audit row reads detail NULL");
+
+      // Backfill: last_rev = MAX(rev) = 4 for this author.
+      const rev = handle
+        .prepare(
+          "SELECT last_rev FROM owner_document_revs WHERE owner_id = ? AND user_id = ?",
+        )
+        .get("user-1", "user-1") as { last_rev: number } | undefined;
+      assert.ok(rev, "the backfill must have written a counter row");
+      assert.equal(
+        rev!.last_rev,
+        4,
+        "counter starts from the document's last rev",
+      );
+
+      // The document keeps its rev 4.
+      const doc = handle
+        .prepare(
+          "SELECT rev FROM owner_documents WHERE owner_id = ? AND user_id = ? AND kind = ? AND id = ?",
+        )
+        .get("user-1", "user-1", "workspace", "doc-1") as { rev: number };
+      assert.equal(doc.rev, 4, "the document's own rev is untouched");
+
+      // Next store write takes rev = max(4, counter 4) + 1 = 5.
+      const platformDb = createSqlitePlatformDb(handle);
+      const store = createOwnerDocumentsStore(platformDb, "user-1", "user-1");
+      const written = await store.put({
+        kind: "workspace",
+        id: "doc-1",
+        payload: { v: "after" },
+      });
+      assert.equal(written.success, true);
+      assert.equal(written.success && written.value.rev, 5);
+
+      // Capture whatever the counter holds after the write, so a second open
+      // can assert it is untouched (the backfill is idempotent).
+      const revAfterRow = handle
+        .prepare(
+          "SELECT last_rev FROM owner_document_revs WHERE owner_id = ? AND user_id = ?",
+        )
+        .get("user-1", "user-1") as { last_rev: number };
+      revAfter = revAfterRow.last_rev;
+    } finally {
+      handle.close();
+    }
+
+    // A second open on the same file is a no-op: schema snapshot unchanged and
+    // the backfill leaves the already-correct counter untouched.
+    const handle2 = openPlatformDb(path);
+    try {
+      assert.equal(columns(handle2, "audit_log").includes("detail"), true);
+      assert.equal(
+        columns(handle2, "owner_document_revs").includes("last_rev"),
+        true,
+      );
+      const rev = handle2
+        .prepare(
+          "SELECT last_rev FROM owner_document_revs WHERE owner_id = ? AND user_id = ?",
+        )
+        .get("user-1", "user-1") as { last_rev: number };
+      assert.equal(
+        rev!.last_rev,
+        revAfter,
+        "a second open must not re-backfill",
+      );
+    } finally {
+      handle2.close();
+      rmSync(path, { force: true });
+    }
+  });
+
+  it("opens without lowering an owner_document_revs counter, and repairs one below MAX(rev)", () => {
+    // A file that already has owner_document_revs (new-shaped), with a stale
+    // counter and a document whose rev is higher.
+    const path = tmpDbPath("hexagen-rev-repair-");
+    const file = new Database(path);
+    file.exec(`
+      CREATE TABLE owner_documents (
+        owner_id   TEXT NOT NULL,
+        user_id    TEXT NOT NULL,
+        kind       TEXT NOT NULL,
+        id         TEXT NOT NULL,
+        project_id TEXT,
+        rev        INTEGER NOT NULL,
+        payload    TEXT NOT NULL,
+        updated_at INTEGER NOT NULL,
+        updated_by TEXT,
+        PRIMARY KEY (owner_id, user_id, kind, id)
+      );
+      CREATE TABLE owner_document_revs (
+        owner_id  TEXT NOT NULL,
+        user_id   TEXT NOT NULL,
+        last_rev  INTEGER NOT NULL,
+        PRIMARY KEY (owner_id, user_id)
+      );
+    `);
+    const now = Date.now();
+    file
+      .prepare(
+        `INSERT INTO owner_documents
+           (owner_id, user_id, kind, id, project_id, rev, payload, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run("o-1", "u-1", "workspace", "doc-1", null, 7, "{}", now);
+    // Counter is stale (4 < the document's rev 7).
+    file
+      .prepare(
+        `INSERT INTO owner_document_revs (owner_id, user_id, last_rev) VALUES (?, ?, ?)`,
+      )
+      .run("o-1", "u-1", 4);
+    file.close();
+
+    const handle = openPlatformDb(path);
+    try {
+      const c = handle
+        .prepare(
+          "SELECT last_rev FROM owner_document_revs WHERE owner_id = ? AND user_id = ?",
+        )
+        .get("o-1", "u-1") as { last_rev: number } | undefined;
+      assert.ok(c, "the counter row must still exist");
+      assert.equal(
+        c!.last_rev,
+        7,
+        "a counter below MAX(rev) is repaired up to MAX(rev)",
+      );
+    } finally {
+      handle.close();
+    }
+
+    // A counter that already exceeds MAX(rev) must not be lowered on reopen.
+    const h2 = openPlatformDb(path);
+    h2.prepare(
+      "UPDATE owner_document_revs SET last_rev = ? WHERE owner_id = ? AND user_id = ?",
+    ).run(9, "o-1", "u-1");
+    h2.close();
+    const h3 = openPlatformDb(path);
+    try {
+      const c2 = h3
+        .prepare(
+          "SELECT last_rev FROM owner_document_revs WHERE owner_id = ? AND user_id = ?",
+        )
+        .get("o-1", "u-1") as { last_rev: number } | undefined;
+      assert.ok(c2, "the counter row must survive a reopen");
+      assert.equal(
+        c2!.last_rev,
+        9,
+        "a counter above MAX(rev) is never lowered",
+      );
+    } finally {
+      h3.close();
+      rmSync(path, { force: true });
     }
   });
 });

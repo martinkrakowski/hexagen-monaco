@@ -3,6 +3,7 @@ import {
   resolvePlatformDbPath,
   resolveScanArtifactsDir,
 } from "./platform-db";
+import type { PlatformDb } from "./db";
 import { createSqlitePlatformDb } from "./sqlite-db";
 import { createAuthRepository, type AuthRepository } from "./auth-store";
 import {
@@ -76,15 +77,10 @@ export interface PlatformStore {
   close(): Promise<void>;
 }
 
-export function createPlatformStore(
-  dbPath: string,
-  // Overridable so a suite can point artifacts at a temp dir without touching
-  // process.env. Unlike the db path there is no `:memory:` equivalent for a
-  // directory, so the default is a real path even under NODE_ENV=test.
+export function createPlatformStoreOn(
+  platformDb: PlatformDb,
   artifactsDir: string = resolveScanArtifactsDir(),
 ): PlatformStore {
-  const db = openPlatformDb(dbPath);
-  const platformDb = createSqlitePlatformDb(db);
   const ownerState = createOwnerStateStore(platformDb);
   return {
     scanArtifactsDir: artifactsDir,
@@ -119,6 +115,19 @@ export function createPlatformStore(
       return platformDb.close();
     },
   };
+}
+
+export function createPlatformStore(
+  dbPath: string,
+  // Overridable so a suite can point artifacts at a temp dir without touching
+  // process.env. Unlike the db path there is no `:memory:` equivalent for a
+  // directory, so the default is a real path even under NODE_ENV=test.
+  artifactsDir: string = resolveScanArtifactsDir(),
+): PlatformStore {
+  return createPlatformStoreOn(
+    createSqlitePlatformDb(openPlatformDb(dbPath)),
+    artifactsDir,
+  );
 }
 
 let singleton: PlatformStore | null = null;

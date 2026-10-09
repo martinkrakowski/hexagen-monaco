@@ -117,7 +117,21 @@ export default async function setup(
         user: pgUser,
         password: pgPassword,
         initdbFlags: ["--locale=C", "--encoding=UTF8"],
-        postgresFlags: ["-c", "listen_addresses=127.0.0.1"],
+        // A throw-away server for one test run: durability is worth nothing
+        // here and costs a real fsync per commit. On Linux that made a test
+        // with five hundred small transactions take half a minute (it timed
+        // out) where macOS, whose fsync does not reach the disk, took two
+        // seconds. Never copy these three settings to a server that holds data.
+        postgresFlags: [
+          "-c",
+          "listen_addresses=127.0.0.1",
+          "-c",
+          "fsync=off",
+          "-c",
+          "synchronous_commit=off",
+          "-c",
+          "full_page_writes=off",
+        ],
         createPostgresUser: false,
       });
 
