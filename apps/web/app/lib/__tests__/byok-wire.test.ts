@@ -20,11 +20,11 @@ describe("byok-wire durability (AUD-007)", () => {
   let dir = "";
   let prev: string | undefined;
 
-  beforeAll(() => {
+  beforeAll(async () => {
     dir = mkdtempSync(join(tmpdir(), "byok-wire-"));
     prev = process.env.BYOK_DB_PATH;
     process.env.BYOK_DB_PATH = join(dir, "byok.db");
-    void clearByokCache();
+    await clearByokCache();
   });
 
   afterAll(async () => {
