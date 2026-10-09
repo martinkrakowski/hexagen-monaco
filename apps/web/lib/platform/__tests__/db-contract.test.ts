@@ -259,11 +259,18 @@ describe.each(backends)("db contract: %s", (name, make) => {
         "a",
         10,
       ]);
-      later = new Promise<void>((resolve, reject) =>
-        setTimeout(() => {
-          db.get("SELECT 1 AS one").then(() => resolve(), reject);
-        }, 20),
-      );
+      // Two timers: 0 ms lands inside the COMMIT round trip on a backend
+      // where COMMIT is asynchronous, 20 ms usually after it. Both are after
+      // the callback, and both are plain calls the seam must accept.
+      const at = (ms: number) =>
+        new Promise<void>((resolve, reject) =>
+          setTimeout(() => {
+            db.get("SELECT 1 AS one").then(() => resolve(), reject);
+          }, ms),
+        );
+      later = Promise.all([at(0), at(20)]).then(() => undefined);
+      // The rejections must be observed even if the transaction throws first.
+      later.catch(() => undefined);
     });
     await later;
   });

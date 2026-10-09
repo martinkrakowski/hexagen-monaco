@@ -63,6 +63,23 @@ function dbStampMs(name: string): number {
   return Date.UTC(year, month, day, hour, minute);
 }
 
+// embedded-postgres registers an exit hook (async-exit-hook) that, on
+// `beforeExit`, stops its servers and then calls `process.exit(0)`. Vitest
+// reports a failed run by setting `process.exitCode` and letting the process
+// end, so with that hook loaded A RUN WITH FAILING TESTS EXITS 0 and every gate
+// built on the exit status passes. This listener is registered before the
+// package is imported, so it runs first: when a non-zero status is pending it
+// exits with it. The teardown returned by setup has stopped the server by then.
+let exitCodeKept = false;
+function keepExitCode(): void {
+  if (exitCodeKept) return;
+  exitCodeKept = true;
+  process.on("beforeExit", () => {
+    const pending = Number(process.exitCode ?? 0);
+    if (pending !== 0) process.exit(pending);
+  });
+}
+
 export default async function setup(
   context: VitestGlobalSetupContext,
 ): Promise<() => Promise<void>> {
@@ -92,6 +109,7 @@ export default async function setup(
       pgUser = "postgres";
       pgPassword = "password";
 
+      keepExitCode();
       const { default: Ctor } = await import("embedded-postgres");
       embedded = new Ctor({
         databaseDir: embeddedDir,

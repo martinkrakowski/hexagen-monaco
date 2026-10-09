@@ -344,10 +344,20 @@ export function createPgPlatformDb(pool: Pool): PlatformDb {
 
           try {
             await client.query("BEGIN ISOLATION LEVEL SERIALIZABLE");
-            const result = await nestedGuard.run(token, () => fn(tx));
+            // The callback is over the moment it settles, BEFORE the COMMIT or
+            // ROLLBACK round trip: from then on its session is finished, and a
+            // plain call from code it started (a timer, an unawaited promise)
+            // is an ordinary call on another connection. Leaving the token on
+            // until COMMIT returned rejected such a call whenever it landed
+            // inside that round trip.
+            let result: T;
+            try {
+              result = await nestedGuard.run(token, () => fn(tx));
+            } finally {
+              finished = true;
+              token.active = false;
+            }
             await client.query("COMMIT");
-            finished = true;
-            token.active = false;
             return result;
           } catch (error) {
             // ROLLBACK, ignoring errors from the rollback itself.
@@ -356,6 +366,7 @@ export function createPgPlatformDb(pool: Pool): PlatformDb {
             } catch {
               // ignore rollback errors
             }
+            // Also for a BEGIN that failed, where the callback never ran.
             finished = true;
             token.active = false;
 
