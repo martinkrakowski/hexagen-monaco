@@ -507,4 +507,102 @@ describe.each(BACKENDS)("saved projects stored timestamps (%s)", (kind) => {
       await backend.close();
     }
   });
+
+  it("the legacy updated_at If-Match accepts the stored value and refuses another", async () => {
+    const backend = await openBackend(kind);
+    try {
+      const projects = backend.store.projectsFor("owner-a");
+      const createdAt = 1_700_000_000_000;
+      const updatedAt = 1_700_000_001_000;
+      const proj: SavedProject = {
+        id: "11111111-1111-4111-8111-111111111111",
+        name: "alpha",
+        schemaVersion: 4,
+        createdAt,
+        updatedAt,
+        formState: {},
+        manifestYaml: "",
+      };
+      must(await projects.createProjectRecord(proj));
+
+      const stored = await backend.db.get<{ u: number }>(
+        "SELECT hx_ms(updated_at) AS u FROM saved_projects WHERE owner_id = ? AND id = ?",
+        ["owner-a", proj.id],
+      );
+      assert.equal(typeof stored.u, "number");
+
+      const accepted = must(
+        await projects.putProject(
+          { ...proj, name: "alpha-v2", updatedAt: updatedAt + 1_000 },
+          { updatedAt: stored.u },
+        ),
+      );
+      assert.equal(accepted.rev, 2);
+
+      const rejected = await projects.putProject(
+        { ...proj, name: "alpha-v3", updatedAt: updatedAt + 2_000 },
+        { updatedAt: stored.u + 1 },
+      );
+      assert.equal(rejected.success, false);
+      if (!rejected.success) assert.equal(rejected.error.kind, "Conflict");
+
+      const after = must(await projects.getProjectWithRev(proj.id));
+      assert.equal(after.rev, 2);
+      assert.equal(after.project.name, "alpha-v2");
+    } finally {
+      await backend.close();
+    }
+  });
+
+  it("a rev precondition matches only the current rev", async () => {
+    const backend = await openBackend(kind);
+    try {
+      const projects = backend.store.projectsFor("owner-a");
+      const proj: SavedProject = {
+        id: "22222222-2222-4222-8222-222222222222",
+        name: "beta",
+        schemaVersion: 4,
+        createdAt: 1_700_000_000_000,
+        updatedAt: 1_700_000_001_000,
+        formState: {},
+        manifestYaml: "",
+      };
+      must(await projects.createProjectRecord(proj));
+
+      let current = must(await projects.getProjectWithRev(proj.id));
+      assert.equal(current.rev, 1);
+
+      // Current rev succeeds and bumps
+      const accepted = must(
+        await projects.putProject(
+          { ...proj, name: "beta-v2", updatedAt: 1_700_000_002_000 },
+          { rev: current.rev },
+        ),
+      );
+      assert.equal(accepted.rev, 2);
+
+      // Stale rev is Conflict
+      const rejected = await projects.putProject(
+        { ...proj, name: "beta-v3", updatedAt: 1_700_000_003_000 },
+        { rev: current.rev },
+      );
+      assert.equal(rejected.success, false);
+      if (!rejected.success) assert.equal(rejected.error.kind, "Conflict");
+
+      // No precondition writes unconditionally and still bumps rev
+      const unconditional = must(
+        await projects.putProject(
+          { ...proj, name: "beta-v4", updatedAt: 1_700_000_004_000 },
+          undefined,
+        ),
+      );
+      assert.equal(unconditional.rev, 3);
+
+      current = must(await projects.getProjectWithRev(proj.id));
+      assert.equal(current.rev, 3);
+      assert.equal(current.project.name, "beta-v4");
+    } finally {
+      await backend.close();
+    }
+  });
 });
