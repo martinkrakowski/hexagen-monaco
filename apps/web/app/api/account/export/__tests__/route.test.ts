@@ -9,6 +9,7 @@ import { getToken } from "next-auth/jwt";
 import { GET } from "../route";
 import {
   closePlatformStore,
+  DOCUMENT_KINDS,
   getPlatformStore,
   type PlatformStore,
   type RunEventRecord,
@@ -19,6 +20,8 @@ const OTHER = "user-b";
 const THEIR_PROJECT = "99999999-9999-4999-8999-999999999999";
 /** Must match the private ceiling in `route.ts`. */
 const RUN_EXPORT_LIMIT = 10_000;
+/** Must match the private ceiling in `route.ts`. */
+const DOCUMENT_EXPORT_LIMIT = 10_000;
 
 function project(id: string, name: string): SavedProject {
   return {
@@ -252,6 +255,116 @@ describe("GET /api/account/export", () => {
       "server-side log must retain the persistence detail",
     );
     logged.mockRestore();
+  });
+
+  it("the export has one document of every kind the account authored, asserting on the set of kinds", async () => {
+    const store = getPlatformStore();
+    const docs = store.documentsFor(OWNER, OWNER);
+    for (const kind of DOCUMENT_KINDS) {
+      await docs.put({ kind, id: `own-${kind}`, payload: { kind, n: 1 } });
+    }
+
+    const body = await (await GET(req())).json();
+    const kinds = body.documents.items.map((d: { kind: string }) => d.kind);
+    assert.deepEqual([...kinds].sort(), [...DOCUMENT_KINDS].sort());
+    for (const item of body.documents.items) {
+      assert.deepEqual(item.payload, { kind: item.kind, n: 1 });
+    }
+  });
+
+  it("documents authored in an org are included, with the org as ownerId", async () => {
+    const store = getPlatformStore();
+    const orgId = "org-documents";
+    await store.orgs.createOrgWithOwner(
+      {
+        id: orgId,
+        slug: "org-documents",
+        name: "Org Documents",
+        createdBy: "founder",
+      },
+      { actorId: "founder" },
+    );
+    await store.orgs.addMember(orgId, OWNER, "member");
+
+    await store.documentsFor(orgId, OWNER).put({
+      kind: "workspace",
+      id: "org-doc-1",
+      payload: { inOrg: true },
+    });
+
+    const body = await (await GET(req())).json();
+    const orgItem = body.documents.items.find(
+      (d: { ownerId: string; id: string }) => d.id === "org-doc-1",
+    );
+    assert.ok(orgItem, "an org-authored document must appear in the export");
+    assert.equal(orgItem!.ownerId, orgId);
+    assert.deepEqual(orgItem!.payload, { inOrg: true });
+  });
+
+  it("another member's org documents and another user's personal documents are not included", async () => {
+    const store = getPlatformStore();
+    const orgId = "org-excluded";
+    await store.orgs.createOrgWithOwner(
+      {
+        id: orgId,
+        slug: "org-excluded",
+        name: "Org Excluded",
+        createdBy: "founder",
+      },
+      { actorId: "founder" },
+    );
+    await store.orgs.addMember(orgId, OWNER, "member");
+    await store.orgs.addMember(orgId, OTHER, "member");
+
+    await store.documentsFor(orgId, OWNER).put({
+      kind: "workspace",
+      id: "mine-in-org",
+      payload: {},
+    });
+    // Another member of the same org authored this — must stay absent.
+    await store.documentsFor(orgId, OTHER).put({
+      kind: "workspace",
+      id: "theirs-in-org",
+      payload: {},
+    });
+    // Another user's personal-tenant document — must stay absent.
+    await store.documentsFor(OTHER, OTHER).put({
+      kind: "workspace",
+      id: "theirs-personal",
+      payload: {},
+    });
+
+    const body = await (await GET(req())).json();
+    const ids = body.documents.items.map((d: { id: string }) => d.id);
+    assert.ok(
+      ids.includes("mine-in-org"),
+      "the caller's own org document must be present",
+    );
+    assert.equal(
+      ids.includes("theirs-in-org"),
+      false,
+      "another member's org document must be absent",
+    );
+    assert.equal(
+      ids.includes("theirs-personal"),
+      false,
+      "another user's personal document must be absent",
+    );
+  });
+
+  it("reports the document limit and is not truncated below it, and documentsAuthoredBy honours its limit", async () => {
+    const store = getPlatformStore();
+    const docs = store.documentsFor(OWNER, OWNER);
+    await docs.put({ kind: "workspace", id: "d1", payload: {} });
+    await docs.put({ kind: "workspace", id: "d2", payload: {} });
+    await docs.put({ kind: "workspace", id: "d3", payload: {} });
+
+    const page = await store.documentsAuthoredBy(OWNER, 2);
+    assert.equal(page.length, 2);
+
+    const body = await (await GET(req())).json();
+    assert.equal(body.documents.limit, DOCUMENT_EXPORT_LIMIT);
+    assert.equal(body.documents.truncated, false);
   });
 });
 

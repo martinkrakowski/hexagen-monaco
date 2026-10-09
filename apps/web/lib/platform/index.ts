@@ -72,6 +72,13 @@ export {
 } from "./scan-records-store";
 export { requirePersistenceOwner } from "./require-owner";
 export {
+  DOCUMENT_KINDS,
+  type AuthoredDocument,
+  type DocumentKind,
+  type OwnerDocumentsStore,
+  listDocumentsAuthoredBy,
+} from "./owner-documents-store";
+export {
   resolvePlatformDbPath,
   LOCAL_PLATFORM_DB_PATH,
   resolveScanArtifactsDir,

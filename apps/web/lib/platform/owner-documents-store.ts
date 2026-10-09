@@ -151,6 +151,60 @@ export function deleteDocumentsOfOwner(
     .then((result) => result.changes);
 }
 
+export interface AuthoredDocument extends OwnerDocument {
+  ownerId: string;
+}
+
+const SELECT_AUTHORED_DOCUMENTS = `
+  SELECT owner_id, kind, id, project_id, rev, payload, updated_at
+    FROM owner_documents
+   WHERE user_id = ?
+   ORDER BY owner_id, kind, id
+   LIMIT ?
+`;
+
+/**
+ * Every document one person authored, across tenants. For that person's own
+ * export only — the caller is the author, scoped by `user_id` (the JWT `sub`),
+ * never by the request.
+ *
+ * A row whose `payload` does not parse is kept with `payload: null` rather than
+ * dropped: an export that silently omits a row is worse than one that shows a
+ * broken one.
+ */
+export async function listDocumentsAuthoredBy(
+  session: PlatformDbSession,
+  userId: string,
+  limit: number,
+): Promise<AuthoredDocument[]> {
+  const rows = await session.all<{
+    owner_id: string;
+    kind: string;
+    id: string;
+    project_id: string | null;
+    rev: number;
+    payload: string;
+    updated_at: number;
+  }>(SELECT_AUTHORED_DOCUMENTS, [userId, limit]);
+  return rows.map((r) => {
+    let payload: unknown = null;
+    try {
+      payload = JSON.parse(r.payload);
+    } catch {
+      // Keep the row, but leave its payload null (see JSDoc above).
+    }
+    return {
+      ownerId: r.owner_id,
+      kind: r.kind as DocumentKind,
+      id: r.id,
+      projectId: r.project_id,
+      rev: r.rev,
+      payload,
+      updatedAt: r.updated_at,
+    };
+  });
+}
+
 export function createOwnerDocumentsStore(
   db: PlatformDb,
   ownerId: string,

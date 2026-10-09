@@ -23,6 +23,13 @@ export const dynamic = "force-dynamic";
  * route does not open, and its schema has no ciphertext column at all — only
  * key metadata and revocations (ADR-0030: ciphertext is never persisted
  * server-side). Unreachable beats redacted.
+ *
+ * Documents are the exception and cross tenant boundaries: the export includes
+ * every document the account authored, in every tenant (its personal one and
+ * every org it belongs to), because a document is readable only by its author
+ * and the author is the signed-in user (`owner.ownerId`, the JWT `sub`), never a
+ * request parameter. No other org data — grants, teams, members, audit rows —
+ * appears here; only this account's own documents.
  */
 
 /**
@@ -33,6 +40,15 @@ export const dynamic = "force-dynamic";
  * ever exceeds it, `runs.truncated` says so rather than the archive lying.
  */
 const RUN_EXPORT_LIMIT = 10_000;
+
+/**
+ * Document reads are likewise bounded. `documentsAuthoredBy` takes an explicit
+ * LIMIT rather than streaming unboundedly, so the export never quietly stops
+ * short. If an account authored more than this ceiling, the bundle's
+ * `documents.truncated` reports it rather than the archive lying. Mirrors
+ * RUN_EXPORT_LIMIT.
+ */
+const DOCUMENT_EXPORT_LIMIT = 10_000;
 
 export async function GET(request: NextRequest) {
   const owner = await requirePersistenceOwner(request);
@@ -68,6 +84,18 @@ export async function GET(request: NextRequest) {
     .list({ limit: RUN_EXPORT_LIMIT + 1 });
   const truncated = listed.length > RUN_EXPORT_LIMIT;
   const events = truncated ? listed.slice(0, RUN_EXPORT_LIMIT) : listed;
+
+  // Documents: every document this account authored, in every tenant. Probe one
+  // row past the ceiling (see runs above) so the archive can report truncation
+  // rather than silently ending at the limit.
+  const listedDocs = await store.documentsAuthoredBy(
+    owner.ownerId,
+    DOCUMENT_EXPORT_LIMIT + 1,
+  );
+  const documentsTruncated = listedDocs.length > DOCUMENT_EXPORT_LIMIT;
+  const documentItems = documentsTruncated
+    ? listedDocs.slice(0, DOCUMENT_EXPORT_LIMIT)
+    : listedDocs;
   const entitlement = await store.billing.resolve(owner.ownerId);
 
   const bundle = {
@@ -80,6 +108,11 @@ export async function GET(request: NextRequest) {
       limit: RUN_EXPORT_LIMIT,
       truncated,
       events,
+    },
+    documents: {
+      limit: DOCUMENT_EXPORT_LIMIT,
+      truncated: documentsTruncated,
+      items: documentItems,
     },
     entitlement,
   };

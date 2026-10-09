@@ -2,7 +2,10 @@ import { describe, it } from "vitest";
 import assert from "node:assert/strict";
 import { openPlatformDb } from "../platform-db";
 import { createSqlitePlatformDb } from "../sqlite-db";
-import { createOwnerDocumentsStore } from "../owner-documents-store";
+import {
+  createOwnerDocumentsStore,
+  listDocumentsAuthoredBy,
+} from "../owner-documents-store";
 import type { DocumentKind } from "../owner-documents-store";
 import { createSavedProjectsStore } from "../saved-projects-store";
 import { createOrgsRepository } from "../orgs-store";
@@ -828,6 +831,132 @@ describe("owner-documents store", () => {
         0,
         "no document for a deleted org may survive",
       );
+    } finally {
+      db.close();
+    }
+  });
+
+  it("listDocumentsAuthoredBy returns every document the user authored across tenants, with payloads parsed and others excluded", async () => {
+    const db = openPlatformDb(":memory:");
+    const platformDb = createSqlitePlatformDb(db);
+    const orgs = createOrgsRepository(platformDb);
+    await orgs.createOrgWithOwner(
+      { id: "org-1", slug: "test-org", name: "Test Org", createdBy: "founder" },
+      { actorId: "founder" },
+    );
+    await orgs.addMember("org-1", "user-a", "member");
+    try {
+      // Personal tenant: user-a authors two kinds.
+      const personal = createOwnerDocumentsStore(
+        platformDb,
+        "user-a",
+        "user-a",
+      );
+      await personal.put({
+        kind: "workspace",
+        id: "p-ws",
+        payload: { v: 1 },
+      });
+      await personal.put({
+        kind: "governance",
+        id: "p-gov",
+        payload: { v: 2 },
+      });
+
+      // Org tenant: user-a (a member) authors one kind.
+      const orgDocs = createOwnerDocumentsStore(platformDb, "org-1", "user-a");
+      await orgDocs.put({
+        kind: "canvas-layout",
+        id: "o-cl",
+        payload: { v: 3 },
+      });
+
+      // Another user's personal document must not appear.
+      const other = createOwnerDocumentsStore(platformDb, "user-b", "user-b");
+      await other.put({
+        kind: "workspace",
+        id: "x-ws",
+        payload: { v: 99 },
+      });
+
+      const rows = await listDocumentsAuthoredBy(platformDb, "user-a", 100);
+      assert.equal(rows.length, 3);
+      const byKey = new Map(
+        rows.map((r) => [`${r.ownerId}:${r.kind}:${r.id}`] as const),
+      );
+      assert.ok(byKey.has("user-a:workspace:p-ws"));
+      assert.ok(byKey.has("user-a:governance:p-gov"));
+      assert.ok(byKey.has("org-1:canvas-layout:o-cl"));
+      assert.equal(
+        rows.find((r) => r.id === "x-ws"),
+        undefined,
+        "another user's documents must not be returned",
+      );
+      assert.deepEqual(
+        rows.find((r) => r.id === "p-ws")!.payload,
+        { v: 1 },
+        "payloads must round-trip",
+      );
+      assert.deepEqual(
+        rows.find((r) => r.id === "o-cl")!.payload,
+        { v: 3 },
+        "org tenant payloads must round-trip",
+      );
+    } finally {
+      db.close();
+    }
+  });
+
+  it("listDocumentsAuthoredBy keeps a row whose payload fails to parse (payload null, not dropped), ordered by owner_id, kind, id", async () => {
+    const db = openPlatformDb(":memory:");
+    const platformDb = createSqlitePlatformDb(db);
+    try {
+      await platformDb.run(
+        `INSERT INTO owner_documents
+           (owner_id, user_id, kind, id, project_id, rev, payload, updated_at, updated_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          "org-1",
+          "user-a",
+          "workspace",
+          "bad-ws",
+          null,
+          1,
+          "not-json{",
+          1,
+          "user-a",
+        ],
+      );
+      await platformDb.run(
+        `INSERT INTO owner_documents
+           (owner_id, user_id, kind, id, project_id, rev, payload, updated_at, updated_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          "org-1",
+          "user-a",
+          "governance",
+          "bad-gov",
+          null,
+          1,
+          "also-not-json",
+          2,
+          "user-a",
+        ],
+      );
+
+      const rows = await listDocumentsAuthoredBy(platformDb, "user-a", 100);
+      assert.equal(
+        rows.length,
+        2,
+        "no row may be dropped for an unparseable payload",
+      );
+      // ORDER BY owner_id, kind, id -> governance sorts before workspace.
+      assert.equal(rows[0].kind, "governance");
+      assert.equal(rows[0].id, "bad-gov");
+      assert.equal(rows[0].payload, null);
+      assert.equal(rows[1].kind, "workspace");
+      assert.equal(rows[1].id, "bad-ws");
+      assert.equal(rows[1].payload, null);
     } finally {
       db.close();
     }
