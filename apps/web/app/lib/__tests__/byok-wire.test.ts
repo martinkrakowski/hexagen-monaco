@@ -24,11 +24,11 @@ describe("byok-wire durability (AUD-007)", () => {
     dir = mkdtempSync(join(tmpdir(), "byok-wire-"));
     prev = process.env.BYOK_DB_PATH;
     process.env.BYOK_DB_PATH = join(dir, "byok.db");
-    clearByokCache();
+    void clearByokCache();
   });
 
-  afterAll(() => {
-    clearByokCache();
+  afterAll(async () => {
+    await clearByokCache();
     if (prev === undefined) delete process.env.BYOK_DB_PATH;
     else process.env.BYOK_DB_PATH = prev;
     if (dir) rmSync(dir, { recursive: true, force: true });
@@ -45,7 +45,7 @@ describe("byok-wire durability (AUD-007)", () => {
 
     // Simulate a restart: drop every cached singleton (and, with the durable
     // store, close the SQLite handle) so the next lookup reopens from disk.
-    clearByokCache();
+    await clearByokCache();
 
     const after = getMetadataAdapter();
     const found = await after.findByKeyId(KEY.keyId);
