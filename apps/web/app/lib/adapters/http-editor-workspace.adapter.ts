@@ -383,9 +383,7 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
   private readonly pendingPreconditions = new Map<
     string,
     { ifMatch: number } | { createOnly: true }
-  >();
-  /** ids whose last load GET was a 404 (used for discard-marker first writes). */
-  private readonly lastGet404 = new Set<string>();
+    >();
 
   constructor(
     private readonly cache: EditorWorkspaceCachePort,
@@ -453,17 +451,16 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
 
     const readResult = await this.remote.read(userId, sessionId);
 
-    // Track last GET 404 for discard-marker saves (Item 4).
-    if (!readResult.ok && readResult.reason === "not_found") {
-      this.lastGet404.add(sessionId);
-    } else {
-      this.lastGet404.delete(sessionId);
-    }
-
     // Item 4: check discard marker before the normal load logic.
     const stamp = await this.cache.getLiftStamp(sessionId);
     if (stamp !== null && stamp.ownerId === userId && stamp.discarded) {
-      return this.handleDiscardMarker(sessionId, userId, stamp, readResult);
+      return this.handleDiscardMarker(
+        sessionId,
+        userId,
+        stamp,
+        readResult,
+        cacheResult,
+      );
     }
 
     if (!readResult.ok) {
@@ -587,27 +584,44 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
     userId: string,
     marker: LiftStamp,
     readResult: ReadResult,
+    cacheResult: Result<PersistedEditorWorkspace | null, PersistenceError>,
   ): Promise<Result<PersistedEditorWorkspace | null, PersistenceError>> {
     if (!readResult.ok) {
-      // GET failed → keep marker, return null.
-      return { success: true, value: null };
+      if (readResult.reason === "not_found") {
+        // GET 404 → the discarded copy is already gone: drop the marker.
+        await this.cache.setLiftStamp(sessionId, null);
+        if (cacheResult.success && cacheResult.value !== null) {
+          return this.maybeLift(sessionId, userId, cacheResult);
+        }
+        return { success: true, value: null };
+      }
+      // GET failed (offline/error) → keep marker; honor any cache entry.
+      return cacheResult.success && cacheResult.value !== null
+        ? cacheResult
+        : { success: true, value: null };
     }
     if (readResult.rev === marker.rev) {
-      // Server copy still at the discarded rev → try DELETE again.
+      // Server copy still at the discarded rev → retry DELETE.
       const delResult = await this.remote.delete(userId, sessionId, marker.rev);
       if (delResult.ok) {
-        await this.cache.setLiftStamp(sessionId, null); // drop marker
+        // 204 → dropped; the server copy is gone now.
+        await this.cache.setLiftStamp(sessionId, null);
+        if (cacheResult.success && cacheResult.value !== null) {
+          return this.maybeLift(sessionId, userId, cacheResult);
+        }
+        return { success: true, value: null };
       }
-      // 204 or 404 → dropped; failure → keep marker.
-      return { success: true, value: null };
+      // DELETE failed → keep marker; honor any cache entry.
+      return cacheResult.success && cacheResult.value !== null
+        ? cacheResult
+        : { success: true, value: null };
     }
     // GET 200 with different rev → moved on another device.
     this.logger.warn(
       `workspace ${sessionId}: changed on another device after it was discarded here`,
     );
     await this.cache.setLiftStamp(sessionId, null); // drop marker
-    this.lastGet404.delete(sessionId);
-    // Fall through to normal load (it's a different copy, not the discarded one).
+    // Hand over to the existing normal load logic with the marker gone.
     return this.loadFromRemote(sessionId, userId);
   }
 
@@ -843,16 +857,11 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
     const stamp = await this.cache.getLiftStamp(sessionId);
     if (stamp !== null && stamp.ownerId !== userId) return cacheResult;
     if (this.pausedIds.has(sessionId)) return cacheResult;
-    // Item 4: drop a discard marker.
-    let localStamp = stamp;
+    // Item 4: a discard marker is kept as-is; never schedule or send on it.
     if (stamp !== null && stamp.ownerId === userId && stamp.discarded) {
-      await this.cache.setLiftStamp(sessionId, null);
-      localStamp = await this.cache.getLiftStamp(sessionId);
-      if (localStamp === null && this.lastGet404.has(sessionId)) {
-        this.firstWriteAfter404.add(sessionId);
-      }
+      return cacheResult;
     }
-    const effectiveStamp = localStamp;
+    const effectiveStamp = stamp;
     if (effectiveStamp === null && !this.firstWriteAfter404.has(sessionId)) {
       return cacheResult;
     }

@@ -2358,6 +2358,172 @@ describe("CachedEditorWorkspaceAdapter Item 4: discard marker", () => {
   });
 });
 
+describe("CachedEditorWorkspaceAdapter Item 1: save after a failed discard", () => {
+  it("T1 a save after a failed discard keeps the marker and sends nothing", async () => {
+    const { adapter, cache, server, fetchImpl } = makeAdapters();
+    const ws = makeWorkspace(1000);
+    await cache.saveWorkspace(UUID, ws);
+    await cache.setLiftStamp(UUID, {
+      ownerId: "user-1",
+      rev: 5,
+      syncedUpdatedAt: 1000,
+      confirmed: true,
+    });
+    server.set(UUID, { payload: ws, rev: 5, updatedAt: 1000, projectId: UUID });
+
+    // Discard whose DELETE fails → marker written on rev 5.
+    fetchImpl.mockImplementation(
+      async (url: string | URL | Request, init?: RequestInit) => {
+        const method = (init?.method ?? "GET").toUpperCase();
+        if (method === "DELETE")
+          return new Response("network error", { status: 500 });
+        return new Response("nope", { status: 500 });
+      },
+    );
+    await adapter.clearWorkspace(UUID);
+    const mark = await cache.getLiftStamp(UUID);
+    assert.ok(mark && mark.discarded, "discard marker written");
+    const callsAfterClear = fetchImpl.mock.calls.length;
+
+    // Save new content; no load between the discard and the save.
+    await adapter.saveWorkspace(UUID, makeWorkspace(2000));
+
+    // Advance the save timer — nothing should be sent.
+    await vi.advanceTimersByTimeAsync(REMOTE_DEBOUNCE_MS);
+
+    assert.equal(
+      fetchImpl.mock.calls.length,
+      callsAfterClear,
+      "save after a failed discard sends no request",
+    );
+    const markAfter = await cache.getLiftStamp(UUID);
+    assert.ok(markAfter && markAfter.discarded, "marker is still there");
+    const cached = await cache.loadWorkspace(UUID);
+    assert.ok(cached.success && cached.value, "cache has the new content");
+    assert.equal(cached.value!.updatedAt, 2000);
+  });
+
+  it("T2 load resolves a kept marker by deleting the server copy and lifting the new cache entry create-only", async () => {
+    const { adapter, cache, server, fetchImpl } = makeAdapters();
+    const ws = makeWorkspace(1000);
+    await cache.saveWorkspace(UUID, ws);
+    await cache.setLiftStamp(UUID, {
+      ownerId: "user-1",
+      rev: 5,
+      syncedUpdatedAt: 1000,
+      confirmed: true,
+    });
+    server.set(UUID, { payload: ws, rev: 5, updatedAt: 1000, projectId: UUID });
+    const serverFetch = fetchImpl.getMockImplementation()!;
+
+    // Discard whose DELETE fails → marker on rev 5.
+    fetchImpl.mockImplementation(
+      async (url: string | URL | Request, init?: RequestInit) => {
+        const method = (init?.method ?? "GET").toUpperCase();
+        if (method === "DELETE")
+          return new Response("network error", { status: 500 });
+        return new Response("nope", { status: 500 });
+      },
+    );
+    await adapter.clearWorkspace(UUID);
+    const mark = await cache.getLiftStamp(UUID);
+    assert.ok(mark && mark.discarded, "discard marker written");
+
+    // Save new content; no load between the discard and the save.
+    await adapter.saveWorkspace(UUID, makeWorkspace(2000));
+    const callsBeforeLoad = fetchImpl.mock.calls.length;
+
+    // Load: server still at the marker's rev → retry DELETE → success.
+    fetchImpl.mockImplementation(serverFetch);
+    const result = await adapter.loadWorkspace(UUID);
+
+    const methods = allMethodsOf(fetchImpl).slice(callsBeforeLoad);
+    assert.deepEqual(methods, ["GET", "DELETE", "PUT", "GET"]);
+    const putCalls = putCallsOf(fetchImpl);
+    assert.equal(putCalls.length, 1, "one create-only PUT of the new content");
+    const putHeaders = new Headers(
+      (putCalls[0]![1] as RequestInit).headers,
+    );
+    assert.equal(putHeaders.get("If-None-Match"), "*", "PUT is create-only");
+    assert.ok(result.success && result.value);
+    assert.equal(result.value!.updatedAt, 2000, "load returns the NEW content");
+    const stamp = await cache.getLiftStamp(UUID);
+    assert.ok(stamp);
+    assert.equal(stamp!.discarded, false, "marker dropped");
+    assert.equal(stamp!.confirmed, true, "stamp is a normal confirmed one");
+  });
+
+  it("T3 a load whose marker-DELETE fails again keeps the marker and returns the new cache entry without a PUT", async () => {
+    const { adapter, cache, server, fetchImpl } = makeAdapters();
+    const ws = makeWorkspace(1000);
+    await cache.saveWorkspace(UUID, ws);
+    await cache.setLiftStamp(UUID, {
+      ownerId: "user-1",
+      rev: 5,
+      syncedUpdatedAt: 1000,
+      confirmed: true,
+    });
+    server.set(UUID, { payload: ws, rev: 5, updatedAt: 1000, projectId: UUID });
+
+    // Discard whose DELETE fails → marker on rev 5.
+    fetchImpl.mockImplementation(
+      async (url: string | URL | Request, init?: RequestInit) => {
+        const method = (init?.method ?? "GET").toUpperCase();
+        if (method === "DELETE")
+          return new Response("network error", { status: 500 });
+        return new Response("nope", { status: 500 });
+      },
+    );
+    await adapter.clearWorkspace(UUID);
+    const mark = await cache.getLiftStamp(UUID);
+    assert.ok(mark && mark.discarded, "discard marker written");
+
+    // Save new content; no load between the discard and the save.
+    await adapter.saveWorkspace(UUID, makeWorkspace(2000));
+    const callsBeforeLoad = fetchImpl.mock.calls.length;
+
+    // Load: server still at the marker's rev, but the DELETE fails again.
+    fetchImpl.mockImplementation(
+      async (url: string | URL | Request, init?: RequestInit) => {
+        const method = (init?.method ?? "GET").toUpperCase();
+        const match = /\/api\/tenants\/(.+)\/documents\/workspace\/(.+)/.exec(
+          String(url),
+        );
+        const id = match![2]!;
+        if (method === "GET") {
+          const doc = server.get(id)!;
+          return new Response(
+            JSON.stringify({
+              kind: "workspace",
+              id,
+              projectId: doc.projectId,
+              payload: doc.payload,
+              updatedAt: doc.updatedAt,
+            }),
+            { status: 200, headers: { ETag: `"rev:${doc.rev}"` } },
+          );
+        }
+        if (method === "DELETE")
+          return new Response("network error", { status: 500 });
+        return new Response("nope", { status: 500 });
+      },
+    );
+    const result = await adapter.loadWorkspace(UUID);
+
+    const methods = allMethodsOf(fetchImpl).slice(callsBeforeLoad);
+    assert.deepEqual(methods, ["GET", "DELETE"]);
+    assert.equal(putCallsOf(fetchImpl).length, 0, "no PUT sent");
+    assert.ok(result.success && result.value);
+    assert.equal(
+      result.value!.updatedAt,
+      2000,
+      "load returns the NEW content from the cache",
+    );
+    const markAfter = await cache.getLiftStamp(UUID);
+    assert.ok(markAfter && markAfter.discarded, "marker is still kept");
+  });
+});
+
 describe("CachedEditorWorkspaceAdapter Item 15: identity reset", () => {
   it("after a 401 the user id is asked for again", async () => {
     const { defaultUserIdSource, resetCachedUserId } =
