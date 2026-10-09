@@ -27,6 +27,11 @@ name: "PR-Agent Correctness Review"
 # posts each finding as a line comment only from a later version on
 # (pr_reviewer.inline_key_issues), so this workflow could not wait for it.
 
+# `pull_request`, never `pull_request_target`: a fork's run has a read-only
+# token and no secrets, so it could neither call the model nor post. The job is
+# skipped for forks outright (see `if:`), which gives a fork's pull request no
+# bot review instead of a failed run.
+
 on:
   pull_request:
     # No `synchronize`: one review per pull-request lifecycle. Re-reviewing every
@@ -49,7 +54,8 @@ jobs:
   pr_agent_correctness:
     name: "PR-Agent correctness review"
     if: >-
-      github.event.sender.type != 'Bot'
+      github.event.pull_request.head.repo.full_name == github.repository
+      && github.event.sender.type != 'Bot'
       && github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -246,7 +252,10 @@ jobs:
       # fails unless /review left its own comment in this run: one that BEGINS
       # "## PR Reviewer Guide", created or updated since the run began. The UI
       # reviewer posts as the same bot but never under that heading, so its
-      # comments cannot stand in for this one.
+      # comments cannot stand in for this one. The failure notice is matched the
+      # same way: /review's own begins "Failed to review PR". Matched anywhere,
+      # a finding that quotes the words would fail the run that posted it, and
+      # the UI reviewer's notice ("Failed to generate…") would be counted here.
       - name: "Fail if the review did not actually run"
         if: always()
         env:
@@ -259,7 +268,7 @@ jobs:
           gh api --paginate --slurp --method GET "repos/${GITHUB_REPOSITORY}/pulls/${PR}/comments" > "$RUNNER_TEMP/line.json"
           MINE='[.[][] | select(.user.login == "github-actions[bot]") | select(.updated_at >= $since)]'
           count() { jq --arg since "$STARTED_AT" "$MINE | map(select(.body | test(\"$1\"))) | length" "$2"; }
-          failed=$(count "Failed to generate" "$RUNNER_TEMP/issue.json")
+          failed=$(count "^Failed to review PR" "$RUNNER_TEMP/issue.json")
           review=$(count "^## PR Reviewer Guide" "$RUNNER_TEMP/issue.json")
           lines=$(count "." "$RUNNER_TEMP/line.json")
           for n in "$failed" "$review" "$lines"; do
