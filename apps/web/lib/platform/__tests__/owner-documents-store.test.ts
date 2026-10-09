@@ -2,7 +2,10 @@ import { describe, it } from "vitest";
 import assert from "node:assert/strict";
 import { openPlatformDb } from "../platform-db";
 import { createSqlitePlatformDb } from "../sqlite-db";
-import { createOwnerDocumentsStore } from "../owner-documents-store";
+import {
+  createOwnerDocumentsStore,
+  listDocumentsAuthoredBy,
+} from "../owner-documents-store";
 import type { DocumentKind } from "../owner-documents-store";
 import { createSavedProjectsStore } from "../saved-projects-store";
 import { createOrgsRepository } from "../orgs-store";
@@ -828,6 +831,229 @@ describe("owner-documents store", () => {
         0,
         "no document for a deleted org may survive",
       );
+    } finally {
+      db.close();
+    }
+  });
+
+  it("listDocumentsAuthoredBy returns every document the user authored across tenants, with payloads parsed and others excluded", async () => {
+    const db = openPlatformDb(":memory:");
+    const platformDb = createSqlitePlatformDb(db);
+    const orgs = createOrgsRepository(platformDb);
+    await orgs.createOrgWithOwner(
+      { id: "org-1", slug: "test-org", name: "Test Org", createdBy: "founder" },
+      { actorId: "founder" },
+    );
+    await orgs.addMember("org-1", "user-a", "member");
+    try {
+      // Personal tenant: user-a authors two kinds.
+      const personal = createOwnerDocumentsStore(
+        platformDb,
+        "user-a",
+        "user-a",
+      );
+      await personal.put({
+        kind: "workspace",
+        id: "p-ws",
+        payload: { v: 1 },
+      });
+      await personal.put({
+        kind: "governance",
+        id: "p-gov",
+        payload: { v: 2 },
+      });
+
+      // Org tenant: user-a (a member) authors one kind.
+      const orgDocs = createOwnerDocumentsStore(platformDb, "org-1", "user-a");
+      await orgDocs.put({
+        kind: "canvas-layout",
+        id: "o-cl",
+        payload: { v: 3 },
+      });
+
+      // Another user's personal document must not appear.
+      const other = createOwnerDocumentsStore(platformDb, "user-b", "user-b");
+      await other.put({
+        kind: "workspace",
+        id: "x-ws",
+        payload: { v: 99 },
+      });
+
+      const res = await listDocumentsAuthoredBy(
+        platformDb,
+        "user-a",
+        100,
+        1_000_000_000,
+      );
+      assert.equal(res.items.length, 3);
+      assert.equal(res.truncatedBy, null);
+      const byKey = new Set(
+        res.items.map((r) => `${r.ownerId}:${r.kind}:${r.id}`),
+      );
+      assert.ok(byKey.has("user-a:workspace:p-ws"));
+      assert.ok(byKey.has("user-a:governance:p-gov"));
+      assert.ok(byKey.has("org-1:canvas-layout:o-cl"));
+      assert.equal(
+        res.items.find((r) => r.id === "x-ws"),
+        undefined,
+        "another user's documents must not be returned",
+      );
+      assert.deepEqual(
+        res.items.find((r) => r.id === "p-ws")!.payload,
+        { v: 1 },
+        "payloads must round-trip",
+      );
+      assert.deepEqual(
+        res.items.find((r) => r.id === "o-cl")!.payload,
+        { v: 3 },
+        "org tenant payloads must round-trip",
+      );
+    } finally {
+      db.close();
+    }
+  });
+
+  it("listDocumentsAuthoredBy flags a row whose payload fails to parse, and leaves a genuine JSON null unflagged, ordered by owner_id, kind, id", async () => {
+    const db = openPlatformDb(":memory:");
+    const platformDb = createSqlitePlatformDb(db);
+    try {
+      const insert = (id: string, kind: string, payload: string, ts: number) =>
+        platformDb.run(
+          `INSERT INTO owner_documents
+             (owner_id, user_id, kind, id, project_id, rev, payload, updated_at, updated_by)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          ["org-1", "user-a", kind, id, null, 1, payload, ts, "user-a"],
+        );
+      await insert("bad-ws", "workspace", "not-json{", 1);
+      await insert("bad-gov", "governance", "also-not-json", 2);
+      // A real, round-trippable JSON `null`: parses to null, no failure.
+      await insert("null-doc", "workspace", "null", 3);
+
+      const res = await listDocumentsAuthoredBy(
+        platformDb,
+        "user-a",
+        100,
+        1_000_000_000,
+      );
+      assert.equal(
+        res.items.length,
+        3,
+        "no row may be dropped for an unparseable payload",
+      );
+      assert.equal(res.truncatedBy, null);
+      // ORDER BY owner_id, kind, id -> governance, then workspace by id.
+      assert.equal(res.items[0].kind, "governance");
+      assert.equal(res.items[0].id, "bad-gov");
+      assert.equal(res.items[0].payload, null);
+      assert.equal(res.items[0].payloadUnparseable, true);
+      assert.equal(res.items[1].kind, "workspace");
+      assert.equal(res.items[1].id, "bad-ws");
+      assert.equal(res.items[1].payload, null);
+      assert.equal(res.items[1].payloadUnparseable, true);
+      assert.equal(res.items[2].kind, "workspace");
+      assert.equal(res.items[2].id, "null-doc");
+      assert.equal(res.items[2].payload, null);
+      assert.equal(
+        res.items[2].payloadUnparseable,
+        undefined,
+        "a genuine JSON null must not be flagged",
+      );
+    } finally {
+      db.close();
+    }
+  });
+
+  it("listDocumentsAuthoredBy cuts by the maxChars budget before the row that would exceed it", async () => {
+    const db = openPlatformDb(":memory:");
+    const platformDb = createSqlitePlatformDb(db);
+    const docs = createOwnerDocumentsStore(platformDb, "user-a", "user-a");
+    try {
+      const p1 = { v: "aaa" };
+      const p2 = { v: "bbbbb" };
+      const p3 = { v: "ccccccc" };
+      const len = (p: unknown) => JSON.stringify(p).length;
+      await docs.put({ kind: "workspace", id: "d-1", payload: p1 });
+      await docs.put({ kind: "workspace", id: "d-2", payload: p2 });
+      await docs.put({ kind: "workspace", id: "d-3", payload: p3 });
+
+      // A budget that fits exactly the first two payloads: two items, in order,
+      // size-truncated, payloads round-trip.
+      const fitsTwo = await listDocumentsAuthoredBy(
+        platformDb,
+        "user-a",
+        100,
+        len(p1) + len(p2),
+      );
+      assert.equal(fitsTwo.items.length, 2);
+      assert.equal(fitsTwo.truncatedBy, "size");
+      assert.deepEqual(
+        fitsTwo.items.map((r) => r.id),
+        ["d-1", "d-2"],
+        "kept rows must stay in ORDER BY order",
+      );
+      assert.deepEqual(fitsTwo.items[0].payload, p1);
+      assert.deepEqual(fitsTwo.items[1].payload, p2);
+
+      // A budget smaller than the first payload: nothing kept, still truncated.
+      const belowFirst = await listDocumentsAuthoredBy(
+        platformDb,
+        "user-a",
+        100,
+        len(p1) - 1,
+      );
+      assert.equal(belowFirst.items.length, 0);
+      assert.equal(belowFirst.truncatedBy, "size");
+    } finally {
+      db.close();
+    }
+  });
+
+  it("listDocumentsAuthoredBy reports the size cut when both ceilings are passed, and the row cut when only that one is", async () => {
+    const db = openPlatformDb(":memory:");
+    const platformDb = createSqlitePlatformDb(db);
+    const docs = createOwnerDocumentsStore(platformDb, "user-a", "user-a");
+    try {
+      const p = { v: "aaa" };
+      const len = JSON.stringify(p).length;
+      for (const id of ["d-1", "d-2", "d-3", "d-4"]) {
+        await docs.put({ kind: "workspace", id, payload: p });
+      }
+      // Four stored, limit three (so the row ceiling is passed), and a budget
+      // that fits one: the size cut decided, and one item is kept.
+      const both = await listDocumentsAuthoredBy(platformDb, "user-a", 3, len);
+      assert.equal(both.items.length, 1);
+      assert.equal(both.truncatedBy, "size");
+      // The same rows with room for all three: only the row ceiling was passed.
+      const rowsOnly = await listDocumentsAuthoredBy(
+        platformDb,
+        "user-a",
+        3,
+        len * 10,
+      );
+      assert.equal(rowsOnly.items.length, 3);
+      assert.equal(rowsOnly.truncatedBy, "rows");
+    } finally {
+      db.close();
+    }
+  });
+
+  it("listDocumentsAuthoredBy rejects a non-integer or negative limit or maxChars with RangeError", async () => {
+    const db = openPlatformDb(":memory:");
+    const platformDb = createSqlitePlatformDb(db);
+    try {
+      const MAX = 100;
+      for (const bad of [-1, 1.5]) {
+        await assert.rejects(
+          () => listDocumentsAuthoredBy(platformDb, "user-a", bad, MAX),
+          RangeError,
+          `limit ${bad} must throw RangeError`,
+        );
+        await assert.rejects(
+          () => listDocumentsAuthoredBy(platformDb, "user-a", MAX, bad),
+          RangeError,
+          `maxChars ${bad} must throw RangeError`,
+        );
+      }
     } finally {
       db.close();
     }
