@@ -1153,3 +1153,65 @@ describe.each(BACKENDS)(
     });
   },
 );
+
+describe.each(BACKENDS)(
+  "OrgsRepository.invite — expiry compared as instants (%s",
+  (kind) => {
+    // Postgres-only (D-5): expires_at is `timestamptz`, so
+    // `expires_at > @now` compares INSTANTS, not text. A past instant written
+    // with a non-UTC offset whose TEXT sorts after "now" must still be
+    // excluded. On SQLite the column is TEXT and the writer guarantees a UTC
+    // ISO format, so the instant-vs-text hazard is out of scope here and is
+    // covered by the ported "expires ORG_INVITE_TTL_DAYS out" test.
+    it.runIf(kind === "postgres")(
+      "OR1 an invite whose expiry is in the past is not pending, compared as instants",
+      async () => {
+        const backend = await openBackend(kind);
+        try {
+          const orgs = backend.store.orgs;
+          const org = await orgs.createOrgWithOwner(
+            { slug: "acme", name: "Acme", createdBy: "owner-1" },
+            { actorId: "owner-1" },
+          );
+          await orgs.invite(org.id, "ada", "member", { actorId: "owner-1" });
+
+          // A past instant written with a +14:00 offset whose TEXT sorts AFTER
+          // "now" as a string (e.g. 2026-10-10T02:15:00.000+14:00 while it is
+          // 2026-10-09T12:15Z). A text comparison would wrongly call it pending.
+          const past = new Date(Date.now() - 3_600_000);
+          const text = new Date(past.getTime() + 14 * 3_600_000)
+            .toISOString()
+            .replace("Z", "+14:00");
+          await backend.db.run(
+            "UPDATE org_invites SET expires_at = ? WHERE org_id = ? AND github_login = ?",
+            [text, org.id, "ada"],
+          );
+
+          assert.deepEqual(
+            (await orgs.listPendingInvites(org.id)).map((i) => i.githubLogin),
+            [],
+            "a past expiry is not pending, compared as an instant",
+          );
+          assert.deepEqual(
+            await orgs.acceptInvitesForLogin("ada-user", "ada"),
+            [],
+            "acceptInvitesForLogin joins nobody on a past expiry",
+          );
+          // The invite row itself is retained: evidence someone was invited.
+          assert.ok(
+            defined(
+              await backend.db.get<{ ok: number }>(
+                "SELECT 1 AS ok FROM org_invites WHERE org_id = ? AND github_login = ?",
+                [org.id, "ada"],
+              ),
+              "invite row",
+            ).ok,
+            "the expired invite row is retained",
+          );
+        } finally {
+          await backend.close();
+        }
+      },
+    );
+  },
+);
