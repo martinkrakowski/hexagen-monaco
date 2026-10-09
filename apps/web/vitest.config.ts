@@ -35,6 +35,7 @@ export default mergeConfig(
       // harmless — Vitest dedupes matched files) so the .tsx inclusion can't be
       // lost to a merge-semantics surprise.
       include: ["**/*.test.ts", "**/*.test.tsx"],
+      globalSetup: ["./test-support/pg-global-setup.ts"],
       setupFiles: ["./vitest.setup.ts"],
       // Pin the reporter instead of letting Vitest choose one.
       //

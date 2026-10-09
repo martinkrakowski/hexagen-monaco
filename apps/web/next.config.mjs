@@ -270,6 +270,12 @@ const nextConfig = {
       ...(config.resolve.conditionNames || []),
     ];
 
+    config.module.rules.push({
+      test: /\.sql$/,
+      resourceQuery: /raw/,
+      type: "asset/source",
+    });
+
     return config;
   },
 
