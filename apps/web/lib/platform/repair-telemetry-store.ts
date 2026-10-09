@@ -496,13 +496,13 @@ interface RepairAttemptRow {
 const RUN_COLUMNS = `
   id, run_id, surface, outcome, rounds, violations_initial,
   violations_remaining, attempts_total, attempts_applied, duration_ms,
-  created_at
+  hx_ms(created_at) AS created_at
 `;
 
 const ATTEMPT_COLUMNS = `
   id, run_id, round, seq, violation_class, violation_status, path, eligible,
   applied, changed_yaml, duration_ms, ops_proposed, ops_applied, ops_skipped,
-  gate_reason, created_at
+  gate_reason, hx_ms(created_at) AS created_at
 `;
 
 /**
@@ -622,8 +622,8 @@ export function createRepairTelemetryStore(
     ) VALUES (
       @id, @owner_id, @schema_version, @run_id, @surface, @outcome, @rounds,
       @violations_initial, @violations_remaining, @attempts_total,
-      @attempts_applied, @duration_ms, @created_at
-    )
+       @attempts_applied, @duration_ms, hx_ts(@created_at)
+     )
     ON CONFLICT(owner_id, run_id) DO UPDATE SET
       surface = excluded.surface,
       outcome = excluded.outcome,
@@ -647,8 +647,8 @@ export function createRepairTelemetryStore(
       @id, @owner_id, @schema_version, @run_id, @round, @seq, @violation_class,
       @violation_status, @path, @eligible, @applied, @changed_yaml,
       @duration_ms, @ops_proposed, @ops_applied, @ops_skipped, @gate_reason,
-      @created_at
-    )
+       hx_ts(@created_at)
+     )
     ON CONFLICT(owner_id, run_id, round, seq) DO UPDATE SET
       violation_class = excluded.violation_class,
       violation_status = excluded.violation_status,
@@ -677,18 +677,18 @@ export function createRepairTelemetryStore(
   const selectEvictableRuns = `
     SELECT run_id FROM repair_runs
      WHERE owner_id = @owner_id
-     ORDER BY created_at DESC, rowid DESC
-     LIMIT -1 OFFSET @keep
+      ORDER BY created_at DESC, rowid DESC
+      LIMIT 9223372036854775807 OFFSET @keep
   `;
   const deleteRunByRunId =
     "DELETE FROM repair_runs WHERE owner_id = ? AND run_id = ?";
 
   const selectRuns = `
     SELECT ${RUN_COLUMNS} FROM repair_runs
-     WHERE owner_id = @owner_id
-       AND schema_version = @schema_version
-       AND (@surface IS NULL OR surface = @surface)
-     ORDER BY created_at DESC, rowid DESC
+      WHERE owner_id = @owner_id
+        AND schema_version = @schema_version
+        AND (CAST(@surface AS TEXT) IS NULL OR surface = @surface)
+      ORDER BY created_at DESC, rowid DESC
      LIMIT @limit
   `;
 
@@ -726,15 +726,15 @@ export function createRepairTelemetryStore(
         COUNT(*) OVER (PARTITION BY a.violation_class) AS n
       FROM repair_attempts a
       JOIN repair_runs r ON r.owner_id = a.owner_id AND r.run_id = a.run_id
-       WHERE a.owner_id = @owner_id
-         AND a.schema_version = @schema_version
-         AND (@surface IS NULL OR r.surface = @surface)
+        WHERE a.owner_id = @owner_id
+          AND a.schema_version = @schema_version
+          AND (CAST(@surface AS TEXT) IS NULL OR r.surface = @surface)
     )
     SELECT
       violation_class,
       COUNT(*) AS attempts,
-      SUM(eligible) AS eligible,
-      SUM(applied) AS applied,
+      SUM(CASE WHEN eligible THEN 1 ELSE 0 END) AS eligible,
+      SUM(CASE WHEN applied THEN 1 ELSE 0 END) AS applied,
       MAX(CASE WHEN rn = (n + 1) / 2 THEN duration_ms END)
         AS median_duration_ms
     FROM scoped
