@@ -30,6 +30,11 @@ function must<T>(
   return r.value;
 }
 
+function defined<T>(v: T | undefined | null, what: string): T {
+  if (v === undefined || v === null) throw new Error("expected " + what);
+  return v;
+}
+
 async function docCount(
   db: PlatformDb,
   ownerId: string,
@@ -41,13 +46,13 @@ async function docCount(
       "SELECT COUNT(*) AS n FROM owner_documents WHERE owner_id = ? AND user_id = ?",
       [ownerId, userId],
     );
-    return row.n;
+    return defined(row, "count row").n;
   }
   const row = await db.get<{ n: number }>(
     "SELECT COUNT(*) AS n FROM owner_documents WHERE owner_id = ? AND user_id = ? AND project_id = ?",
     [ownerId, userId, projectId],
   );
-  return row.n;
+  return defined(row, "count row").n;
 }
 
 async function auditCount(
@@ -58,7 +63,7 @@ async function auditCount(
     "SELECT COUNT(*) AS n FROM audit_log WHERE action = ?",
     [action],
   );
-  return row.n;
+  return defined(row, "audit count row").n;
 }
 
 describe.each(BACKENDS)("owner-documents store (%s", (kind) => {
@@ -132,7 +137,7 @@ describe.each(BACKENDS)("owner-documents store (%s", (kind) => {
         "SELECT rev FROM owner_documents WHERE owner_id = ? AND user_id = ? AND kind = ? AND id = ?",
         ["user-1", "user-1", "workspace", "doc-1"],
       );
-      assert.equal(stored.rev, 3);
+      assert.equal(defined(stored, "stored").rev, 3);
     } finally {
       await backend.close();
     }
@@ -172,7 +177,7 @@ describe.each(BACKENDS)("owner-documents store (%s", (kind) => {
         "SELECT rev FROM owner_documents WHERE owner_id = ? AND user_id = ? AND kind = ? AND id = ?",
         ["user-1", "user-1", "workspace", "doc-1"],
       );
-      assert.equal(stored.rev, 3);
+      assert.equal(defined(stored, "stored").rev, 3);
     } finally {
       await backend.close();
     }
@@ -205,7 +210,11 @@ describe.each(BACKENDS)("owner-documents store (%s", (kind) => {
         "SELECT COUNT(*) AS n FROM owner_documents WHERE owner_id = ? AND user_id = ? AND kind = ? AND id = ?",
         ["user-1", "user-1", "workspace", "doc-1"],
       );
-      assert.equal(count.n, 1, "the row must exist exactly once");
+      assert.equal(
+        defined(count, "count").n,
+        1,
+        "the row must exist exactly once",
+      );
     } finally {
       await backend.close();
     }
@@ -257,8 +266,14 @@ describe.each(BACKENDS)("owner-documents store (%s", (kind) => {
             WHERE owner_id = ? AND user_id = ? AND kind = ? AND id = ?`,
         ["user-1", "user-1", "workspace", "doc-1"],
       );
-      assert.equal(row.rev, 2, "a refused write must not move rev");
-      assert.deepEqual(JSON.parse(row.payload), { v: "updated" });
+      assert.equal(
+        defined(row, "row").rev,
+        2,
+        "a refused write must not move rev",
+      );
+      assert.deepEqual(JSON.parse(defined(row, "row").payload), {
+        v: "updated",
+      });
     } finally {
       await backend.close();
     }
@@ -669,7 +684,7 @@ describe.each(BACKENDS)("owner-documents store (%s", (kind) => {
         "SELECT project_id FROM owner_documents WHERE owner_id = ? AND user_id = ? AND kind = ? AND id = ?",
         ["user-1", "user-1", "workspace", "doc-1"],
       );
-      assert.equal(row.project_id, null);
+      assert.equal(defined(row, "row").project_id, null);
       const reread = await store.get("workspace", "doc-1");
       assert.equal(reread.success && reread.value?.projectId, null);
     } finally {
@@ -1194,8 +1209,12 @@ describe.each(BACKENDS)("owner-documents store (%s", (kind) => {
         "SELECT payload, rev FROM owner_documents WHERE owner_id = ? AND user_id = ? AND kind = ? AND id = ?",
         ["user-1", "user-1", "workspace", "doc-1"],
       );
-      assert.deepEqual(JSON.parse(row.payload), { v: "B" });
-      assert.equal(row.rev, 2, "the existing row must be untouched");
+      assert.deepEqual(JSON.parse(defined(row, "row").payload), { v: "B" });
+      assert.equal(
+        defined(row, "row").rev,
+        2,
+        "the existing row must be untouched",
+      );
     } finally {
       await backend.close();
     }
@@ -1250,8 +1269,10 @@ describe.each(BACKENDS)("owner-documents store (%s", (kind) => {
         "SELECT payload, rev FROM owner_documents WHERE owner_id = ? AND user_id = ? AND kind = ? AND id = ?",
         ["org-1", "user-a", "workspace", "doc-1"],
       );
-      assert.deepEqual(JSON.parse(aRow.payload), { v: "owned by user-a" });
-      assert.equal(aRow.rev, 1);
+      assert.deepEqual(JSON.parse(defined(aRow, "aRow").payload), {
+        v: "owned by user-a",
+      });
+      assert.equal(defined(aRow, "aRow").rev, 1);
     } finally {
       await backend.close();
     }
@@ -1300,8 +1321,8 @@ describe.each(BACKENDS)("owner-documents store (%s", (kind) => {
         "SELECT rev, payload FROM owner_documents WHERE owner_id = ? AND user_id = ? AND kind = ? AND id = ?",
         ["org-1", "user-b", "workspace", "doc-1"],
       );
-      assert.equal(row.rev, 1);
-      assert.deepEqual(JSON.parse(row.payload), {});
+      assert.equal(defined(row, "row").rev, 1);
+      assert.deepEqual(JSON.parse(defined(row, "row").payload), {});
       assert.equal(
         await auditCount(db),
         0,
@@ -1349,7 +1370,11 @@ describe.each(BACKENDS)("owner-documents store (%s", (kind) => {
         "SELECT COUNT(*) AS n FROM owner_documents WHERE owner_id = ? AND user_id = ? AND kind = ? AND id = ?",
         ["user-1", "user-1", "workspace", "doc-1"],
       );
-      assert.equal(count.n, 1, "the row must exist exactly once");
+      assert.equal(
+        defined(count, "count").n,
+        1,
+        "the row must exist exactly once",
+      );
 
       assert.equal(
         await auditCount(db),
@@ -1458,7 +1483,11 @@ describe.each(BACKENDS)("owner-documents store (%s", (kind) => {
         "SELECT rev FROM owner_documents WHERE owner_id = ? AND user_id = ? AND kind = ? AND id = ?",
         ["user-1", "user-1", "workspace", "doc-1"],
       );
-      assert.equal(untouched.rev, 2, "a refused delete must not touch the row");
+      assert.equal(
+        defined(untouched, "untouched").rev,
+        2,
+        "a refused delete must not touch the row",
+      );
 
       // Absent row: NotFound.
       const missing = await store.delete("workspace", "does-not-exist", 1);
@@ -1508,7 +1537,7 @@ describe.each(BACKENDS)("owner-documents store (%s", (kind) => {
         "SELECT payload FROM owner_documents WHERE owner_id = ? AND user_id = ? AND kind = ? AND id = ?",
         ["org-1", "user-b", "workspace", "doc-1"],
       );
-      assert.deepEqual(JSON.parse(bRow.payload), { v: "B" });
+      assert.deepEqual(JSON.parse(defined(bRow, "bRow").payload), { v: "B" });
     } finally {
       await backend.close();
     }
@@ -2017,7 +2046,11 @@ describe.each(BACKENDS)("owner documents updated_at type (%s)", (kind) => {
         "SELECT COUNT(*) AS n FROM owner_documents WHERE owner_id = ? AND user_id = ?",
         ["user-a", "user-a"],
       );
-      assert.equal(count.n, 0, "no documents must be written");
+      assert.equal(
+        defined(count, "count").n,
+        0,
+        "no documents must be written",
+      );
     } finally {
       await backend.close();
     }
@@ -2154,7 +2187,10 @@ describe.each(BACKENDS)("owner documents updated_at type (%s)", (kind) => {
       // put returns the caller's own payload object (not a re-serialized copy)
       assert.deepEqual(written.payload, payload);
 
-      const fetched = must(await store.get("workspace", "doc-1"));
+      const fetched = defined(
+        must(await store.get("workspace", "doc-1")),
+        "fetched",
+      );
       assert.deepEqual(fetched.payload, payload);
 
       const authored = await listDocumentsAuthoredBy(

@@ -32,6 +32,11 @@ function must<T>(
   return r.value;
 }
 
+function defined<T>(v: T | undefined | null, what: string): T {
+  if (v === undefined || v === null) throw new Error("expected " + what);
+  return v;
+}
+
 describe.each(BACKENDS)("SavedProjectsPersistencePort (%s", (kind) => {
   it("creates, loads newest-first, updates, and deletes by the port contract", async () => {
     const backend = await openBackend(kind);
@@ -252,13 +257,14 @@ async function countDocs(
       "SELECT COUNT(*) AS n FROM owner_documents WHERE owner_id = ? AND project_id IS NULL",
       [ownerId],
     );
-    return row.n;
+    return defined(row, "count row").n;
   }
   const row = await db.get<{ n: number }>(
     "SELECT COUNT(*) AS n FROM owner_documents WHERE owner_id = ? AND project_id = ?",
     [ownerId, projectId],
   );
-  return row.n;
+  return defined(row, "count row").n;
+  return defined(row, "count row").n;
 }
 
 describe.each(BACKENDS)(
@@ -473,9 +479,12 @@ describe.each(BACKENDS)("saved projects stored timestamps (%s)", (kind) => {
         manifestYaml: "",
       };
       must(await projects.createProjectRecord(proj));
-      const row = await backend.db.get<{ c: number; u: number }>(
-        "SELECT hx_ms(created_at) AS c, hx_ms(updated_at) AS u FROM saved_projects WHERE owner_id = ? AND id = ?",
-        ["owner-a", proj.id],
+      const row = defined(
+        await backend.db.get<{ c: number; u: number }>(
+          "SELECT hx_ms(created_at) AS c, hx_ms(updated_at) AS u FROM saved_projects WHERE owner_id = ? AND id = ?",
+          ["owner-a", proj.id],
+        ),
+        "row",
       );
       assert.equal(typeof row.c, "number");
       assert.equal(typeof row.u, "number");
@@ -484,9 +493,12 @@ describe.each(BACKENDS)("saved projects stored timestamps (%s)", (kind) => {
 
       const replacedAt = 1_700_000_002_000;
       must(await projects.saveProjects([{ ...proj, updatedAt: replacedAt }]));
-      const after = await backend.db.get<{ c: number; u: number }>(
-        "SELECT hx_ms(created_at) AS c, hx_ms(updated_at) AS u FROM saved_projects WHERE owner_id = ? AND id = ?",
-        ["owner-a", proj.id],
+      const after = defined(
+        await backend.db.get<{ c: number; u: number }>(
+          "SELECT hx_ms(created_at) AS c, hx_ms(updated_at) AS u FROM saved_projects WHERE owner_id = ? AND id = ?",
+          ["owner-a", proj.id],
+        ),
+        "after",
       );
       assert.equal(typeof after.c, "number");
       assert.equal(typeof after.u, "number");
@@ -500,9 +512,12 @@ describe.each(BACKENDS)("saved projects stored timestamps (%s)", (kind) => {
           updatedAt: updatedTimestamp,
         })),
       );
-      const afterUpdate = await backend.db.get<{ c: number; u: number }>(
-        "SELECT hx_ms(created_at) AS c, hx_ms(updated_at) AS u FROM saved_projects WHERE owner_id = ? AND id = ?",
-        ["owner-a", proj.id],
+      const afterUpdate = defined(
+        await backend.db.get<{ c: number; u: number }>(
+          "SELECT hx_ms(created_at) AS c, hx_ms(updated_at) AS u FROM saved_projects WHERE owner_id = ? AND id = ?",
+          ["owner-a", proj.id],
+        ),
+        "afterUpdate",
       );
       assert.equal(typeof afterUpdate.c, "number");
       assert.equal(typeof afterUpdate.u, "number");
@@ -544,9 +559,12 @@ describe.each(BACKENDS)("saved projects stored timestamps (%s)", (kind) => {
       };
       must(await projects.createProjectRecord(proj));
 
-      const stored = await backend.db.get<{ u: number }>(
-        "SELECT hx_ms(updated_at) AS u FROM saved_projects WHERE owner_id = ? AND id = ?",
-        ["owner-a", proj.id],
+      const stored = defined(
+        await backend.db.get<{ u: number }>(
+          "SELECT hx_ms(updated_at) AS u FROM saved_projects WHERE owner_id = ? AND id = ?",
+          ["owner-a", proj.id],
+        ),
+        "stored",
       );
       assert.equal(typeof stored.u, "number");
 
@@ -565,7 +583,10 @@ describe.each(BACKENDS)("saved projects stored timestamps (%s)", (kind) => {
       assert.equal(rejected.success, false);
       if (!rejected.success) assert.equal(rejected.error.kind, "Conflict");
 
-      const after = must(await projects.getProjectWithRev(proj.id));
+      const after = defined(
+        must(await projects.getProjectWithRev(proj.id)),
+        "after",
+      );
       assert.equal(after.rev, 2);
       assert.equal(after.project.name, "alpha-v2");
     } finally {
@@ -588,7 +609,10 @@ describe.each(BACKENDS)("saved projects stored timestamps (%s)", (kind) => {
       };
       must(await projects.createProjectRecord(proj));
 
-      let current = must(await projects.getProjectWithRev(proj.id));
+      let current = defined(
+        must(await projects.getProjectWithRev(proj.id)),
+        "current",
+      );
       assert.equal(current.rev, 1);
 
       // Current rev succeeds and bumps
@@ -617,7 +641,10 @@ describe.each(BACKENDS)("saved projects stored timestamps (%s)", (kind) => {
       );
       assert.equal(unconditional.rev, 3);
 
-      current = must(await projects.getProjectWithRev(proj.id));
+      current = defined(
+        must(await projects.getProjectWithRev(proj.id)),
+        "current",
+      );
       assert.equal(current.rev, 3);
       assert.equal(current.project.name, "beta-v4");
     } finally {
@@ -645,8 +672,10 @@ describe.each(BACKENDS)("saved projects stored timestamps (%s)", (kind) => {
       must(await projects.createProjectRecord(b));
       must(await projects.createProjectRecord(c));
 
-      const d = mk("44444444-4444-4444-8444-444444444444", "d");
-      d.updatedAt = 1_700_000_002_000;
+      const d = {
+        ...mk("44444444-4444-4444-8444-444444444444", "d"),
+        updatedAt: 1_700_000_002_000,
+      };
       must(await projects.saveProjects([b, a, d]));
 
       const loaded = must(await projects.loadProjects());
@@ -726,31 +755,37 @@ describe.each(BACKENDS)("saved projects stored timestamps (%s)", (kind) => {
 
       const newId = "22222222-2222-4222-8222-222222222222";
       must(await projectsA.saveProjects([{ ...projA, id: newId }]));
-      let bRow = await backend.db.get<{ rev: number; payload: string }>(
-        "SELECT rev, payload FROM saved_projects WHERE owner_id = ? AND id = ?",
-        ["owner-b", sharedId],
+      let bRow = defined(
+        await backend.db.get<{ rev: number; payload: string }>(
+          "SELECT rev, payload FROM saved_projects WHERE owner_id = ? AND id = ?",
+          ["owner-b", sharedId],
+        ),
+        "owner-b project",
       );
-      assert.ok(bRow, "owner-b project must survive saveProjects");
-      assert.equal(bRow!.rev, 1);
-      assert.deepEqual(JSON.parse(bRow!.payload), projB);
+      assert.equal(bRow.rev, 1);
+      assert.deepEqual(JSON.parse(bRow.payload), projB);
 
       must(await projectsA.saveProjects([]));
-      bRow = await backend.db.get<{ rev: number; payload: string }>(
-        "SELECT rev, payload FROM saved_projects WHERE owner_id = ? AND id = ?",
-        ["owner-b", sharedId],
+      bRow = defined(
+        await backend.db.get<{ rev: number; payload: string }>(
+          "SELECT rev, payload FROM saved_projects WHERE owner_id = ? AND id = ?",
+          ["owner-b", sharedId],
+        ),
+        "owner-b project",
       );
-      assert.ok(bRow, "owner-b project must survive empty saveProjects");
-      assert.equal(bRow!.rev, 1);
-      assert.deepEqual(JSON.parse(bRow!.payload), projB);
+      assert.equal(bRow.rev, 1);
+      assert.deepEqual(JSON.parse(bRow.payload), projB);
 
       must(await projectsA.deleteProjectRecord(newId));
-      bRow = await backend.db.get<{ rev: number; payload: string }>(
-        "SELECT rev, payload FROM saved_projects WHERE owner_id = ? AND id = ?",
-        ["owner-b", sharedId],
+      bRow = defined(
+        await backend.db.get<{ rev: number; payload: string }>(
+          "SELECT rev, payload FROM saved_projects WHERE owner_id = ? AND id = ?",
+          ["owner-b", sharedId],
+        ),
+        "owner-b project",
       );
-      assert.ok(bRow, "owner-b project must survive deleteProjectRecord");
-      assert.equal(bRow!.rev, 1);
-      assert.deepEqual(JSON.parse(bRow!.payload), projB);
+      assert.equal(bRow.rev, 1);
+      assert.deepEqual(JSON.parse(bRow.payload), projB);
     } finally {
       await backend.close();
     }
