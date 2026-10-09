@@ -311,10 +311,9 @@ describe("defaultUserIdSource Item 2: signed-out caching", () => {
 
     // Let the null cache expire, then a non-null answer is fetched once and cached.
     await vi.advanceTimersByTimeAsync(31000);
-    nextResponse = new Response(
-      JSON.stringify({ user: { sub: "user-2" } }),
-      { status: 200 },
-    );
+    nextResponse = new Response(JSON.stringify({ user: { sub: "user-2" } }), {
+      status: 200,
+    });
     const e = await defaultUserIdSource();
     assert.equal(e, "user-2");
     assert.equal(fetchCount, 3, "non-null answer fetched once");

@@ -1607,7 +1607,11 @@ describe("CachedEditorWorkspaceAdapter Item 7/8: cache staleness", () => {
       "cache holds the SAVED content, not the server's",
     );
     assert.ok(result.success && result.value);
-    assert.equal(result.value!.updatedAt, 2000, "load returns the saved content");
+    assert.equal(
+      result.value!.updatedAt,
+      2000,
+      "load returns the saved content",
+    );
   });
 
   it("ii a save that lands while the load's GET is pending keeps the saved content (clean confirmed entry, stamp rev below server's)", async () => {
@@ -1683,7 +1687,11 @@ describe("CachedEditorWorkspaceAdapter Item 7/8: cache staleness", () => {
       "cache holds the SAVED content, not the server's",
     );
     assert.ok(result.success && result.value);
-    assert.equal(result.value!.updatedAt, 2000, "load returns the saved content");
+    assert.equal(
+      result.value!.updatedAt,
+      2000,
+      "load returns the saved content",
+    );
   });
 });
 
@@ -2535,9 +2543,7 @@ describe("CachedEditorWorkspaceAdapter Item 1: save after a failed discard", () 
     assert.deepEqual(methods, ["GET", "DELETE", "PUT", "GET"]);
     const putCalls = putCallsOf(fetchImpl);
     assert.equal(putCalls.length, 1, "one create-only PUT of the new content");
-    const putHeaders = new Headers(
-      (putCalls[0]![1] as RequestInit).headers,
-    );
+    const putHeaders = new Headers((putCalls[0]![1] as RequestInit).headers);
     assert.equal(putHeaders.get("If-None-Match"), "*", "PUT is create-only");
     assert.ok(result.success && result.value);
     assert.equal(result.value!.updatedAt, 2000, "load returns the NEW content");

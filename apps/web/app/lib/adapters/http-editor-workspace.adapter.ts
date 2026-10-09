@@ -42,7 +42,7 @@ let cachedUserId: string | undefined;
 let nullUntil: number = 0;
 let inFlight: Promise<string | null> | null = null;
 
-export function defaultUserIdSource(): Promise<string | null> {
+export async function defaultUserIdSource(): Promise<string | null> {
   if (cachedUserId !== undefined) return cachedUserId;
   const now = Date.now();
   if (now < nullUntil) return null;
@@ -404,7 +404,7 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
   private readonly pendingPreconditions = new Map<
     string,
     { ifMatch: number } | { createOnly: true }
-    >();
+  >();
 
   constructor(
     private readonly cache: EditorWorkspaceCachePort,
