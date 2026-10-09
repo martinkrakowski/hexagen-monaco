@@ -1,9 +1,11 @@
-import { describe, it, vi } from "vitest";
+import { describe, it, vi, beforeEach, afterEach } from "vitest";
 import type { MockedFunction } from "vitest";
 import assert from "node:assert/strict";
 import {
   HttpEditorWorkspaceAdapter,
   DOCUMENT_ID_PATTERN,
+  defaultUserIdSource,
+  resetCachedUserId,
 } from "./http-editor-workspace.adapter";
 // Imported in the TEST only — this module is server code and must not be
 // imported by client code.
@@ -264,5 +266,69 @@ describe("HttpEditorWorkspaceAdapter DELETE", () => {
     const adapter = new HttpEditorWorkspaceAdapter(fetchImpl);
     const result = await adapter.delete("owner1", "ws1", 5);
     assert.ok(result.ok && !result.deleted);
+  });
+});
+
+describe("defaultUserIdSource Item 2: signed-out caching", () => {
+  beforeEach(() => {
+    resetCachedUserId();
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it("two concurrent calls share one fetch, null is cached 30s, re-fetch after, non-null cached, reset clears", async () => {
+    resetCachedUserId();
+    let fetchCount = 0;
+    let nextResponse: Response = new Response(null, { status: 401 });
+    const sessionFetch = vi.fn(async () => {
+      fetchCount++;
+      return nextResponse;
+    }) as unknown as MockedFunction<typeof fetch>;
+    vi.stubGlobal("fetch", sessionFetch);
+
+    // Two concurrent calls → one fetch (null answer).
+    const [a, b] = await Promise.all([
+      defaultUserIdSource(),
+      defaultUserIdSource(),
+    ]);
+    assert.equal(a, null);
+    assert.equal(b, null);
+    assert.equal(fetchCount, 1, "concurrent calls share one in-flight fetch");
+
+    // A second call within 30s → still one fetch (null cached).
+    const c = await defaultUserIdSource();
+    assert.equal(c, null);
+    assert.equal(fetchCount, 1, "null answer cached for 30s");
+
+    // After 31s → two fetches.
+    await vi.advanceTimersByTimeAsync(31000);
+    const d = await defaultUserIdSource();
+    assert.equal(d, null);
+    assert.equal(fetchCount, 2, "re-fetches after the 30s null cache");
+
+    // Let the null cache expire, then a non-null answer is fetched once and cached.
+    await vi.advanceTimersByTimeAsync(31000);
+    nextResponse = new Response(JSON.stringify({ user: { sub: "user-2" } }), {
+      status: 200,
+    });
+    const e = await defaultUserIdSource();
+    assert.equal(e, "user-2");
+    assert.equal(fetchCount, 3, "non-null answer fetched once");
+    const f = await defaultUserIdSource();
+    assert.equal(f, "user-2");
+    assert.equal(fetchCount, 3, "non-null answer cached as today");
+
+    // resetCachedUserId() after a null → next call fetches (and null is cached again).
+    resetCachedUserId();
+    nextResponse = new Response(null, { status: 401 });
+    const g = await defaultUserIdSource();
+    assert.equal(g, null);
+    assert.equal(fetchCount, 4, "reset clears the cached id");
+    const h = await defaultUserIdSource();
+    assert.equal(h, null);
+    assert.equal(fetchCount, 4, "null re-cached after reset");
   });
 });

@@ -1541,55 +1541,157 @@ describe("CachedEditorWorkspaceAdapter Item 7/8: cache staleness", () => {
     assert.equal(putCalls.length, 0, "no PUT when cache read fails");
   });
 
-  it("a save that lands while the load's GET is in flight is not overwritten", async () => {
-    const server = new Map<string, ServerDoc>();
+  it("i a save that lands while the load's GET is pending keeps the saved content (no cache entry at load start)", async () => {
+    const { adapter, cache, server, fetchImpl } = makeAdapters();
+    const wsA = makeWorkspace(1000);
+    server.set(UUID, {
+      payload: wsA,
+      rev: 1,
+      updatedAt: 1000,
+      projectId: UUID,
+    });
     let getInFlight = false;
-    const { adapter, cache, fetchImpl } = makeAdapters();
-
-    // Override GET to be deferred.
+    let resolveGet!: (v: Response) => void;
     fetchImpl.mockImplementation(
       async (url: string | URL | Request, init?: RequestInit) => {
         const method = (init?.method ?? "GET").toUpperCase();
         if (method === "GET") {
           return new Promise((resolve) => {
             getInFlight = true;
-            // Resolve after a save lands.
-            setTimeout(() => {
-              resolve(new Response(null, { status: 404 }));
-            }, 0);
+            resolveGet = resolve as (v: Response) => void;
           }) as unknown as Response;
         }
-        if (method === "PUT") {
+        if (method === "PUT")
           return new Response(
             JSON.stringify({
               kind: "workspace",
               id: UUID,
               projectId: UUID,
               payload: {},
-              updatedAt: 1000,
+              updatedAt: 2000,
             }),
-            { status: 200, headers: { ETag: '"rev:1"' } },
+            { status: 200, headers: { ETag: '"rev:2"' } },
           );
-        }
         return new Response("nope", { status: 500 });
       },
     );
 
-    await cache.saveWorkspace(UUID, makeWorkspace(1000));
-
+    // (i) nothing in the cache when the load starts.
     const loadPromise = adapter.loadWorkspace(UUID);
-    // Give the load a chance to start.
-    await vi.advanceTimersByTimeAsync(1);
-    // Save while GET is in flight.
-    await adapter.saveWorkspace(UUID, makeWorkspace(2000));
-    // Resolve the GET.
-    await vi.runAllTimersAsync();
-    await loadPromise;
+    await vi.advanceTimersByTimeAsync(0);
+    assert.equal(getInFlight, true, "GET is in flight when the save lands");
 
-    // Cache should have the newer value (2000).
+    // A save lands while the GET is pending.
+    await adapter.saveWorkspace(UUID, makeWorkspace(2000));
+
+    // Resolve the GET with a DIFFERENT payload (wsA) and rev (1).
+    resolveGet(
+      new Response(
+        JSON.stringify({
+          kind: "workspace",
+          id: UUID,
+          projectId: UUID,
+          payload: wsA,
+          updatedAt: 1000,
+        }),
+        { status: 200, headers: { ETag: '"rev:1"' } },
+      ),
+    );
+    const result = await loadPromise;
+
     const after = await cache.loadWorkspace(UUID);
     assert.ok(after.success && after.value);
-    assert.equal(after.value!.updatedAt, 2000, "newer save preserved");
+    assert.equal(
+      after.value!.updatedAt,
+      2000,
+      "cache holds the SAVED content, not the server's",
+    );
+    assert.ok(result.success && result.value);
+    assert.equal(
+      result.value!.updatedAt,
+      2000,
+      "load returns the saved content",
+    );
+  });
+
+  it("ii a save that lands while the load's GET is pending keeps the saved content (clean confirmed entry, stamp rev below server's)", async () => {
+    const { adapter, cache, server, fetchImpl } = makeAdapters();
+    const wsA = makeWorkspace(1000);
+    await cache.saveWorkspace(UUID, wsA);
+    await cache.setLiftStamp(UUID, {
+      ownerId: "user-1",
+      rev: 1,
+      syncedUpdatedAt: 1000,
+      confirmed: true,
+    });
+    // Server moved: same payload, higher rev.
+    server.set(UUID, {
+      payload: wsA,
+      rev: 9,
+      updatedAt: 1000,
+      projectId: UUID,
+    });
+    let getInFlight = false;
+    let resolveGet!: (v: Response) => void;
+    fetchImpl.mockImplementation(
+      async (url: string | URL | Request, init?: RequestInit) => {
+        const method = (init?.method ?? "GET").toUpperCase();
+        if (method === "GET") {
+          return new Promise((resolve) => {
+            getInFlight = true;
+            resolveGet = resolve as (v: Response) => void;
+          }) as unknown as Response;
+        }
+        if (method === "PUT")
+          return new Response(
+            JSON.stringify({
+              kind: "workspace",
+              id: UUID,
+              projectId: UUID,
+              payload: {},
+              updatedAt: 2000,
+            }),
+            { status: 200, headers: { ETag: '"rev:2"' } },
+          );
+        return new Response("nope", { status: 500 });
+      },
+    );
+
+    const loadPromise = adapter.loadWorkspace(UUID);
+    await vi.advanceTimersByTimeAsync(0);
+    assert.equal(getInFlight, true, "GET is in flight when the save lands");
+
+    // A save lands while the GET is pending.
+    await adapter.saveWorkspace(UUID, makeWorkspace(2000));
+
+    // Resolve the GET: server says rev 9, payload wsA.
+    resolveGet(
+      new Response(
+        JSON.stringify({
+          kind: "workspace",
+          id: UUID,
+          projectId: UUID,
+          payload: wsA,
+          updatedAt: 1000,
+        }),
+        { status: 200, headers: { ETag: '"rev:9"' } },
+      ),
+    );
+    const result = await loadPromise;
+
+    const after = await cache.loadWorkspace(UUID);
+    assert.ok(after.success && after.value);
+    assert.equal(
+      after.value!.updatedAt,
+      2000,
+      "cache holds the SAVED content, not the server's",
+    );
+    assert.ok(result.success && result.value);
+    assert.equal(
+      result.value!.updatedAt,
+      2000,
+      "load returns the saved content",
+    );
   });
 });
 
@@ -2355,6 +2457,170 @@ describe("CachedEditorWorkspaceAdapter Item 4: discard marker", () => {
     assert.equal(await cache.getLiftStamp(UUID), null, "stamp removed");
     const cacheAfter = await cache.loadWorkspace(UUID);
     assert.equal(cacheAfter.success && cacheAfter.value, null, "cache cleared");
+  });
+});
+
+describe("CachedEditorWorkspaceAdapter Item 1: save after a failed discard", () => {
+  it("T1 a save after a failed discard keeps the marker and sends nothing", async () => {
+    const { adapter, cache, server, fetchImpl } = makeAdapters();
+    const ws = makeWorkspace(1000);
+    await cache.saveWorkspace(UUID, ws);
+    await cache.setLiftStamp(UUID, {
+      ownerId: "user-1",
+      rev: 5,
+      syncedUpdatedAt: 1000,
+      confirmed: true,
+    });
+    server.set(UUID, { payload: ws, rev: 5, updatedAt: 1000, projectId: UUID });
+
+    // Discard whose DELETE fails → marker written on rev 5.
+    fetchImpl.mockImplementation(
+      async (url: string | URL | Request, init?: RequestInit) => {
+        const method = (init?.method ?? "GET").toUpperCase();
+        if (method === "DELETE")
+          return new Response("network error", { status: 500 });
+        return new Response("nope", { status: 500 });
+      },
+    );
+    await adapter.clearWorkspace(UUID);
+    const mark = await cache.getLiftStamp(UUID);
+    assert.ok(mark && mark.discarded, "discard marker written");
+    const callsAfterClear = fetchImpl.mock.calls.length;
+
+    // Save new content; no load between the discard and the save.
+    await adapter.saveWorkspace(UUID, makeWorkspace(2000));
+
+    // Advance the save timer — nothing should be sent.
+    await vi.advanceTimersByTimeAsync(REMOTE_DEBOUNCE_MS);
+
+    assert.equal(
+      fetchImpl.mock.calls.length,
+      callsAfterClear,
+      "save after a failed discard sends no request",
+    );
+    const markAfter = await cache.getLiftStamp(UUID);
+    assert.ok(markAfter && markAfter.discarded, "marker is still there");
+    const cached = await cache.loadWorkspace(UUID);
+    assert.ok(cached.success && cached.value, "cache has the new content");
+    assert.equal(cached.value!.updatedAt, 2000);
+  });
+
+  it("T2 load resolves a kept marker by deleting the server copy and lifting the new cache entry create-only", async () => {
+    const { adapter, cache, server, fetchImpl } = makeAdapters();
+    const ws = makeWorkspace(1000);
+    await cache.saveWorkspace(UUID, ws);
+    await cache.setLiftStamp(UUID, {
+      ownerId: "user-1",
+      rev: 5,
+      syncedUpdatedAt: 1000,
+      confirmed: true,
+    });
+    server.set(UUID, { payload: ws, rev: 5, updatedAt: 1000, projectId: UUID });
+    const serverFetch = fetchImpl.getMockImplementation()!;
+
+    // Discard whose DELETE fails → marker on rev 5.
+    fetchImpl.mockImplementation(
+      async (url: string | URL | Request, init?: RequestInit) => {
+        const method = (init?.method ?? "GET").toUpperCase();
+        if (method === "DELETE")
+          return new Response("network error", { status: 500 });
+        return new Response("nope", { status: 500 });
+      },
+    );
+    await adapter.clearWorkspace(UUID);
+    const mark = await cache.getLiftStamp(UUID);
+    assert.ok(mark && mark.discarded, "discard marker written");
+
+    // Save new content; no load between the discard and the save.
+    await adapter.saveWorkspace(UUID, makeWorkspace(2000));
+    const callsBeforeLoad = fetchImpl.mock.calls.length;
+
+    // Load: server still at the marker's rev → retry DELETE → success.
+    fetchImpl.mockImplementation(serverFetch);
+    const result = await adapter.loadWorkspace(UUID);
+
+    const methods = allMethodsOf(fetchImpl).slice(callsBeforeLoad);
+    assert.deepEqual(methods, ["GET", "DELETE", "PUT", "GET"]);
+    const putCalls = putCallsOf(fetchImpl);
+    assert.equal(putCalls.length, 1, "one create-only PUT of the new content");
+    const putHeaders = new Headers((putCalls[0]![1] as RequestInit).headers);
+    assert.equal(putHeaders.get("If-None-Match"), "*", "PUT is create-only");
+    assert.ok(result.success && result.value);
+    assert.equal(result.value!.updatedAt, 2000, "load returns the NEW content");
+    const stamp = await cache.getLiftStamp(UUID);
+    assert.ok(stamp);
+    assert.equal(stamp!.discarded, false, "marker dropped");
+    assert.equal(stamp!.confirmed, true, "stamp is a normal confirmed one");
+  });
+
+  it("T3 a load whose marker-DELETE fails again keeps the marker and returns the new cache entry without a PUT", async () => {
+    const { adapter, cache, server, fetchImpl } = makeAdapters();
+    const ws = makeWorkspace(1000);
+    await cache.saveWorkspace(UUID, ws);
+    await cache.setLiftStamp(UUID, {
+      ownerId: "user-1",
+      rev: 5,
+      syncedUpdatedAt: 1000,
+      confirmed: true,
+    });
+    server.set(UUID, { payload: ws, rev: 5, updatedAt: 1000, projectId: UUID });
+
+    // Discard whose DELETE fails → marker on rev 5.
+    fetchImpl.mockImplementation(
+      async (url: string | URL | Request, init?: RequestInit) => {
+        const method = (init?.method ?? "GET").toUpperCase();
+        if (method === "DELETE")
+          return new Response("network error", { status: 500 });
+        return new Response("nope", { status: 500 });
+      },
+    );
+    await adapter.clearWorkspace(UUID);
+    const mark = await cache.getLiftStamp(UUID);
+    assert.ok(mark && mark.discarded, "discard marker written");
+
+    // Save new content; no load between the discard and the save.
+    await adapter.saveWorkspace(UUID, makeWorkspace(2000));
+    const callsBeforeLoad = fetchImpl.mock.calls.length;
+
+    // Load: server still at the marker's rev, but the DELETE fails again.
+    fetchImpl.mockImplementation(
+      async (url: string | URL | Request, init?: RequestInit) => {
+        const method = (init?.method ?? "GET").toUpperCase();
+        const match = /\/api\/tenants\/(.+)\/documents\/workspace\/(.+)/.exec(
+          String(url),
+        );
+        const id = match![2]!;
+        if (method === "GET") {
+          const doc = server.get(id)!;
+          return new Response(
+            JSON.stringify({
+              kind: "workspace",
+              id,
+              projectId: doc.projectId,
+              payload: doc.payload,
+              updatedAt: doc.updatedAt,
+            }),
+            { status: 200, headers: { ETag: `"rev:${doc.rev}"` } },
+          );
+        }
+        if (method === "DELETE")
+          return new Response("network error", { status: 500 });
+        return new Response("nope", { status: 500 });
+      },
+    );
+    const result = await adapter.loadWorkspace(UUID);
+
+    const methods = allMethodsOf(fetchImpl).slice(callsBeforeLoad);
+    assert.deepEqual(methods, ["GET", "DELETE"]);
+    assert.equal(putCallsOf(fetchImpl).length, 0, "no PUT sent");
+    assert.ok(result.success && result.value);
+    assert.equal(
+      result.value!.updatedAt,
+      2000,
+      "load returns the NEW content from the cache",
+    );
+    const markAfter = await cache.getLiftStamp(UUID);
+    assert.ok(markAfter && markAfter.discarded, "marker is still kept");
   });
 });
 
