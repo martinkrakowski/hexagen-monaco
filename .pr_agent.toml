@@ -291,5 +291,11 @@ glob = ['**/dist/**', '**/*.tsbuildinfo', 'yarn.lock']
 #
 # effort is kept rather than max_tokens: it is the knob the model interprets
 # for itself, and OpenRouter converts it to a budget for models that want one.
-# A hard token budget would need re-tuning per model; "low" survives a swap.
-reasoning_effort = "low"
+# A hard token budget would need re-tuning per model; an effort survives a swap.
+#
+# Raised from "low" to "medium" on 2026-10-09 (the owner's decision), for the UI
+# reviewer on mercury-2. Reviews before this change reached the default branch
+# ran at "low", reviews after it at "medium"; compare run times in the Actions
+# log before reading a change in findings as the model's. The correctness
+# reviewer (pr-agent-correctness.yml) sets its own value in its env block.
+reasoning_effort = "medium"
