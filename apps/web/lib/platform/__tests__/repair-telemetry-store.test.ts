@@ -1,12 +1,19 @@
+// @vitest-environment node
 import { describe, it } from "vitest";
 import assert from "node:assert/strict";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import Database from "better-sqlite3";
-import { canAutoFix, type ViolationCode } from "@hexagen/manifest-generation";
+import {
+  BACKENDS,
+  openBackend,
+  type BackendKind,
+} from "../../../test-support/platform-backends";
 import { openPlatformDb } from "../platform-db";
 import { createSqlitePlatformDb } from "../sqlite-db";
+import { canAutoFix, type ViolationCode } from "@hexagen/manifest-generation";
+import type { PlatformDb } from "../db";
 import {
   MAX_REPAIR_RUNS_PER_OWNER,
   REPAIR_VIOLATION_CLASSES,
@@ -22,10 +29,13 @@ import {
 // packet lands the schema only, and wiring it into PlatformStore would be a
 // call-site change. Suites open the db directly, in-memory, per the
 // run-history-store convention.
-function openStore(ownerId = "owner-a") {
-  const db = openPlatformDb(":memory:");
-  const platformDb = createSqlitePlatformDb(db);
-  return { db, store: createRepairTelemetryStore(platformDb, ownerId) };
+async function openStore(kind: BackendKind, ownerId = "owner-a") {
+  const backend = await openBackend(kind);
+  return {
+    backend,
+    db: backend.db,
+    store: createRepairTelemetryStore(backend.db, ownerId),
+  };
 }
 
 const RUN_ID = "11111111-1111-4111-8111-111111111111";
@@ -239,412 +249,780 @@ describe("classifyFinding", () => {
   });
 });
 
-describe("repair telemetry store", () => {
+describe.each(BACKENDS)("repair telemetry store (%s)", (kind) => {
   it("persists a run and its attempts together", async () => {
-    const { db, store } = openStore();
-    const written = await store.record(run());
-    assert.equal(written.success, true);
-    assert.ok(written.success && written.value.attemptsTotal === 1);
-    assert.ok(written.success && written.value.attemptsApplied === 1);
+    const { backend, store } = await openStore(kind);
+    try {
+      const written = await store.record(run());
+      assert.equal(written.success, true);
+      assert.ok(written.success && written.value.attemptsTotal === 1);
+      assert.ok(written.success && written.value.attemptsApplied === 1);
 
-    const runs = await store.listRuns();
-    assert.ok(runs.success);
-    assert.equal(runs.success && runs.value.length, 1);
-    assert.equal(runs.success && runs.value[0]?.outcome, "deterministic-fixed");
+      const runs = await store.listRuns();
+      assert.equal(runs.success && runs.value.length, 1);
+      assert.equal(
+        runs.success && runs.value[0]?.outcome,
+        "deterministic-fixed",
+      );
 
-    const attempts = await store.listAttempts(RUN_ID);
-    assert.ok(attempts.success);
-    assert.equal(attempts.success && attempts.value.length, 1);
-    assert.equal(
-      attempts.success && attempts.value[0]?.violationClass,
-      "client-scope-missing",
-    );
-    db.close();
+      const attempts = await store.listAttempts(RUN_ID);
+      assert.equal(attempts.success && attempts.value.length, 1);
+      assert.equal(
+        attempts.success && attempts.value[0]?.violationClass,
+        "client-scope-missing",
+      );
+    } finally {
+      await backend.close();
+    }
   });
 
   it("scopes rows to the owner", async () => {
-    const db = openPlatformDb(":memory:");
-    const platformDb = createSqlitePlatformDb(db);
-    const a = createRepairTelemetryStore(platformDb, "owner-a");
-    const b = createRepairTelemetryStore(platformDb, "owner-b");
-    // Asserted, not discarded: `record` returns a Result rather than throwing,
-    // so a fixture that stopped validating would make "b sees 0 rows" pass for
-    // the wrong reason -- b sees nothing because nothing exists.
-    assert.equal((await a.record(run())).success, true);
-    const seen = await b.listRuns();
-    assert.ok(seen.success);
-    assert.equal(seen.success && seen.value.length, 0);
-    db.close();
+    const backend = await openBackend(kind);
+    try {
+      const a = createRepairTelemetryStore(backend.db, "owner-a");
+      const b = createRepairTelemetryStore(backend.db, "owner-b");
+      assert.equal((await a.record(run())).success, true);
+      const seen = await b.listRuns();
+      assert.equal(seen.success && seen.value.length, 0);
+    } finally {
+      await backend.close();
+    }
   });
 
   it("records eligible-but-unapplied as its own state", async () => {
-    // The whole reason the two flags are separate columns: this is the class a
-    // tuned fixer must not inherit, and today it is silent.
-    const { db, store } = openStore();
-    await store.record(
-      run({
-        outcome: "unfixable",
-        violationsRemaining: 1,
-        attempts: [
-          attempt({
-            violationClass: "client-zero-adapters",
-            eligible: true,
-            applied: false,
-            changedYaml: false,
-          }),
-        ],
-      }),
-    );
-    const attempts = await store.listAttempts(RUN_ID);
-    assert.ok(attempts.success);
-    const row = attempts.success ? attempts.value[0] : undefined;
-    assert.equal(row?.eligible, true);
-    assert.equal(row?.applied, false);
-    assert.equal(row?.changedYaml, false);
-    db.close();
+    const { backend, store } = await openStore(kind);
+    try {
+      await store.record(
+        run({
+          outcome: "unfixable",
+          violationsRemaining: 1,
+          attempts: [
+            attempt({
+              violationClass: "client-zero-adapters",
+              eligible: true,
+              applied: false,
+              changedYaml: false,
+            }),
+          ],
+        }),
+      );
+      const attempts = await store.listAttempts(RUN_ID);
+      const row = attempts.success ? attempts.value[0] : undefined;
+      assert.equal(row?.eligible, true);
+      assert.equal(row?.applied, false);
+      assert.equal(row?.changedYaml, false);
+    } finally {
+      await backend.close();
+    }
   });
 
   it("keeps unfixable and abandoned distinguishable", async () => {
-    const { db, store } = openStore();
-    await store.record(run({ runId: RUN_ID, outcome: "unfixable" }));
-    await store.record(run({ runId: OTHER_RUN_ID, outcome: "abandoned" }));
-    const runs = await store.listRuns();
-    assert.ok(runs.success);
-    const outcomes = runs.success
-      ? runs.value.map((r) => r.outcome).sort()
-      : [];
-    assert.deepEqual(outcomes, ["abandoned", "unfixable"]);
-    db.close();
+    const { backend, store } = await openStore(kind);
+    try {
+      await store.record(run({ runId: RUN_ID, outcome: "unfixable" }));
+      await store.record(run({ runId: OTHER_RUN_ID, outcome: "abandoned" }));
+      const runs = await store.listRuns();
+      const outcomes = runs.success
+        ? runs.value.map((r) => r.outcome).sort()
+        : [];
+      assert.deepEqual(outcomes, ["abandoned", "unfixable"]);
+    } finally {
+      await backend.close();
+    }
   });
 
   it("upserts on (owner, run_id) so a reconnect does not double-count", async () => {
-    const { db, store } = openStore();
-    const first = await store.record(run({ rounds: 1 }));
-    const second = await store.record(run({ rounds: 4, durationMs: 900 }));
-    const runs = await store.listRuns();
-    assert.ok(runs.success);
-    assert.equal(runs.success && runs.value.length, 1);
-    assert.equal(runs.success && runs.value[0]?.rounds, 4);
-    assert.equal(runs.success && runs.value[0]?.durationMs, 900);
-    // The returned record must be the STORED row: the conflicting row keeps
-    // its original primary key, so a caller that trusted the freshly minted
-    // id would be holding a key that is not in the table.
-    assert.equal(
-      first.success && second.success && second.value.id,
-      first.success ? first.value.id : undefined,
-    );
-    assert.equal(
-      runs.success && runs.value[0]?.id,
-      first.success ? first.value.id : undefined,
-    );
-    db.close();
+    const { backend, store } = await openStore(kind);
+    try {
+      const first = await store.record(run({ rounds: 1 }));
+      const second = await store.record(run({ rounds: 4, durationMs: 900 }));
+      const runs = await store.listRuns();
+      assert.equal(runs.success && runs.value.length, 1);
+      assert.equal(runs.success && runs.value[0]?.rounds, 4);
+      assert.equal(runs.success && runs.value[0]?.durationMs, 900);
+      assert.equal(
+        first.success && second.success && second.value.id,
+        first.success ? first.value.id : undefined,
+      );
+      assert.equal(
+        runs.success && runs.value[0]?.id,
+        first.success ? first.value.id : undefined,
+      );
+    } finally {
+      await backend.close();
+    }
   });
 
   it("replaces the attempt set wholesale on re-record", async () => {
-    const { db, store } = openStore();
-    await store.record(
-      run({
-        attempts: [
-          attempt({ round: 1, seq: 0 }),
-          attempt({ round: 2, seq: 0 }),
-          attempt({ round: 3, seq: 0 }),
-        ],
-      }),
-    );
-    await store.record(run({ attempts: [attempt({ round: 1, seq: 0 })] }));
-    const attempts = await store.listAttempts(RUN_ID);
-    assert.ok(attempts.success);
-    // Orphans from the longer previous loop would make attempts_total lie.
-    assert.equal(attempts.success && attempts.value.length, 1);
-    const runs = await store.listRuns();
-    assert.equal(runs.success && runs.value[0]?.attemptsTotal, 1);
-    db.close();
+    const { backend, store } = await openStore(kind);
+    try {
+      await store.record(
+        run({
+          attempts: [
+            attempt({ round: 1, seq: 0 }),
+            attempt({ round: 2, seq: 0 }),
+            attempt({ round: 3, seq: 0 }),
+          ],
+        }),
+      );
+      await store.record(run({ attempts: [attempt({ round: 1, seq: 0 })] }));
+      const attempts = await store.listAttempts(RUN_ID);
+      assert.equal(attempts.success && attempts.value.length, 1);
+      const runs = await store.listRuns();
+      assert.equal(runs.success && runs.value[0]?.attemptsTotal, 1);
+    } finally {
+      await backend.close();
+    }
   });
 
   it("rejects a non-opaque run id instead of storing it", async () => {
-    const { db, store } = openStore();
-    const bad = await store.record(run({ runId: "acme/billing-service" }));
-    assert.equal(bad.success, false);
-    // The rejection message must not echo the value it refused.
-    assert.ok(!bad.success && !bad.error.message.includes("acme"));
-    const runs = await store.listRuns();
-    assert.ok(runs.success, "listRuns succeeds after a rejected record");
-    assert.equal(runs.value.length, 0);
-    db.close();
+    const { backend, store } = await openStore(kind);
+    try {
+      const bad = await store.record(run({ runId: "acme/billing-service" }));
+      assert.equal(bad.success, false);
+      assert.ok(!bad.success && !bad.error.message.includes("acme"));
+      const runs = await store.listRuns();
+      assert.ok(runs.success, "listRuns succeeds after a rejected record");
+      assert.equal(runs.value.length, 0);
+    } finally {
+      await backend.close();
+    }
   });
 
   it("rejects unknown enum values rather than coercing them", async () => {
-    const { db, store } = openStore();
-    const loose = store.record as unknown as (
-      i: Record<string, unknown>,
-    ) => Promise<{ success: boolean }>;
-    assert.equal(
-      (await loose({ ...run(), surface: "smuggled-text" })).success,
-      false,
-    );
-    assert.equal(
-      (await loose({ ...run(), outcome: "probably-fine" })).success,
-      false,
-    );
-    assert.equal(
-      (
-        await loose({
-          ...run(),
-          attempts: [
-            { ...attempt(), violationClass: 'Context Name "Billing"' },
-          ],
-        })
-      ).success,
-      false,
-    );
-    assert.equal(
-      (
-        await loose({
-          ...run(),
-          attempts: [{ ...attempt(), path: "magic" }],
-        })
-      ).success,
-      false,
-    );
-    assert.equal(
-      (
-        await loose({
-          ...run(),
-          attempts: [{ ...attempt(), gateReason: "because" }],
-        })
-      ).success,
-      false,
-    );
-    db.close();
+    const { backend, store } = await openStore(kind);
+    try {
+      const loose = store.record as unknown as (
+        i: Record<string, unknown>,
+      ) => Promise<{ success: boolean }>;
+      assert.equal(
+        (await loose({ ...run(), surface: "smuggled-text" })).success,
+        false,
+      );
+      assert.equal(
+        (await loose({ ...run(), outcome: "probably-fine" })).success,
+        false,
+      );
+      assert.equal(
+        (
+          await loose({
+            ...run(),
+            attempts: [
+              { ...attempt(), violationClass: 'Context Name "Billing"' },
+            ],
+          })
+        ).success,
+        false,
+      );
+      assert.equal(
+        (
+          await loose({
+            ...run(),
+            attempts: [{ ...attempt(), path: "magic" }],
+          })
+        ).success,
+        false,
+      );
+      assert.equal(
+        (
+          await loose({
+            ...run(),
+            attempts: [{ ...attempt(), gateReason: "because" }],
+          })
+        ).success,
+        false,
+      );
+    } finally {
+      await backend.close();
+    }
   });
 
   it("rejects a duplicate round/seq pair rather than losing an attempt", async () => {
-    const { db, store } = openStore();
-    const dup = await store.record({
-      ...run(),
-      attempts: [attempt({ round: 1, seq: 0 }), attempt({ round: 1, seq: 0 })],
-    });
-    assert.equal(dup.success, false);
-    db.close();
+    const { backend, store } = await openStore(kind);
+    try {
+      const dup = await store.record({
+        ...run(),
+        attempts: [
+          attempt({ round: 1, seq: 0 }),
+          attempt({ round: 1, seq: 0 }),
+        ],
+      });
+      assert.equal(dup.success, false);
+    } finally {
+      await backend.close();
+    }
   });
 
   it("aggregates per violation class with a median duration", async () => {
-    const { db, store } = openStore();
-    await store.record(
-      run({
-        attempts: [
-          attempt({
-            round: 1,
-            seq: 0,
-            violationClass: "client-zero-adapters",
-            durationMs: 1,
-            applied: true,
-          }),
-          attempt({
-            round: 1,
-            seq: 1,
-            violationClass: "client-zero-adapters",
-            durationMs: 5,
-            applied: false,
-          }),
-          attempt({
-            round: 1,
-            seq: 2,
-            violationClass: "client-zero-adapters",
-            durationMs: 30000,
-            applied: false,
-          }),
-          attempt({
-            round: 2,
-            seq: 0,
-            violationClass: "R03",
-            eligible: false,
-            path: "llm-ops",
-            durationMs: 4200,
-            opsProposed: 3,
-            opsApplied: 2,
-            opsSkipped: 1,
-            gateReason: "applied",
-          }),
-        ],
-      }),
-    );
-    const stats = await store.classStats();
-    assert.ok(stats.success);
-    const byClass = new Map(
-      (stats.success ? stats.value : []).map((s) => [s.violationClass, s]),
-    );
-    const zero = byClass.get("client-zero-adapters");
-    assert.equal(zero?.attempts, 3);
-    assert.equal(zero?.eligible, 3);
-    assert.equal(zero?.applied, 1);
-    // Median, not mean: the 30s outlier must not become the class's number.
-    assert.equal(zero?.medianDurationMs, 5);
-    const r03 = byClass.get("R03");
-    assert.equal(r03?.attempts, 1);
-    assert.equal(r03?.eligible, 0);
-    db.close();
+    const { backend, store } = await openStore(kind);
+    try {
+      await store.record(
+        run({
+          attempts: [
+            attempt({
+              round: 1,
+              seq: 0,
+              violationClass: "client-zero-adapters",
+              durationMs: 1,
+              applied: true,
+            }),
+            attempt({
+              round: 1,
+              seq: 1,
+              violationClass: "client-zero-adapters",
+              durationMs: 5,
+              applied: false,
+            }),
+            attempt({
+              round: 1,
+              seq: 2,
+              violationClass: "client-zero-adapters",
+              durationMs: 30000,
+              applied: false,
+            }),
+            attempt({
+              round: 2,
+              seq: 0,
+              violationClass: "R03",
+              eligible: false,
+              path: "llm-ops",
+              durationMs: 4200,
+              opsProposed: 3,
+              opsApplied: 2,
+              opsSkipped: 1,
+              gateReason: "applied",
+            }),
+          ],
+        }),
+      );
+      const stats = await store.classStats();
+      assert.ok(stats.success);
+      const byClass = new Map(
+        (stats.success ? stats.value : []).map((s) => [s.violationClass, s]),
+      );
+      const zero = byClass.get("client-zero-adapters");
+      assert.equal(zero?.attempts, 3);
+      assert.equal(zero?.eligible, 3);
+      assert.equal(zero?.applied, 1);
+      assert.equal(zero?.medianDurationMs, 5);
+      const r03 = byClass.get("R03");
+      assert.equal(r03?.attempts, 1);
+      assert.equal(r03?.eligible, 0);
+    } finally {
+      await backend.close();
+    }
   });
 
   it("filters class stats by surface", async () => {
-    const { db, store } = openStore();
-    await store.record(run({ runId: RUN_ID, surface: "client-deterministic" }));
-    await store.record(
-      run({
-        runId: OTHER_RUN_ID,
-        surface: "server-staged",
-        outcome: "llm-fixed",
-        attempts: [
-          attempt({ violationClass: "R05", path: "llm-ops", eligible: false }),
-        ],
-      }),
-    );
-    const server = await store.classStats({ surface: "server-staged" });
-    assert.ok(server.success);
-    assert.deepEqual(
-      server.success ? server.value.map((s) => s.violationClass) : [],
-      ["R05"],
-    );
-    db.close();
+    const { backend, store } = await openStore(kind);
+    try {
+      await store.record(
+        run({ runId: RUN_ID, surface: "client-deterministic" }),
+      );
+      await store.record(
+        run({
+          runId: OTHER_RUN_ID,
+          surface: "server-staged",
+          outcome: "llm-fixed",
+          attempts: [
+            attempt({
+              violationClass: "R05",
+              path: "llm-ops",
+              eligible: false,
+            }),
+          ],
+        }),
+      );
+      const server = await store.classStats({ surface: "server-staged" });
+      assert.ok(server.success);
+      assert.deepEqual(
+        server.success ? server.value.map((s) => s.violationClass) : [],
+        ["R05"],
+      );
+    } finally {
+      await backend.close();
+    }
   });
 
   it("evicts the oldest runs and their attempts past the per-owner cap", async () => {
-    const { db, store } = openStore();
-    const total = MAX_REPAIR_RUNS_PER_OWNER + 3;
-    for (let i = 0; i < total; i++) {
-      const id = `33333333-3333-4333-8333-${String(i).padStart(12, "0")}`;
-      await store.record(run({ runId: id, now: 1_700_000_000_000 + i }));
-    }
-    const runs = await store.listRuns({ limit: MAX_REPAIR_RUNS_PER_OWNER });
-    assert.ok(runs.success);
-    assert.equal(runs.success && runs.value.length, MAX_REPAIR_RUNS_PER_OWNER);
-    // Attempts must go with their run: a surviving orphan is a row the
-    // class-stats join drops, i.e. a table that reads smaller than it is.
-    const orphans = db
-      .prepare(
+    const { backend, db, store } = await openStore(kind);
+    try {
+      const total = MAX_REPAIR_RUNS_PER_OWNER + 3;
+      for (let i = 0; i < total; i++) {
+        const id = `33333333-3333-4333-8333-${String(i).padStart(12, "0")}`;
+        await store.record(run({ runId: id, now: 1_700_000_000_000 + i }));
+      }
+      const runs = await store.listRuns({ limit: MAX_REPAIR_RUNS_PER_OWNER });
+      assert.equal(
+        runs.success && runs.value.length,
+        MAX_REPAIR_RUNS_PER_OWNER,
+      );
+      const orphans = await db.get<{ n: number }>(
         `SELECT COUNT(*) AS n FROM repair_attempts a
           WHERE NOT EXISTS (
             SELECT 1 FROM repair_runs r
              WHERE r.owner_id = a.owner_id AND r.run_id = a.run_id)`,
-      )
-      .get() as { n: number };
-    assert.equal(orphans.n, 0);
-    db.close();
+      );
+      assert.equal(orphans?.n, 0);
+    } finally {
+      await backend.close();
+    }
   });
 
   it("writes the new run and evicts the oldest with its attempts in one record call", async () => {
-    // Retention lives inside `record`'s synchronous writeWithRetention
-    // transaction: a single call past the cap must both persist the new row and
-    // drop the oldest run + its attempts together, not in a later sweep.
-    const { db, store } = openStore();
-    for (let i = 0; i < MAX_REPAIR_RUNS_PER_OWNER; i++) {
-      const id = `33333333-3333-4333-8333-${String(i).padStart(12, "0")}`;
-      const seeded = await store.record(
-        run({ runId: id, now: 1_700_000_000_000 + i }),
+    const { backend, db, store } = await openStore(kind);
+    try {
+      for (let i = 0; i < MAX_REPAIR_RUNS_PER_OWNER; i++) {
+        const id = `33333333-3333-4333-8333-${String(i).padStart(12, "0")}`;
+        const seeded = await store.record(
+          run({ runId: id, now: 1_700_000_000_000 + i }),
+        );
+        assert.ok(seeded.success, `fixture write ${i} failed`);
+      }
+      const overwritten = `33333333-3333-4333-8333-000000000000`;
+
+      const overflow = await store.record(
+        run({ runId: OTHER_RUN_ID, now: 2_000_000_000_000 }),
       );
-      assert.ok(seeded.success, `fixture write ${i} failed`);
-    }
-    const overwritten = `33333333-3333-4333-8333-000000000000`;
+      assert.equal(overflow.success, true);
 
-    const overflow = await store.record(
-      run({ runId: OTHER_RUN_ID, now: 2_000_000_000_000 }),
-    );
-    assert.equal(overflow.success, true);
-
-    const runs = await store.listRuns({ limit: MAX_REPAIR_RUNS_PER_OWNER });
-    assert.ok(runs.success);
-    assert.equal(runs.success && runs.value.length, MAX_REPAIR_RUNS_PER_OWNER);
-    // Newest run is present and is first (newest first).
-    assert.equal(runs.success && runs.value[0]?.runId, OTHER_RUN_ID);
-    // Oldest run evicted in the same transaction that wrote the new one.
-    assert.equal(
-      runs.success ? runs.value.some((r) => r.runId === overwritten) : false,
-      false,
-    );
-    // Its attempts went with it: no orphan attempts survive.
-    const orphans = db
-      .prepare(
+      const runs = await store.listRuns({ limit: MAX_REPAIR_RUNS_PER_OWNER });
+      assert.equal(
+        runs.success && runs.value.length,
+        MAX_REPAIR_RUNS_PER_OWNER,
+      );
+      assert.equal(runs.success && runs.value[0]?.runId, OTHER_RUN_ID);
+      assert.equal(
+        runs.success ? runs.value.some((r) => r.runId === overwritten) : false,
+        false,
+      );
+      const orphans = await db.get<{ n: number }>(
         `SELECT COUNT(*) AS n FROM repair_attempts a
           WHERE NOT EXISTS (
             SELECT 1 FROM repair_runs r
              WHERE r.owner_id = a.owner_id AND r.run_id = a.run_id)`,
-      )
-      .get() as { n: number };
-    assert.equal(orphans.n, 0);
-    db.close();
+      );
+      assert.equal(orphans?.n, 0);
+    } finally {
+      await backend.close();
+    }
   });
 
   it("hides rows written under a foreign schema_version instead of decoding them", async () => {
-    const { db, store } = openStore();
-    assert.equal((await store.record(run())).success, true);
-    db.prepare("UPDATE repair_runs SET schema_version = 99").run();
-    const runs = await store.listRuns();
-    assert.ok(runs.success);
-    assert.equal(runs.success && runs.value.length, 0);
-    db.close();
+    const { backend, db, store } = await openStore(kind);
+    try {
+      assert.equal((await store.record(run())).success, true);
+      await db.run("UPDATE repair_runs SET schema_version = 99");
+      const runs = await store.listRuns();
+      assert.equal(runs.success && runs.value.length, 0);
+    } finally {
+      await backend.close();
+    }
   });
 
   it("drops a row whose stored enum no longer parses", async () => {
-    const { db, store } = openStore();
-    assert.equal((await store.record(run())).success, true);
-    db.prepare("UPDATE repair_runs SET outcome = 'from-the-future'").run();
-    const runs = await store.listRuns();
-    assert.ok(runs.success);
-    // Coercing to a default would be a silently skewed baseline.
-    assert.equal(runs.success && runs.value.length, 0);
-    db.close();
+    const { backend, db, store } = await openStore(kind);
+    try {
+      assert.equal((await store.record(run())).success, true);
+      await db.run("UPDATE repair_runs SET outcome = 'from-the-future'");
+      const runs = await store.listRuns();
+      assert.equal(runs.success && runs.value.length, 0);
+    } finally {
+      await backend.close();
+    }
   });
 
   it("stores nothing outside the closed value sets", async () => {
-    // Belt to the guards: read every column back raw and assert that no cell
-    // holds a string that isn't an enum member or the opaque run id. This is
-    // the test that would fail if someone later added a `title` column.
-    const { db, store } = openStore();
-    assert.equal((await store.record(run())).success, true);
-    const allowed = new Set<string>([
-      ...REPAIR_VIOLATION_CLASSES,
-      "client-deterministic",
-      "server-staged",
-      "deterministic-fixed",
-      "llm-fixed",
-      "mixed-fixed",
-      "unfixable",
-      "abandoned",
-      "deterministic",
-      "llm-ops",
-      "none",
-      "fail",
-      "warn",
-      "applied",
-      "no-error-reduction",
-      "structure-shrunk-or-context-drift",
-    ]);
-    const uuid =
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-    // Counted so the guard cannot pass by inspecting nothing. This is the
-    // assertion that no user architecture reaches a column, and a vacuous
-    // version of it is worse than none -- it reports the guarantee holds while
-    // having looked at zero cells.
-    let inspected = 0;
-    for (const table of ["repair_runs", "repair_attempts"]) {
-      const rows = db.prepare(`SELECT * FROM ${table}`).all() as Array<
-        Record<string, unknown>
-      >;
-      assert.ok(rows.length > 0, `${table} produced no rows to inspect`);
-      for (const row of rows) {
-        for (const [column, value] of Object.entries(row)) {
-          if (typeof value !== "string") continue;
-          if (column === "owner_id") continue;
-          inspected += 1;
-          assert.ok(
-            allowed.has(value) || uuid.test(value),
-            `${table}.${column} holds unbounded text: ${value}`,
-          );
+    const { backend, db, store } = await openStore(kind);
+    try {
+      assert.equal((await store.record(run())).success, true);
+      const allowed = new Set<string>([
+        ...REPAIR_VIOLATION_CLASSES,
+        "client-deterministic",
+        "server-staged",
+        "deterministic-fixed",
+        "llm-fixed",
+        "mixed-fixed",
+        "unfixable",
+        "abandoned",
+        "deterministic",
+        "llm-ops",
+        "none",
+        "fail",
+        "warn",
+        "applied",
+        "no-error-reduction",
+        "structure-shrunk-or-context-drift",
+      ]);
+      const uuid =
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+      let inspected = 0;
+      for (const table of ["repair_runs", "repair_attempts"]) {
+        const rows = await db.all<Record<string, unknown>>(
+          `SELECT * FROM ${table}`,
+        );
+        assert.ok(rows.length > 0, `${table} produced no rows to inspect`);
+        for (const row of rows) {
+          for (const [column, value] of Object.entries(row)) {
+            if (typeof value !== "string") continue;
+            if (column === "owner_id") continue;
+            if (column === "created_at") {
+              assert.match(value, /^\d{4}-\d{2}-\d{2}T[\d:.]+Z$/);
+              continue;
+            }
+            inspected += 1;
+            assert.ok(
+              allowed.has(value) || uuid.test(value),
+              `${table}.${column} holds unbounded text: ${value}`,
+            );
+          }
         }
       }
+      assert.ok(inspected > 0, "no string cells were inspected at all");
+    } finally {
+      await backend.close();
     }
-    assert.ok(inspected > 0, "no string cells were inspected at all");
-    db.close();
+  });
+
+  it("RP1 createdAt is a number on the run returned by record, on listRuns and on listAttempts, equal to now; durationMs numbers", async () => {
+    const { backend, store } = await openStore(kind);
+    try {
+      const now = Date.UTC(2026, 7, 20, 12, 0, 0);
+      const recorded = await store.record(run({ now }));
+      assert.equal(recorded.success, true);
+      if (!recorded.success) return;
+      assert.equal(typeof recorded.value.createdAt, "number");
+      assert.equal(recorded.value.createdAt, now);
+      assert.equal(typeof recorded.value.durationMs, "number");
+
+      const runs = await store.listRuns();
+      assert.equal(runs.success, true);
+      if (!runs.success) return;
+      assert.equal(typeof runs.value[0]?.createdAt, "number");
+      assert.equal(runs.value[0]?.createdAt, now);
+
+      const attempts = await store.listAttempts(RUN_ID);
+      assert.equal(attempts.success, true);
+      if (!attempts.success) return;
+      assert.equal(typeof attempts.value[0]?.createdAt, "number");
+      assert.equal(attempts.value[0]?.createdAt, now);
+      assert.equal(typeof attempts.value[0]?.durationMs, "number");
+    } finally {
+      await backend.close();
+    }
+  });
+
+  it("RP2 flags round-trip per attempt", async () => {
+    const { backend, store } = await openStore(kind);
+    try {
+      await store.record(
+        run({
+          attempts: [
+            attempt({
+              round: 1,
+              seq: 0,
+              eligible: true,
+              applied: false,
+              changedYaml: true,
+            }),
+            attempt({
+              round: 1,
+              seq: 1,
+              eligible: false,
+              applied: true,
+              changedYaml: false,
+            }),
+            attempt({
+              round: 1,
+              seq: 2,
+              eligible: true,
+              applied: true,
+              changedYaml: true,
+            }),
+          ],
+        }),
+      );
+      const attempts = await store.listAttempts(RUN_ID);
+      assert.equal(attempts.success, true);
+      if (!attempts.success) return;
+      assert.equal(attempts.value.length, 3);
+      assert.equal(attempts.value[0]?.eligible, true);
+      assert.equal(attempts.value[0]?.applied, false);
+      assert.equal(attempts.value[0]?.changedYaml, true);
+      assert.equal(attempts.value[1]?.eligible, false);
+      assert.equal(attempts.value[1]?.applied, true);
+      assert.equal(attempts.value[1]?.changedYaml, false);
+      assert.equal(attempts.value[2]?.eligible, true);
+      assert.equal(attempts.value[2]?.applied, true);
+      assert.equal(attempts.value[2]?.changedYaml, true);
+    } finally {
+      await backend.close();
+    }
+  });
+
+  it("RP3 re-recording a run id updates in place and replaces its attempts", async () => {
+    const { backend, db, store } = await openStore(kind, "owner-a");
+    try {
+      await store.record(
+        run({
+          runId: RUN_ID,
+          attempts: [
+            attempt({
+              round: 1,
+              seq: 0,
+              violationClass: "client-scope-missing",
+            }),
+            attempt({
+              round: 1,
+              seq: 1,
+              violationClass: "client-scope-missing",
+            }),
+          ],
+        }),
+      );
+      const before = await db.get<{ rowid: number }>(
+        "SELECT rowid FROM repair_runs WHERE owner_id = ? AND run_id = ?",
+        ["owner-a", RUN_ID],
+      );
+      await store.record(
+        run({
+          runId: RUN_ID,
+          outcome: "llm-fixed",
+          attempts: [
+            attempt({
+              round: 1,
+              seq: 0,
+              violationClass: "client-zero-adapters",
+            }),
+          ],
+        }),
+      );
+      const after = await db.get<{ rowid: number }>(
+        "SELECT rowid FROM repair_runs WHERE owner_id = ? AND run_id = ?",
+        ["owner-a", RUN_ID],
+      );
+      assert.equal(after?.rowid, before?.rowid);
+      const count = await db.get<{ n: number }>(
+        "SELECT COUNT(*) AS n FROM repair_runs WHERE owner_id = ? AND run_id = ?",
+        ["owner-a", RUN_ID],
+      );
+      assert.equal(count?.n, 1);
+      const attempts = await store.listAttempts(RUN_ID);
+      assert.equal(attempts.success && attempts.value.length, 1);
+      assert.equal(
+        attempts.success && attempts.value[0]?.violationClass,
+        "client-zero-adapters",
+      );
+    } finally {
+      await backend.close();
+    }
+  });
+
+  it("RP4 class stats count eligible and applied separately", async () => {
+    const { backend, store } = await openStore(kind);
+    try {
+      await store.record(
+        run({
+          attempts: [
+            attempt({
+              round: 1,
+              seq: 0,
+              violationClass: "client-zero-adapters",
+              durationMs: 10,
+              eligible: true,
+              applied: false,
+            }),
+            attempt({
+              round: 1,
+              seq: 1,
+              violationClass: "client-zero-adapters",
+              durationMs: 20,
+              eligible: true,
+              applied: false,
+            }),
+            attempt({
+              round: 1,
+              seq: 2,
+              violationClass: "client-zero-adapters",
+              durationMs: 30,
+              eligible: true,
+              applied: true,
+            }),
+            attempt({
+              round: 1,
+              seq: 3,
+              violationClass: "client-zero-adapters",
+              durationMs: 40,
+              eligible: false,
+              applied: false,
+            }),
+            attempt({
+              round: 1,
+              seq: 4,
+              violationClass: "R03",
+              durationMs: 42,
+              eligible: false,
+              applied: false,
+              path: "llm-ops",
+            }),
+          ],
+        }),
+      );
+      const stats = await store.classStats();
+      assert.ok(stats.success);
+      const byClass = new Map(
+        (stats.success ? stats.value : []).map((s) => [s.violationClass, s]),
+      );
+      const zero = byClass.get("client-zero-adapters");
+      assert.equal(zero?.attempts, 4);
+      assert.equal(zero?.eligible, 3);
+      assert.equal(zero?.applied, 1);
+      assert.equal(typeof zero?.eligible, "number");
+      assert.equal(typeof zero?.applied, "number");
+      assert.equal(typeof zero?.medianDurationMs, "number");
+      assert.equal(zero?.medianDurationMs, 20);
+      const r03 = byClass.get("R03");
+      assert.equal(r03?.attempts, 1);
+      assert.equal(r03?.eligible, 0);
+      assert.equal(typeof r03?.eligible, "number");
+    } finally {
+      await backend.close();
+    }
+  });
+
+  it("RP5 class stats are scoped to the owner and filter by surface", async () => {
+    const backend = await openBackend(kind);
+    try {
+      const a = createRepairTelemetryStore(backend.db, "owner-a");
+      const b = createRepairTelemetryStore(backend.db, "owner-b");
+
+      await a.record(
+        run({
+          runId: RUN_ID,
+          surface: "client-deterministic",
+          attempts: [attempt({ violationClass: "client-zero-adapters" })],
+        }),
+      );
+      await b.record(
+        run({
+          runId: OTHER_RUN_ID,
+          surface: "client-deterministic",
+          attempts: [attempt({ violationClass: "client-zero-adapters" })],
+        }),
+      );
+
+      const stats = await a.classStats();
+      assert.ok(stats.success);
+      const zero = stats.value.find(
+        (s) => s.violationClass === "client-zero-adapters",
+      );
+      assert.equal(zero?.attempts, 1);
+      assert.equal(zero?.eligible, 1);
+
+      const serverStats = await a.classStats({ surface: "server-staged" });
+      assert.equal(serverStats.value.length, 0);
+
+      await a.record(
+        run({
+          runId: OTHER_RUN_ID,
+          surface: "server-staged",
+          outcome: "llm-fixed",
+          attempts: [
+            attempt({
+              round: 1,
+              seq: 0,
+              violationClass: "client-zero-adapters",
+              path: "llm-ops",
+            }),
+          ],
+        }),
+      );
+
+      const both = await a.classStats();
+      const zeroBoth = both.value.find(
+        (s) => s.violationClass === "client-zero-adapters",
+      );
+      assert.equal(zeroBoth?.attempts, 2);
+
+      const serverOnly = await a.classStats({ surface: "server-staged" });
+      const zeroServer = serverOnly.value.find(
+        (s) => s.violationClass === "client-zero-adapters",
+      );
+      assert.equal(zeroServer?.attempts, 1);
+    } finally {
+      await backend.close();
+    }
+  });
+
+  it("RP6 retention evicts the oldest runs with their attempts, only this owner's, ties by insertion", async () => {
+    const backend = await openBackend(kind);
+    const db = backend.db;
+    try {
+      const a = createRepairTelemetryStore(backend.db, "owner-a");
+      const b = createRepairTelemetryStore(backend.db, "owner-b");
+
+      for (let i = 0; i < 3; i++) {
+        const id = `44444444-4444-4444-8444-${String(i).padStart(12, "0")}`;
+        await b.record(run({ runId: id, now: 2_000_000_000_000 + i }));
+      }
+
+      const total = MAX_REPAIR_RUNS_PER_OWNER + 3;
+      for (let i = 0; i < total; i++) {
+        const id = `33333333-3333-4333-8333-${String(i).padStart(12, "0")}`;
+        await a.record(run({ runId: id, now: 1_700_000_000_000 }));
+      }
+
+      const aRuns = await a.listRuns({ limit: MAX_REPAIR_RUNS_PER_OWNER });
+      assert.equal(
+        aRuns.success && aRuns.value.length,
+        MAX_REPAIR_RUNS_PER_OWNER,
+      );
+      const gone = await db.get<{ n: number }>(
+        "SELECT COUNT(*) AS n FROM repair_runs WHERE run_id IN (?, ?, ?)",
+        [
+          "33333333-3333-4333-8333-000000000000",
+          "33333333-3333-4333-8333-000000000001",
+          "33333333-3333-4333-8333-000000000002",
+        ],
+      );
+      assert.equal(gone?.n, 0);
+      const orphans = await db.get<{ n: number }>(
+        `SELECT COUNT(*) AS n FROM repair_attempts a
+          WHERE NOT EXISTS (
+            SELECT 1 FROM repair_runs r
+             WHERE r.owner_id = a.owner_id AND r.run_id = a.run_id)`,
+      );
+      assert.equal(orphans?.n, 0);
+      const bRuns = await b.listRuns({ limit: MAX_REPAIR_RUNS_PER_OWNER });
+      assert.equal(bRuns.success && bRuns.value.length, 3);
+    } finally {
+      await backend.close();
+    }
+  });
+
+  it("RP7 listRuns and listAttempts hide other schema versions and other owners", async () => {
+    const { backend, db, store } = await openStore(kind, "owner-a");
+    try {
+      const bStore = createRepairTelemetryStore(backend.db, "owner-b");
+      await store.record(run({ runId: RUN_ID }));
+      const attempts = await store.listAttempts(RUN_ID);
+      assert.equal(attempts.success && attempts.value.length, 1);
+
+      await bStore.record(run({ runId: OTHER_RUN_ID }));
+      await db.run(
+        "UPDATE repair_runs SET schema_version = 99 WHERE run_id = ?",
+        [OTHER_RUN_ID],
+      );
+
+      const aRuns = await store.listRuns();
+      assert.equal(aRuns.success && aRuns.value.length, 1);
+      assert.equal(aRuns.success && aRuns.value[0]?.runId, RUN_ID);
+
+      const aAttempts = await store.listAttempts(RUN_ID);
+      assert.equal(aAttempts.success && aAttempts.value.length, 1);
+    } finally {
+      await backend.close();
+    }
   });
 });
 
