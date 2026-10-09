@@ -1001,6 +1001,13 @@ describe("CachedEditorWorkspaceAdapter clearWorkspace", () => {
 
     const methods = allMethodsOf(fetchImpl);
     assert.deepEqual(methods, ["DELETE"]);
+    const deleteInit = fetchImpl.mock.calls[0]![1]!;
+    const deleteHeaders = new Headers(deleteInit.headers);
+    assert.equal(
+      deleteHeaders.get("If-Match"),
+      '"rev:1"',
+      "conditional DELETE with stamp rev",
+    );
     const cacheAfter = await cache.loadWorkspace(UUID);
     assert.equal(
       cacheAfter.success && cacheAfter.value,
