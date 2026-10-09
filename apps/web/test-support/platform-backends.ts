@@ -24,6 +24,9 @@ export async function openBackend(
 ): Promise<Backend> {
   if (kind === "sqlite") {
     const db = createSqlitePlatformDb(openPlatformDb(":memory:"));
+    // Only a directory this helper made is removed on close: a caller's own
+    // directory (a fixture, a shared temp dir) is the caller's to keep.
+    const ownsDir = opts?.artifactsDir === undefined;
     const artifactsDir =
       opts?.artifactsDir ?? mkdtempSync(join(tmpdir(), "hx-artifacts-"));
     return {
@@ -32,12 +35,13 @@ export async function openBackend(
       store: createPlatformStoreOn(db, artifactsDir),
       close: async () => {
         await db.close();
-        rmSync(artifactsDir, { recursive: true, force: true });
+        if (ownsDir) rmSync(artifactsDir, { recursive: true, force: true });
       },
     };
   }
 
   const { db, drop } = await createTestPgDb({ max: opts?.pgMax });
+  const ownsDir = opts?.artifactsDir === undefined;
   const artifactsDir =
     opts?.artifactsDir ?? mkdtempSync(join(tmpdir(), "hx-artifacts-"));
   let dropped = false;
@@ -50,7 +54,7 @@ export async function openBackend(
       dropped = true;
       await db.close();
       await drop();
-      rmSync(artifactsDir, { recursive: true, force: true });
+      if (ownsDir) rmSync(artifactsDir, { recursive: true, force: true });
     },
   };
 }

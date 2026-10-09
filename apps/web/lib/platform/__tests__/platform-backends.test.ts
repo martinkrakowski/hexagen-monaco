@@ -1,6 +1,9 @@
 // @vitest-environment node
 import { describe, it, expect, afterEach } from "vitest";
 import assert from "node:assert/strict";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   BACKENDS,
   openBackend,
@@ -26,11 +29,32 @@ describe.each(BACKENDS)("platform-backends (%s)", (kind) => {
 
   it("two backends of one kind do not see each other's rows", async () => {
     const a = await openBackend(kind);
-    const b = await openBackend(kind);
-    await a.store.markProjectsInitialized("owner-a");
-    assert.equal(await b.store.isProjectsInitialized("owner-a"), false);
-    await b.close();
-    await a.close();
+    try {
+      const b = await openBackend(kind);
+      try {
+        await a.store.markProjectsInitialized("owner-a");
+        assert.equal(await b.store.isProjectsInitialized("owner-a"), false);
+      } finally {
+        await b.close();
+      }
+    } finally {
+      await a.close();
+    }
+  });
+
+  it("close removes the artifacts directory it made, and leaves a caller's own", async () => {
+    const own = mkdtempSync(join(tmpdir(), "hx-caller-dir-"));
+    try {
+      const made = await openBackend(kind);
+      const madeDir = made.store.scanArtifactsDir;
+      const given = await openBackend(kind, { artifactsDir: own });
+      await made.close();
+      await given.close();
+      assert.equal(existsSync(madeDir), false);
+      assert.equal(existsSync(own), true);
+    } finally {
+      rmSync(own, { recursive: true, force: true });
+    }
   });
 
   it("failOnSql: a plain call that matches rejects with the given error and writes nothing", async () => {
