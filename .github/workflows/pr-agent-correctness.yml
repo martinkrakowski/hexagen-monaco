@@ -267,6 +267,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR: ${{ github.event.pull_request.number }}
           STARTED_AT: ${{ steps.started.outputs.at }}
+          CAP: "12" # keep equal to pr_reviewer.num_max_findings above
         run: |
           set -euo pipefail
           gh api --paginate --slurp --method GET "repos/${GITHUB_REPOSITORY}/issues/${PR}/comments" > "$RUNNER_TEMP/issue.json"
@@ -276,7 +277,8 @@ jobs:
           failed=$(count "^Failed to review PR" "$RUNNER_TEMP/issue.json")
           review=$(count "^## PR Reviewer Guide" "$RUNNER_TEMP/issue.json")
           lines=$(count "." "$RUNNER_TEMP/line.json")
-          for n in "$failed" "$review" "$lines"; do
+          findings=$(count "pr-agent-key-issue-location" "$RUNNER_TEMP/line.json")
+          for n in "$failed" "$review" "$lines" "$findings"; do
             case "$n" in
               ''|*[!0-9]*)
                 echo "Expected an integer from the comment scan, got: $n"
@@ -285,6 +287,11 @@ jobs:
             esac
           done
           echo "/review: $review guide comment(s). Line comments by the bot in this window (either reviewer): $lines. Failure notices: $failed."
+          # What is over the cap is dropped without a note, so a review that
+          # posts exactly the cap may be missing findings. A warning, not a failure.
+          if [ "$findings" -ge "$CAP" ]; then
+            echo "::warning::/review posted $findings findings, the cap of $CAP: more may have been dropped. Report this pull request."
+          fi
           status=0
           if [ "$failed" -gt 0 ]; then
             echo "PR-Agent reported it could not generate a review."
