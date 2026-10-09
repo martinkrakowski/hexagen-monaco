@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, beforeEach, afterEach } from "vitest";
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -120,13 +120,13 @@ describe.each(BACKENDS)("byok-store (%s)", (kind) => {
       fixture({ keyId: "u1-openai", userId: "user-1", provider: "openai" }),
     );
     await backend.store.metadata.store(
-      fixture({ keyId: "u1-vertex", userId: "user-1", provider: "vertex" }),
+      fixture({ keyId: "u1-vertex", userId: "user-1", provider: "anthropic" }),
     );
     await backend.store.metadata.store(
       fixture({ keyId: "u2-openai", userId: "user-2", provider: "openai" }),
     );
     await backend.store.metadata.store(
-      fixture({ keyId: "u2-vertex", userId: "user-2", provider: "vertex" }),
+      fixture({ keyId: "u2-vertex", userId: "user-2", provider: "anthropic" }),
     );
 
     await backend.store.revocation.revoke({
@@ -138,7 +138,7 @@ describe.each(BACKENDS)("byok-store (%s)", (kind) => {
     });
     await backend.store.revocation.revoke({
       userId: "user-2",
-      provider: "vertex",
+      provider: "anthropic",
       keyId: "u2-vertex",
       revokedAt: "2026-01-02T00:00:00.000Z",
       revokedBy: "admin",
@@ -152,7 +152,7 @@ describe.each(BACKENDS)("byok-store (%s)", (kind) => {
     assert.strictEqual(u1o.success && u1o.value?.keyId, "u1-openai");
     const u1v = await backend.store.metadata.findByUserAndProvider(
       "user-1",
-      "vertex",
+      "anthropic",
     );
     assert.strictEqual(u1v.success && u1v.value?.keyId, "u1-vertex");
     const u2o = await backend.store.metadata.findByUserAndProvider(
@@ -162,48 +162,33 @@ describe.each(BACKENDS)("byok-store (%s)", (kind) => {
     assert.strictEqual(u2o.success && u2o.value?.keyId, "u2-openai");
     const u2v = await backend.store.metadata.findByUserAndProvider(
       "user-2",
-      "vertex",
+      "anthropic",
     );
     assert.strictEqual(u2v.success && u2v.value?.keyId, "u2-vertex");
 
     // hasKeys is true for every user with at least one key.
-    assert.strictEqual(
-      (await backend.store.metadata.hasKeys("user-1")).success &&
-        (await backend.store.metadata.hasKeys("user-1")).value,
-      true,
-    );
-    assert.strictEqual(
-      (await backend.store.metadata.hasKeys("user-2")).success &&
-        (await backend.store.metadata.hasKeys("user-2")).value,
-      true,
-    );
-    assert.strictEqual(
-      (await backend.store.metadata.hasKeys("user-3")).success &&
-        (await backend.store.metadata.hasKeys("user-3")).value,
-      false,
-    );
+    const has1 = await backend.store.metadata.hasKeys("user-1");
+    assert.strictEqual(has1.success && has1.value, true);
+    const has2 = await backend.store.metadata.hasKeys("user-2");
+    assert.strictEqual(has2.success && has2.value, true);
+    const has3 = await backend.store.metadata.hasKeys("user-3");
+    assert.strictEqual(has3.success && has3.value, false);
 
     // isRevoked is true only for the pair that was revoked.
-    assert.strictEqual(
-      (await backend.store.revocation.isRevoked("user-1", "openai")).success &&
-        (await backend.store.revocation.isRevoked("user-1", "openai")).value,
-      true,
+    const rev11 = await backend.store.revocation.isRevoked("user-1", "openai");
+    assert.strictEqual(rev11.success && rev11.value, true);
+    const rev2a = await backend.store.revocation.isRevoked(
+      "user-2",
+      "anthropic",
     );
-    assert.strictEqual(
-      (await backend.store.revocation.isRevoked("user-2", "vertex")).success &&
-        (await backend.store.revocation.isRevoked("user-2", "vertex")).value,
-      true,
+    assert.strictEqual(rev2a.success && rev2a.value, true);
+    const rev1a = await backend.store.revocation.isRevoked(
+      "user-1",
+      "anthropic",
     );
-    assert.strictEqual(
-      (await backend.store.revocation.isRevoked("user-1", "vertex")).success &&
-        (await backend.store.revocation.isRevoked("user-1", "vertex")).value,
-      false,
-    );
-    assert.strictEqual(
-      (await backend.store.revocation.isRevoked("user-2", "openai")).success &&
-        (await backend.store.revocation.isRevoked("user-2", "openai")).value,
-      false,
-    );
+    assert.strictEqual(rev1a.success && rev1a.value, false);
+    const rev2o = await backend.store.revocation.isRevoked("user-2", "openai");
+    assert.strictEqual(rev2o.success && rev2o.value, false);
   });
 
   it("markRevoked on one key leaves another key's revokedAt null", async () => {
@@ -277,9 +262,13 @@ describe.each(BACKENDS)("byok-store (%s)", (kind) => {
 
     const meta = await backend.store.metadata.findByKeyId("time-1");
     assert.strictEqual(meta.success && meta.value?.createdAt, createdAt);
-    assert.strictEqual(typeof meta.value?.revokedAt, "string");
-    assert.strictEqual(typeof meta.value?.revokedBy, "string");
-    new Date(meta.value!.revokedAt as string).getTime();
+    assert.strictEqual(meta.success && typeof meta.value?.revokedAt, "string");
+    assert.strictEqual(meta.success && typeof meta.value?.revokedBy, "string");
+    new Date(
+      meta.success && meta.value?.revokedAt
+        ? (meta.value!.revokedAt as string)
+        : "",
+    ).getTime();
 
     const raw = await backend.db.get<{ revoked_at: string }>(
       "SELECT revoked_at FROM byok_revocations WHERE user_id = ? AND provider = ?",
@@ -288,6 +277,7 @@ describe.each(BACKENDS)("byok-store (%s)", (kind) => {
     assert.strictEqual(typeof raw!.revoked_at, "string");
     new Date(raw!.revoked_at).getTime();
   });
+
   it("the store runs on any PlatformDb: store, find, revoke", async () => {
     assert.strictEqual(
       (await backend.store.metadata.store(fixture({ keyId: "k1" }))).success,
