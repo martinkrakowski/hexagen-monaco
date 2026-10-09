@@ -7,7 +7,12 @@ import type {
   PersistedEditorWorkspace,
   Result,
 } from "@hexagen/shared";
-import type { LiftStamp } from "./idb-editor-workspace.adapter";
+import type {
+  ConflictEntry,
+  ConflictRecord,
+  ConflictWhere,
+  LiftStamp,
+} from "./idb-editor-workspace.adapter";
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -20,6 +25,8 @@ const UUID_PATTERN =
 export interface EditorWorkspaceCachePort extends EditorWorkspacePersistencePort {
   getLiftStamp(sessionId: string): Promise<LiftStamp | null>;
   setLiftStamp(sessionId: string, stamp: LiftStamp | null): Promise<void>;
+  recordConflict(entry: ConflictEntry): Promise<void>;
+  getConflicts(): Promise<ConflictRecord | null>;
 }
 
 /**
@@ -476,6 +483,7 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
         return cacheResult;
       }
       this.cancelWriteTimer(sessionId);
+      await this.recordConflictEntry(sessionId, "load", null, readResult.rev);
       this.logger.warn(
         `workspace ${sessionId} conflict: no stamp, cache differs from server`,
       );
@@ -512,6 +520,12 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
       return this.catchUp(sessionId, userId, cacheEntry, stamp);
     }
     this.cancelWriteTimer(sessionId);
+    await this.recordConflictEntry(
+      sessionId,
+      "load",
+      stamp.rev,
+      readResult.rev,
+    );
     this.logger.warn(
       `workspace ${sessionId} conflict: cache dirty and server moved (cache rev=${stamp.rev}, server rev=${readResult.rev})`,
     );
@@ -524,6 +538,25 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
       await this.cache.setLiftStamp(sessionId, stamp);
     } catch {
       // stamp writes are best-effort
+    }
+  }
+
+  private async recordConflictEntry(
+    sessionId: string,
+    where: ConflictWhere,
+    stampRev: number | null,
+    serverRev: number | null,
+  ): Promise<void> {
+    try {
+      await this.cache.recordConflict({
+        id: sessionId,
+        at: new Date().toISOString(),
+        where,
+        stampRev,
+        serverRev,
+      });
+    } catch {
+      // best-effort: never fail the editor
     }
   }
 
@@ -555,6 +588,12 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
       if (putResult.reason === "conflict") {
         this.logger.warn(
           `workspace ${sessionId} conflict: created elsewhere before the lift`,
+        );
+        await this.recordConflictEntry(
+          sessionId,
+          "lift",
+          null,
+          putResult.serverRev ?? null,
         );
       } else {
         this.logger.warn(
@@ -760,9 +799,21 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
               this.logger.warn(
                 `workspace ${sessionId} conflict: created elsewhere before the first save`,
               );
+              await this.recordConflictEntry(
+                sessionId,
+                "first-save",
+                null,
+                result.serverRev ?? null,
+              );
             } else {
               this.logger.warn(
                 `workspace ${sessionId} save conflict: one PUT, server rev=${result.serverRev ?? "unknown"}`,
+              );
+              await this.recordConflictEntry(
+                sessionId,
+                "save",
+                precondition.ifMatch,
+                result.serverRev ?? null,
               );
             }
             this.pausedIds.add(sessionId);
@@ -848,6 +899,12 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
       if (deleteResult.reason === "conflict") {
         this.logger.warn(
           `workspace ${sessionId}: server copy changed on another device, not deleted`,
+        );
+        await this.recordConflictEntry(
+          sessionId,
+          "discard",
+          stamp!.rev,
+          deleteResult.serverRev ?? null,
         );
       } else {
         this.logger.warn(

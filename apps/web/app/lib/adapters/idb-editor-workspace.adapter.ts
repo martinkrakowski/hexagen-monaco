@@ -8,6 +8,24 @@ import type {
 
 const WORKSPACE_KEY_PREFIX = "hexagen:workspace:";
 const LIFT_STAMP_KEY = "hexagen:workspace-lift";
+const CONFLICTS_KEY = "hexagen:workspace-conflicts";
+
+export type ConflictWhere = "load" | "save" | "lift" | "first-save" | "discard";
+
+export interface ConflictEntry {
+  id: string;
+  at: string;
+  where: ConflictWhere;
+  stampRev: number | null;
+  serverRev: number | null;
+}
+
+export interface ConflictRecord {
+  count: number;
+  last: ConflictEntry[];
+}
+
+const MAX_CONFLICT_HISTORY = 20;
 
 /**
  * Per-id stamp that records the last workspace value confirmed on the server.
@@ -154,5 +172,33 @@ export class IDBEditorWorkspaceAdapter implements EditorWorkspacePersistencePort
       // Stamp operations are best-effort: a failed lift-stamp write must
       // never surface to the editor.
     }
+  }
+
+  /** Diagnostics only: the number of conflicts seen, and the newest 20. */
+  async getConflicts(): Promise<ConflictRecord | null> {
+    try {
+      const record = await get<ConflictRecord>(CONFLICTS_KEY);
+      return record ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Records a conflict (count + 1; last keeps the newest 20). Best-effort. */
+  async recordConflict(entry: ConflictEntry): Promise<void> {
+    await this.enqueueWrite(async () => {
+      try {
+        const existing = await get<ConflictRecord>(CONFLICTS_KEY);
+        const record: ConflictRecord = existing ?? { count: 0, last: [] };
+        record.count += 1;
+        record.last.push(entry);
+        if (record.last.length > MAX_CONFLICT_HISTORY) {
+          record.last = record.last.slice(-MAX_CONFLICT_HISTORY);
+        }
+        await set(CONFLICTS_KEY, record);
+      } catch {
+        // Conflict recording must never fail the editor.
+      }
+    });
   }
 }

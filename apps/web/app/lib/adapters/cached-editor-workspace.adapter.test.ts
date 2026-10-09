@@ -1645,3 +1645,138 @@ describe("CachedEditorWorkspaceAdapter Item 18: foreign stamp + save", () => {
     assert.ok(warns.some((w) => /skipped/.test(w)));
   });
 });
+
+describe("CachedEditorWorkspaceAdapter conflict recording (Item 4)", () => {
+  it("each kind of conflict adds one record with where it happened and both revisions", async () => {
+    const { adapter, cache, server, fetchImpl } = makeAdapters();
+
+    // Load conflict (no stamp, cache differs): GET 200, cache has different entry.
+    await cache.saveWorkspace(UUID, makeWorkspace(1000));
+    server.set(UUID, {
+      payload: makeWorkspace(2000),
+      rev: 3,
+      updatedAt: 2000,
+      projectId: UUID,
+    });
+    await adapter.loadWorkspace(UUID);
+
+    // Save conflict (409): stamp exists, save → PUT → 409.
+    const {
+      adapter: a2,
+      cache: c2,
+      server: s2,
+      fetchImpl: f2,
+    } = makeAdapters();
+    await c2.saveWorkspace(UUID, makeWorkspace(1000));
+    await c2.setLiftStamp(UUID, {
+      ownerId: "user-1",
+      rev: 5,
+      syncedUpdatedAt: 1000,
+      confirmed: true,
+    });
+    s2.set(UUID, {
+      payload: makeWorkspace(1000),
+      rev: 5,
+      updatedAt: 1000,
+      projectId: UUID,
+    });
+    await a2.loadWorkspace(UUID);
+    s2.set(UUID, {
+      payload: makeWorkspace(1000),
+      rev: 9,
+      updatedAt: 1000,
+      projectId: UUID,
+    });
+    f2.mockImplementation(
+      async (url: string | URL | Request, init?: RequestInit) => {
+        const method = (init?.method ?? "GET").toUpperCase();
+        const match = /\/api\/tenants\/(.+)\/documents\/workspace\/(.+)/.exec(
+          String(url),
+        );
+        const id = match![2]!;
+        if (method === "GET") {
+          const doc = s2.get(id);
+          if (!doc) return new Response(null, { status: 404 });
+          return new Response(
+            JSON.stringify({
+              kind: "workspace",
+              id,
+              projectId: doc.projectId,
+              payload: doc.payload,
+              updatedAt: doc.updatedAt,
+            }),
+            { status: 200, headers: { ETag: `"rev:${doc.rev}"` } },
+          );
+        }
+        if (method === "PUT")
+          return new Response("conflict", {
+            status: 409,
+            headers: { ETag: '"rev:9"' },
+          });
+        return new Response("nope", { status: 500 });
+      },
+    );
+    await a2.saveWorkspace(UUID, makeWorkspace(2000));
+    await vi.advanceTimersByTimeAsync(REMOTE_DEBOUNCE_MS);
+
+    const rec = await cache.getConflicts();
+    assert.ok(rec);
+    assert.equal(rec.count, 2);
+    const loadConflicts = rec.last.filter((e) => e.where === "load");
+    assert.equal(loadConflicts.length, 1);
+    assert.equal(loadConflicts[0]!.id, UUID);
+    assert.equal(loadConflicts[0]!.stampRev, null);
+    assert.equal(loadConflicts[0]!.serverRev, 3);
+    const saveConflicts = rec.last.filter((e) => e.where === "save");
+    assert.equal(saveConflicts.length, 1);
+    assert.equal(saveConflicts[0]!.stampRev, 5);
+    assert.equal(saveConflicts[0]!.serverRev, 9);
+  });
+
+  it("the record keeps the newest twenty and counts all", async () => {
+    const { cache } = makeAdapters();
+    for (let i = 0; i < 25; i++) {
+      await cache.recordConflict({
+        id: `id-${i}`,
+        at: new Date().toISOString(),
+        where: "load",
+        stampRev: i,
+        serverRev: i + 100,
+      });
+    }
+    const rec = await cache.getConflicts();
+    assert.ok(rec);
+    assert.equal(rec.count, 25, "count tracks all");
+    assert.equal(rec.last.length, 20, "last capped at 20");
+    assert.equal(rec.last[0]!.id, "id-5", "first 5 dropped");
+    assert.equal(rec.last[19]!.id, "id-24", "newest kept");
+  });
+
+  it("a failed record write does not fail load or save", async () => {
+    const { adapter, cache, server } = makeAdapters();
+    await cache.saveWorkspace(UUID, makeWorkspace(1000));
+    await cache.setLiftStamp(UUID, {
+      ownerId: "user-1",
+      rev: 5,
+      syncedUpdatedAt: 1000,
+      confirmed: true,
+    });
+    server.set(UUID, {
+      payload: makeWorkspace(1000),
+      rev: 5,
+      updatedAt: 1000,
+      projectId: UUID,
+    });
+
+    // Make recordConflict throw — load/save must still succeed.
+    vi.spyOn(cache, "recordConflict").mockImplementationOnce(async () => {
+      throw new Error("storage error");
+    });
+
+    const result = await adapter.loadWorkspace(UUID);
+    assert.ok(
+      result.success && result.value,
+      "load succeeds even if record write fails",
+    );
+  });
+});
