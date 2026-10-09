@@ -54,6 +54,12 @@ export interface AuditEntry {
    * written before this column existed and on every non-refusal row.
    */
   detail?: Record<string, unknown>;
+  /**
+   * When the row says it happened, as an ISO string. Defaults to now. A store
+   * that decides something by its own (injectable) clock passes that clock's
+   * time, so the row and the decision cannot disagree about when.
+   */
+  createdAt?: string;
 }
 
 export interface AuditLogRepository {
@@ -100,7 +106,7 @@ export async function appendAudit(
     subject_id: entry.subjectId ?? null,
     grantee_type: entry.granteeType ?? null,
     grantee_id: entry.granteeId ?? null,
-    created_at: new Date().toISOString(),
+    created_at: entry.createdAt ?? new Date().toISOString(),
     detail: entry.detail === undefined ? null : JSON.stringify(entry.detail),
   });
 }

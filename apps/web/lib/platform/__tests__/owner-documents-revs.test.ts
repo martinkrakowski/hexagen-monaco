@@ -11,6 +11,15 @@ import {
 } from "../owner-documents-store";
 import { createOrgsRepository } from "../orgs-store";
 import { createSavedProjectsStore } from "../saved-projects-store";
+import type { SavedProject } from "@hexagen/shared";
+
+function must<T>(
+  r: { success: true; value: T } | { success: false; error: unknown },
+): T {
+  if (!r.success)
+    throw new Error(`expected success, got ${JSON.stringify(r.error)}`);
+  return r.value;
+}
 
 type Backend = {
   db: PlatformDb;
@@ -42,24 +51,6 @@ const backends: Array<[string, () => Promise<Backend>]> = [
   ["sqlite", makeSqlite],
   ["postgres", () => makePg(8)],
 ];
-
-// A saved_projects row, written via raw SQL with hx_ts(@at) so the timestamp
-// column is accepted on both backends. createProjectRecord is not used here:
-// it binds epoch-ms created_at/updated_at directly, which Postgres rejects
-// (22008) — a pre-existing saved-projects-store limitation outside A3-00's rev
-// scope. deleteProjectRecord (plain DELETE) is used for the cascade, per the
-// brief. The point of test 4 is the document counter through the FK cascade.
-async function createProjectRow(
-  db: PlatformDb,
-  ownerId: string,
-  id: string,
-): Promise<void> {
-  const at = Date.now();
-  await db.run(
-    "INSERT INTO saved_projects (id, owner_id, name, payload, created_at, updated_at, ord, rev) VALUES (@id, @oid, @name, @payload, hx_ts(@at), hx_ts(@at), @ord, 1)",
-    { id, oid: ownerId, name: "P", payload: "{}", at, ord: 0 },
-  );
-}
 
 describe.each(backends)("owner document revs: %s", (_name, make) => {
   let db: PlatformDb;
@@ -223,7 +214,17 @@ describe.each(backends)("owner document revs: %s", (_name, make) => {
     const projects = createSavedProjectsStore(db, "user-1");
     const store = createOwnerDocumentsStore(db, "user-1", "user-1");
     try {
-      await createProjectRow(db, "user-1", "proj-a");
+      must(
+        await projects.createProjectRecord({
+          id: "proj-a",
+          name: "P",
+          schemaVersion: 4,
+          createdAt: 1,
+          updatedAt: 1,
+          formState: {},
+          manifestYaml: "",
+        } as unknown as SavedProject),
+      );
       await store.put({
         kind: "workspace",
         id: "doc-1",
@@ -245,7 +246,17 @@ describe.each(backends)("owner document revs: %s", (_name, make) => {
 
       // Re-create the project row and the document; the new rev must exceed the
       // old one because the counter was not reset by the cascade.
-      await createProjectRow(db, "user-1", "proj-a");
+      must(
+        await projects.createProjectRecord({
+          id: "proj-a",
+          name: "P",
+          schemaVersion: 4,
+          createdAt: 1,
+          updatedAt: 1,
+          formState: {},
+          manifestYaml: "",
+        } as unknown as SavedProject),
+      );
       const re = await store.put({
         kind: "workspace",
         id: "doc-1",
