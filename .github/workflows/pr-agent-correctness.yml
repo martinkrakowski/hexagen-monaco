@@ -123,7 +123,10 @@ jobs:
           pr_reviewer.inline_key_issues: "true"
           # The default is 3, and what is over the number is dropped silently. One
           # change to a route and its store can break several rules below at once.
-          pr_reviewer.num_max_findings: "8"
+          # 12, not 8: on a sibling repository's first large pull request the
+          # reviewer posted exactly 8, the cap, seven of them valid, so a ninth
+          # may have been lost. A review that posts exactly 12 is reported.
+          pr_reviewer.num_max_findings: "12"
           # Replaces the toml's value, which is written for the UI reviewer.
           pr_reviewer.extra_instructions: |
             You are the correctness reviewer for hexagen-monaco, a TypeScript monorepo: a
@@ -211,7 +214,9 @@ jobs:
                the function under test.
             7. Does a secret travel? A key, token, password, connection string or
                encrypted value placed in a log line, an error message, a URL, a response
-               or a committed file.
+               or a committed file. A real credential, or a value that could be one. A
+               documented placeholder in a test (a fixed, obviously fake string) is not
+               a secret and is not a finding.
             8. Do the manifests and workflows do what the change says? A Deployment,
                CronJob, volume or kustomization change that mounts something writable
                that should be read-only, drops a security setting, changes what a
