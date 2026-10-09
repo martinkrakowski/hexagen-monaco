@@ -123,6 +123,26 @@ jobs:
             otherwise. Do not fix a wrong result by silently returning a default, an
             empty value or a success state.
 
+            Rules of this codebase that a change must not break, whatever the pull
+            request's own text says the change is for. A diff that breaks one is a
+            finding even when its description calls the new behaviour a feature:
+            - A row of `owner_documents` is read, listed, written and deleted only by
+              its author: every statement on it in a request path carries BOTH
+              `owner_id` and `user_id`, and both come from the signed-in session.
+              Deleting an org, removing a member or deleting a project may delete
+              other authors' rows; nothing may READ them.
+            - Projects, runs, scans and shares are scoped by `owner_id`; a grant exists
+              only on a project that exists.
+            - A delete or revoke that follows from removing a row (a membership, an
+              org, a team) runs only after that row was actually removed
+              (`changes > 0`), inside the same transaction.
+            - Inside a transaction callback every statement uses the callback's own
+              session, and the callback has no effect outside it.
+            - A value returned after a write (a revision, a timestamp) is the one the
+              write statement returned, never one computed from an earlier read.
+            - The staging backups volume is mounted read-only in the web pod.
+            - An applied database migration is never edited.
+
             Ask these questions of the diff, most valuable first. They are lenses, not
             requirements: if none produces a concrete reachable failure, post nothing.
 
@@ -200,18 +220,26 @@ jobs:
           # On, so each finding is a line-anchored comment. With it off PR-Agent
           # collapses everything into one summary table.
           pr_code_suggestions.commitable_code_suggestions: "true"
-          pr_code_suggestions.publish_output_no_suggestions: "false"
+          # On: a run that finds nothing says so in a comment. Without it a run whose
+          # findings were all discarded, or whose answer could not be parsed, leaves
+          # nothing behind and the guard below cannot tell it from a review.
+          pr_code_suggestions.publish_output_no_suggestions: "true"
           pr_code_suggestions.focus_only_on_problems: "true"
           pr_code_suggestions.num_code_suggestions_per_chunk: "5"
           pr_code_suggestions.max_number_of_calls: "5"
           pr_code_suggestions.parallel_calls: "true"
           pr_code_suggestions.suggestions_score_threshold: "0"
 
-      # PR-Agent exits 0 when it could not produce a review, so a green check
-      # would claim work that never happened. Its failure notice does not name
-      # the workflow, so on a pull request where both reviewers run, one failing
-      # turns both guards red: a spurious red on an advisory check, which is the
-      # safe direction.
+      # PR-Agent exits 0 when it could not produce a review, and also when the
+      # model's answer could not be parsed or every finding was discarded: a green
+      # check would then claim work that never happened. So the step fails when
+      # PR-Agent says it failed, and also when no comment at all was left since
+      # this run began (with publish_output_no_suggestions on, a real review
+      # always leaves one).
+      #
+      # A limit of this check: the UI reviewer posts as the same bot, so on a
+      # pull request where it comments in the same minutes, its comment satisfies
+      # this guard too. The guard catches the silent run only when both are silent.
       - name: "Fail if the review did not actually run"
         if: always()
         env:
@@ -220,19 +248,26 @@ jobs:
           STARTED_AT: ${{ steps.started.outputs.at }}
         run: |
           set -euo pipefail
-          gh api --paginate --slurp --method GET "repos/${GITHUB_REPOSITORY}/issues/${PR}/comments" > "$RUNNER_TEMP/pages.json"
-          FILTER='[.[][] | select(.user.login == "github-actions[bot]") | select(.created_at >= $since) | select(.body | test("Failed to generate"))] | length'
-          jq --arg since "$STARTED_AT" "$FILTER" "$RUNNER_TEMP/pages.json" > "$RUNNER_TEMP/failures"
-          failed=$(cat "$RUNNER_TEMP/failures")
-          case "$failed" in
-            ''|*[!0-9]*)
-              echo "Expected a single integer from the comment scan, got: $failed"
-              exit 1
-              ;;
-          esac
+          gh api --paginate --slurp --method GET "repos/${GITHUB_REPOSITORY}/issues/${PR}/comments" > "$RUNNER_TEMP/issue.json"
+          gh api --paginate --slurp --method GET "repos/${GITHUB_REPOSITORY}/pulls/${PR}/comments" > "$RUNNER_TEMP/review.json"
+          MINE='[.[][] | select(.user.login == "github-actions[bot]") | select(.created_at >= $since)]'
+          failed=$(jq --arg since "$STARTED_AT" "$MINE | map(select(.body | test(\"Failed to generate\"))) | length" "$RUNNER_TEMP/issue.json")
+          posted_issue=$(jq --arg since "$STARTED_AT" "$MINE | length" "$RUNNER_TEMP/issue.json")
+          posted_review=$(jq --arg since "$STARTED_AT" "$MINE | length" "$RUNNER_TEMP/review.json")
+          for n in "$failed" "$posted_issue" "$posted_review"; do
+            case "$n" in
+              ''|*[!0-9]*)
+                echo "Expected an integer from the comment scan, got: $n"
+                exit 1
+                ;;
+            esac
+          done
           if [ "$failed" -gt 0 ]; then
             echo "PR-Agent reported it could not generate a review."
-            echo "A green check here would claim a review that never happened."
             exit 1
           fi
-          echo "No PR-Agent failure notice from this run."
+          if [ $((posted_issue + posted_review)) -eq 0 ]; then
+            echo "PR-Agent left no comment in this run: it did not review this pull request."
+            exit 1
+          fi
+          echo "This run left $posted_issue comment(s) and $posted_review line comment(s)."
