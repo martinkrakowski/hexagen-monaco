@@ -128,14 +128,14 @@ export function createSavedProjectsStore(
   ownerId: string,
 ): SavedProjectsStore {
   const selectAll =
-    "SELECT id, name, payload, created_at, updated_at, ord, rev, updated_by FROM saved_projects WHERE owner_id = ? ORDER BY ord ASC";
+    "SELECT id, name, payload, hx_ms(created_at) AS created_at, hx_ms(updated_at) AS updated_at, ord, rev, updated_by FROM saved_projects WHERE owner_id = ? ORDER BY ord ASC";
   const selectOne =
-    "SELECT id, name, payload, created_at, updated_at, ord, rev, updated_by FROM saved_projects WHERE owner_id = ? AND id = ?";
+    "SELECT id, name, payload, hx_ms(created_at) AS created_at, hx_ms(updated_at) AS updated_at, ord, rev, updated_by FROM saved_projects WHERE owner_id = ? AND id = ?";
   const minOrd =
     "SELECT COALESCE(MIN(ord), 0) AS min_ord FROM saved_projects WHERE owner_id = ?";
   const insert = `
     INSERT INTO saved_projects (id, owner_id, name, payload, created_at, updated_at, ord)
-    VALUES (@id, @owner_id, @name, @payload, @created_at, @updated_at, @ord)
+    VALUES (@id, @owner_id, @name, @payload, hx_ts(@created_at), hx_ts(@updated_at), @ord)
   `;
   /**
    * Bulk replace used to DELETE + INSERT, which reset `rev` to the column
@@ -145,7 +145,7 @@ export function createSavedProjectsStore(
    */
   const upsert = `
     INSERT INTO saved_projects (id, owner_id, name, payload, created_at, updated_at, ord)
-    VALUES (@id, @owner_id, @name, @payload, @created_at, @updated_at, @ord)
+    VALUES (@id, @owner_id, @name, @payload, hx_ts(@created_at), hx_ts(@updated_at), @ord)
     ON CONFLICT (owner_id, id) DO UPDATE SET
       name = excluded.name,
       payload = excluded.payload,
@@ -169,15 +169,15 @@ export function createSavedProjectsStore(
    */
   const updateProject = `
     UPDATE saved_projects
-       SET name = @name,
-           payload = @payload,
-           updated_at = @updated_at,
-           rev = rev + 1,
-           updated_by = @updated_by
-     WHERE owner_id = @owner_id
-       AND id = @id
-       AND (@expected_rev IS NULL OR rev = @expected_rev)
-       AND (@expected_updated_at IS NULL OR updated_at = @expected_updated_at)
+        SET name = @name,
+            payload = @payload,
+            updated_at = hx_ts(@updated_at),
+            rev = rev + 1,
+            updated_by = @updated_by
+      WHERE owner_id = @owner_id
+        AND id = @id
+        AND (CAST(@expected_rev AS INTEGER) IS NULL OR rev = @expected_rev)
+        AND (CAST(@expected_updated_at AS BIGINT) IS NULL OR updated_at = hx_ts(@expected_updated_at))
     RETURNING rev
   `;
   const remove = "DELETE FROM saved_projects WHERE owner_id = ? AND id = ?";

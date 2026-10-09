@@ -124,19 +124,26 @@ export function openByokDb(dbPath: string): Database.Database {
 
 /** The two ports over any PlatformDb. */
 export function createByokStoreOn(db: PlatformDb): ByokStore {
-  // Upsert on key_id mirrors the in-memory `byKeyId.set(keyId, …)` overwrite.
-  // write_seq is stamped MAX+1 on both insert and in-place update so every
-  // store() — including re-storing an existing key_id — advances it past every
-  // other row. (MAX() over the current table already excludes the not-yet-
-  // inserted row and, on update, sees the conflicting row's prior value.)
-  // One statement, so it is atomic on one connection. A pooled backend needs a
-  // sequence here (a later packet).
+  // write_seq: MAX+1 on SQLite (one connection serialises writes), nextval on
+  // Postgres (a pooled backend has no single connection). A value is taken when
+  // the statement runs, not at commit; gaps are possible (rolled-back/failed
+  // statements burn a value). For two calls where B starts after A resolved,
+  // B > A on both backends; for overlapping calls no caller can tell which
+  // "last" — either result is a valid order. The store does NOT hide this.
+  const writeSeqValue =
+    db.dialect === "postgres"
+      ? "nextval('byok_write_seq')"
+      : "(SELECT COALESCE(MAX(write_seq), 0) + 1 FROM byok_key_metadata)";
+  const writeSeqSet =
+    db.dialect === "postgres"
+      ? "excluded.write_seq"
+      : "(SELECT COALESCE(MAX(write_seq), 0) + 1 FROM byok_key_metadata)";
   const upsertMeta = `
     INSERT INTO byok_key_metadata
       (key_id, user_id, provider, key_version, created_at, revoked_at, revoked_by, write_seq)
     VALUES
       (@key_id, @user_id, @provider, @key_version, @created_at, @revoked_at, @revoked_by,
-       (SELECT COALESCE(MAX(write_seq), 0) + 1 FROM byok_key_metadata))
+       ${writeSeqValue})
     ON CONFLICT(key_id) DO UPDATE SET
       user_id     = excluded.user_id,
       provider    = excluded.provider,
@@ -144,7 +151,7 @@ export function createByokStoreOn(db: PlatformDb): ByokStore {
       created_at  = excluded.created_at,
       revoked_at  = excluded.revoked_at,
       revoked_by  = excluded.revoked_by,
-      write_seq   = (SELECT COALESCE(MAX(write_seq), 0) + 1 FROM byok_key_metadata)
+      write_seq   = ${writeSeqSet}
   `;
   // Last-write-wins per (user, provider) mirrors the in-memory `byUserProvider`
   // map: the row with the highest write_seq is the most recently stored one.
