@@ -280,9 +280,13 @@ export function createTeamsRepository(db: PlatformDb): TeamsRepository {
    * read-then-write check in the route loses the race between two concurrent
    * creates and the loser would escape as a 500.
    */
-  const isDuplicateSlug = (err: unknown): boolean =>
-    db.isUniqueViolation(err) &&
-    String((err as { message?: unknown }).message ?? "").includes("teams.slug");
+  const isDuplicateSlug = (err: unknown): boolean => {
+    const message = String((err as { message?: unknown }).message ?? "");
+    return (
+      db.isUniqueViolation(err) &&
+      (message.includes("teams.slug") || message.includes("idx_teams_org_slug"))
+    );
+  };
 
   return {
     async createTeam(input, audit) {
