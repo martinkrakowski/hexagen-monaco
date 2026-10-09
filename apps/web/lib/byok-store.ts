@@ -10,6 +10,8 @@ import type {
   KeyMetadataStorePort,
   RevocationStorePort,
 } from "@hexagen/byok";
+import type { PlatformDb } from "./platform/db";
+import { createSqlitePlatformDb } from "./platform/sqlite-db";
 
 /**
  * Durable BYOK metadata + revocation store (AUD-007).
@@ -34,7 +36,7 @@ import type {
 export interface ByokStore {
   metadata: KeyMetadataStorePort;
   revocation: RevocationStorePort;
-  close(): void;
+  close(): Promise<void>;
 }
 
 /** Column shape of `byok_key_metadata` rows. */
@@ -72,7 +74,11 @@ function metadataStoreError<T>(
   } satisfies ByokError) as Result<T, ByokError>;
 }
 
-export function createByokStore(dbPath: string): ByokStore {
+/**
+ * Opens (and creates) the SQLite file and returns the raw handle. Schema setup
+ * stays here, unchanged.
+ */
+export function openByokDb(dbPath: string): Database.Database {
   if (dbPath !== ":memory:") {
     mkdirSync(dirname(dbPath), { recursive: true });
   }
@@ -113,13 +119,19 @@ export function createByokStore(dbPath: string): ByokStore {
       PRIMARY KEY (user_id, provider)
     );
   `);
+  return db;
+}
 
+/** The two ports over any PlatformDb. */
+export function createByokStoreOn(db: PlatformDb): ByokStore {
   // Upsert on key_id mirrors the in-memory `byKeyId.set(keyId, …)` overwrite.
   // write_seq is stamped MAX+1 on both insert and in-place update so every
   // store() — including re-storing an existing key_id — advances it past every
   // other row. (MAX() over the current table already excludes the not-yet-
   // inserted row and, on update, sees the conflicting row's prior value.)
-  const upsertMetaStmt = db.prepare(`
+  // One statement, so it is atomic on one connection. A pooled backend needs a
+  // sequence here (a later packet).
+  const upsertMeta = `
     INSERT INTO byok_key_metadata
       (key_id, user_id, provider, key_version, created_at, revoked_at, revoked_by, write_seq)
     VALUES
@@ -133,41 +145,35 @@ export function createByokStore(dbPath: string): ByokStore {
       revoked_at  = excluded.revoked_at,
       revoked_by  = excluded.revoked_by,
       write_seq   = (SELECT COALESCE(MAX(write_seq), 0) + 1 FROM byok_key_metadata)
-  `);
+  `;
   // Last-write-wins per (user, provider) mirrors the in-memory `byUserProvider`
   // map: the row with the highest write_seq is the most recently stored one.
-  const findByUserProviderStmt = db.prepare(
-    `SELECT * FROM byok_key_metadata WHERE user_id = ? AND provider = ?
-       ORDER BY write_seq DESC LIMIT 1`,
-  );
-  const findByKeyIdStmt = db.prepare(
-    "SELECT * FROM byok_key_metadata WHERE key_id = ?",
-  );
-  const markRevokedStmt = db.prepare(
-    "UPDATE byok_key_metadata SET revoked_at = ?, revoked_by = ? WHERE key_id = ?",
-  );
+  const findByUserProvider = `
+    SELECT * FROM byok_key_metadata WHERE user_id = ? AND provider = ?
+       ORDER BY write_seq DESC LIMIT 1
+  `;
+  const findByKeyId = "SELECT * FROM byok_key_metadata WHERE key_id = ?";
+  const markRevoked =
+    "UPDATE byok_key_metadata SET revoked_at = ?, revoked_by = ? WHERE key_id = ?";
   // hasKeys counts revoked rows too — matches the in-memory adapter, which
   // iterates every stored (user, provider) key without filtering revocation.
-  const hasKeysStmt = db.prepare(
-    "SELECT 1 FROM byok_key_metadata WHERE user_id = ? LIMIT 1",
-  );
+  const hasKeys = "SELECT 1 FROM byok_key_metadata WHERE user_id = ? LIMIT 1";
 
-  const upsertRevocationStmt = db.prepare(`
+  const upsertRevocation = `
     INSERT INTO byok_revocations (user_id, provider, key_id, revoked_at, revoked_by)
     VALUES (@user_id, @provider, @key_id, @revoked_at, @revoked_by)
     ON CONFLICT(user_id, provider) DO UPDATE SET
       key_id     = excluded.key_id,
       revoked_at = excluded.revoked_at,
       revoked_by = excluded.revoked_by
-  `);
-  const isRevokedStmt = db.prepare(
-    "SELECT 1 FROM byok_revocations WHERE user_id = ? AND provider = ? LIMIT 1",
-  );
+  `;
+  const isRevoked =
+    "SELECT 1 FROM byok_revocations WHERE user_id = ? AND provider = ? LIMIT 1";
 
   const metadata: KeyMetadataStorePort = {
     async store(m) {
       try {
-        upsertMetaStmt.run({
+        await db.run(upsertMeta, {
           key_id: m.keyId,
           user_id: m.userId,
           provider: m.provider,
@@ -183,9 +189,10 @@ export function createByokStore(dbPath: string): ByokStore {
     },
     async findByUserAndProvider(userId, provider) {
       try {
-        const row = findByUserProviderStmt.get(userId, provider) as
-          | MetadataRow
-          | undefined;
+        const row = (await db.get<MetadataRow>(findByUserProvider, [
+          userId,
+          provider,
+        ])) as MetadataRow | undefined;
         return ok(row ? rowToMetadata(row) : null) as Result<
           KeyMetadata | null,
           ByokError
@@ -199,7 +206,9 @@ export function createByokStore(dbPath: string): ByokStore {
     },
     async findByKeyId(keyId) {
       try {
-        const row = findByKeyIdStmt.get(keyId) as MetadataRow | undefined;
+        const row = (await db.get<MetadataRow>(findByKeyId, [keyId])) as
+          | MetadataRow
+          | undefined;
         return ok(row ? rowToMetadata(row) : null) as Result<
           KeyMetadata | null,
           ByokError
@@ -215,11 +224,11 @@ export function createByokStore(dbPath: string): ByokStore {
       try {
         // Single UPDATE: `changes === 0` means no row matched this keyId, i.e.
         // the key metadata does not exist — no separate existence SELECT needed.
-        const result = markRevokedStmt.run(
+        const result = await db.run(markRevoked, [
           new Date().toISOString(),
           revokedBy,
           keyId,
-        );
+        ]);
         if (result.changes === 0) {
           return err({
             kind: "key_not_found",
@@ -234,7 +243,7 @@ export function createByokStore(dbPath: string): ByokStore {
     },
     async hasKeys(userId) {
       try {
-        const found = hasKeysStmt.get(userId);
+        const found = await db.get(hasKeys, [userId]);
         return ok(found !== undefined) as Result<boolean, ByokError>;
       } catch (error) {
         return metadataStoreError(error, "Failed to check user keys");
@@ -245,7 +254,7 @@ export function createByokStore(dbPath: string): ByokStore {
   const revocation: RevocationStorePort = {
     async revoke(entry) {
       try {
-        upsertRevocationStmt.run({
+        await db.run(upsertRevocation, {
           user_id: entry.userId,
           provider: entry.provider,
           key_id: entry.keyId,
@@ -259,7 +268,7 @@ export function createByokStore(dbPath: string): ByokStore {
     },
     async isRevoked(userId, provider) {
       try {
-        const found = isRevokedStmt.get(userId, provider);
+        const found = await db.get(isRevoked, [userId, provider]);
         return ok(found !== undefined) as Result<boolean, ByokError>;
       } catch (error) {
         return metadataStoreError(error, "Failed to check revocation status");
@@ -270,10 +279,15 @@ export function createByokStore(dbPath: string): ByokStore {
   return {
     metadata,
     revocation,
-    close() {
-      db.close();
+    async close() {
+      await db.close();
     },
   };
+}
+
+/** As before: open the file, wrap it in the SQLite seam, build the store. */
+export function createByokStore(dbPath: string): ByokStore {
+  return createByokStoreOn(createSqlitePlatformDb(openByokDb(dbPath)));
 }
 
 /** Where the durable DB lives in prod; in-memory elsewhere so dev/test leave no
@@ -295,9 +309,10 @@ export function getByokStore(): ByokStore {
 
 /** Close and drop the singleton so the next `getByokStore()` reopens from disk.
  * `clearByokCache()` calls this to simulate a process restart in tests. */
-export function closeByokStore(): void {
+export async function closeByokStore(): Promise<void> {
   if (singleton) {
-    singleton.close();
+    const closing = singleton;
     singleton = null;
+    await closing.close();
   }
 }

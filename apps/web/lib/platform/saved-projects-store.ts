@@ -202,6 +202,13 @@ export function createSavedProjectsStore(
         if (!surviving.has(row.id))
           await revokeSharesForProject(tx, ownerId, row.id);
       }
+      // The same for ids that are NEW in this replacement: a project created
+      // here starts with no grants, whatever was once granted on its id.
+      const known = new Set(existing.map((row) => row.id));
+      for (const project of projects) {
+        if (!known.has(project.id))
+          await revokeSharesForProject(tx, ownerId, project.id);
+      }
       // Delete ONLY the non-surviving rows. A clear + reinsert would reset
       // `rev` to the column default on every surviving project, making a stale
       // If-Match token valid again (the ABA the H1.4 contract exists to stop);
@@ -316,6 +323,10 @@ export function createSavedProjectsStore(
             project.id,
           ]);
           if (existing) return true;
+          // A new project starts with no grants. Any live grant already on
+          // this id belongs to a project that is gone (ids are chosen by the
+          // client and can come back); it must not attach to this one.
+          await revokeSharesForProject(tx, ownerId, project.id);
           const { min_ord } = (await tx.get<{ min_ord: number }>(minOrd, [
             ownerId,
           ]))!;

@@ -89,7 +89,7 @@ export const getRevokeKeyUseCase = (): RevokeKeyPort => {
   return _revokeUseCase;
 };
 
-export const clearByokCache = (): void => {
+export const clearByokCache = async (): Promise<void> => {
   _encryptUseCase = null;
   _proxyUseCase = null;
   _revokeUseCase = null;
@@ -98,5 +98,5 @@ export const clearByokCache = (): void => {
   _auditLogAdapter = null;
   // Drop the SQLite handle too, so the next getByokStore() reopens from disk —
   // this is what lets tests simulate a container restart.
-  closeByokStore();
+  await closeByokStore();
 };
