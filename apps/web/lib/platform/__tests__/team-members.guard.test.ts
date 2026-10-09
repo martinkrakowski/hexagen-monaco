@@ -640,7 +640,7 @@ describe("P-A4 — grants made to a team die with the team", () => {
     }
   });
 
-  it("deleting an id that is not a team revokes nothing", async () => {
+  it("deleting an id that is not a team revokes nothing (no over-revocation)", async () => {
     const { db, orgs, teams, shares } = fixture();
     try {
       const org = await orgs.createOrg({

@@ -1,4 +1,4 @@
-import { describe, it } from "vitest";
+import { describe, it, vi } from "vitest";
 import assert from "node:assert/strict";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -6,6 +6,7 @@ import { join } from "node:path";
 
 import { openPlatformDb, ORG_INVITE_TTL_DAYS } from "../platform-db";
 import { createSqlitePlatformDb } from "../sqlite-db";
+import type { PlatformDbSession } from "../db";
 import { createOrgsRepository, LastOwnerError } from "../orgs-store";
 import { createTeamsRepository } from "../teams-store";
 import { createAuditLogRepository } from "../audit-log-store";
@@ -19,6 +20,7 @@ function fixture() {
   const platformDb = createSqlitePlatformDb(db);
   return {
     db,
+    platformDb,
     orgs: createOrgsRepository(platformDb),
     teams: createTeamsRepository(platformDb),
     audit: createAuditLogRepository(platformDb),
@@ -623,12 +625,17 @@ describe("H1.2 — changeMemberRole", () => {
       assert.equal(
         await fx.orgs.memberRole("org-acme", "founder"),
         "owner",
-        "the refusal is atomic: role is untouched",
+        "the refusal is atomic: the owner's role reads back as owner",
       );
       assert.equal(
         await fx.audit.countFor("org.member.role_change", "org-acme"),
         0,
-        "a refused demotion writes no audit row",
+        "a refused demotion writes no role_change row",
+      );
+      assert.equal(
+        await fx.audit.countFor("org.member.add", "org-acme"),
+        0,
+        "a refused demotion must not insert a membership under any isolation",
       );
     } finally {
       fx.db.close();
@@ -674,6 +681,62 @@ describe("H1.2 — changeMemberRole", () => {
         await fx.orgs.memberRole("org-acme", "dev-1"),
         null,
         "change-then-remove: the member is gone, not left as an owner",
+      );
+    } finally {
+      fx.db.close();
+    }
+  });
+
+  it("changeMemberRole runs an UPDATE and never the member upsert", async () => {
+    // Structural guarantee, not an isolation one: a role change must never
+    // INSERT a row, because an INSERT ... ON CONFLICT would re-create a
+    // membership removed between the caller's check and the write. This test
+    // wraps db.transaction to record every SQL handed to tx.run, so it captures
+    // the statement the store actually issues (upsertMember would surface as
+    // `INSERT INTO org_members`, updateMemberRole as `UPDATE org_members SET
+    // role`) independent of the statement cache, and fails the moment the
+    // upsert comes back.
+    const fx = fixture();
+    try {
+      await seedOrg(fx);
+      await fx.orgs.addMember("org-acme", "founder", "owner");
+      await fx.orgs.addMember("org-acme", "dev-1", "member", {
+        actorId: "founder",
+      });
+
+      const ran: string[] = [];
+      const realTransaction = fx.platformDb.transaction.bind(fx.platformDb);
+      const spy = vi
+        .spyOn(fx.platformDb, "transaction")
+        .mockImplementation((fn) =>
+          realTransaction(async (tx) => {
+            const wrapped: PlatformDbSession = {
+              get: tx.get,
+              all: tx.all,
+              run: (sql, params) => {
+                ran.push(sql);
+                return tx.run(sql, params);
+              },
+            };
+            return fn(wrapped);
+          }),
+        );
+      try {
+        await fx.orgs.changeMemberRole("org-acme", "dev-1", "owner", {
+          actorId: "founder",
+        });
+      } finally {
+        spy.mockRestore();
+      }
+
+      assert.ok(
+        ran.some((s) => s.includes("UPDATE org_members SET role")),
+        "changeMemberRole must run an UPDATE on org_members, not the upsert",
+      );
+      assert.equal(
+        ran.filter((s) => s.includes("INSERT INTO org_members")).length,
+        0,
+        "changeMemberRole must never run the member upsert",
       );
     } finally {
       fx.db.close();

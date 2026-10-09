@@ -165,6 +165,10 @@ export interface OrgsRepository {
   ): Promise<boolean>;
   /**
    * Adds the member, or changes an existing member's role.
+   *
+   * Role changes from a route go through `changeMemberRole`, which cannot
+   * create a row; `addMember` is retained for the join/invite-accept paths
+   * that need to insert.
    * @throws LastOwnerError when it would demote the org's only owner.
    */
   addMember(
@@ -299,6 +303,12 @@ export function createOrgsRepository(db: PlatformDb): OrgsRepository {
     VALUES (@org_id, @user_id, @role, @created_at)
     ON CONFLICT(org_id, user_id) DO UPDATE SET role = excluded.role
   `;
+  // Structural UPDATE for a role change (see changeMemberRoleTx): it matches at
+  // most the existing row, so it can never INSERT a membership that was removed
+  // between the caller's read and this write. NOT `upsertMember`, which would
+  // re-create such a row on conflict.
+  const updateMemberRole =
+    "UPDATE org_members SET role = @role WHERE org_id = @org_id AND user_id = @user_id";
   // Promote-never-demote at acceptance: an owner-level invite to someone who
   // joined as a member in the meantime lands the promotion; a member-level
   // invite to someone who became an owner changes nothing. Both directions
@@ -494,6 +504,12 @@ export function createOrgsRepository(db: PlatformDb): OrgsRepository {
       });
     });
 
+  // The role read and the last-owner count are decided together with the write.
+  // This read-then-write RELIES ON THE SEAM'S ISOLATION: it is correct only
+  // because the transaction is serialised (BEGIN IMMEDIATE on SQLite;
+  // SERIALIZABLE with retry on Postgres). Under a weaker isolation two
+  // demotions of the last two owners could both pass the count check before
+  // either committed, leaving the org with zero owners.
   const changeMemberRoleTx = (
     orgId: string,
     userId: string,
@@ -506,18 +522,22 @@ export function createOrgsRepository(db: PlatformDb): OrgsRepository {
         userId,
       ]);
       // No row: not a member. Returns false so the route can 404, and writes
-      // nothing — a role change must never re-add a member that was removed
-      // between the caller's check and this write.
+      // nothing — a role change must never re-add a member.
       if (!existing) return false;
       // Same role: no write, no audit row, no invariant check.
       if (existing.role === role) return true;
       await guardLastOwner(tx, orgId, userId, existing.role);
-      await tx.run(upsertMember, {
+      // UPDATE, never the member upsert: an UPDATE matches at most the existing
+      // row, so it cannot INSERT a membership that did not exist.
+      const updated = await tx.run(updateMemberRole, {
         org_id: orgId,
         user_id: userId,
         role,
-        created_at: new Date().toISOString(),
       });
+      // Under the seam's serialisation the row read above cannot disappear
+      // between read and write; under a weaker isolation it could. Treat a
+      // zero-row UPDATE as "not a member" and write no audit row.
+      if (updated.changes === 0) return false;
       await audited(tx, audit, {
         action: "org.member.role_change",
         subjectOwnerId: orgId,

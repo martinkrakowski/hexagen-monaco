@@ -435,12 +435,11 @@ describe("H1.2 — PATCH /api/orgs/[orgId]/members/[userId]", () => {
     assert.equal(await store.orgs.memberRole(ORG, "founder"), "member");
   });
 
-  it("PATCH for a member removed between the request's checks and the write is 404 and adds nobody", async () => {
-    // The race this closes: the OLD PATCH pre-read membership (non-atomic) then
-    // called addMember, which INSERTS on conflict — so a removal in between
-    // re-added the member. The route now has no pre-read and calls
-    // changeMemberRole, which reads on `tx`; this test simulates the
-    // interleaving the transaction must survive regardless of route shape.
+  it("PATCH on a member already gone when the store method runs is 404 and adds nobody", async () => {
+    // The spy removes the member BEFORE calling the real changeMemberRole, so
+    // the method's own read on `tx` finds no row: it returns false, the route
+    // answers 404, and nobody is re-added. This pins the post-fix shape (no
+    // route-level pre-read) rather than the old read-then-addMember window.
     const store = await seedOrg("owner", "founder");
     await store.orgs.addMember(ORG, "dev-1", "member");
 
