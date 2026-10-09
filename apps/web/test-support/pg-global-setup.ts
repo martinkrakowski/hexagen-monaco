@@ -33,16 +33,16 @@ function randomHex(n: number): string {
 function getFreePort(): Promise<number> {
   return new Promise((resolve, reject) => {
     const server = createServer();
-    server.unref();
+    server.on("error", reject);
     server.listen(0, "127.0.0.1", () => {
       const addr = server.address();
-      if (addr && typeof addr === "object") {
-        resolve(addr.port);
-      } else {
-        reject(new Error("Could not determine a free port"));
-      }
+      const port = addr && typeof addr === "object" ? addr.port : null;
+      // Give the port back before Postgres is told to bind it.
+      server.close(() => {
+        if (port === null) reject(new Error("Could not determine a free port"));
+        else resolve(port);
+      });
     });
-    server.on("error", reject);
   });
 }
 
@@ -103,10 +103,16 @@ export default async function setup(
     await embedded.start();
     await embedded.createDatabase("hx_home");
 
-    homeUrl = `postgres://${pgUser}:${pgPassword}@localhost:${port}/hx_home`;
+    // 127.0.0.1, not "localhost": the port was probed on that address.
+    homeUrl = `postgres://${pgUser}:${pgPassword}@127.0.0.1:${port}/hx_home`;
   }
 
-  const homePool = new Pool({ connectionString: homeUrl });
+  // A connect timeout turns "nothing is listening for us" into a failure the
+  // run reports, not a hang.
+  const homePool = new Pool({
+    connectionString: homeUrl,
+    connectionTimeoutMillis: 15000,
+  });
   try {
     // Drop leftover databases from previous runs: owned by the current role,
     // matching the run-name pattern, and older than 24 hours.

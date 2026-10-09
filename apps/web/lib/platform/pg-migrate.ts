@@ -109,8 +109,15 @@ export async function runPgMigrations(
 
     return { applied };
   } finally {
-    // 7. Release lock and client, exactly once
-    await client.query(`SELECT pg_advisory_unlock(${ADVISORY_LOCK_KEY})`);
-    client.release();
+    // 7. Release the lock and the client, exactly once. If the unlock itself
+    // fails the connection is in doubt: it is destroyed, not returned to the
+    // pool, and the server drops a session-level lock with its session.
+    let unlockError: unknown;
+    try {
+      await client.query(`SELECT pg_advisory_unlock(${ADVISORY_LOCK_KEY})`);
+    } catch (error) {
+      unlockError = error;
+    }
+    client.release(unlockError ? true : undefined);
   }
 }
