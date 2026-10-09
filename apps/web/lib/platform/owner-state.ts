@@ -18,8 +18,8 @@ export function createOwnerStateStore(db: PlatformDb): OwnerStateStore {
       await db.run(
         `
   INSERT INTO project_owner_state (owner_id, initialized)
-  VALUES (?, 1)
-  ON CONFLICT(owner_id) DO UPDATE SET initialized = 1
+  VALUES (?, TRUE)
+  ON CONFLICT(owner_id) DO UPDATE SET initialized = TRUE
 `,
         [ownerId],
       );
