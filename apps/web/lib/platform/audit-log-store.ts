@@ -36,7 +36,8 @@ export type AuditAction =
   | "org.invite"
   | "org.invite.accept"
   | "share.grant"
-  | "share.revoke";
+  | "share.revoke"
+  | "document.precondition_failed";
 
 export interface AuditEntry {
   actorId: string;

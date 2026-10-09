@@ -1,5 +1,6 @@
 import type { PlatformDb, PlatformDbSession } from "./db";
 import type { PersistenceError, Result } from "@hexagen/shared";
+import { appendAudit } from "./audit-log-store";
 
 export const DOCUMENT_KINDS = [
   "workspace",
@@ -29,10 +30,22 @@ export interface OwnerDocument {
 export type OwnerDocumentSummary = Omit<OwnerDocument, "payload">;
 
 export type OwnerDocumentsError =
-  | PersistenceError
+  | Exclude<PersistenceError, { kind: "Conflict" }>
   | { kind: "InvalidInput"; message: string }
   | { kind: "UnknownProject"; message: string }
-  | { kind: "NotAMember"; message: string };
+  | { kind: "NotAMember"; message: string }
+  | {
+      kind: "Conflict";
+      message: string;
+      currentRev?: number;
+      audited?: boolean;
+    }
+  | {
+      kind: "PreconditionFailed";
+      message: string;
+      currentRev: number;
+      audited?: boolean;
+    };
 
 export interface OwnerDocumentsStore {
   list(filter?: {
@@ -51,15 +64,17 @@ export interface OwnerDocumentsStore {
       payload: unknown;
     },
     expectedRev?: number,
+    options?: { createOnly?: boolean },
   ): Promise<Result<OwnerDocument, OwnerDocumentsError>>;
   delete(
     kind: DocumentKind,
     id: string,
+    expectedRev?: number,
   ): Promise<Result<{ deleted: boolean }, OwnerDocumentsError>>;
 }
 
 function persistError(
-  kind: OwnerDocumentsError["kind"],
+  kind: Exclude<OwnerDocumentsError["kind"], "PreconditionFailed">,
   message: string,
   cause?: unknown,
 ): OwnerDocumentsError {
@@ -308,6 +323,7 @@ export function createOwnerDocumentsStore(
   db: PlatformDb,
   ownerId: string,
   userId: string,
+  now: () => number = Date.now,
 ): OwnerDocumentsStore {
   const selectList = `
     SELECT kind, id, project_id, rev, updated_at
@@ -353,9 +369,60 @@ export function createOwnerDocumentsStore(
     RETURNING rev, updated_at
   `;
   const selectKey = `
-    SELECT rev FROM owner_documents
-     WHERE owner_id = ? AND user_id = ? AND kind = ? AND id = ?
+     SELECT rev FROM owner_documents
+      WHERE owner_id = ? AND user_id = ? AND kind = ? AND id = ?
+   `;
+  const insertOnly = `
+     INSERT INTO owner_documents
+       (owner_id, user_id, kind, id, project_id, rev, payload, updated_at, updated_by)
+     VALUES (@owner_id, @user_id, @kind, @id, @project_id, 1, @payload, @updated_at, @updated_by)
+     ON CONFLICT (owner_id, user_id, kind, id) DO NOTHING
+     RETURNING rev, updated_at
+   `;
+  const deleteAtRev = `
+      DELETE FROM owner_documents
+       WHERE owner_id = ? AND user_id = ? AND kind = ? AND id = ? AND rev = ?
+   `;
+  const refusalRecent = `
+    SELECT 1 FROM audit_log
+     WHERE action = ?
+       AND actor_id = ?
+       AND subject_owner_id = ?
+       AND subject_id = ?
+       AND created_at > ?
+     LIMIT 1
   `;
+
+  /**
+   * Records a precondition-failure audit row, capped at one per
+   * (actor, document) per minute. Returns true when a row was written and
+   * false when the cap suppressed it. The refusal result is unchanged either
+   * way — the cap only bounds audit volume, not the error returned to the
+   * caller.
+   */
+  async function recordRefusal(
+    tx: PlatformDbSession,
+    kind: DocumentKind,
+    id: string,
+  ): Promise<boolean> {
+    const since = new Date(now() - 60_000).toISOString();
+    const subjectId = `${kind}/${id}`;
+    const exists = await tx.get<{ n: number } | undefined>(refusalRecent, [
+      "document.precondition_failed",
+      userId,
+      ownerId,
+      subjectId,
+      since,
+    ]);
+    if (exists) return false;
+    await appendAudit(tx, {
+      actorId: userId,
+      action: "document.precondition_failed",
+      subjectOwnerId: ownerId,
+      subjectId,
+    });
+    return true;
+  }
 
   return {
     async list(filter) {
@@ -438,7 +505,17 @@ export function createOwnerDocumentsStore(
       }
     },
 
-    async put(input, expectedRev?) {
+    async put(input, expectedRev?, options?) {
+      const createOnly = options?.createOnly ?? false;
+      if (createOnly && expectedRev !== undefined) {
+        return {
+          success: false,
+          error: persistError(
+            "InvalidInput",
+            "createOnly cannot be combined with expectedRev",
+          ),
+        };
+      }
       const kind = input.kind;
       const id = input.id;
       const projectId = input.projectId === undefined ? null : input.projectId;
@@ -495,6 +572,58 @@ export function createOwnerDocumentsStore(
             updated_at: now,
             updated_by: userId,
           };
+
+          if (createOnly) {
+            const written = await tx.get<{
+              rev: number;
+              updated_at: number;
+            }>(insertOnly, params);
+            if (written) {
+              return {
+                success: true,
+                value: {
+                  kind,
+                  id,
+                  projectId,
+                  rev: written.rev,
+                  payload: input.payload,
+                  updatedAt: written.updated_at,
+                },
+              };
+            }
+            // Row already exists (or vanished between the two statements).
+            const existing = await tx.get<{ rev: number }>(selectKey, [
+              ownerId,
+              userId,
+              kind,
+              id,
+            ]);
+            if (!existing) {
+              // The insert saw a conflicting row that this transaction's
+              // snapshot cannot see; not reachable on SQLite; on Postgres under
+              // SERIALIZABLE the seam retries a serialization failure before
+              // this could be observed; pinned by the Postgres store tests (B2b-2).
+              const audited = await recordRefusal(tx, kind, id);
+              return {
+                success: false,
+                error: {
+                  kind: "Conflict",
+                  message: "document write conflicted",
+                  audited,
+                },
+              };
+            }
+            const audited = await recordRefusal(tx, kind, id);
+            return {
+              success: false,
+              error: {
+                kind: "PreconditionFailed",
+                message: "document already exists",
+                currentRev: existing.rev,
+                audited,
+              },
+            };
+          }
 
           if (expectedRev === undefined) {
             const written = await tx.get<{
@@ -559,9 +688,15 @@ export function createOwnerDocumentsStore(
               ),
             };
           }
+          const audited = await recordRefusal(tx, kind, id);
           return {
             success: false,
-            error: persistError("Conflict", "document was updated elsewhere"),
+            error: {
+              kind: "Conflict",
+              message: "document was updated elsewhere",
+              currentRev: existing.rev,
+              audited,
+            },
           };
         });
       } catch (cause) {
@@ -586,10 +721,49 @@ export function createOwnerDocumentsStore(
       }
     },
 
-    async delete(kind, id) {
+    async delete(kind, id, expectedRev?) {
       try {
-        const result = await db.run(deleteDoc, [ownerId, userId, kind, id]);
-        return { success: true, value: { deleted: result.changes > 0 } };
+        if (expectedRev === undefined) {
+          const result = await db.run(deleteDoc, [ownerId, userId, kind, id]);
+          return { success: true, value: { deleted: result.changes > 0 } };
+        }
+        return await db.transaction(async (tx) => {
+          const result = await tx.run(deleteAtRev, [
+            ownerId,
+            userId,
+            kind,
+            id,
+            expectedRev,
+          ]);
+          if (result.changes > 0) {
+            return { success: true, value: { deleted: true } };
+          }
+          const existing = await tx.get<{ rev: number }>(selectKey, [
+            ownerId,
+            userId,
+            kind,
+            id,
+          ]);
+          if (!existing) {
+            return {
+              success: false,
+              error: persistError(
+                "NotFound",
+                `no document ${kind}/${id} for owner ${ownerId}`,
+              ),
+            };
+          }
+          const audited = await recordRefusal(tx, kind, id);
+          return {
+            success: false,
+            error: {
+              kind: "PreconditionFailed",
+              message: "document was updated elsewhere",
+              currentRev: existing.rev,
+              audited,
+            },
+          };
+        });
       } catch (cause) {
         return {
           success: false,
