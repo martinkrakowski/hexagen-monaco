@@ -1253,12 +1253,84 @@ describe("owner-documents store", () => {
       assert.equal(successes.length, 1, "exactly one must create the row");
       assert.equal(refusals.length, 1, "exactly one must be refused");
 
+      const refused = refusals[0]!;
+      if (!refused.success) {
+        assert.equal(
+          refused.error.kind,
+          "PreconditionFailed",
+          "the loser must be a PreconditionFailed, not a silent upsert",
+        );
+      }
+
       const count = db
         .prepare(
           "SELECT COUNT(*) AS n FROM owner_documents WHERE owner_id = ? AND user_id = ? AND kind = ? AND id = ?",
         )
         .get("user-1", "user-1", "workspace", "doc-1") as { n: number };
       assert.equal(count.n, 1, "the row must exist exactly once");
+
+      assert.equal(
+        auditCount(db),
+        1,
+        "exactly one audit row for the refusal",
+      );
+    } finally {
+      db.close();
+    }
+  });
+
+  it("create-only runs ONE insert with ON CONFLICT … DO NOTHING and no select before it", async () => {
+    const db = openPlatformDb(":memory:");
+    const platformDb = createSqlitePlatformDb(db);
+    const store = createOwnerDocumentsStore(platformDb, "user-1", "user-1");
+    const realTransaction = platformDb.transaction.bind(platformDb);
+    try {
+      const ran: string[] = [];
+      vi.spyOn(platformDb, "transaction").mockImplementation((fn) =>
+        realTransaction(async (tx: PlatformDbSession) => {
+          const wrapped: PlatformDbSession = {
+            get: (sql, params) => {
+              ran.push(sql);
+              return tx.get(sql, params);
+            },
+            all: tx.all,
+            run: (sql, params) => {
+              ran.push(sql);
+              return tx.run(sql, params);
+            },
+          };
+          return fn(wrapped);
+        }),
+      );
+
+      await store.put(
+        { kind: "workspace", id: "doc-1", payload: { v: "a" } },
+        undefined,
+        { createOnly: true },
+      );
+
+      // The insert statement must contain ON CONFLICT … DO NOTHING.
+      assert.ok(
+        ran.some((s) =>
+          s.includes("ON CONFLICT (owner_id, user_id, kind, id) DO NOTHING"),
+        ),
+        "createOnly must use INSERT … ON CONFLICT DO NOTHING",
+      );
+      // No SELECT FROM owner_documents may come before the insert.
+      const insertIdx = ran.findIndex((s) =>
+        s.includes("ON CONFLICT (owner_id, user_id, kind, id) DO NOTHING"),
+      );
+      assert.notEqual(insertIdx, -1, "the insert must be present");
+      const beforeInsert = ran.slice(0, insertIdx);
+      assert.equal(
+        beforeInsert.filter((s) =>
+          s.includes("SELECT rev FROM owner_documents"),
+        ).length,
+        0,
+        "no select-before-insert (no read-then-insert)",
+      );
+
+      vi.restoreAllMocks();
     } finally {
       db.close();
     }
@@ -1634,6 +1706,41 @@ describe("owner-documents store", () => {
         ).length,
         0,
         "no DELETE may omit user_id = ?",
+      );
+
+      // Also record tx.get so we can verify the audit INSERT ran through tx.
+      const ranAll: string[] = [];
+      vi.spyOn(platformDb, "transaction").mockImplementation((fn) =>
+        realTransaction(async (tx: PlatformDbSession) => {
+          const wrapped: PlatformDbSession = {
+            get: (sql, params) => {
+              ranAll.push(sql);
+              return tx.get(sql, params);
+            },
+            all: tx.all,
+            run: (sql, params) => {
+              ranAll.push(sql);
+              return tx.run(sql, params);
+            },
+          };
+          return fn(wrapped);
+        }),
+      );
+
+      // Re-seed so the stale-rev delete finds a row and enters the
+      // ref-usal path that writes an audit row. Use createOnly on a new id.
+      await store.put(
+        { kind: "workspace", id: "doc-stale", payload: { v: "reseed" } },
+        undefined,
+        { createOnly: true },
+      );
+      ranAll.length = 0;
+      // Stale-rev delete: triggers a refusal path that writes an audit row.
+      await store.delete("workspace", "doc-stale", 999);
+
+      assert.ok(
+        ranAll.some((s) => s.includes("INSERT INTO audit_log")),
+        "the stale delete's audit row must run THROUGH tx (not db after commit)",
       );
 
       vi.restoreAllMocks();

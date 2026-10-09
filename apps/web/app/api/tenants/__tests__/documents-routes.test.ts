@@ -1106,4 +1106,125 @@ describe("document routes", () => {
     );
     assert.equal(res.status, 400);
   });
+
+  it("a refusal by each of the three paths leaves one audit row", async () => {
+    signedInAs(OWNER);
+
+    // 1. Seed doc-1 at rev 1, then advance to rev 2.
+    await DETAIL_PUT(
+      putReq(OWNER, KIND, "doc-1", JSON.stringify({ payload: { v: "1" } })),
+      detailParams(OWNER, KIND, "doc-1"),
+    );
+    await DETAIL_PUT(
+      putReq(OWNER, KIND, "doc-1", JSON.stringify({ payload: { v: "2" } }), {
+        "If-Match": '"rev:1"',
+      }),
+      detailParams(OWNER, KIND, "doc-1"),
+    );
+
+    // 2. Stale-If-Match PUT: 409, one audit row.
+    const stale = await DETAIL_PUT(
+      putReq(OWNER, KIND, "doc-1", JSON.stringify({ payload: { v: "stale" } }), {
+        "If-Match": '"rev:1"',
+      }),
+      detailParams(OWNER, KIND, "doc-1"),
+    );
+    assert.equal(stale.status, 409);
+    assert.equal(
+      await getPlatformStore().audit.countFor(
+        "document.precondition_failed",
+        "workspace/doc-1",
+      ),
+      1,
+      "stale If-Match PUT writes one audit row",
+    );
+
+    // 3. Refused create-only PUT: 412, one audit row.
+    const createOnly = await DETAIL_PUT(
+      putReq(OWNER, KIND, "doc-1", JSON.stringify({ payload: {} }), {
+        "If-None-Match": "*",
+      }),
+      detailParams(OWNER, KIND, "doc-1"),
+    );
+    assert.equal(createOnly.status, 412);
+    assert.equal(
+      await getPlatformStore().audit.countFor(
+        "document.precondition_failed",
+        "workspace/doc-1",
+      ),
+      1,
+      "still 1 (rate-limited); the stale PUT above already counted",
+    );
+
+    // Another document: 412, one audit row.
+    await DETAIL_PUT(
+      putReq(OWNER, KIND, "doc-2", JSON.stringify({ payload: { v: "1" } })),
+      detailParams(OWNER, KIND, "doc-2"),
+    );
+    const refuseCreate = await DETAIL_PUT(
+      putReq(OWNER, KIND, "doc-2", JSON.stringify({ payload: {} }), {
+        "If-None-Match": "*",
+      }),
+      detailParams(OWNER, KIND, "doc-2"),
+    );
+    assert.equal(refuseCreate.status, 412);
+    assert.equal(
+      await getPlatformStore().audit.countFor(
+        "document.precondition_failed",
+        "workspace/doc-2",
+      ),
+      1,
+      "a refused create-only on another document writes its own row",
+    );
+
+    // 4. Refused conditional DELETE: 412, one audit row.
+    const staleDel = await DETAIL_DELETE(
+      delReq(OWNER, KIND, "doc-2", { "If-Match": '"rev:999"' }),
+      detailParams(OWNER, KIND, "doc-2"),
+    );
+    assert.equal(staleDel.status, 412);
+    assert.equal(
+      await getPlatformStore().audit.countFor(
+        "document.precondition_failed",
+        "workspace/doc-2",
+      ),
+      1,
+      "still 1 for doc-2 (rate-limited within the minute); no new row",
+    );
+
+    // 5. A third document for the DELETE refusal.
+    await DETAIL_PUT(
+      putReq(OWNER, KIND, "doc-3", JSON.stringify({ payload: { v: "1" } })),
+      detailParams(OWNER, KIND, "doc-3"),
+    );
+    const staleDel3 = await DETAIL_DELETE(
+      delReq(OWNER, KIND, "doc-3", { "If-Match": '"rev:999"' }),
+      detailParams(OWNER, KIND, "doc-3"),
+    );
+    assert.equal(staleDel3.status, 412);
+    assert.equal(
+      await getPlatformStore().audit.countFor(
+        "document.precondition_failed",
+        "workspace/doc-3",
+      ),
+      1,
+      "a refused conditional DELETE on a third document writes its own row",
+    );
+
+    // 6. A successful conditional write leaves the audit count unchanged.
+    await DETAIL_PUT(
+      putReq(OWNER, KIND, "doc-3", JSON.stringify({ payload: { v: "2" } }), {
+        "If-Match": '"rev:1"',
+      }),
+      detailParams(OWNER, KIND, "doc-3"),
+    );
+    assert.equal(
+      await getPlatformStore().audit.countFor(
+        "document.precondition_failed",
+        "workspace/doc-3",
+      ),
+      1,
+      "a successful write must not add an audit row",
+    );
+  });
 });
