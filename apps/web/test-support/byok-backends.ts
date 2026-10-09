@@ -45,8 +45,11 @@ export async function openByokBackend(
     db,
     store,
     close: async () => {
-      await store.close();
-      await drop();
+      try {
+        await store.close();
+      } finally {
+        await drop();
+      }
     },
   };
 }
