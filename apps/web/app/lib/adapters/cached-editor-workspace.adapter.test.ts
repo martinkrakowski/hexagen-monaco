@@ -1800,9 +1800,7 @@ describe("CachedEditorWorkspaceAdapter Item 1: no self-conflict", () => {
     );
 
     await adapter.saveWorkspace(UUID, makeWorkspace(2000));
-    vi.advanceTimersByTime(REMOTE_DEBOUNCE_MS);
-    await Promise.resolve();
-    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(REMOTE_DEBOUNCE_MS);
     assert.ok(resolvePut, "PUT in flight");
 
     await adapter.saveWorkspace(UUID, makeWorkspace(3000));
@@ -1891,9 +1889,7 @@ describe("CachedEditorWorkspaceAdapter Item 1: no self-conflict", () => {
     );
 
     await adapter.saveWorkspace(UUID, makeWorkspace(2000));
-    vi.advanceTimersByTime(REMOTE_DEBOUNCE_MS);
-    await Promise.resolve();
-    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(REMOTE_DEBOUNCE_MS);
     assert.ok(resolvePut, "PUT in flight");
 
     await adapter.saveWorkspace(UUID, makeWorkspace(3000));
@@ -1919,6 +1915,71 @@ describe("CachedEditorWorkspaceAdapter Item 1: no self-conflict", () => {
     assert.equal(warns.length, 0, "no warnings");
     const rec = await cache.getConflicts();
     assert.equal(rec?.count ?? 0, 0, "zero conflict records");
+  });
+
+  it("a chained second write re-reads the stamp so PUT 2 carries the new rev, not a stale If-Match", async () => {
+    const { adapter, cache, server, fetchImpl, warns } = makeAdapters();
+    const ws = makeWorkspace(1000);
+    await cache.saveWorkspace(UUID, ws);
+    await cache.setLiftStamp(UUID, {
+      ownerId: "user-1",
+      rev: 1,
+      syncedUpdatedAt: 1000,
+      confirmed: true,
+    });
+    server.set(UUID, { payload: ws, rev: 1, updatedAt: 1000, projectId: UUID });
+    await adapter.loadWorkspace(UUID);
+
+    let resolvePut!: (v: Response) => void;
+    fetchImpl.mockImplementationOnce(
+      async (url: string | URL | Request) => {
+        return new Promise((resolve) => {
+          resolvePut = (r) => {
+            const id = /\/workspace\/(.+)/.exec(String(url))![1]!;
+            const doc = server.get(id);
+            if (doc) {
+              doc.rev = 2;
+              doc.updatedAt = Date.now();
+            }
+            resolve(r);
+          };
+        });
+      },
+    );
+
+    await adapter.saveWorkspace(UUID, makeWorkspace(2000));
+    vi.advanceTimersByTime(REMOTE_DEBOUNCE_MS);
+    await vi.advanceTimersByTimeAsync(0);
+    assert.ok(resolvePut, "PUT #1 in flight");
+
+    await adapter.saveWorkspace(UUID, makeWorkspace(3000));
+    vi.advanceTimersByTime(REMOTE_DEBOUNCE_MS);
+    await vi.advanceTimersByTimeAsync(0);
+
+    resolvePut(
+      new Response(
+        JSON.stringify({
+          kind: "workspace",
+          id: UUID,
+          projectId: UUID,
+          payload: {},
+          updatedAt: 2000,
+        }),
+        { status: 200, headers: { ETag: '"rev:2"' } },
+      ),
+    );
+    await vi.advanceTimersByTimeAsync(0);
+
+    const put2Headers = new Headers(putCallsOf(fetchImpl)[1]![1]!.headers);
+    assert.equal(put2Headers.get("If-Match"), '"rev:2"', "second PUT carries the new rev");
+    assert.equal(warns.length, 0, "no warnings");
+    const rec = await cache.getConflicts();
+    assert.equal(rec?.count ?? 0, 0, "zero conflict records");
+    assert.equal(adapter["pausedIds"].has(UUID), false, "id not paused");
+
+    await adapter.saveWorkspace(UUID, makeWorkspace(4000));
+    await vi.advanceTimersByTimeAsync(REMOTE_DEBOUNCE_MS);
+    assert.equal(putCallsOf(fetchImpl).length, 3, "third save sends a PUT");
   });
 });
 
@@ -2161,16 +2222,47 @@ describe("CachedEditorWorkspaceAdapter Item 14: clearWorkspace", () => {
     server.set(UUID, { payload: ws, rev: 5, updatedAt: 1000, projectId: UUID });
     await adapter.loadWorkspace(UUID);
 
-    await adapter.saveWorkspace(UUID, makeWorkspace(2000));
-
+    let resolvePut!: (v: Response) => void;
     let resolveGetDelay!: () => void;
-    idb.getDelay = () =>
-      new Promise<void>((resolve) => {
-        resolveGetDelay = resolve;
-      });
+    fetchImpl.mockImplementationOnce(
+      async (url: string | URL | Request) => {
+        return new Promise((resolve) => {
+          resolvePut = (r) => {
+            idb.getDelay = () =>
+              new Promise<void>((resolve) => {
+                resolveGetDelay = resolve;
+              });
+            const id = /\/workspace\/(.+)/.exec(String(url))![1]!;
+            const doc = server.get(id);
+            if (doc) {
+              doc.rev = 6;
+              doc.updatedAt = Date.now();
+            }
+            resolve(r);
+          };
+        });
+      },
+    );
 
-    await vi.advanceTimersByTimeAsync(REMOTE_DEBOUNCE_MS);
-    assert.ok(resolveGetDelay, "stamp read blocked on getDelay");
+    await adapter.saveWorkspace(UUID, makeWorkspace(2000));
+    vi.advanceTimersByTime(REMOTE_DEBOUNCE_MS);
+    await vi.advanceTimersByTimeAsync(0);
+    assert.ok(resolvePut, "PUT in flight");
+
+    resolvePut(
+      new Response(
+        JSON.stringify({
+          kind: "workspace",
+          id: UUID,
+          projectId: UUID,
+          payload: {},
+          updatedAt: 2000,
+        }),
+        { status: 200, headers: { ETag: '"rev:6"' } },
+      ),
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    assert.ok(resolveGetDelay, "post-PUT stamp read blocked on getDelay");
 
     const clearPromise = adapter.clearWorkspace(UUID);
 
@@ -3063,9 +3155,7 @@ describe("CachedEditorWorkspaceAdapter Item 2: discard + timer", () => {
 
     // Save #1: timer armed, PUT #1 in flight.
     await adapter.saveWorkspace(UUID, makeWorkspace(2000));
-    vi.advanceTimersByTime(REMOTE_DEBOUNCE_MS);
-    await Promise.resolve();
-    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(REMOTE_DEBOUNCE_MS);
     assert.equal(putCount, 1, "PUT is in flight");
 
     // clearWorkspace must wait for the in-flight PUT (no re-timestamp).
@@ -3156,16 +3246,12 @@ describe("CachedEditorWorkspaceAdapter Item 3: chained write + discard", () => {
 
     // Save #1: timer armed, PUT #1 in flight.
     await adapter.saveWorkspace(UUID, makeWorkspace(2000));
-    vi.advanceTimersByTime(REMOTE_DEBOUNCE_MS);
-    await Promise.resolve();
-    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(REMOTE_DEBOUNCE_MS);
     assert.equal(putCount, 1, "first PUT is in flight");
 
     // Schedule #2 while #1 is in flight; its timer fires and chains on #1.
     await adapter.saveWorkspace(UUID, makeWorkspace(3000));
-    vi.advanceTimersByTime(REMOTE_DEBOUNCE_MS);
-    await Promise.resolve();
-    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(REMOTE_DEBOUNCE_MS);
 
     // Resolve #1 (it stamps rev 2); the chained #2 then sends PUT #2.
     resolvers[0](
@@ -3290,9 +3376,7 @@ describe("CachedEditorWorkspaceAdapter Item 3: chained write + discard", () => {
 
     // PUT #1 in flight...
     await adapter.saveWorkspace(UUID, makeWorkspace(2000));
-    vi.advanceTimersByTime(REMOTE_DEBOUNCE_MS);
-    await Promise.resolve();
-    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(REMOTE_DEBOUNCE_MS);
     assert.equal(putCount, 1, "first PUT is in flight");
 
     // ...discard while it is in flight, with the clean-up DELETE offline.

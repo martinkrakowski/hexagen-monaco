@@ -960,6 +960,19 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
       if (this.tenantIdSource() !== null) return;
       if (epochAtStart !== (this.epochs.get(sessionId) ?? 0)) return;
 
+      // Item 2: re-read the stamp right before stamping — the timer captured
+      // the precondition by value, but a prior write in the same chain may
+      // have stamped a new rev. Rebaza the precondition on the fresh rev so
+      // the PUT goes out with the current If-Match.
+      const freshStamp = await this.cache.getLiftStamp(sessionId);
+      if (
+        freshStamp !== null &&
+        freshStamp.ownerId === userId &&
+        !freshStamp.discarded
+      ) {
+        precondition = { ifMatch: freshStamp.rev };
+      }
+
       const result = await this.remote.write(
         userId,
         sessionId,
