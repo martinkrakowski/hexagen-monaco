@@ -299,7 +299,10 @@ export async function handleDocumentGet(
   if (!tenant.ok) return tenant.response;
 
   const store = getPlatformStore().documentsFor(tenant.tenantId, tenant.userId);
-  const found = await store.get(kind as DocumentKind, id);
+  const shared = request.nextUrl.searchParams.get("shared") === "1";
+  const found = shared
+    ? await store.getShared(kind as DocumentKind, id)
+    : await store.get(kind as DocumentKind, id);
   if (!found.success) {
     return mapStoreError(found.error);
   }

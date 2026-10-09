@@ -43,6 +43,11 @@ export interface OwnerDocumentsStore {
     kind: DocumentKind,
     id: string,
   ): Promise<Result<OwnerDocument | null, OwnerDocumentsError>>;
+  /** A document of this tenant, whoever wrote it. */
+  getShared(
+    kind: DocumentKind,
+    id: string,
+  ): Promise<Result<OwnerDocument | null, OwnerDocumentsError>>;
   put(
     input: {
       kind: DocumentKind;
@@ -169,6 +174,11 @@ export function createOwnerDocumentsStore(
       FROM owner_documents
      WHERE owner_id = ? AND user_id = ? AND kind = ? AND id = ?
   `;
+  const selectOneForTenant = `
+    SELECT kind, id, project_id, rev, payload, updated_at
+      FROM owner_documents
+     WHERE owner_id = ? AND kind = ? AND id = ?
+  `;
   const deleteDoc = `
     DELETE FROM owner_documents
      WHERE owner_id = ? AND user_id = ? AND kind = ? AND id = ?
@@ -283,6 +293,29 @@ export function createOwnerDocumentsStore(
           ),
         };
       }
+    },
+
+    async getShared(kind, id) {
+      const row = await db.get<{
+        kind: string;
+        id: string;
+        project_id: string | null;
+        rev: number;
+        payload: string;
+        updated_at: number;
+      }>(selectOneForTenant, [ownerId, kind, id]);
+      if (!row) return { success: true, value: null };
+      return {
+        success: true,
+        value: {
+          kind: row.kind as DocumentKind,
+          id: row.id,
+          projectId: row.project_id,
+          rev: row.rev,
+          payload: JSON.parse(row.payload) as unknown,
+          updatedAt: row.updated_at,
+        },
+      };
     },
 
     async put(input, expectedRev?) {

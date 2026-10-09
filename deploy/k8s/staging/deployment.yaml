@@ -64,7 +64,6 @@ spec:
             # the one node, which is what a ReadWriteOnce claim allows.
             - name: backups
               mountPath: /backups
-              readOnly: true
           securityContext:
             # readOnlyRootFilesystem stays off on purpose: repository scans
             # write to /app/.scan-workspaces, and bootstrap and governance
@@ -111,4 +110,3 @@ spec:
         - name: backups
           persistentVolumeClaim:
             claimName: hexagen-web-backups
-            readOnly: true
