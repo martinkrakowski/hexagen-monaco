@@ -2,7 +2,11 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import type { Pool } from "pg";
 import type { PgMigration } from "../pg-migrations/index";
-import { runPgMigrations, checksumOf } from "../pg-migrate";
+import {
+  runPgMigrations,
+  checksumOf,
+  transactionControlIn,
+} from "../pg-migrate";
 import { createTestPgDb } from "../../../test-support/pg-test-db";
 
 const EXPECTED_TABLES = [
@@ -207,5 +211,45 @@ describe("pg-migrate", () => {
       { version: 1, name: "init", sql: "CREATE TABLE t (id integer); BEGIN;" },
     ];
     await expect(runPgMigrations(pool, withBegin)).rejects.toThrow("BEGIN");
+  });
+
+  it("END, ROLLBACK, ABORT, START TRANSACTION and COMMIT AND CHAIN are refused too, and nothing is created", async () => {
+    for (const control of [
+      "END",
+      "ROLLBACK",
+      "ABORT",
+      "START TRANSACTION",
+      "COMMIT AND CHAIN",
+      "commit",
+    ]) {
+      const leaky: PgMigration[] = [
+        {
+          version: 1,
+          name: "init",
+          sql: `CREATE TABLE leaked_t (id integer); ${control}; SELECT * FROM missing_t;`,
+        },
+      ];
+      await expect(runPgMigrations(pool, leaky), control).rejects.toThrow(
+        "transaction control statement",
+      );
+    }
+    const left = await pool.query(
+      "SELECT 1 FROM information_schema.tables WHERE table_name = 'leaked_t'",
+    );
+    expect(left.rowCount).toBe(0);
+  });
+
+  it("a plpgsql body's BEGIN … END, a CASE … END and the words in a literal or a comment are not transaction control", () => {
+    expect(
+      transactionControlIn(
+        "CREATE FUNCTION f() RETURNS trigger LANGUAGE plpgsql AS $fn$\nBEGIN\n  IF true THEN RETURN NEW; END IF;\n  RETURN NEW;\nEND;\n$fn$;",
+      ),
+    ).toBeNull();
+    expect(
+      transactionControlIn(
+        "SELECT CASE WHEN true THEN 1 END; -- COMMIT;\nSELECT 'x; ROLLBACK;'; /* ; END; */",
+      ),
+    ).toBeNull();
+    expect(transactionControlIn("SELECT 1;\n  rollback ;")).toBe("ROLLBACK");
   });
 });

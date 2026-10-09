@@ -22,6 +22,23 @@ export function checksumOf(sql: string): string {
     .digest("hex");
 }
 
+// The first transaction-control statement in a migration's SQL, or null.
+// Function bodies (dollar-quoted), literals and comments are blanked first, so
+// the BEGIN … END; of a plpgsql body and a CASE … END are not statements here:
+// only a keyword that STARTS a statement counts.
+export function transactionControlIn(sql: string): string | null {
+  const bare = sql
+    .replace(/\$([A-Za-z_][A-Za-z0-9_]*)?\$[\s\S]*?\$\1\$/g, " ")
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .replace(/--[^\n]*/g, " ")
+    .replace(/'(?:[^']|'')*'/g, "''");
+  const match =
+    /(?:^|;)\s*(BEGIN|START\s+TRANSACTION|COMMIT|END|ROLLBACK|ABORT)\b/i.exec(
+      bare,
+    );
+  return match ? match[1].toUpperCase().replace(/\s+/g, " ") : null;
+}
+
 export async function runPgMigrations(
   pool: Pool,
   migrations: readonly PgMigration[] = PG_MIGRATIONS,
@@ -50,10 +67,14 @@ export async function runPgMigrations(
         );
       }
     } else {
-      // A transactional migration must not manage its own transaction.
-      if (/\b(BEGIN|COMMIT)\b\s*;/i.test(migration.sql)) {
+      // A transactional migration must not manage its own transaction: a
+      // COMMIT (or its alias END, or a ROLLBACK) in the middle would end the
+      // runner's transaction, and what followed would run outside it and
+      // outside the bookkeeping.
+      const control = transactionControlIn(migration.sql);
+      if (control) {
         throw new Error(
-          `migration ${migration.version} contains BEGIN or COMMIT; a transactional migration must not manage its own transaction`,
+          `migration ${migration.version} contains the transaction control statement ${control}; a transactional migration must not manage its own transaction`,
         );
       }
     }
