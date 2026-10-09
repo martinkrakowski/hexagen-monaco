@@ -2007,8 +2007,9 @@ describe("CachedEditorWorkspaceAdapter Item 14: clearWorkspace", () => {
     assert.equal(server.has(UUID), true, "server copy preserved");
     assert.equal(await cache.getLiftStamp(UUID), null, "stamp removed");
     const cacheAfter = await cache.loadWorkspace(UUID);
-    assert.ok(cacheAfter.success && cacheAfter.value);
-    assert.deepEqual(cacheAfter.value, ws, "browser copy unchanged");
+    // A discard is this device's decision about this device's copy: it is
+    // cleared. What survives is the other device's work, on the server.
+    assert.equal(cacheAfter.success && cacheAfter.value, null, "cache cleared");
   });
 
   it("clear cancels a pending save timer so no PUT fires", async () => {
