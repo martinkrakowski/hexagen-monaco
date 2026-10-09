@@ -483,6 +483,48 @@ describe("CachedEditorWorkspaceAdapter lift", () => {
     assert.ok(warns.some((w) => /payload mismatch/.test(w)));
   });
 
+  it("the lift is a create-only write", async () => {
+    const { adapter, cache, fetchImpl } = makeAdapters();
+    await cache.saveWorkspace(UUID, makeWorkspace(1000));
+
+    await adapter.loadWorkspace(UUID);
+
+    const puts = putCallsOf(fetchImpl);
+    assert.equal(puts.length, 1, "one PUT for the lift");
+    const headers = new Headers(puts[0]![1]!.headers);
+    assert.equal(headers.get("If-None-Match"), "*", "create-only header");
+    assert.equal(headers.get("If-Match"), null, "no If-Match on lift");
+  });
+
+  it("a lift that finds a copy created elsewhere does not overwrite it", async () => {
+    const { adapter, cache, fetchImpl, warns } = makeAdapters();
+    await cache.saveWorkspace(UUID, makeWorkspace(1000));
+
+    // Simulate a race: GET sees no document (404), but by the time the
+    // create-only PUT lands, another device has created it (412).
+    fetchImpl.mockImplementation(
+      async (url: string | URL | Request, init?: RequestInit) => {
+        const method = (init?.method ?? "GET").toUpperCase();
+        if (method === "GET") return new Response(null, { status: 404 });
+        if (method === "PUT") {
+          const headers = new Headers(init?.headers);
+          if (headers.get("If-None-Match") === "*") {
+            return new Response("exists", {
+              status: 412,
+              headers: { ETag: '"rev:1"' },
+            });
+          }
+        }
+        return new Response("nope", { status: 500 });
+      },
+    );
+
+    await adapter.loadWorkspace(UUID);
+
+    assert.ok(warns.some((w) => /created elsewhere before the lift/.test(w)));
+    assert.equal(await cache.getLiftStamp(UUID), null, "no stamp on conflict");
+  });
+
   it("the lift never deletes or rewrites the browser copy", async () => {
     const { adapter, cache, fetchImpl } = makeAdapters();
     const ws = makeWorkspace(1000);
