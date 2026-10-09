@@ -1,4 +1,5 @@
 import initial from "./0001_initial.sql?raw";
+import revsAndDetail from "./0002_owner_document_revs_and_audit_detail.sql?raw";
 
 export interface PgMigration {
   version: number;
@@ -14,4 +15,9 @@ export interface PgMigration {
 
 export const PG_MIGRATIONS: readonly PgMigration[] = [
   { version: 1, name: "initial", sql: initial },
+  {
+    version: 2,
+    name: "owner_document_revs_and_audit_detail",
+    sql: revsAndDetail,
+  },
 ];

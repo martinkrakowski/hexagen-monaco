@@ -2,6 +2,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import type { Pool } from "pg";
 import type { PgMigration } from "../pg-migrations/index";
+import { PG_MIGRATIONS } from "../pg-migrations/index";
 import {
   runPgMigrations,
   checksumOf,
@@ -26,6 +27,7 @@ const EXPECTED_TABLES = [
   "model_prices",
   "project_owner_state",
   "owner_documents",
+  "owner_document_revs",
   "entitlements",
   "scan_records",
   "repair_runs",
@@ -46,16 +48,20 @@ describe("pg-migrate", () => {
     await drop();
   });
 
-  it("a fresh database gets version 1 and all tables", async () => {
+  it("a fresh database gets versions 1 and 2 and all tables", async () => {
     const { applied } = await runPgMigrations(pool);
-    expect(applied).toEqual([1]);
+    expect(applied).toEqual([1, 2]);
 
     const m = await pool.query<{
       version: number;
       name: string;
     }>("SELECT version, name FROM schema_migrations ORDER BY version");
-    expect(m.rows).toHaveLength(1);
+    expect(m.rows).toHaveLength(2);
     expect(m.rows[0]).toMatchObject({ version: 1, name: "initial" });
+    expect(m.rows[1]).toMatchObject({
+      version: 2,
+      name: "owner_document_revs_and_audit_detail",
+    });
 
     const tables = await pool.query<{ tablename: string }>(
       "SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename != 'schema_migrations'",
@@ -82,9 +88,9 @@ describe("pg-migrate", () => {
 
   it("a changed checksum is refused and names the version", async () => {
     await runPgMigrations(pool);
-    const modified: PgMigration[] = [
-      { version: 1, name: "initial", sql: "SELECT 42;" },
-    ];
+    const modified: PgMigration[] = PG_MIGRATIONS.map((m) =>
+      m.version === 1 ? { ...m, sql: "SELECT 42;" } : m,
+    );
     await expect(runPgMigrations(pool, modified)).rejects.toThrow("version 1");
   });
 
