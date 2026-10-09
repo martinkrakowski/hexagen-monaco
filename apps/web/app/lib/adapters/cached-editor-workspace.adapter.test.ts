@@ -1641,6 +1641,41 @@ describe("CachedEditorWorkspaceAdapter Item 1: no self-conflict", () => {
     assert.equal(rec?.count ?? 0, 0, "zero conflict records");
   });
 
+  it("a successful first save sends If-None-Match: * and stores the returned revision in the stamp", async () => {
+    const { adapter, cache, fetchImpl } = makeAdapters();
+    // Server has no document (404) and there is no cache/stamp.
+    fetchImpl.mockImplementation(
+      async (url: string | URL | Request, init?: RequestInit) => {
+        const method = (init?.method ?? "GET").toUpperCase();
+        if (method === "GET") return new Response(null, { status: 404 });
+        if (method === "PUT") {
+          return new Response(null, {
+            status: 201,
+            headers: { ETag: '"rev:7"' },
+          });
+        }
+        return new Response("nope", { status: 500 });
+      },
+    );
+
+    await adapter.loadWorkspace(UUID); // GET 404 → firstWriteAfter404
+
+    await adapter.saveWorkspace(UUID, makeWorkspace(1000));
+    await vi.advanceTimersByTimeAsync(REMOTE_DEBOUNCE_MS);
+
+    const puts = putCallsOf(fetchImpl);
+    assert.equal(puts.length, 1, "one PUT");
+    const headers = new Headers(puts[0]![1]!.headers);
+    assert.equal(headers.get("If-None-Match"), "*", "createOnly first save");
+    assert.equal(headers.get("If-Match"), null, "no If-Match on first save");
+
+    // stamp.rev equals the revision in the PUT response's ETag, whatever
+    // number that is.
+    const stamp = await cache.getLiftStamp(UUID);
+    assert.ok(stamp, "stamp stored after first save");
+    assert.equal(stamp!.rev, 7, "stamp rev from response ETag");
+  });
+
   it("a second save while the first createOnly PUT is in flight follows it with If-Match and nothing is paused", async () => {
     const { adapter, cache, fetchImpl, warns } = makeAdapters();
     await cache.saveWorkspace(UUID, makeWorkspace(1000));
