@@ -2855,6 +2855,124 @@ describe("CachedEditorWorkspaceAdapter Item 3: chained write + discard", () => {
     assert.equal(server.has(UUID), false, "server copy deleted");
     assert.equal(putCount, 2, "exactly two PUTs");
   });
+
+  it("a discard during an in-flight write whose clean-up DELETE fails leaves a marker, and the next load deletes the server copy and returns nothing", async () => {
+    const { adapter, cache, server, fetchImpl } = makeAdapters();
+    const ws = makeWorkspace(1000);
+    await cache.saveWorkspace(UUID, ws);
+    await cache.setLiftStamp(UUID, {
+      ownerId: "user-1",
+      rev: 1,
+      syncedUpdatedAt: 1000,
+      confirmed: true,
+    });
+    server.set(UUID, { payload: ws, rev: 1, updatedAt: 1000, projectId: UUID });
+    await adapter.loadWorkspace(UUID);
+
+    const serverFetch = fetchImpl.getMockImplementation()!;
+    let putCount = 0;
+    let resolvePut!: (v: Response) => void;
+    let allowDelete = true;
+    fetchImpl.mockImplementation(
+      async (url: string | URL | Request, init?: RequestInit) => {
+        const href = String(url);
+        const method = (init?.method ?? "GET").toUpperCase();
+        const match = /\/api\/tenants\/(.+)\/documents\/workspace\/(.+)/.exec(
+          href,
+        );
+        const id = match![2]!;
+        if (method === "GET")
+          return serverFetch(
+            url as string | URL | Request,
+            init,
+          ) as unknown as Response;
+        if (method === "PUT") {
+          putCount++;
+          return new Promise<Response>((res) => {
+            resolvePut = (resp) => {
+              const body = JSON.parse(init!.body as string);
+              const doc = server.get(id) ?? {
+                payload: body.payload,
+                rev: 0,
+                updatedAt: 0,
+                projectId: body.projectId ?? null,
+              };
+              doc.rev = putCount + 1;
+              doc.updatedAt = Date.now();
+              doc.projectId = body.projectId ?? null;
+              doc.payload = body.payload;
+              server.set(id, doc);
+              res(resp);
+            };
+          });
+        }
+        if (method === "DELETE") {
+          if (!allowDelete)
+            return new Response("network error", { status: 500 });
+          const doc = server.get(id);
+          const ifMatch = /^rev:(\d+)$/.exec(
+            new Headers(init?.headers)
+              .get("If-Match")
+              ?.trim()
+              .replaceAll('"', "") ?? "",
+          );
+          if (!doc) return new Response(null, { status: 404 });
+          if (ifMatch && Number(ifMatch[1]) !== doc.rev)
+            return new Response("conflict", {
+              status: 412,
+              headers: { ETag: `"rev:${doc.rev}"` },
+            });
+          server.delete(id);
+          return new Response(null, { status: 204 });
+        }
+        return new Response("nope", { status: 500 });
+      },
+    );
+
+    // PUT #1 in flight...
+    await adapter.saveWorkspace(UUID, makeWorkspace(2000));
+    vi.advanceTimersByTime(REMOTE_DEBOUNCE_MS);
+    await Promise.resolve();
+    await Promise.resolve();
+    assert.equal(putCount, 1, "first PUT is in flight");
+
+    // ...discard while it is in flight, with the clean-up DELETE offline.
+    allowDelete = false;
+    const clearPromise = adapter.clearWorkspace(UUID);
+    resolvePut(
+      new Response(
+        JSON.stringify({
+          kind: "workspace",
+          id: UUID,
+          projectId: UUID,
+          payload: {},
+          updatedAt: 2000,
+        }),
+        { status: 200, headers: { ETag: '"rev:2"' } },
+      ),
+    );
+    await clearPromise;
+
+    const mark = await cache.getLiftStamp(UUID);
+    assert.ok(mark && mark.discarded, "discard marker written");
+    assert.equal(
+      mark!.rev,
+      2,
+      "marker carries the in-flight write's confirmed rev",
+    );
+    assert.equal(
+      server.has(UUID),
+      true,
+      "server copy still there (clean-up DELETE failed)",
+    );
+
+    // Next load: GET 200, rev matches marker → retry DELETE → success.
+    allowDelete = true;
+    const result = await adapter.loadWorkspace(UUID);
+    assert.equal(result.success && result.value, null, "load returns nothing");
+    assert.equal(server.has(UUID), false, "server copy deleted on retry");
+    assert.equal(await cache.getLiftStamp(UUID), null, "marker dropped");
+  });
 });
 
 describe("CachedEditorWorkspaceAdapter Item 7: deleted-elsewhere", () => {

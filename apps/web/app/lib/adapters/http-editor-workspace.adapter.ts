@@ -980,7 +980,38 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
       // Item 3/6: if a discard bumped the epoch, delete the copy but don't
       // write a stamp (the discard cleared the cache+stamp already).
       if (epochAtStart !== (this.epochs.get(sessionId) ?? 0)) {
-        await this.remote.delete(userId, sessionId, result.rev);
+        const deleteResult = await this.remote.delete(
+          userId,
+          sessionId,
+          result.rev,
+        );
+        if (!deleteResult.ok) {
+          if (deleteResult.reason === "conflict") {
+            this.logger.warn(
+              `workspace ${sessionId}: server copy changed on another device, not deleted`,
+            );
+            await this.recordConflictEntry(
+              sessionId,
+              "discard",
+              result.rev,
+              deleteResult.serverRev ?? null,
+            );
+          } else {
+            // Item 3: clean-up DELETE lost (network/429/5xx) → keep a marker
+            // so the next load retries the deletion and the discarded
+            // workspace does not come back.
+            this.logger.warn(
+              `workspace ${sessionId}: discard clean-up delete failed: ${deleteResult.message}; keeping marker`,
+            );
+            await this.tryStamp(sessionId, {
+              ownerId: userId,
+              rev: result.rev,
+              syncedUpdatedAt: 0,
+              confirmed: false,
+              discarded: true,
+            });
+          }
+        }
         this.pendingPreconditions.delete(sessionId);
         return;
       }
