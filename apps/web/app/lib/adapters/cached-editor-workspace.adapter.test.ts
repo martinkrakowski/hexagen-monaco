@@ -2473,3 +2473,186 @@ describe("CachedEditorWorkspaceAdapter conflict recording (Item 4)", () => {
     await vi.advanceTimersByTimeAsync(REMOTE_DEBOUNCE_MS);
   });
 });
+
+describe("CachedEditorWorkspaceAdapter Item 2: discard + timer", () => {
+  it("a save scheduled before a discard never writes after it, even when a PUT was in flight", async () => {
+    const { adapter, cache, server, fetchImpl } = makeAdapters();
+    const ws = makeWorkspace(1000);
+    await cache.saveWorkspace(UUID, ws);
+    await cache.setLiftStamp(UUID, {
+      ownerId: "user-1",
+      rev: 1,
+      syncedUpdatedAt: 1000,
+      confirmed: true,
+    });
+    server.set(UUID, { payload: ws, rev: 1, updatedAt: 1000, projectId: UUID });
+
+    await adapter.loadWorkspace(UUID);
+    await adapter.saveWorkspace(UUID, makeWorkspace(2000));
+
+    // Fire the timer (write starts), then immediately clear.
+    vi.advanceTimersByTime(REMOTE_DEBOUNCE_MS);
+
+    await adapter.clearWorkspace(UUID);
+
+    // Advance timers: no PUT should fire (epoch bumped, timer cancelled).
+    await vi.advanceTimersByTimeAsync(REMOTE_DEBOUNCE_MS);
+
+    assert.equal(server.has(UUID), false, "server copy deleted by clear");
+    assert.equal(await cache.getLiftStamp(UUID), null, "no stamp left");
+  });
+});
+
+describe("CachedEditorWorkspaceAdapter Item 3: chained write + discard", () => {
+  it("a discard during a chained second write waits for it and leaves no stamp", async () => {
+    const { adapter, cache, server, fetchImpl } = makeAdapters();
+    const ws = makeWorkspace(1000);
+    await cache.saveWorkspace(UUID, ws);
+    await cache.setLiftStamp(UUID, {
+      ownerId: "user-1",
+      rev: 1,
+      syncedUpdatedAt: 1000,
+      confirmed: true,
+    });
+    server.set(UUID, { payload: ws, rev: 1, updatedAt: 1000, projectId: UUID });
+
+    await adapter.loadWorkspace(UUID);
+
+    // Save #1: timer armed.
+    await adapter.saveWorkspace(UUID, makeWorkspace(2000));
+    // Save #2: cancels timer #1, arms timer #2.
+    await adapter.saveWorkspace(UUID, makeWorkspace(3000));
+
+    // Fire both timers (only #2 fires).
+    await vi.advanceTimersByTimeAsync(REMOTE_DEBOUNCE_MS);
+
+    // Discard while the second write is in-flight (chained on the first).
+    await adapter.clearWorkspace(UUID);
+
+    // The in-flight write should have completed and seen the epoch change.
+    assert.equal(
+      await cache.getLiftStamp(UUID),
+      null,
+      "no stamp after discard",
+    );
+    assert.equal(server.has(UUID), false, "server copy deleted");
+  });
+});
+
+describe("CachedEditorWorkspaceAdapter Item 7: deleted-elsewhere", () => {
+  it("a deleted-elsewhere with a 404 + own clean stamp does not lift", async () => {
+    const { adapter, cache, server, fetchImpl, warns } = makeAdapters();
+    const ws = makeWorkspace(1000);
+    await cache.saveWorkspace(UUID, ws);
+    await cache.setLiftStamp(UUID, {
+      ownerId: "user-1",
+      rev: 5,
+      syncedUpdatedAt: 1000,
+      confirmed: true,
+    });
+
+    await adapter.loadWorkspace(UUID);
+
+    assert.equal(putCallsOf(fetchImpl).length, 0, "no lift");
+    assert.ok(warns.some((w) => /deleted on another device/.test(w)));
+    const rec = await cache.getConflicts();
+    assert.ok(rec && rec.count === 1);
+    assert.equal(rec!.last[0]!.where, "deleted-elsewhere");
+    assert.equal(server.has(UUID), false, "no document on server");
+  });
+
+  it("a deleted-elsewhere with a dirty cache lifts it", async () => {
+    const { adapter, cache, fetchImpl } = makeAdapters();
+    // Cache has dirty workspace (updatedAt 2000), stamp (syncedUpdatedAt 1000).
+    const dirtyWs = makeWorkspace(2000);
+    await cache.saveWorkspace(UUID, dirtyWs);
+    await cache.setLiftStamp(UUID, {
+      ownerId: "user-1",
+      rev: 5,
+      syncedUpdatedAt: 1000,
+      confirmed: true,
+    });
+
+    // Server has no document (404). Cache is dirty → lift.
+    const result = await adapter.loadWorkspace(UUID);
+
+    const puts = putCallsOf(fetchImpl);
+    assert.equal(puts.length, 1, "one PUT to lift (dirty cache)");
+    const headers = new Headers(puts[0]![1]!.headers);
+    assert.equal(headers.get("If-None-Match"), "*", "createOnly lift");
+
+    const rec = await cache.getConflicts();
+    assert.equal(rec?.count ?? 0, 0, "no conflicts");
+  });
+});
+
+describe("CachedEditorWorkspaceAdapter Item 10c: 412 browser copy + pause", () => {
+  it("the lift 412 keeps the browser copy byte-identical and pauses", async () => {
+    const { adapter, cache, fetchImpl } = makeAdapters();
+    const ws = makeWorkspace(1000);
+    await cache.saveWorkspace(UUID, ws);
+    const original = JSON.parse(JSON.stringify(ws));
+
+    fetchImpl.mockImplementation(
+      async (url: string | URL | Request, init?: RequestInit) => {
+        const method = (init?.method ?? "GET").toUpperCase();
+        if (method === "GET") return new Response(null, { status: 404 });
+        if (method === "PUT") {
+          return new Response("exists", {
+            status: 412,
+            headers: { ETag: '"rev:1"' },
+          });
+        }
+        return new Response("nope", { status: 500 });
+      },
+    );
+
+    await adapter.loadWorkspace(UUID);
+
+    const after = await cache.loadWorkspace(UUID);
+    assert.ok(after.success && after.value);
+    assert.deepEqual(after.value, original, "browser copy byte-identical");
+
+    // A following save sends nothing (paused).
+    const beforePuts = putCallsOf(fetchImpl).length;
+    await adapter.saveWorkspace(UUID, makeWorkspace(2000));
+    await vi.advanceTimersByTimeAsync(REMOTE_DEBOUNCE_MS);
+    assert.equal(
+      putCallsOf(fetchImpl).length,
+      beforePuts,
+      "no PUT while paused",
+    );
+  });
+
+  it("the first-save 412 keeps the browser copy byte-identical and pauses", async () => {
+    const { adapter, cache, fetchImpl } = makeAdapters();
+    await cache.saveWorkspace(UUID, makeWorkspace(1000));
+    const original = makeWorkspace(2000);
+
+    fetchImpl.mockImplementation(
+      async (url: string | URL | Request, init?: RequestInit) => {
+        const method = (init?.method ?? "GET").toUpperCase();
+        if (method === "GET") return new Response(null, { status: 404 });
+        if (method === "PUT") {
+          return new Response("exists", {
+            status: 412,
+            headers: { ETag: '"rev:1"' },
+          });
+        }
+        return new Response("nope", { status: 500 });
+      },
+    );
+
+    await adapter.loadWorkspace(UUID);
+    await adapter.saveWorkspace(UUID, original);
+    await vi.advanceTimersByTimeAsync(REMOTE_DEBOUNCE_MS);
+
+    const after = await cache.loadWorkspace(UUID);
+    assert.ok(after.success && after.value);
+    assert.deepEqual(after.value, original, "browser copy byte-identical");
+
+    await adapter.saveWorkspace(UUID, makeWorkspace(3000));
+    await vi.advanceTimersByTimeAsync(REMOTE_DEBOUNCE_MS);
+    assert.equal(putCallsOf(fetchImpl).length, 1, "no second PUT while paused");
+  });
+});
