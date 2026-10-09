@@ -207,7 +207,7 @@ function assertNonNegativeInteger(name: string, value: number): void {
  * "more than N stored" when the row count equals the limit).
  */
 const SELECT_AUTHORED_DOCUMENTS = `
-  SELECT owner_id, kind, id, project_id, rev, length(payload) AS payload_len, updated_at
+  SELECT owner_id, kind, id, project_id, rev, length(CAST(payload AS TEXT)) AS payload_len, hx_ms(updated_at) AS updated_at
     FROM owner_documents
    WHERE user_id = ?
    ORDER BY owner_id, kind, id
@@ -220,7 +220,7 @@ const SELECT_AUTHORED_DOCUMENTS = `
  * row. One statement per row keeps peak memory to a single payload.
  */
 const SELECT_AUTHORED_DOCUMENT_PAYLOAD = `
-  SELECT owner_id, kind, id, project_id, rev, payload, updated_at
+  SELECT owner_id, kind, id, project_id, rev, payload, hx_ms(updated_at) AS updated_at
     FROM owner_documents
    WHERE owner_id = ? AND user_id = ? AND kind = ? AND id = ?
 `;
@@ -330,15 +330,15 @@ export function createOwnerDocumentsStore(
   now: () => number = Date.now,
 ): OwnerDocumentsStore {
   const selectList = `
-    SELECT kind, id, project_id, rev, updated_at
+    SELECT kind, id, project_id, rev, hx_ms(updated_at) AS updated_at
       FROM owner_documents
-     WHERE owner_id = ? AND user_id = ?
-       AND (? IS NULL OR kind = ?)
-       AND (? IS NULL OR project_id = ?)
-     ORDER BY updated_at DESC, kind, id
+     WHERE owner_id = @owner_id AND user_id = @user_id
+        AND (CAST(@kind AS TEXT) IS NULL OR kind = @kind)
+        AND (CAST(@project_id AS TEXT) IS NULL OR project_id = @project_id)
+      ORDER BY updated_at DESC, kind, id
   `;
   const selectOne = `
-    SELECT kind, id, project_id, rev, payload, updated_at
+    SELECT kind, id, project_id, rev, payload, hx_ms(updated_at) AS updated_at
       FROM owner_documents
      WHERE owner_id = ? AND user_id = ? AND kind = ? AND id = ?
   `;
@@ -377,7 +377,7 @@ export function createOwnerDocumentsStore(
       project_id = excluded.project_id,
       updated_at = excluded.updated_at,
       updated_by = excluded.updated_by
-    RETURNING rev, updated_at
+    RETURNING rev, hx_ms(updated_at) AS updated_at
   `;
   const updateWithRev = `
     UPDATE owner_documents
@@ -386,7 +386,7 @@ export function createOwnerDocumentsStore(
            updated_at = hx_ts(@updated_at), updated_by = @updated_by
      WHERE owner_id = @owner_id AND user_id = @user_id AND kind = @kind AND id = @id
        AND rev = @expected_rev
-    RETURNING rev, updated_at
+    RETURNING rev, hx_ms(updated_at) AS updated_at
   `;
   const selectKey = `
       SELECT rev FROM owner_documents
@@ -397,7 +397,7 @@ export function createOwnerDocumentsStore(
         (owner_id, user_id, kind, id, project_id, rev, payload, updated_at, updated_by)
       VALUES (@owner_id, @user_id, @kind, @id, @project_id, @new_rev, @payload, hx_ts(@updated_at), @updated_by)
       ON CONFLICT (owner_id, user_id, kind, id) DO NOTHING
-      RETURNING rev, updated_at
+      RETURNING rev, hx_ms(updated_at) AS updated_at
     `;
   const deleteAtRev = `
        DELETE FROM owner_documents
@@ -493,7 +493,12 @@ export function createOwnerDocumentsStore(
           project_id: string | null;
           rev: number;
           updated_at: number;
-        }>(selectList, [ownerId, userId, kind, kind, projectId, projectId]);
+        }>(selectList, {
+          owner_id: ownerId,
+          user_id: userId,
+          kind,
+          project_id: projectId,
+        });
         return {
           success: true,
           value: rows.map((r) => ({
@@ -789,6 +794,19 @@ export function createOwnerDocumentsStore(
           };
         });
       } catch (cause) {
+        if (
+          typeof input.projectId === "string" &&
+          db.isForeignKeyViolation(cause)
+        ) {
+          return {
+            success: false,
+            error: persistError(
+              "UnknownProject",
+              `project ${input.projectId} not found in tenant ${ownerId}`,
+              cause,
+            ),
+          };
+        }
         if (db.isUniqueViolation(cause)) {
           return {
             success: false,
