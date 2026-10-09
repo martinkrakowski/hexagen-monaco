@@ -9,11 +9,7 @@ import type { PlatformDb, PlatformDbSession } from "../db";
 import type { DocumentKind } from "../owner-documents-store";
 import { createSavedProjectsStore } from "../saved-projects-store";
 import { createOrgsRepository } from "../orgs-store";
-import {
-  BACKENDS,
-  openBackend,
-  failOnSql,
-} from "../../../test-support/platform-backends";
+import { BACKENDS, openBackend } from "../../../test-support/platform-backends";
 import type { SavedProject } from "@hexagen/shared";
 
 function project(id: string): SavedProject {
