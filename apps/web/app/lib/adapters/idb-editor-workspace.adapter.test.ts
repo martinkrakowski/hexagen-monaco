@@ -46,12 +46,14 @@ describe("IDBEditorWorkspaceAdapter lift stamp", () => {
       rev: 5,
       syncedUpdatedAt: 100,
       confirmed: true,
+      discarded: false,
     };
     const stampB = {
       ownerId: "u1",
       rev: 9,
       syncedUpdatedAt: 200,
       confirmed: false,
+      discarded: false,
     };
 
     await adapter.setLiftStamp("s1", stampA);
@@ -80,12 +82,14 @@ describe("IDBEditorWorkspaceAdapter lift stamp", () => {
       rev: 1,
       syncedUpdatedAt: 100,
       confirmed: true,
+      discarded: false,
     };
     const stampB = {
       ownerId: "u1",
       rev: 2,
       syncedUpdatedAt: 200,
       confirmed: true,
+      discarded: false,
     };
 
     await Promise.all([
@@ -107,12 +111,14 @@ describe("IDBEditorWorkspaceAdapter lift stamp", () => {
       rev: 3,
       syncedUpdatedAt: 100,
       confirmed: true,
+      discarded: false,
     });
     await adapter.setLiftStamp("gone", {
       ownerId: "u1",
       rev: 7,
       syncedUpdatedAt: 200,
       confirmed: false,
+      discarded: false,
     });
     idb.store.set(`${WORKSPACE_KEY}keep`, ws("keep"));
     idb.store.set(`${WORKSPACE_KEY}gone`, ws("gone"));
@@ -127,6 +133,7 @@ describe("IDBEditorWorkspaceAdapter lift stamp", () => {
       rev: 3,
       syncedUpdatedAt: 100,
       confirmed: true,
+      discarded: false,
     });
   });
 
@@ -137,12 +144,14 @@ describe("IDBEditorWorkspaceAdapter lift stamp", () => {
       rev: 1,
       syncedUpdatedAt: 100,
       confirmed: true,
+      discarded: false,
     });
     await adapter.setLiftStamp("s2", {
       ownerId: "u1",
       rev: 2,
       syncedUpdatedAt: 200,
       confirmed: true,
+      discarded: false,
     });
 
     await adapter.setLiftStamp("s1", null);
@@ -153,6 +162,7 @@ describe("IDBEditorWorkspaceAdapter lift stamp", () => {
       rev: 2,
       syncedUpdatedAt: 200,
       confirmed: true,
+      discarded: false,
     });
   });
 });

@@ -1,4 +1,4 @@
-import { get, set, del } from "idb-keyval";
+import { get, set, del, update } from "idb-keyval";
 import type {
   EditorWorkspacePersistencePort,
   PersistenceError,
@@ -44,6 +44,7 @@ export interface LiftStamp {
   rev: number;
   syncedUpdatedAt: number;
   confirmed: boolean;
+  discarded?: boolean;
 }
 
 export class IDBEditorWorkspaceAdapter implements EditorWorkspacePersistencePort {
@@ -143,6 +144,7 @@ export class IDBEditorWorkspaceAdapter implements EditorWorkspacePersistencePort
         rev: entry.rev ?? 0,
         syncedUpdatedAt: entry.syncedUpdatedAt ?? 0,
         confirmed: entry.confirmed ?? false,
+        discarded: entry.discarded ?? false,
       };
     } catch {
       return null;
@@ -194,14 +196,15 @@ export class IDBEditorWorkspaceAdapter implements EditorWorkspacePersistencePort
   async recordConflict(entry: ConflictEntry): Promise<void> {
     await this.enqueueWrite(async () => {
       try {
-        const existing = await get<ConflictRecord>(CONFLICTS_KEY);
-        const record: ConflictRecord = existing ?? { count: 0, last: [] };
-        record.count += 1;
-        record.last.push(entry);
-        if (record.last.length > MAX_CONFLICT_HISTORY) {
-          record.last = record.last.slice(-MAX_CONFLICT_HISTORY);
-        }
-        await set(CONFLICTS_KEY, record);
+        await update<ConflictRecord | undefined>(CONFLICTS_KEY, (existing) => {
+          const record: ConflictRecord = existing ?? { count: 0, last: [] };
+          record.count += 1;
+          record.last.push(entry);
+          if (record.last.length > MAX_CONFLICT_HISTORY) {
+            record.last = record.last.slice(-MAX_CONFLICT_HISTORY);
+          }
+          return record;
+        });
       } catch {
         // Conflict recording must never fail the editor.
       }

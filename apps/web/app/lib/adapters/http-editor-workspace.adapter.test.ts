@@ -194,3 +194,46 @@ describe("HttpEditorWorkspaceAdapter 413", () => {
     }
   });
 });
+
+describe("HttpEditorWorkspaceAdapter DELETE", () => {
+  it("delete sends If-Match with the revision", async () => {
+    const fetchImpl = vi.fn(
+      async (_url: string | URL | Request, init?: RequestInit) => {
+        const headers = new Headers(init?.headers);
+        assert.equal(headers.get("If-Match"), '"rev:5"');
+        return new Response(null, { status: 204 });
+      },
+    ) as unknown as MockedFunction<typeof fetch>;
+
+    const adapter = new HttpEditorWorkspaceAdapter(fetchImpl);
+    const result = await adapter.delete("owner1", "ws1", 5);
+    assert.ok(result.ok && result.deleted);
+  });
+
+  it("412 is a conflict carrying the server's revision", async () => {
+    const fetchImpl = vi.fn(async () => {
+      return new Response("conflict", {
+        status: 412,
+        headers: { ETag: '"rev:7"' },
+      });
+    }) as unknown as MockedFunction<typeof fetch>;
+
+    const adapter = new HttpEditorWorkspaceAdapter(fetchImpl);
+    const result = await adapter.delete("owner1", "ws1", 5);
+    assert.equal(result.ok, false);
+    if (!result.ok) {
+      assert.equal(result.reason, "conflict");
+      assert.equal(result.serverRev, 7);
+    }
+  });
+
+  it("404 is treated as done", async () => {
+    const fetchImpl = vi.fn(async () => {
+      return new Response(null, { status: 404 });
+    }) as unknown as MockedFunction<typeof fetch>;
+
+    const adapter = new HttpEditorWorkspaceAdapter(fetchImpl);
+    const result = await adapter.delete("owner1", "ws1", 5);
+    assert.ok(result.ok && !result.deleted);
+  });
+});
