@@ -135,7 +135,7 @@ export function createSavedProjectsStore(
     "SELECT COALESCE(MIN(ord), 0) AS min_ord FROM saved_projects WHERE owner_id = ?";
   const insert = `
     INSERT INTO saved_projects (id, owner_id, name, payload, created_at, updated_at, ord)
-    VALUES (@id, @owner_id, @name, @payload, @created_at, @updated_at, @ord)
+    VALUES (@id, @owner_id, @name, @payload, hx_ts(@created_at), hx_ts(@updated_at), @ord)
   `;
   /**
    * Bulk replace used to DELETE + INSERT, which reset `rev` to the column

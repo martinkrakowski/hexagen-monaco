@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, it } from "vitest";
 import assert from "node:assert/strict";
 import Database from "better-sqlite3";
@@ -8,6 +9,7 @@ import { createSqlitePlatformDb } from "../sqlite-db";
 import { createSavedProjectsStore } from "../saved-projects-store";
 import { createOwnerDocumentsStore } from "../owner-documents-store";
 import { createOrgsRepository } from "../orgs-store";
+import { BACKENDS, openBackend } from "../../../test-support/platform-backends";
 
 function project(id: string, name = id): SavedProject {
   return {
@@ -19,6 +21,14 @@ function project(id: string, name = id): SavedProject {
     formState: { workspaceName: name },
     manifestYaml: "system: shop\nbounded_contexts: []\n",
   };
+}
+
+function must<T>(
+  r: { success: true; value: T } | { success: false; error: unknown },
+): T {
+  if (!r.success)
+    throw new Error(`expected success, got ${JSON.stringify(r.error)}`);
+  return r.value;
 }
 
 describe("sqlite SavedProjectsPersistencePort", () => {
@@ -423,6 +433,37 @@ describe("saved_projects delete — owner_documents cascade", () => {
       );
     } finally {
       db.close();
+    }
+  });
+});
+
+describe.each(BACKENDS)("saved projects stored timestamps (%s)", (kind) => {
+  it("the stored columns hold the project's own timestamps after create", async () => {
+    const backend = await openBackend(kind);
+    try {
+      const projects = backend.store.projectsFor("owner-a");
+      const createdAt = 1_700_000_000_000;
+      const updatedAt = 1_700_000_001_000;
+      const proj: SavedProject = {
+        id: "11111111-1111-4111-8111-111111111111",
+        name: "alpha",
+        schemaVersion: 4,
+        createdAt,
+        updatedAt,
+        formState: {},
+        manifestYaml: "",
+      };
+      must(await projects.createProjectRecord(proj));
+      const row = await backend.db.get<{ c: number; u: number }>(
+        "SELECT hx_ms(created_at) AS c, hx_ms(updated_at) AS u FROM saved_projects WHERE owner_id = ? AND id = ?",
+        ["owner-a", proj.id],
+      );
+      assert.equal(typeof row.c, "number");
+      assert.equal(typeof row.u, "number");
+      assert.equal(row.c, createdAt);
+      assert.equal(row.u, updatedAt);
+    } finally {
+      await backend.close();
     }
   });
 });
