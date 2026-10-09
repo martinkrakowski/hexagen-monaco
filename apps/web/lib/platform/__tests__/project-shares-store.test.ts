@@ -3,6 +3,8 @@ import { describe, it, beforeEach, afterEach } from "vitest";
 import assert from "node:assert/strict";
 import {
   ShareProjectNotFoundError,
+  revokeSharesForProject,
+  revokeSharesToTeam,
   type GranteeType,
   type ShareRole,
 } from "../project-shares-store";
@@ -318,5 +320,281 @@ describe.each(BACKENDS)("ProjectSharesRepository (%s", (kind) => {
       }),
       "read",
     );
+  });
+
+  it("SH5: selectSharedWith excludes the caller's own and org-owned projects, collapses to the strongest and honours the project filter", async () => {
+    const shares = backend.store.shares;
+    const me = "me";
+    const orgId = "org-1";
+    const foreign = "foreign";
+    const ownProj = "own-proj";
+    const orgProj = "org-proj";
+    const f2 = "f-proj-2";
+    const f1 = "f-proj";
+    must(
+      await backend.store.projectsFor(me).createProjectRecord({
+        id: ownProj,
+        name: "O",
+        schemaVersion: 4,
+        createdAt: 1,
+        updatedAt: 1,
+        formState: {},
+        manifestYaml: "",
+      } as unknown as SavedProject),
+    );
+    must(
+      await backend.store.projectsFor(orgId).createProjectRecord({
+        id: orgProj,
+        name: "OP",
+        schemaVersion: 4,
+        createdAt: 1,
+        updatedAt: 1,
+        formState: {},
+        manifestYaml: "",
+      } as unknown as SavedProject),
+    );
+    must(
+      await backend.store.projectsFor(foreign).createProjectRecord({
+        id: f1,
+        name: "F1",
+        schemaVersion: 4,
+        createdAt: 1,
+        updatedAt: 1,
+        formState: {},
+        manifestYaml: "",
+      } as unknown as SavedProject),
+    );
+    must(
+      await backend.store.projectsFor(foreign).createProjectRecord({
+        id: f2,
+        name: "F2",
+        schemaVersion: 4,
+        createdAt: 1,
+        updatedAt: 1,
+        formState: {},
+        manifestYaml: "",
+      } as unknown as SavedProject),
+    );
+
+    await shares.grant(
+      {
+        ownerId: me,
+        projectId: ownProj,
+        granteeType: "user",
+        granteeId: me,
+        role: "read",
+        grantedBy: me,
+      },
+      { actorId: me },
+    );
+    await shares.grant(
+      {
+        ownerId: orgId,
+        projectId: orgProj,
+        granteeType: "org",
+        granteeId: orgId,
+        role: "read",
+        grantedBy: me,
+      },
+      { actorId: me },
+    );
+    await shares.grant(
+      {
+        ownerId: foreign,
+        projectId: f1,
+        granteeType: "user",
+        granteeId: me,
+        role: "read",
+        grantedBy: me,
+      },
+      { actorId: me },
+    );
+    await shares.grant(
+      {
+        ownerId: foreign,
+        projectId: f1,
+        granteeType: "org",
+        granteeId: orgId,
+        role: "write",
+        grantedBy: me,
+      },
+      { actorId: me },
+    );
+    await shares.grant(
+      {
+        ownerId: foreign,
+        projectId: f2,
+        granteeType: "user",
+        granteeId: me,
+        role: "write",
+        grantedBy: me,
+      },
+      { actorId: me },
+    );
+
+    const identity = { userId: me, orgIds: [orgId], teamIds: [] as const };
+    const all = await shares.selectSharedWith(identity);
+    assert.equal(all.length, 2, "own and org-owned projects excluded");
+    assert.equal(all[0]?.projectId, f2, "order by ord ASC (newer first)");
+    assert.equal(all[0]?.role, "write");
+    assert.equal(all[1]?.projectId, f1, "collapsed to strongest role");
+    assert.equal(all[1]?.role, "write", "user read + org write → write");
+
+    const filtered = await shares.selectSharedWith(identity, f1);
+    assert.equal(filtered.length, 1);
+    assert.equal(filtered[0]?.projectId, f1);
+    assert.equal(filtered[0]?.role, "write");
+  });
+
+  it("SH6: revokeSharesForProject and revokeSharesToTeam return counts and are scoped", async () => {
+    const shares = backend.store.shares;
+    const owner = "owner-6";
+    const p1 = "p-share-1";
+    const p2 = "p-share-2";
+    const p3 = "p-share-3";
+    const p4 = "p-share-4";
+    for (const id of [p1, p2, p3, p4])
+      must(
+        await backend.store.projectsFor(owner).createProjectRecord({
+          id,
+          name: "P",
+          schemaVersion: 4,
+          createdAt: 1,
+          updatedAt: 1,
+          formState: {},
+          manifestYaml: "",
+        } as unknown as SavedProject),
+      );
+
+    // p1 gets 3 live grants (user, org, team); p2 gets 1.
+    await shares.grant(
+      {
+        ownerId: owner,
+        projectId: p1,
+        granteeType: "user",
+        granteeId: "u1",
+        role: "read",
+        grantedBy: "u1",
+      },
+      { actorId: "u1" },
+    );
+    await shares.grant(
+      {
+        ownerId: owner,
+        projectId: p1,
+        granteeType: "org",
+        granteeId: "o1",
+        role: "read",
+        grantedBy: "u1",
+      },
+      { actorId: "u1" },
+    );
+    await shares.grant(
+      {
+        ownerId: owner,
+        projectId: p1,
+        granteeType: "team",
+        granteeId: "t1",
+        role: "write",
+        grantedBy: "u1",
+      },
+      { actorId: "u1" },
+    );
+    await shares.grant(
+      {
+        ownerId: owner,
+        projectId: p2,
+        granteeType: "user",
+        granteeId: "u2",
+        role: "read",
+        grantedBy: "u1",
+      },
+      { actorId: "u1" },
+    );
+
+    // revokeSharesForProject: returns 3, leaves p2.
+    const removed = await backend.db.transaction((tx) =>
+      revokeSharesForProject(tx, owner, p1),
+    );
+    assert.equal(typeof removed, "number");
+    assert.equal(removed, 3, "revokeSharesForProject returns 3");
+    assert.equal(
+      (await shares.listForProject(owner, p1)).length,
+      0,
+      "p1 all revoked",
+    );
+    assert.equal(
+      (await shares.listForProject(owner, p2)).length,
+      1,
+      "p2 untouched",
+    );
+
+    // Team t1 grants on p3 and p4; user and org grants on p3 must survive.
+    await shares.grant(
+      {
+        ownerId: owner,
+        projectId: p3,
+        granteeType: "user",
+        granteeId: "u3",
+        role: "read",
+        grantedBy: "u3",
+      },
+      { actorId: "u3" },
+    );
+    await shares.grant(
+      {
+        ownerId: owner,
+        projectId: p3,
+        granteeType: "org",
+        granteeId: "o2",
+        role: "read",
+        grantedBy: "u3",
+      },
+      { actorId: "u3" },
+    );
+    await shares.grant(
+      {
+        ownerId: owner,
+        projectId: p3,
+        granteeType: "team",
+        granteeId: "t2",
+        role: "write",
+        grantedBy: "u3",
+      },
+      { actorId: "u3" },
+    );
+    await shares.grant(
+      {
+        ownerId: owner,
+        projectId: p4,
+        granteeType: "team",
+        granteeId: "t2",
+        role: "read",
+        grantedBy: "u3",
+      },
+      { actorId: "u3" },
+    );
+
+    const teamRemoved = await backend.db.transaction((tx) =>
+      revokeSharesToTeam(tx, "t2"),
+    );
+    assert.equal(typeof teamRemoved, "number");
+    assert.equal(teamRemoved, 2, "revokeSharesToTeam returns 2");
+    assert.equal(
+      (await shares.listForProject(owner, p3)).length,
+      2,
+      "user+org untouched on p3",
+    );
+    assert.equal(
+      (await shares.listForProject(owner, p4)).length,
+      0,
+      "team t2 revoked on p4",
+    );
+
+    // Already-revoked grants not counted: revoke t2 again → 0.
+    const again = await backend.db.transaction((tx) =>
+      revokeSharesToTeam(tx, "t2"),
+    );
+    assert.equal(again, 0, "already-revoked grants not counted");
   });
 });
