@@ -1,58 +1,60 @@
+// @vitest-environment node
 import { describe, it } from "vitest";
 import assert from "node:assert/strict";
-import { mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-
-import { openPlatformDb } from "../platform-db";
-import { createSqlitePlatformDb } from "../sqlite-db";
-import { createOrgsRepository } from "../orgs-store";
 import {
   createTeamsRepository,
   DuplicateTeamSlugError,
   NotAnOrgMemberError,
   UnknownTeamError,
 } from "../teams-store";
-import { createAuditLogRepository } from "../audit-log-store";
-import { createProjectSharesRepository } from "../project-shares-store";
+import { createOrgsRepository, type OrgsRepository } from "../orgs-store";
+import type { PlatformDb } from "../db";
+import {
+  BACKENDS,
+  openBackend,
+  failOnSql,
+} from "../../../test-support/platform-backends";
 
-function fixture() {
-  const path = join(
-    mkdtempSync(join(tmpdir(), "hexagen-team-members-")),
-    "p.db",
-  );
-  const db = openPlatformDb(path);
-  const platformDb = createSqlitePlatformDb(db);
-  return {
-    db,
-    orgs: createOrgsRepository(platformDb),
-    teams: createTeamsRepository(platformDb),
-    audit: createAuditLogRepository(platformDb),
-    shares: createProjectSharesRepository(platformDb),
-  };
+function defined<T>(v: T | undefined | null, what: string): T {
+  if (v === undefined || v === null) throw new Error("expected " + what);
+  return v;
 }
 
-const countTeamRows = (db: ReturnType<typeof fixture>["db"], userId: string) =>
-  (
-    db
-      .prepare("SELECT COUNT(*) AS n FROM team_members WHERE user_id = ?")
-      .get(userId) as { n: number }
+const seedOrg = (orgs: OrgsRepository, id = "org-acme") =>
+  orgs.createOrg({
+    id,
+    slug: id,
+    name: "Acme",
+    createdBy: "founder",
+  });
+
+const countTeamRows = async (db: PlatformDb, userId: string) =>
+  defined(
+    await db.get<{ n: number }>(
+      "SELECT COUNT(*) AS n FROM team_members WHERE user_id = ?",
+      [userId],
+    ),
+    "team rows",
   ).n;
 
-describe("P-A2 — team membership invariants", () => {
+describe.each(BACKENDS)("P-A2 — team membership invariants (%s", (kind) => {
   it("a no-op mutation writes NO audit row (duplicate add, absent removals)", async () => {
     // An audit row for a mutation that changed nothing is a record of an event
     // that did not happen — and a reader cannot tell it from a real one. That
     // is worse than a missing row, so each transaction gates its append on
     // better-sqlite3's `changes`.
-    const { db, orgs, teams, audit } = fixture();
+    const backend = await openBackend(kind);
     try {
+      const orgs = backend.store.orgs;
+      const teams = backend.store.teams;
+      const audit = backend.store.audit;
       const org = await orgs.createOrg({
         slug: "acme",
         name: "Acme",
         createdBy: "owner-1",
       });
       await orgs.addMember(org.id, "member-1", "member");
+      await orgs.addMember(org.id, "member-2", "member");
       const team = await teams.createTeam({
         orgId: org.id,
         slug: "platform",
@@ -100,13 +102,15 @@ describe("P-A2 — team membership invariants", () => {
         "a real deletion must still be audited",
       );
     } finally {
-      db.close();
+      await backend.close();
     }
   });
 
   it("refuses a user who is not a member of the team's org", async () => {
-    const { db, orgs, teams } = fixture();
+    const backend = await openBackend(kind);
     try {
+      const orgs = backend.store.orgs;
+      const teams = backend.store.teams;
       const org = await orgs.createOrg({
         slug: "acme",
         name: "Acme",
@@ -134,13 +138,16 @@ describe("P-A2 — team membership invariants", () => {
       );
       assert.equal(await teams.isMember(team.id, "stranger"), false);
     } finally {
-      db.close();
+      await backend.close();
     }
   });
 
   it("addMember to an unknown team rejects with UnknownTeamError; no team_members row and no audit row appear", async () => {
-    const { db, orgs, teams, audit } = fixture();
+    const backend = await openBackend(kind);
     try {
+      const orgs = backend.store.orgs;
+      const teams = backend.store.teams;
+      const audit = backend.store.audit;
       const org = await orgs.createOrg({
         slug: "acme",
         name: "Acme",
@@ -163,11 +170,7 @@ describe("P-A2 — team membership invariants", () => {
         },
       );
       assert.equal(
-        (
-          db
-            .prepare("SELECT COUNT(*) AS n FROM team_members WHERE user_id = ?")
-            .get("member-1") as { n: number }
-        ).n,
+        await countTeamRows(backend.db, "member-1"),
         0,
         "no team_members row must appear for an unknown team",
       );
@@ -177,13 +180,16 @@ describe("P-A2 — team membership invariants", () => {
         "no audit row must appear for an unknown team",
       );
     } finally {
-      db.close();
+      await backend.close();
     }
   });
 
   it("addMember of a user who is not in the org rejects with NotAnOrgMemberError; no team_members row and no audit row appear", async () => {
-    const { db, orgs, teams, audit } = fixture();
+    const backend = await openBackend(kind);
     try {
+      const orgs = backend.store.orgs;
+      const teams = backend.store.teams;
+      const audit = backend.store.audit;
       const org = await orgs.createOrg({
         slug: "acme",
         name: "Acme",
@@ -208,13 +214,7 @@ describe("P-A2 — team membership invariants", () => {
         },
       );
       assert.equal(
-        (
-          db
-            .prepare(
-              "SELECT COUNT(*) AS n FROM team_members WHERE team_id = ? AND user_id = ?",
-            )
-            .get(team.id, "stranger") as { n: number }
-        ).n,
+        await countTeamRows(backend.db, "member-1"),
         0,
         "no team_members row must appear for a non-org-member",
       );
@@ -224,13 +224,15 @@ describe("P-A2 — team membership invariants", () => {
         "no audit row must appear for a non-org-member",
       );
     } finally {
-      db.close();
+      await backend.close();
     }
   });
 
   it("admits a user who IS an org member", async () => {
-    const { db, orgs, teams } = fixture();
+    const backend = await openBackend(kind);
     try {
+      const orgs = backend.store.orgs;
+      const teams = backend.store.teams;
       const org = await orgs.createOrg({
         slug: "acme",
         name: "Acme",
@@ -248,13 +250,15 @@ describe("P-A2 — team membership invariants", () => {
       assert.equal(await teams.isMember(team.id, "dev-1"), true);
       assert.deepEqual(await teams.listTeamIdsForUser("dev-1"), [team.id]);
     } finally {
-      db.close();
+      await backend.close();
     }
   });
 
   it("leaving the org clears the user's team rows in that org", async () => {
-    const { db, orgs, teams } = fixture();
+    const backend = await openBackend(kind);
     try {
+      const orgs = backend.store.orgs;
+      const teams = backend.store.teams;
       const org = await orgs.createOrg({
         slug: "acme",
         name: "Acme",
@@ -277,20 +281,22 @@ describe("P-A2 — team membership invariants", () => {
       await teams.addMember(b.id, "dev-1");
 
       // The plan's non-vacuous form: assert it was > 0 BEFORE.
-      assert.equal(countTeamRows(db, "dev-1"), 2);
+      assert.equal(await countTeamRows(backend.db, "dev-1"), 2);
 
       await orgs.removeMember(org.id, "dev-1");
 
-      assert.equal(countTeamRows(db, "dev-1"), 0);
+      assert.equal(await countTeamRows(backend.db, "dev-1"), 0);
       assert.equal(await orgs.memberRole(org.id, "dev-1"), null);
     } finally {
-      db.close();
+      await backend.close();
     }
   });
 
   it("leaves team rows in OTHER orgs untouched", async () => {
-    const { db, orgs, teams } = fixture();
+    const backend = await openBackend(kind);
     try {
+      const orgs = backend.store.orgs;
+      const teams = backend.store.teams;
       const acme = await orgs.createOrg({
         slug: "acme",
         name: "Acme",
@@ -317,19 +323,21 @@ describe("P-A2 — team membership invariants", () => {
       });
       await teams.addMember(acmeTeam.id, "dev-1");
       await teams.addMember(betaTeam.id, "dev-1");
-      assert.equal(countTeamRows(db, "dev-1"), 2);
+      assert.equal(await countTeamRows(backend.db, "dev-1"), 2);
 
       await orgs.removeMember(acme.id, "dev-1");
 
       assert.deepEqual(await teams.listTeamIdsForUser("dev-1"), [betaTeam.id]);
     } finally {
-      db.close();
+      await backend.close();
     }
   });
 
   it("the cascade is one transaction: a failing team delete leaves the org row intact", async () => {
-    const { db, orgs, teams } = fixture();
+    const backend = await openBackend(kind);
     try {
+      const orgs = backend.store.orgs;
+      const teams = backend.store.teams;
       const org = await orgs.createOrg({
         slug: "acme",
         name: "Acme",
@@ -343,35 +351,40 @@ describe("P-A2 — team membership invariants", () => {
         createdBy: "o",
       });
       await teams.addMember(team.id, "dev-1");
-      assert.equal(countTeamRows(db, "dev-1"), 1);
+      assert.equal(await countTeamRows(backend.db, "dev-1"), 1);
 
       // The failure must land on the SECOND statement, or the test proves
       // nothing: blocking the first one aborts before the second runs in the
       // non-transactional version too, so both shapes look identical. Blocking
       // the org_members delete means the team rows are ALREADY gone unless a
       // transaction rolls them back.
-      db.exec(`
-        CREATE TRIGGER org_members_block_delete
-        BEFORE DELETE ON org_members
-        BEGIN SELECT RAISE(ABORT, 'blocked'); END;
-      `);
-      await assert.rejects(() => orgs.removeMember(org.id, "dev-1"), /blocked/);
+      const decorated = failOnSql(
+        backend.db,
+        (sql) => sql.includes("DELETE FROM org_members"),
+        new Error("boom"),
+      );
+      const brokenOrgs = createOrgsRepository(decorated);
+      await assert.rejects(
+        () => brokenOrgs.removeMember(org.id, "dev-1"),
+        /boom/,
+      );
 
       assert.equal(
-        countTeamRows(db, "dev-1"),
+        await countTeamRows(backend.db, "dev-1"),
         1,
         "team rows must be restored when the org delete fails — without one transaction they stay deleted",
       );
       assert.equal(await orgs.memberRole(org.id, "dev-1"), "member");
-      db.exec("DROP TRIGGER org_members_block_delete");
     } finally {
-      db.close();
+      await backend.close();
     }
   });
 
   it("deleting a team removes its memberships", async () => {
-    const { db, orgs, teams } = fixture();
+    const backend = await openBackend(kind);
     try {
+      const orgs = backend.store.orgs;
+      const teams = backend.store.teams;
       const org = await orgs.createOrg({
         slug: "acme",
         name: "Acme",
@@ -385,20 +398,23 @@ describe("P-A2 — team membership invariants", () => {
         createdBy: "o",
       });
       await teams.addMember(team.id, "dev-1");
-      assert.equal(countTeamRows(db, "dev-1"), 1);
+      assert.equal(await countTeamRows(backend.db, "dev-1"), 1);
 
       await teams.deleteTeam(team.id);
 
-      assert.equal(countTeamRows(db, "dev-1"), 0);
+      assert.equal(await countTeamRows(backend.db, "dev-1"), 0);
       assert.equal(await teams.getTeam(team.id), null);
     } finally {
-      db.close();
+      await backend.close();
     }
   });
 
   it("the audit log records a membership add, and is append-only in practice", async () => {
-    const { db, orgs, teams, audit } = fixture();
+    const backend = await openBackend(kind);
     try {
+      const orgs = backend.store.orgs;
+      const teams = backend.store.teams;
+      const audit = backend.store.audit;
       const org = await orgs.createOrg({
         slug: "acme",
         name: "Acme",
@@ -412,13 +428,19 @@ describe("P-A2 — team membership invariants", () => {
         createdBy: "o",
       });
 
-      const count = () =>
-        (
-          db.prepare("SELECT COUNT(*) AS n FROM audit_log").get() as {
-            n: number;
-          }
+      const auditCount = async () =>
+        defined(
+          await backend.db.get<{ n: number }>(
+            "SELECT COUNT(*) AS n FROM audit_log",
+            [],
+          ),
+          "audit count",
         ).n;
-      assert.equal(count(), 0, "audit log must start empty for this assertion");
+      assert.equal(
+        await auditCount(),
+        0,
+        "audit log must start empty for this assertion",
+      );
 
       await teams.addMember(team.id, "dev-1");
       await audit.append({
@@ -430,11 +452,14 @@ describe("P-A2 — team membership invariants", () => {
         granteeId: "dev-1",
       });
 
-      assert.equal(count(), 1);
-      const row = db.prepare("SELECT * FROM audit_log").get() as Record<
-        string,
-        string
-      >;
+      assert.equal(await auditCount(), 1);
+      const row = defined(
+        await backend.db.get<Record<string, string>>(
+          "SELECT * FROM audit_log",
+          [],
+        ),
+        "audit row",
+      );
       assert.equal(row.actor_id, "owner-1");
       assert.equal(row.action, "team.member.add");
       assert.equal(row.grantee_id, "dev-1");
@@ -458,13 +483,15 @@ describe("P-A2 — team membership invariants", () => {
         );
       }
     } finally {
-      db.close();
+      await backend.close();
     }
   });
 
-  it("a duplicate team slug raises the store's typed error, not a raw SqliteError", async () => {
-    const { db, orgs, teams } = fixture();
+  it("a duplicate team slug raises the store's typed error, not a raw driver error", async () => {
+    const backend = await openBackend(kind);
     try {
+      const orgs = backend.store.orgs;
+      const teams = backend.store.teams;
       const org = await orgs.createOrg({
         slug: "acme",
         name: "Acme",
@@ -517,13 +544,15 @@ describe("P-A2 — team membership invariants", () => {
       });
       assert.ok(ok.id);
     } finally {
-      db.close();
+      await backend.close();
     }
   });
 
   it("a failing audit append rolls the membership back: no unaudited mutation", async () => {
-    const { db, orgs, teams } = fixture();
+    const backend = await openBackend(kind);
     try {
+      const orgs = backend.store.orgs;
+      const teams = backend.store.teams;
       const org = await orgs.createOrg({
         slug: "acme",
         name: "Acme",
@@ -544,16 +573,16 @@ describe("P-A2 — team membership invariants", () => {
       await teams.removeMember(team.id, "dev-1", { actorId: "owner-1" });
       assert.equal(await teams.isMember(team.id, "dev-1"), false);
 
-      // Force the audit insert to fail INSIDE the transaction. A trigger is
-      // the honest way to do it: it fails where a real disk/constraint error
-      // would, rather than by stubbing the appender the store closed over.
-      db.exec(`
-        CREATE TRIGGER audit_boom BEFORE INSERT ON audit_log
-        BEGIN SELECT RAISE(ABORT, 'audit unavailable'); END;
-      `);
+      // Force the audit insert to fail INSIDE the transaction.
+      const decorated = failOnSql(
+        backend.db,
+        (sql) => sql.includes("INSERT INTO audit_log"),
+        new Error("audit unavailable"),
+      );
+      const brokenTeams = createTeamsRepository(decorated);
 
       await assert.rejects(
-        () => teams.addMember(team.id, "dev-1", { actorId: "owner-1" }),
+        () => brokenTeams.addMember(team.id, "dev-1", { actorId: "owner-1" }),
         /audit unavailable/,
       );
       assert.equal(
@@ -562,119 +591,215 @@ describe("P-A2 — team membership invariants", () => {
         "the membership must roll back when its audit row cannot be written",
       );
     } finally {
-      db.close();
+      await backend.close();
     }
   });
 });
 
-describe("P-A4 — grants made to a team die with the team", () => {
-  const PROJECT = "proj-shared";
+describe.each(BACKENDS)(
+  "P-A4 — grants made to a team die with the team (%s",
+  (kind) => {
+    const PROJECT = "proj-shared";
 
-  it("deleting a team revokes the grants made to it and no other grant", async () => {
-    const { db, orgs, teams, shares } = fixture();
-    try {
-      const org = await orgs.createOrg({
-        slug: "acme",
-        name: "Acme",
-        createdBy: "owner-1",
-      });
-      await orgs.addMember(org.id, "owner-1", "owner");
-      const team = await teams.createTeam({
-        orgId: org.id,
-        slug: "platform",
-        name: "Platform",
-        createdBy: "owner-1",
-      });
-      const otherTeam = await teams.createTeam({
-        orgId: org.id,
-        slug: "design",
-        name: "Design",
-        createdBy: "owner-1",
-      });
+    it("deleting a team revokes the grants made to it and no other grant", async () => {
+      const backend = await openBackend(kind);
+      try {
+        const orgs = backend.store.orgs;
+        const teams = backend.store.teams;
+        const shares = backend.store.shares;
+        const org = await orgs.createOrg({
+          slug: "acme",
+          name: "Acme",
+          createdBy: "owner-1",
+        });
+        await orgs.addMember(org.id, "owner-1", "owner");
+        const team = await teams.createTeam({
+          orgId: org.id,
+          slug: "platform",
+          name: "Platform",
+          createdBy: "owner-1",
+        });
+        const otherTeam = await teams.createTeam({
+          orgId: org.id,
+          slug: "design",
+          name: "Design",
+          createdBy: "owner-1",
+        });
 
-      // Three live grants on one project: to the team, to another team, to a
-      // user. Planting uses the no-actor form (grantNow), which writes the row
-      // unconditionally — the deletion under test is the only revocation path.
-      await shares.grant({
-        ownerId: org.id,
-        projectId: PROJECT,
-        granteeType: "team",
-        granteeId: team.id,
-        role: "read",
-        grantedBy: "owner-1",
-      });
-      await shares.grant({
-        ownerId: org.id,
-        projectId: PROJECT,
-        granteeType: "team",
-        granteeId: otherTeam.id,
-        role: "write",
-        grantedBy: "owner-1",
-      });
-      await shares.grant({
-        ownerId: org.id,
-        projectId: PROJECT,
-        granteeType: "user",
-        granteeId: "user-other",
-        role: "read",
-        grantedBy: "owner-1",
-      });
-      assert.equal(
-        (await shares.listForProject(org.id, PROJECT)).length,
-        3,
-        "setup: three live grants on the project",
-      );
+        // Three live grants on one project: to the team, to another team, to a
+        // user. Planting uses the no-actor form (grantNow), which writes the row
+        // unconditionally — the deletion under test is the only revocation path.
+        await shares.grant({
+          ownerId: org.id,
+          projectId: PROJECT,
+          granteeType: "team",
+          granteeId: team.id,
+          role: "read",
+          grantedBy: "owner-1",
+        });
+        await shares.grant({
+          ownerId: org.id,
+          projectId: PROJECT,
+          granteeType: "team",
+          granteeId: otherTeam.id,
+          role: "write",
+          grantedBy: "owner-1",
+        });
+        await shares.grant({
+          ownerId: org.id,
+          projectId: PROJECT,
+          granteeType: "user",
+          granteeId: "user-other",
+          role: "read",
+          grantedBy: "owner-1",
+        });
+        assert.equal(
+          (await shares.listForProject(org.id, PROJECT)).length,
+          3,
+          "setup: three live grants on the project",
+        );
 
-      await teams.deleteTeam(team.id, { actorId: "owner-1" });
+        await teams.deleteTeam(team.id, { actorId: "owner-1" });
 
-      const after = await shares.listForProject(org.id, PROJECT);
-      assert.equal(after.length, 2, "only the deleted team's grant is revoked");
-      const granteeIds = after.map((s) => s.granteeId).sort();
-      assert.deepEqual(
-        granteeIds,
-        [otherTeam.id, "user-other"].sort(),
-        "the other team's grant and the user's grant survive",
-      );
-    } finally {
-      db.close();
-    }
-  });
+        const after = await shares.listForProject(org.id, PROJECT);
+        assert.equal(
+          after.length,
+          2,
+          "only the deleted team's grant is revoked",
+        );
+        const granteeIds = after.map((s) => s.granteeId).sort();
+        assert.deepEqual(
+          granteeIds,
+          [otherTeam.id, "user-other"].sort(),
+          "the other team's grant and the user's grant survive",
+        );
+      } finally {
+        await backend.close();
+      }
+    });
 
-  it("deleting an id that is not a team revokes nothing (no over-revocation)", async () => {
-    const { db, orgs, teams, shares } = fixture();
-    try {
-      const org = await orgs.createOrg({
-        slug: "acme",
-        name: "Acme",
-        createdBy: "owner-1",
-      });
-      await orgs.addMember(org.id, "owner-1", "owner");
+    it("deleting an id that is not a team revokes nothing (no over-revocation)", async () => {
+      const backend = await openBackend(kind);
+      try {
+        const orgs = backend.store.orgs;
+        const teams = backend.store.teams;
+        const shares = backend.store.shares;
+        const org = await orgs.createOrg({
+          slug: "acme",
+          name: "Acme",
+          createdBy: "owner-1",
+        });
+        await orgs.addMember(org.id, "owner-1", "owner");
 
-      // A live team-shaped grant for an id that is NOT a team row.
-      await shares.grant({
-        ownerId: org.id,
-        projectId: PROJECT,
-        granteeType: "team",
-        granteeId: "not-a-team",
-        role: "read",
-        grantedBy: "owner-1",
-      });
-      assert.equal(
-        (await shares.listForProject(org.id, PROJECT)).length,
-        1,
-        "setup: the planted grant is live",
-      );
+        // A live team-shaped grant for an id that is NOT a team row.
+        await shares.grant({
+          ownerId: org.id,
+          projectId: PROJECT,
+          granteeType: "team",
+          granteeId: "not-a-team",
+          role: "read",
+          grantedBy: "owner-1",
+        });
+        assert.equal(
+          (await shares.listForProject(org.id, PROJECT)).length,
+          1,
+          "setup: the planted grant is live",
+        );
 
-      await teams.deleteTeam("not-a-team", { actorId: "owner-1" });
+        await teams.deleteTeam("not-a-team", { actorId: "owner-1" });
 
-      const after = await shares.listForProject(org.id, PROJECT);
-      assert.equal(
-        after.length,
-        1,
-        "no team row existed, so nothing is revoked",
-      );
-    } finally {
-      db.close();
-    }
-  });
-});
+        const after = await shares.listForProject(org.id, PROJECT);
+        assert.equal(
+          after.length,
+          1,
+          "no team row existed, so nothing is revoked",
+        );
+      } finally {
+        await backend.close();
+      }
+    });
+
+    // TM3: deleting a team removes its members and revokes only the grants made to it
+    it("deleting a team removes its members and revokes only the grants made to it", async () => {
+      const backend = await openBackend(kind);
+      try {
+        const orgs = backend.store.orgs;
+        const teams = backend.store.teams;
+        const shares = backend.store.shares;
+        const org = await orgs.createOrg({
+          slug: "acme",
+          name: "Acme",
+          createdBy: "owner-1",
+        });
+        await orgs.addMember(org.id, "owner-1", "owner");
+        await orgs.addMember(org.id, "member-1", "member");
+        await orgs.addMember(org.id, "member-2", "member");
+        const team = await teams.createTeam({
+          orgId: org.id,
+          slug: "platform",
+          name: "Platform",
+          createdBy: "owner-1",
+        });
+        const otherTeam = await teams.createTeam({
+          orgId: org.id,
+          slug: "design",
+          name: "Design",
+          createdBy: "owner-1",
+        });
+        await teams.addMember(team.id, "member-1", { actorId: "owner-1" });
+        await teams.addMember(otherTeam.id, "member-2", {
+          actorId: "owner-1",
+        });
+
+        // Grants to the deleted team, to the other team, and to a user.
+        await shares.grant({
+          ownerId: org.id,
+          projectId: PROJECT,
+          granteeType: "team",
+          granteeId: team.id,
+          role: "read",
+          grantedBy: "owner-1",
+        });
+        await shares.grant({
+          ownerId: org.id,
+          projectId: PROJECT,
+          granteeType: "team",
+          granteeId: otherTeam.id,
+          role: "write",
+          grantedBy: "owner-1",
+        });
+        await shares.grant({
+          ownerId: org.id,
+          projectId: PROJECT,
+          granteeType: "user",
+          granteeId: "user-other",
+          role: "read",
+          grantedBy: "owner-1",
+        });
+        assert.equal(await countTeamRows(backend.db, "member-1"), 1);
+        assert.equal(
+          (await shares.listForProject(org.id, PROJECT)).length,
+          3,
+          "setup: three live grants on the project",
+        );
+
+        await teams.deleteTeam(team.id, { actorId: "owner-1" });
+
+        // Members of the deleted team are gone.
+        assert.equal(await countTeamRows(backend.db, "member-1"), 0);
+        // The other team's member and grants survive.
+        assert.equal(await countTeamRows(backend.db, "member-2"), 1);
+        const after = await shares.listForProject(org.id, PROJECT);
+        assert.equal(
+          after.length,
+          2,
+          "only the deleted team's grant is revoked",
+        );
+        const granteeIds = after.map((s) => s.granteeId).sort();
+        assert.deepEqual(granteeIds, [otherTeam.id, "user-other"].sort());
+      } finally {
+        await backend.close();
+      }
+    });
+  },
+);
