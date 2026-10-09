@@ -438,7 +438,7 @@ describe("saved_projects delete — owner_documents cascade", () => {
 });
 
 describe.each(BACKENDS)("saved projects stored timestamps (%s)", (kind) => {
-  it("the stored columns hold the project's own timestamps after create and replace", async () => {
+  it("the stored columns hold the project's own timestamps after create, replace and update", async () => {
     const backend = await openBackend(kind);
     try {
       const projects = backend.store.projectsFor("owner-a");
@@ -473,6 +473,22 @@ describe.each(BACKENDS)("saved projects stored timestamps (%s)", (kind) => {
       assert.equal(typeof after.u, "number");
       assert.equal(after.c, createdAt);
       assert.equal(after.u, replacedAt);
+
+      const updatedTimestamp = 1_700_000_003_000;
+      must(
+        await projects.updateProjectRecord(proj.id, (p) => ({
+          ...p,
+          updatedAt: updatedTimestamp,
+        })),
+      );
+      const afterUpdate = await backend.db.get<{ c: number; u: number }>(
+        "SELECT hx_ms(created_at) AS c, hx_ms(updated_at) AS u FROM saved_projects WHERE owner_id = ? AND id = ?",
+        ["owner-a", proj.id],
+      );
+      assert.equal(typeof afterUpdate.c, "number");
+      assert.equal(typeof afterUpdate.u, "number");
+      assert.equal(afterUpdate.c, createdAt);
+      assert.equal(afterUpdate.u, updatedTimestamp);
     } finally {
       await backend.close();
     }

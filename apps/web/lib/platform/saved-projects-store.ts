@@ -169,15 +169,15 @@ export function createSavedProjectsStore(
    */
   const updateProject = `
     UPDATE saved_projects
-       SET name = @name,
-           payload = @payload,
-           updated_at = @updated_at,
-           rev = rev + 1,
-           updated_by = @updated_by
-     WHERE owner_id = @owner_id
-       AND id = @id
-       AND (@expected_rev IS NULL OR rev = @expected_rev)
-       AND (@expected_updated_at IS NULL OR updated_at = @expected_updated_at)
+        SET name = @name,
+            payload = @payload,
+            updated_at = hx_ts(@updated_at),
+            rev = rev + 1,
+            updated_by = @updated_by
+      WHERE owner_id = @owner_id
+        AND id = @id
+        AND (CAST(@expected_rev AS INTEGER) IS NULL OR rev = @expected_rev)
+        AND (CAST(@expected_updated_at AS BIGINT) IS NULL OR updated_at = hx_ts(@expected_updated_at))
     RETURNING rev
   `;
   const remove = "DELETE FROM saved_projects WHERE owner_id = ? AND id = ?";
