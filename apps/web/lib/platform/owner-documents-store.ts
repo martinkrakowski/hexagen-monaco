@@ -78,9 +78,6 @@ function persistError(
   if (kind === "Unknown") {
     return { kind, message, cause };
   }
-  if (kind === "PreconditionFailed") {
-    return { kind, message, currentRev: 0 };
-  }
   return { kind, message };
 }
 
