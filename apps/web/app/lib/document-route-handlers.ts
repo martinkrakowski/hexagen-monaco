@@ -182,17 +182,21 @@ function invalidIfNoneMatch(): { ok: false; response: NextResponse } {
 }
 
 /**
- * Parses `If-None-Match` for documents. Absent, empty, or `*` all mean
- * "unconditional" — but `*` is special-cased to `createOnly` (refuse to overwrite
- * an existing copy). Any other value (a quoted ETag, a list, or a non-empty
- * value that is not `*` after trimming) is a malformed 400.
+ * Parses `If-None-Match` for documents. Absent, empty, or `*` (after trimming)
+ * all mean "unconditional" — but `*` is special-cased to `createOnly` (refuse
+ * to overwrite an existing copy). Any other non-empty value (a quoted ETag, a
+ * list, etc.) is a malformed 400.
  */
 function parseDocumentIfNoneMatch(
   request: NextRequest,
-): { ok: true; createOnly: boolean } | { ok: false; response: NextResponse } {
+):
+  | { ok: true; createOnly: boolean }
+  | { ok: false; response: NextResponse } {
   const raw = request.headers.get("If-None-Match");
-  if (raw == null || raw === "" || raw === "*")
-    return { ok: true, createOnly: raw === "*" };
+  if (raw == null) return { ok: true, createOnly: false };
+  const trimmed = raw.trim();
+  if (trimmed === "" || trimmed === "*")
+    return { ok: true, createOnly: trimmed === "*" };
   return invalidIfNoneMatch();
 }
 
@@ -453,20 +457,20 @@ export async function handleDocumentPut(
   // is unconditional. Any other value is a malformed 400.
   const noneMatch = parseDocumentIfNoneMatch(request);
   if (!noneMatch.ok) return noneMatch.response;
-  if (noneMatch.createOnly) {
-    const match = parseDocumentIfMatch(request);
-    if (!match.ok) return match.response;
-    if (match.expectedRev !== undefined || request.headers.get("If-Match")) {
-      return NextResponse.json(
-        {
-          error: "validation",
-          message: "If-None-Match cannot be combined with If-Match",
-          statusCode: 400,
-        },
-        { status: 400 },
-      );
-    }
-  }
+   if (noneMatch.createOnly) {
+     const match = parseDocumentIfMatch(request);
+     if (!match.ok) return match.response;
+     if (match.expectedRev !== undefined) {
+       return NextResponse.json(
+         {
+           error: "validation",
+           message: "If-None-Match cannot be combined with If-Match",
+           statusCode: 400,
+         },
+         { status: 400 },
+       );
+     }
+   }
 
   // If-Match: rev:<n> only. A bare number is malformed (no legacy support).
   const precondition = parseDocumentIfMatch(request);

@@ -1039,8 +1039,71 @@ describe("document routes", () => {
     assert.equal(deleted.status, 204);
   });
 
-  // Skipped: test 16 ("a refusal by each of the three paths leaves one audit
-  // row") cannot be checked from this file because PlatformStore does not
-  // expose its raw db handle. The audit-row counting is covered in full by
-  // owner-documents-store.test.ts item 8.
+  it("If-None-Match trimmed * creates; rev:1 and W/rev:1 are 400; *+* creates; *+rev:1 is 400", async () => {
+    signedInAs(OWNER);
+    // " * " (trimmed to *) creates on absent document.
+    const padded = await DETAIL_PUT(
+      putReq(OWNER, KIND, "doc-padded", JSON.stringify({ payload: {} }), {
+        "If-None-Match": " * ",
+      }),
+      detailParams(OWNER, KIND, "doc-padded"),
+    );
+    assert.equal(padded.status, 200);
+    assert.match(padded.headers.get("ETag") ?? "", /rev:1/);
+
+    // A bare rev:1 is a 400 (not *).
+    const bareRev = await DETAIL_PUT(
+      putReq(OWNER, KIND, "doc-bare", JSON.stringify({ payload: {} }), {
+        "If-None-Match": '"rev:1"',
+      }),
+      detailParams(OWNER, KIND, "doc-bare"),
+    );
+    assert.equal(bareRev.status, 400);
+
+    // W/"rev:1" is also 400.
+    const wRev = await DETAIL_PUT(
+      putReq(OWNER, KIND, "doc-w", JSON.stringify({ payload: {} }), {
+        "If-None-Match": 'W/"rev:1"',
+      }),
+      detailParams(OWNER, KIND, "doc-w"),
+    );
+    assert.equal(wRev.status, 400);
+
+    // If-None-Match * + If-Match * is accepted as create-only (both mean
+    // unconditional), and creates on an absent document.
+    const bothStar = await DETAIL_PUT(
+      putReq(OWNER, KIND, "doc-both-star", JSON.stringify({ payload: {} }), {
+        "If-None-Match": "*",
+        "If-Match": "*",
+      }),
+      detailParams(OWNER, KIND, "doc-both-star"),
+    );
+    assert.equal(bothStar.status, 200);
+    assert.match(bothStar.headers.get("ETag") ?? "", /rev:1/);
+
+    // If-None-Match * + If-Match "rev:1" is 400.
+    const bothMatch = await DETAIL_PUT(
+      putReq(OWNER, KIND, "doc-both-match", JSON.stringify({ payload: {} }), {
+        "If-None-Match": "*",
+        "If-Match": '"rev:1"',
+      }),
+      detailParams(OWNER, KIND, "doc-both-match"),
+    );
+    assert.equal(bothMatch.status, 400);
+  });
+
+  it("DELETE with a malformed If-Match (a bare number) is 400", async () => {
+    signedInAs(OWNER);
+    // Seed so the request reaches the If-Match parser (not a 404).
+    await DETAIL_PUT(
+      putReq(OWNER, KIND, DOC_ID, JSON.stringify({ payload: {} })),
+      detailParams(OWNER, KIND, DOC_ID),
+    );
+
+    const res = await DETAIL_DELETE(
+      delReq(OWNER, KIND, DOC_ID, { "If-Match": "123" }),
+      detailParams(OWNER, KIND, DOC_ID),
+    );
+    assert.equal(res.status, 400);
+  });
 });
