@@ -70,6 +70,13 @@ describe("pg-byok-schema", () => {
           expect(row!.data_type, `${fullCol} should be text`).toBe("text");
         }
       }
+      const pgCount = await db.all<{ count: number }>(
+        "SELECT COUNT(*) AS count FROM information_schema.columns WHERE table_schema = 'public' AND table_name = $1",
+        [table],
+      );
+      expect(pgCount[0].count, `Postgres column count for ${table}`).toBe(
+        cols.length,
+      );
     }
     expect(totalCols).toBeGreaterThan(0);
   });
@@ -93,10 +100,20 @@ describe("pg-byok-schema", () => {
   });
 
   it("the write-order index and sequence exist and nextval increases", async () => {
-    const indexes = await db.all<{ indexname: string }>(
-      "SELECT indexname FROM pg_indexes WHERE schemaname = 'public' AND indexname = 'idx_byok_meta_user_provider'",
+    const indexes = await db.all<{
+      indexname: string;
+      indexdef: string;
+    }>(
+      "SELECT indexname, indexdef FROM pg_indexes WHERE schemaname = 'public' AND indexname = 'idx_byok_meta_user_provider'",
     );
     expect(indexes).toHaveLength(1);
+    expect(indexes[0].indexdef).toContain("user_id");
+    expect(indexes[0].indexdef).toContain("provider");
+
+    const seqOwner = await db.get<{ pg_get_serial_sequence: string | null }>(
+      "SELECT pg_get_serial_sequence('byok_key_metadata', 'write_seq') AS pg_get_serial_sequence",
+    );
+    expect(seqOwner?.pg_get_serial_sequence).toBe("public.byok_write_seq");
 
     const seqRes = await db.get<{ last_value: string }>(
       "SELECT last_value FROM byok_write_seq",
