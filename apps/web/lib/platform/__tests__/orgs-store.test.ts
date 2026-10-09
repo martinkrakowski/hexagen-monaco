@@ -860,3 +860,296 @@ describe.each(BACKENDS)(
     });
   },
 );
+
+describe.each(BACKENDS)(
+  "OrgsRepository.deleteOrg — tenancy scoping (%s",
+  (kind) => {
+    it("OR7 deleteOrg removes only this org's rows", async () => {
+      const backend = await openBackend(kind);
+      try {
+        const orgs = backend.store.orgs;
+        const teams = backend.store.teams;
+        const shares = backend.store.shares;
+        const audit = { actorId: "owner-1" };
+        const n = (sql: string, ...args: SqlValue[]) =>
+          count(backend.db, sql, ...args);
+        const insertRun = `INSERT INTO run_events (id, owner_id, run_id, stage, label, duration_ms,
+  retry_count, input_tokens, output_tokens, served_from_cache, used_llm,
+  summary, created_at)
+VALUES (?, ?, ?, 0, 'stage-0', 1, 0, 0, 0, ?, ?, 's', hx_ts(?))`;
+
+        // Two orgs, each seeded: owner + member, a team + its member, a pending
+        // invite, a grant where the org is the grantee, and a run event.
+        const org1 = await orgs.createOrgWithOwner(
+          { slug: "acme", name: "Acme", createdBy: "owner-1" },
+          { actorId: "owner-1" },
+        );
+        const team1 = await teams.createTeam({
+          orgId: org1.id,
+          slug: "acme",
+          name: "Acme",
+          createdBy: "owner-1",
+        });
+        await orgs.addMember(org1.id, "member-1", "member", audit);
+        await teams.addMember(team1.id, "member-1", audit);
+        await orgs.invite(org1.id, "someone", "member", audit);
+        await shares.grant({
+          ownerId: "other-user",
+          projectId: "their-project",
+          granteeType: "org",
+          granteeId: org1.id,
+          role: "read",
+          grantedBy: "other-user",
+        });
+        await backend.db.run(insertRun, [
+          "evt-acme",
+          org1.id,
+          "run-1",
+          0,
+          0,
+          Date.now(),
+        ]);
+        const org2 = await orgs.createOrgWithOwner(
+          { slug: "beta", name: "Beta", createdBy: "owner-1" },
+          { actorId: "owner-1" },
+        );
+        const team2 = await teams.createTeam({
+          orgId: org2.id,
+          slug: "beta",
+          name: "Beta",
+          createdBy: "owner-1",
+        });
+        await orgs.addMember(org2.id, "member-1", "member", audit);
+        await teams.addMember(team2.id, "member-1", audit);
+        await orgs.invite(org2.id, "someone", "member", audit);
+        await shares.grant({
+          ownerId: "other-user",
+          projectId: "their-project",
+          granteeType: "org",
+          granteeId: org2.id,
+          role: "read",
+          grantedBy: "other-user",
+        });
+        await backend.db.run(insertRun, [
+          "evt-beta",
+          org2.id,
+          "run-1",
+          0,
+          0,
+          Date.now(),
+        ]);
+
+        // Non-vacuity: every class the deletion touches exists for org 2 before.
+        const liveGrants = (orgId: string) =>
+          n(
+            "SELECT COUNT(*) AS n FROM project_shares WHERE grantee_type = 'org' AND grantee_id = ? AND revoked_at IS NULL",
+            orgId,
+          );
+        const totalGrants = (orgId: string) =>
+          n(
+            "SELECT COUNT(*) AS n FROM project_shares WHERE grantee_type = 'org' AND grantee_id = ?",
+            orgId,
+          );
+        assert.equal(
+          await n("SELECT COUNT(*) AS n FROM orgs WHERE id = ?", org2.id),
+          1,
+        );
+        assert.equal(
+          await n(
+            "SELECT COUNT(*) AS n FROM org_members WHERE org_id = ?",
+            org2.id,
+          ),
+          2,
+        );
+        assert.equal(
+          await n("SELECT COUNT(*) AS n FROM teams WHERE org_id = ?", org2.id),
+          1,
+        );
+        assert.equal(
+          await n(
+            "SELECT COUNT(*) AS n FROM team_members WHERE team_id = ?",
+            team2.id,
+          ),
+          1,
+        );
+        assert.equal(
+          await n(
+            "SELECT COUNT(*) AS n FROM org_invites WHERE org_id = ?",
+            org2.id,
+          ),
+          1,
+        );
+        assert.equal(
+          await n(
+            "SELECT COUNT(*) AS n FROM run_events WHERE owner_id = ?",
+            org2.id,
+          ),
+          1,
+        );
+        assert.equal(await liveGrants(org2.id), 1);
+        assert.equal(typeof (await liveGrants(org2.id)), "number");
+
+        await orgs.deleteOrg(org1.id, { actorId: "owner-1" });
+
+        // Org 2 is untouched across every row class.
+        assert.equal(
+          await n("SELECT COUNT(*) AS n FROM orgs WHERE id = ?", org2.id),
+          1,
+        );
+        assert.equal(
+          await n(
+            "SELECT COUNT(*) AS n FROM org_members WHERE org_id = ?",
+            org2.id,
+          ),
+          2,
+        );
+        assert.equal(
+          await n("SELECT COUNT(*) AS n FROM teams WHERE org_id = ?", org2.id),
+          1,
+        );
+        assert.equal(
+          await n(
+            "SELECT COUNT(*) AS n FROM team_members WHERE team_id = ?",
+            team2.id,
+          ),
+          1,
+        );
+        assert.equal(
+          await n(
+            "SELECT COUNT(*) AS n FROM org_invites WHERE org_id = ?",
+            org2.id,
+          ),
+          1,
+        );
+        assert.equal(
+          await n(
+            "SELECT COUNT(*) AS n FROM run_events WHERE owner_id = ?",
+            org2.id,
+          ),
+          1,
+        );
+        assert.equal(
+          await liveGrants(org2.id),
+          1,
+          "org 2's grant must survive",
+        );
+
+        // Org 1 is gone or soft-revoked across every row class.
+        assert.equal(
+          await n("SELECT COUNT(*) AS n FROM orgs WHERE id = ?", org1.id),
+          0,
+        );
+        assert.equal(
+          await n(
+            "SELECT COUNT(*) AS n FROM org_members WHERE org_id = ?",
+            org1.id,
+          ),
+          0,
+        );
+        assert.equal(
+          await n("SELECT COUNT(*) AS n FROM teams WHERE org_id = ?", org1.id),
+          0,
+        );
+        assert.equal(
+          await n(
+            "SELECT COUNT(*) AS n FROM team_members WHERE team_id = ?",
+            team1.id,
+          ),
+          0,
+        );
+        assert.equal(
+          await n(
+            "SELECT COUNT(*) AS n FROM org_invites WHERE org_id = ?",
+            org1.id,
+          ),
+          0,
+        );
+        assert.equal(
+          await n(
+            "SELECT COUNT(*) AS n FROM run_events WHERE owner_id = ?",
+            org1.id,
+          ),
+          0,
+        );
+        assert.equal(await liveGrants(org1.id), 0, "org 1's grant is revoked");
+        assert.equal(
+          await totalGrants(org1.id),
+          1,
+          "grant row survives as audit trail",
+        );
+      } finally {
+        await backend.close();
+      }
+    });
+  },
+);
+
+describe.each(BACKENDS)(
+  "OrgsRepository.changeMemberRole — last-owner guard under concurrency (%s",
+  (kind) => {
+    it("OR5 two owners demoted at the same time leave one owner", async () => {
+      // pgMax: 6 so the two transactions actually run concurrently on the
+      // Postgres pool rather than serialising like SQLite; the SERIALIZABLE
+      // retry is what makes the count check hold.
+      const backend = await openBackend(kind, { pgMax: 6 });
+      try {
+        const orgs = backend.store.orgs;
+        const audit = { actorId: "owner-1" };
+        const n = (sql: string, ...args: SqlValue[]) =>
+          count(backend.db, sql, ...args);
+        const countOwners = (orgId: string) =>
+          n(
+            "SELECT COUNT(*) AS n FROM org_members WHERE org_id = ? AND role = 'owner'",
+            orgId,
+          );
+
+        const org = await orgs.createOrgWithOwner(
+          { slug: "acme", name: "Acme", createdBy: "owner-1" },
+          { actorId: "owner-1" },
+        );
+        await orgs.addMember(org.id, "owner-2", "owner", audit);
+        // Non-vacuity: two owners before the race.
+        assert.equal(await countOwners(org.id), 2);
+
+        // Demote both owners together. Under SERIALIZABLE both read count=2, the
+        // loser is retried and re-reads count=1, and guardLastOwner throws. On
+        // SQLite the single connection serialises the two transactions, so the
+        // second re-reads the committed count and throws the same way. Either
+        // valid order leaves exactly one owner.
+        const results = await Promise.allSettled([
+          orgs.changeMemberRole(org.id, "owner-1", "member", audit),
+          orgs.changeMemberRole(org.id, "owner-2", "member", audit),
+        ]);
+
+        let resolved = 0;
+        let refused = 0;
+        for (const r of results) {
+          if (r.status === "fulfilled") {
+            assert.equal(r.value, true, "the winning demotion reports true");
+            resolved++;
+          } else {
+            assert.ok(
+              r.reason instanceof LastOwnerError,
+              "the loser is refused as the last owner",
+            );
+            refused++;
+          }
+        }
+        assert.equal(resolved, 1, "exactly one demotion succeeded");
+        assert.equal(refused, 1, "exactly one demotion was refused");
+        assert.equal(
+          typeof (await countOwners(org.id)),
+          "number",
+          "counts are numbers on both backends",
+        );
+        assert.equal(
+          await countOwners(org.id),
+          1,
+          "exactly one owner remains afterwards",
+        );
+      } finally {
+        await backend.close();
+      }
+    });
+  },
+);
