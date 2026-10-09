@@ -75,7 +75,9 @@ export {
   DOCUMENT_KINDS,
   type AuthoredDocument,
   type DocumentKind,
+  type ListDocumentsResult,
   type OwnerDocumentsStore,
+  type TruncationReason,
   listDocumentsAuthoredBy,
 } from "./owner-documents-store";
 export {

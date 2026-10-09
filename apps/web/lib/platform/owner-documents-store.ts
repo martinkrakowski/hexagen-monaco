@@ -153,10 +153,42 @@ export function deleteDocumentsOfOwner(
 
 export interface AuthoredDocument extends OwnerDocument {
   ownerId: string;
+  /**
+   * Set only when the stored `payload` failed to parse; `payload` is then
+   * `null`. A stored JSON `null` parses fine and leaves this absent, so a
+   * genuine null payload is never confused with a broken document.
+   */
+  payloadUnparseable?: boolean;
 }
 
+/** Why `listDocumentsAuthoredBy` stopped before all authored documents. */
+export type TruncationReason = "rows" | "size";
+
+export interface ListDocumentsResult {
+  items: AuthoredDocument[];
+  /** `null` when the account's documents fit within both budgets. */
+  truncatedBy: TruncationReason | null;
+}
+
+function assertNonNegativeInteger(name: string, value: number): void {
+  if (!Number.isInteger(value) || value < 0) {
+    throw new RangeError(
+      `${name} must be a non-negative integer, got ${String(value)}`,
+    );
+  }
+}
+
+/**
+ * First pass: keys + payload length only, no `payload` text. The size budget is
+ * decided before any payload is materialised, so an oversized author cannot make
+ * this read allocate a multi-megabyte payload it will then throw away.
+ * `user_id` scopes every statement (DB-9: an account export is the author's
+ * alone). Fetches `limit + 1`: the trailing row is the truncation probe and is
+ * dropped before it is returned (LIMIT cannot tell "exactly N stored" from
+ * "more than N stored" when the row count equals the limit).
+ */
 const SELECT_AUTHORED_DOCUMENTS = `
-  SELECT owner_id, kind, id, project_id, rev, payload, updated_at
+  SELECT owner_id, kind, id, project_id, rev, length(payload) AS payload_len, updated_at
     FROM owner_documents
    WHERE user_id = ?
    ORDER BY owner_id, kind, id
@@ -164,45 +196,110 @@ const SELECT_AUTHORED_DOCUMENTS = `
 `;
 
 /**
+ * Second pass: the full `payload` for one kept row, fetched by its full key.
+ * `user_id` is re-checked here too, so no statement ever reads another author's
+ * row. One statement per row keeps peak memory to a single payload.
+ */
+const SELECT_AUTHORED_DOCUMENT_PAYLOAD = `
+  SELECT owner_id, kind, id, project_id, rev, payload, updated_at
+    FROM owner_documents
+   WHERE owner_id = ? AND user_id = ? AND kind = ? AND id = ?
+`;
+
+/**
  * Every document one person authored, across tenants. For that person's own
  * export only — the caller is the author, scoped by `user_id` (the JWT `sub`),
  * never by the request.
  *
- * A row whose `payload` does not parse is kept with `payload: null` rather than
- * dropped: an export that silently omits a row is worse than one that shows a
- * broken one.
+ * Two independent budgets bound the result: `limit` rows and `maxChars` of
+ * payload text. `limit` is the real ceiling — this asks the database for
+ * `limit + 1` rows and reports `truncatedBy: "rows"` when the trailing probe
+ * row was there. The size budget walks the surviving rows in order and stops
+ * before the row that would push the running length past `maxChars`, reporting
+ * `truncatedBy: "size"`.
+ *
+ * Rows are scanned before the cut, but payloads are fetched only for the KEPT
+ * rows (one statement per row by its full key), so a size-capped export never
+ * allocates a payload it will discard. `user_id` appears in every statement.
+ *
+ * A row whose `payload` does not parse is kept rather than dropped: its
+ * `payload` stays `null` and `payloadUnparseable` is set, so a broken document
+ * is visible to the reader instead of silently absent.
  */
 export async function listDocumentsAuthoredBy(
   session: PlatformDbSession,
   userId: string,
   limit: number,
-): Promise<AuthoredDocument[]> {
-  const rows = await session.all<{
+  maxChars: number,
+): Promise<ListDocumentsResult> {
+  assertNonNegativeInteger("limit", limit);
+  assertNonNegativeInteger("maxChars", maxChars);
+
+  const keys = await session.all<{
     owner_id: string;
     kind: string;
     id: string;
     project_id: string | null;
     rev: number;
-    payload: string;
+    payload_len: number;
     updated_at: number;
-  }>(SELECT_AUTHORED_DOCUMENTS, [userId, limit]);
-  return rows.map((r) => {
-    let payload: unknown = null;
-    try {
-      payload = JSON.parse(r.payload);
-    } catch {
-      // Keep the row, but leave its payload null (see JSDoc above).
+  }>(SELECT_AUTHORED_DOCUMENTS, [userId, limit + 1]);
+
+  const rowsTruncated = keys.length > limit;
+  const candidates = rowsTruncated ? keys.slice(0, limit) : keys;
+
+  const kept: typeof candidates = [];
+  let running = 0;
+  let sizeTruncated = false;
+  for (const c of candidates) {
+    if (running + c.payload_len > maxChars) {
+      sizeTruncated = true;
+      break;
     }
-    return {
-      ownerId: r.owner_id,
-      kind: r.kind as DocumentKind,
-      id: r.id,
-      projectId: r.project_id,
-      rev: r.rev,
+    running += c.payload_len;
+    kept.push(c);
+  }
+
+  const truncatedBy: TruncationReason | null = rowsTruncated
+    ? "rows"
+    : sizeTruncated
+      ? "size"
+      : null;
+
+  const items: AuthoredDocument[] = [];
+  for (const c of kept) {
+    const row = await session.get<{
+      owner_id: string;
+      kind: string;
+      id: string;
+      project_id: string | null;
+      rev: number;
+      payload: string;
+      updated_at: number;
+    }>(SELECT_AUTHORED_DOCUMENT_PAYLOAD, [c.owner_id, userId, c.kind, c.id]);
+    if (!row) continue; // vanished between the scan and the fetch
+    let payload: unknown = null;
+    let payloadUnparseable = false;
+    try {
+      payload = JSON.parse(row.payload);
+    } catch {
+      // Kept with payload null and flagged, so the reader can tell a broken
+      // document apart from a genuine JSON `null` (see JSDoc).
+      payloadUnparseable = true;
+    }
+    items.push({
+      ownerId: row.owner_id,
+      kind: row.kind as DocumentKind,
+      id: row.id,
+      projectId: row.project_id,
+      rev: row.rev,
       payload,
-      updatedAt: r.updated_at,
-    };
-  });
+      updatedAt: row.updated_at,
+      ...(payloadUnparseable ? { payloadUnparseable: true } : {}),
+    });
+  }
+
+  return { items, truncatedBy };
 }
 
 export function createOwnerDocumentsStore(

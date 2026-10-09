@@ -11,6 +11,7 @@ import {
   closePlatformStore,
   DOCUMENT_KINDS,
   getPlatformStore,
+  type AuthoredDocument,
   type PlatformStore,
   type RunEventRecord,
 } from "../../../../../lib/platform";
@@ -22,6 +23,8 @@ const THEIR_PROJECT = "99999999-9999-4999-8999-999999999999";
 const RUN_EXPORT_LIMIT = 10_000;
 /** Must match the private ceiling in `route.ts`. */
 const DOCUMENT_EXPORT_LIMIT = 10_000;
+/** Must match the private ceiling in `route.ts`. */
+const DOCUMENT_EXPORT_MAX_CHARS = 100_000_000;
 
 function project(id: string, name: string): SavedProject {
   return {
@@ -299,6 +302,11 @@ describe("GET /api/account/export", () => {
     assert.ok(orgItem, "an org-authored document must appear in the export");
     assert.equal(orgItem!.ownerId, orgId);
     assert.deepEqual(orgItem!.payload, { inOrg: true });
+    assert.equal(
+      body.documents.scope,
+      "authored-in-any-tenant",
+      "documents are authored across any tenant the account belongs to",
+    );
   });
 
   it("another member's org documents and another user's personal documents are not included", async () => {
@@ -352,19 +360,49 @@ describe("GET /api/account/export", () => {
     );
   });
 
-  it("reports the document limit and is not truncated below it, and documentsAuthoredBy honours its limit", async () => {
-    const store = getPlatformStore();
-    const docs = store.documentsFor(OWNER, OWNER);
-    await docs.put({ kind: "workspace", id: "d1", payload: {} });
-    await docs.put({ kind: "workspace", id: "d2", payload: {} });
-    await docs.put({ kind: "workspace", id: "d3", payload: {} });
-
-    const page = await store.documentsAuthoredBy(OWNER, 2);
-    assert.equal(page.length, 2);
-
+  it("stores the limit and maxChars it asked for, and is not truncated when stored documents equal the ceiling", async () => {
+    const stub = stubDocumentsAuthoredBy(
+      getPlatformStore(),
+      DOCUMENT_EXPORT_LIMIT,
+    );
     const body = await (await GET(req())).json();
-    assert.equal(body.documents.limit, DOCUMENT_EXPORT_LIMIT);
+    // The route passes the real limit (the store owns the +1 probe).
+    assert.deepEqual(stub.mock.calls[0], [
+      OWNER,
+      DOCUMENT_EXPORT_LIMIT,
+      DOCUMENT_EXPORT_MAX_CHARS,
+    ]);
     assert.equal(body.documents.truncated, false);
+    assert.equal(body.documents.truncatedBy, null);
+    assert.equal(body.documents.items.length, DOCUMENT_EXPORT_LIMIT);
+  });
+
+  it("flags truncated by rows and drops the probe when one more than the limit is stored", async () => {
+    stubDocumentsAuthoredBy(getPlatformStore(), DOCUMENT_EXPORT_LIMIT + 1);
+    const body = await (await GET(req())).json();
+    assert.equal(body.documents.truncated, true);
+    assert.equal(body.documents.truncatedBy, "rows");
+    assert.equal(body.documents.items.length, DOCUMENT_EXPORT_LIMIT);
+    assert.equal(
+      body.documents.items.some(
+        (d: { id: string }) => d.id === `doc-${DOCUMENT_EXPORT_LIMIT}`,
+      ),
+      false,
+      "the probe row must not be included in the archive",
+    );
+  });
+
+  it("returns a 500 when the documents store throws", async () => {
+    const store = getPlatformStore();
+    const documentsAuthoredBy = vi.fn().mockRejectedValue(new Error("boom"));
+    vi.spyOn(store, "documentsAuthoredBy").mockImplementation(
+      documentsAuthoredBy as unknown as PlatformStore["documentsAuthoredBy"],
+    );
+    const res = await GET(req());
+    assert.equal(res.status, 500);
+    const body = await res.json();
+    assert.equal(body.error, "persistence");
+    assert.equal(body.message, "Unable to load documents for export");
   });
 });
 
@@ -403,4 +441,40 @@ function stubRunList(store: PlatformStore, storedCount: number) {
     return { ...inner, list };
   });
   return list;
+}
+
+/**
+ * Stub for `PlatformStore.documentsAuthoredBy`, beside `stubRunList` and in the
+ * same style. The route passes the real limit; the store owns the +1 probe, so
+ * the stub mirrors that and reports `truncatedBy: "rows"` when a probe row was
+ * present. Payloads are tiny, so the size budget never engages here (it is
+ * covered by the store test file).
+ */
+function stubDocumentsAuthoredBy(store: PlatformStore, storedCount: number) {
+  const documentsAuthoredBy = vi.fn(
+    async (ownerId: string, limit: number, _maxChars: number) => {
+      const fetched = Array.from(
+        { length: Math.min(storedCount, limit + 1) },
+        (_, i): AuthoredDocument => ({
+          ownerId,
+          kind: "workspace",
+          id: `doc-${i}`,
+          projectId: null,
+          rev: 1,
+          payload: { i },
+          updatedAt: 1,
+        }),
+      );
+      const rowsTruncated = fetched.length > limit;
+      const items = rowsTruncated ? fetched.slice(0, limit) : fetched;
+      return {
+        items,
+        truncatedBy: rowsTruncated ? ("rows" as const) : null,
+      };
+    },
+  );
+  vi.spyOn(store, "documentsAuthoredBy").mockImplementation(
+    documentsAuthoredBy as unknown as PlatformStore["documentsAuthoredBy"],
+  );
+  return documentsAuthoredBy;
 }
