@@ -795,8 +795,14 @@ describe.each(BACKENDS)("owner-documents store (%s", (kind) => {
         }),
       ]);
       assert.equal(removed, undefined);
-      assert.equal(putResult.success, false);
-      if (!putResult.success) assert.equal(putResult.error.kind, "NotAMember");
+      // "Removal first" is the order SQLite's single connection gives for this
+      // call order. With real concurrency either serial order is valid: the
+      // put is refused for the lost membership, or it lands first and the
+      // removal deletes it. The invariant holds in both.
+      if (!putResult.success) {
+        assert.equal(putResult.error.kind, "NotAMember");
+      }
+      if (kind === "sqlite") assert.equal(putResult.success, false);
       assert.equal(
         await docCount(db, "org-1", "user-a"),
         0,
@@ -834,15 +840,27 @@ describe.each(BACKENDS)("owner-documents store (%s", (kind) => {
         }),
         orgs.removeMember("org-1", "user-a", { actorId: "founder" }),
       ]);
-      assert.equal(putResult.success, true, "the put lands before the removal");
-      if (!putResult.success) return;
-      // A3-00: "second" is the author's second document; the counter was 1
-      // (from "seed"), so it starts at rev 2, not 1.
-      assert.equal(putResult.value.rev, 2);
+      // "Put first" is the order SQLite gives for this call order. With real
+      // concurrency the removal may win instead, and the put is then refused
+      // for the lost membership. Either way nothing survives.
+      if (kind === "sqlite") {
+        assert.equal(
+          putResult.success,
+          true,
+          "the put lands before the removal",
+        );
+      }
+      if (putResult.success) {
+        // "second" is the author's second document; the counter was 1 (from
+        // "seed"), so it starts at rev 2, not 1.
+        assert.equal(putResult.value.rev, 2);
+      } else {
+        assert.equal(putResult.error.kind, "NotAMember");
+      }
       assert.equal(
         await docCount(db, "org-1", "user-a"),
         0,
-        "the put landed, then the removal deleted it",
+        "nothing of a removed member survives, whichever came first",
       );
     } finally {
       await backend.close();
@@ -876,8 +894,16 @@ describe.each(BACKENDS)("owner-documents store (%s", (kind) => {
           payload: {},
         }),
       ]);
-      assert.equal(putResult.success, false);
-      if (!putResult.success) assert.equal(putResult.error.kind, "NotAMember");
+      // Two serial orders are valid, and a backend with real concurrency can
+      // produce either: the deletion first (the put then finds no membership
+      // and is refused), or the put first (it succeeds, and the deletion that
+      // follows removes what it wrote). SQLite's single connection always
+      // gives the first. What must hold in BOTH is the invariant below; a put
+      // that fails for any reason other than the lost membership is a defect.
+      if (!putResult.success) {
+        assert.equal(putResult.error.kind, "NotAMember");
+      }
+      if (kind === "sqlite") assert.equal(putResult.success, false);
       assert.equal(
         await docCount(db, "org-1", "user-a"),
         0,
