@@ -198,11 +198,16 @@ function parseDocumentIfNoneMatch(
   return invalidIfNoneMatch();
 }
 
-function preconditionFailed(currentRev: number): NextResponse {
+function preconditionFailed(
+  currentRev: number,
+  message: string,
+): NextResponse {
   return NextResponse.json(
     {
       error: "precondition_failed",
-      message: `document was updated elsewhere; expected the current rev`,
+      // The store's own words: "document already exists" for a refused
+      // create, "document was updated elsewhere" for a refused delete.
+      message,
       statusCode: 412,
     },
     { status: 412, headers: { ETag: `"rev:${currentRev}"` } },
@@ -244,7 +249,7 @@ function mapStoreError(error: OwnerDocumentsError): NextResponse {
     );
   }
   if (error.kind === "PreconditionFailed") {
-    return preconditionFailed(error.currentRev);
+    return preconditionFailed(error.currentRev, error.message);
   }
   if (error.kind === "NotAMember") {
     return NextResponse.json(

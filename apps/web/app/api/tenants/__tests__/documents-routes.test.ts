@@ -895,6 +895,7 @@ describe("document routes", () => {
     const body = (await res.json()) as { error: string; statusCode: number };
     assert.equal(body.error, "precondition_failed");
     assert.equal(body.statusCode, 412);
+    assert.match(body.message, /already exists/);
 
     // The stored document must be unchanged.
     const fetched = await DETAIL_GET(
