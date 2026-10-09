@@ -3188,6 +3188,46 @@ describe("CachedEditorWorkspaceAdapter Item 2: discard + timer", () => {
     assert.equal(server.has(UUID), false, "server copy deleted by clear");
     assert.equal(await cache.getLiftStamp(UUID), null, "no stamp left");
   });
+
+  it("a load that catch-up stamps before the save timer fires sends the new rev on the next PUT", async () => {
+    const { adapter, cache, server, fetchImpl, warns } = makeAdapters();
+    const ws = makeWorkspace(1000);
+    await cache.saveWorkspace(UUID, ws);
+    await cache.setLiftStamp(UUID, {
+      ownerId: "user-1",
+      rev: 5,
+      syncedUpdatedAt: 1000,
+      confirmed: true,
+    });
+    server.set(UUID, { payload: ws, rev: 5, updatedAt: 1000, projectId: UUID });
+    await adapter.loadWorkspace(UUID);
+
+    // Save → timer armed but NOT fired.
+    await adapter.saveWorkspace(UUID, makeWorkspace(2000));
+
+    // Load → catch-up PUT (rev 5 → 6) stamps the new rev.
+    await adapter.loadWorkspace(UUID);
+
+    // Advance the timer → second PUT.
+    await vi.advanceTimersByTimeAsync(REMOTE_DEBOUNCE_MS);
+
+    const puts = putCallsOf(fetchImpl);
+    assert.equal(puts.length, 2, "two PUTs (catch-up + timer)");
+    const h2 = new Headers(puts[1]![1]!.headers);
+    assert.equal(
+      h2.get("If-Match"),
+      '"rev:6"',
+      "timer PUT carries the new rev",
+    );
+    assert.equal(warns.length, 0, "no warnings");
+    const rec = await cache.getConflicts();
+    assert.equal(rec?.count ?? 0, 0, "zero conflict records");
+    assert.equal(
+      adapter["pausedIds"].has(UUID),
+      false,
+      "id not paused",
+    );
+  });
 });
 
 describe("CachedEditorWorkspaceAdapter Item 3: chained write + discard", () => {

@@ -467,6 +467,11 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
   ): Promise<Result<PersistedEditorWorkspace | null, PersistenceError>> {
     this.pausedIds.delete(sessionId);
 
+    // Item 3: wait for any in-flight save PUT so the load's catch-up/maybeLift
+    // PUT does not race it on the server.
+    const inFlight = this.inFlight.get(sessionId);
+    if (inFlight) await inFlight.catch(() => {});
+
     const cacheResult = await this.cache.loadWorkspace(sessionId);
     if (!cacheResult.success) return cacheResult;
 
@@ -757,6 +762,12 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
       confirmed: false,
     });
 
+    // Item 3: rebase any pending save timer on the new rev so its PUT
+    // carries the fresh rev, not the stale one.
+    if (this.pendingPreconditions.has(sessionId)) {
+      this.pendingPreconditions.set(sessionId, { ifMatch: putRev });
+    }
+
     // Confirming GET — must match rev and payload.
     const confirmResult = await this.remote.read(userId, sessionId);
     if (!confirmResult.ok) {
@@ -824,6 +835,13 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
       syncedUpdatedAt: cacheEntry.updatedAt,
       confirmed: false,
     });
+
+    // Item 3: rebase any pending save timer on the new rev so its PUT
+    // carries the fresh rev, not the stale one.
+    if (this.pendingPreconditions.has(sessionId)) {
+      this.pendingPreconditions.set(sessionId, { ifMatch: putResult.rev });
+    }
+
     const confirmResult = await this.remote.read(userId, sessionId);
     if (!confirmResult.ok) {
       this.logger.warn(`workspace ${sessionId} catch-up confirm failed`);
