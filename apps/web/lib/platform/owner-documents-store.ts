@@ -432,16 +432,17 @@ export function createOwnerDocumentsStore(
    * way — the cap only bounds audit volume, not the error returned to the
    * caller.
    *
-   * A3-00: the row's `detail` says what was refused: the store method that was
-   * tried, the rev the client sent (or null — e.g. a createOnly has no expected
-   * rev), and the document's current rev.
+   * A3-00: the row's `detail` says what was refused, in the route layer's
+   * vocabulary: the HTTP method ("PUT"/"DELETE"), the rev the client sent
+   * ("*" when no If-Match was sent, e.g. a refused createOnly), and the
+   * document's current rev.
    */
   async function recordRefusal(
     tx: PlatformDbSession,
     kind: DocumentKind,
     id: string,
-    method: "put" | "delete",
-    sent: number | null,
+    method: "PUT" | "DELETE",
+    sent: number | "*",
     current: number | null,
   ): Promise<boolean> {
     const since = new Date(now() - 60_000).toISOString();
@@ -672,8 +673,8 @@ export function createOwnerDocumentsStore(
                 tx,
                 kind,
                 id,
-                "put",
-                null,
+                "PUT",
+                "*",
                 null,
               );
               return {
@@ -689,8 +690,8 @@ export function createOwnerDocumentsStore(
               tx,
               kind,
               id,
-              "put",
-              null,
+              "PUT",
+              "*",
               existing.rev,
             );
             return {
@@ -773,7 +774,7 @@ export function createOwnerDocumentsStore(
             tx,
             kind,
             id,
-            "put",
+            "PUT",
             expectedRev,
             existing.rev,
           );
@@ -845,7 +846,7 @@ export function createOwnerDocumentsStore(
             tx,
             kind,
             id,
-            "delete",
+            "DELETE",
             expectedRev,
             existing.rev,
           );

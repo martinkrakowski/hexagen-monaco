@@ -329,7 +329,7 @@ describe.each(backends)("owner document revs: %s", (_name, make) => {
       assert.ok(a, "doc-a refusal row must exist");
       assert.deepEqual(
         JSON.parse(a!.detail as string),
-        { method: "put", sent: aCur - 1, current: aCur },
+        { method: "PUT", sent: aCur - 1, current: aCur },
         "stale PUT detail",
       );
       assert.equal(a!.grantee_type, null, "grantee_type must be NULL");
@@ -339,7 +339,7 @@ describe.each(backends)("owner document revs: %s", (_name, make) => {
       assert.ok(b, "doc-b refusal row must exist");
       assert.deepEqual(
         JSON.parse(b!.detail as string),
-        { method: "put", sent: null, current: bCur },
+        { method: "PUT", sent: "*", current: bCur },
         "createOnly refusal detail",
       );
 
@@ -347,7 +347,7 @@ describe.each(backends)("owner document revs: %s", (_name, make) => {
       assert.ok(c, "doc-c refusal row must exist");
       assert.deepEqual(
         JSON.parse(c!.detail as string),
-        { method: "delete", sent: cCur - 1, current: cCur },
+        { method: "DELETE", sent: cCur - 1, current: cCur },
         "stale DELETE detail",
       );
 
