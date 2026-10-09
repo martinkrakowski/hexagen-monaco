@@ -845,6 +845,203 @@ describe("document routes", () => {
       new NextRequest(detailUrl(OWNER, KIND, DOC_ID)),
       detailParams(OWNER, KIND, DOC_ID),
     );
-    assert.equal(got.status, 404);
+     assert.equal(got.status, 404);
   });
+
+  it("If-None-Match * on an absent document creates it (200, ETag \"rev:1\")", async () => {
+    signedInAs(OWNER);
+    const res = await DETAIL_PUT(
+      putReq(
+        OWNER,
+        KIND,
+        DOC_ID,
+        JSON.stringify({ payload: { v: "first-upload" } }),
+        { "If-None-Match": "*" },
+      ),
+      detailParams(OWNER, KIND, DOC_ID),
+    );
+    assert.equal(res.status, 200);
+    const etag = res.headers.get("ETag");
+    assert.match(etag ?? "", /rev:1/);
+  });
+
+  it("If-None-Match * on an existing document is 412 with ETag \"rev:<current>\", body error precondition_failed, and the stored document is unchanged", async () => {
+    signedInAs(OWNER);
+    // Seed a document.
+    await DETAIL_PUT(
+      putReq(
+        OWNER,
+        KIND,
+        DOC_ID,
+        JSON.stringify({ payload: { v: "original" } }),
+      ),
+      detailParams(OWNER, KIND, DOC_ID),
+    );
+
+    // createOnly PUT on the existing key.
+    const res = await DETAIL_PUT(
+      putReq(
+        OWNER,
+        KIND,
+        DOC_ID,
+        JSON.stringify({ payload: { v: "should-not-stick" } }),
+        { "If-None-Match": "*" },
+      ),
+      detailParams(OWNER, KIND, DOC_ID),
+    );
+    assert.equal(res.status, 412);
+    const etag = res.headers.get("ETag");
+    assert.match(etag ?? "", /rev:1/);
+    const body = (await res.json()) as { error: string; statusCode: number };
+    assert.equal(body.error, "precondition_failed");
+    assert.equal(body.statusCode, 412);
+
+    // The stored document must be unchanged.
+    const fetched = await DETAIL_GET(
+      new NextRequest(detailUrl(OWNER, KIND, DOC_ID)),
+      detailParams(OWNER, KIND, DOC_ID),
+    );
+    assert.equal(fetched.status, 200);
+    const fetchedBody = (await fetched.json()) as { payload: { v: string } };
+    assert.equal(fetchedBody.payload.v, "original");
+  });
+
+  it("If-None-Match with any value other than * is 400; If-None-Match * with If-Match is 400 (both write nothing)", async () => {
+    signedInAs(OWNER);
+    // Non-* value: 400.
+    const badValue = await DETAIL_PUT(
+      putReq(
+        OWNER,
+        KIND,
+        DOC_ID,
+        JSON.stringify({ payload: {} }),
+        { "If-None-Match": '"rev:1"' },
+      ),
+      detailParams(OWNER, KIND, DOC_ID),
+    );
+    assert.equal(badValue.status, 400);
+
+    // * with If-Match: 400.
+    const combined = await DETAIL_PUT(
+      putReq(
+        OWNER,
+        KIND,
+        DOC_ID,
+        JSON.stringify({ payload: {} }),
+        { "If-None-Match": "*", "If-Match": '"rev:1"' },
+      ),
+      detailParams(OWNER, KIND, DOC_ID),
+    );
+    assert.equal(combined.status, 400);
+
+    // Nothing must have been written.
+    const listed = await LIST_GET(
+      new NextRequest(listUrl(OWNER)),
+      listParams(OWNER),
+    );
+    const listBody = (await listed.json()) as { documents: unknown[] };
+    assert.equal(listBody.documents.length, 0);
+  });
+
+  it("a conditional DELETE with the matching rev is 204 and the document is gone; with a stale rev it is 412 with the current ETag and the document remains; on an absent document it is 404; with a bare number or garbage If-Match it is 400", async () => {
+    signedInAs(OWNER);
+    // Seed at rev 1.
+    const seed = await DETAIL_PUT(
+      putReq(OWNER, KIND, DOC_ID, JSON.stringify({ payload: { v: "alive" } })),
+      detailParams(OWNER, KIND, DOC_ID),
+    );
+    assert.equal(seed.status, 200);
+    const etag = seed.headers.get("ETag");
+    assert.match(etag ?? "", /rev:1/);
+
+    // Matching rev → 204.
+    const matched = await DETAIL_DELETE(
+      delReq(OWNER, KIND, DOC_ID, { "If-Match": '"rev:1"' }),
+      detailParams(OWNER, KIND, DOC_ID),
+    );
+    assert.equal(matched.status, 204);
+
+    // Stale rev → 412 with ETag.
+    // Re-seed and bump to rev 2, then try to delete at rev 1 (stale).
+    await DETAIL_PUT(
+      putReq(OWNER, KIND, DOC_ID, JSON.stringify({ payload: { v: "alive" } })),
+      detailParams(OWNER, KIND, DOC_ID),
+    );
+    const bump = await DETAIL_PUT(
+      putReq(OWNER, KIND, DOC_ID, JSON.stringify({ payload: { v: "alive2" } }), {
+        "If-Match": '"rev:1"',
+      }),
+      detailParams(OWNER, KIND, DOC_ID),
+    );
+    assert.equal(bump.status, 200);
+    assert.match(bump.headers.get("ETag") ?? "", /rev:2/);
+
+    const stale = await DETAIL_DELETE(
+      delReq(OWNER, KIND, DOC_ID, { "If-Match": '"rev:1"' }),
+      detailParams(OWNER, KIND, DOC_ID),
+    );
+    assert.equal(stale.status, 412);
+    assert.match(stale.headers.get("ETag") ?? "", /rev:2/);
+    // Document must remain.
+    const stillThere = await DETAIL_GET(
+      new NextRequest(detailUrl(OWNER, KIND, DOC_ID)),
+      detailParams(OWNER, KIND, DOC_ID),
+    );
+    assert.equal(stillThere.status, 200);
+
+    // Absent document → 404.
+    const absent = await DETAIL_DELETE(
+      delReq(OWNER, KIND, "doc-missing", { "If-Match": '"rev:1"' }),
+      detailParams(OWNER, KIND, "doc-missing"),
+    );
+    assert.equal(absent.status, 404);
+
+    // Garbage If-Match → 400.
+    const garbage = await DETAIL_DELETE(
+      delReq(OWNER, KIND, DOC_ID, { "If-Match": '"garbage"' }),
+      detailParams(OWNER, KIND, DOC_ID),
+    );
+    assert.equal(garbage.status, 400);
+
+    // Bare number If-Match → 400 (malformed for documents).
+    const bare = await DETAIL_DELETE(
+      delReq(OWNER, KIND, DOC_ID, { "If-Match": "123" }),
+      detailParams(OWNER, KIND, DOC_ID),
+    );
+    assert.equal(bare.status, 400);
+  });
+
+  it("an unconditional PUT with no precondition header, and an unconditional DELETE of a missing document, behave exactly as before", async () => {
+    signedInAs(OWNER);
+
+    // Unconditional PUT: twice gives revs 1 and 2, both 200 (PASS on today's
+    // code too; this pins the no-header path as unchanged).
+    const first = await DETAIL_PUT(
+      putReq(OWNER, KIND, DOC_ID, JSON.stringify({ payload: { v: "1" } })),
+      detailParams(OWNER, KIND, DOC_ID),
+    );
+    assert.equal(first.status, 200);
+    const firstEtag = first.headers.get("ETag");
+    assert.match(firstEtag ?? "", /rev:1/);
+
+    const second = await DETAIL_PUT(
+      putReq(OWNER, KIND, DOC_ID, JSON.stringify({ payload: { v: "2" } })),
+      detailParams(OWNER, KIND, DOC_ID),
+    );
+    assert.equal(second.status, 200);
+    const secondEtag = second.headers.get("ETag");
+    assert.match(secondEtag ?? "", /rev:2/);
+
+    // Unconditional DELETE of a missing document is 204 (idempotent).
+    const deleted = await DETAIL_DELETE(
+      delReq(OWNER, KIND, "doc-missing"),
+      detailParams(OWNER, KIND, "doc-missing"),
+    );
+    assert.equal(deleted.status, 204);
+  });
+
+  // Skipped: test 16 ("a refusal by each of the three paths leaves one audit
+  // row") cannot be checked from this file because PlatformStore does not
+  // expose its raw db handle. The audit-row counting is covered in full by
+  // owner-documents-store.test.ts item 8.
 });

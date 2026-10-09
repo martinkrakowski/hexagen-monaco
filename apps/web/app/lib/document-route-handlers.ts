@@ -163,9 +163,51 @@ function parseDocumentIfMatch(
     return { ok: true, expectedRev: rev };
   }
 
-  // No legacy numeric form for documents: a bare number is malformed.
-  return malformedIfMatch();
-}
+   // No legacy numeric form for documents: a bare number is malformed.
+   return malformedIfMatch();
+ }
+
+function invalidIfNoneMatch(): { ok: false; response: NextResponse } {
+   return {
+     ok: false,
+     response: NextResponse.json(
+       {
+         error: "validation",
+         message: "Invalid If-None-Match precondition",
+         statusCode: 400,
+       },
+       { status: 400 },
+     ),
+   };
+ }
+
+/**
+ * Parses `If-None-Match` for documents. Absent, empty, or `*` all mean
+ * "unconditional" — but `*` is special-cased to `createOnly` (refuse to overwrite
+ * an existing copy). Any other value (a quoted ETag, a list, or a non-empty
+ * value that is not `*` after trimming) is a malformed 400.
+ */
+function parseDocumentIfNoneMatch(
+   request: NextRequest,
+):
+   | { ok: true; createOnly: boolean }
+   | { ok: false; response: NextResponse } {
+   const raw = request.headers.get("If-None-Match");
+   if (raw == null || raw === "" || raw === "*")
+     return { ok: true, createOnly: raw === "*" };
+   return invalidIfNoneMatch();
+ }
+
+function preconditionFailed(currentRev: number): NextResponse {
+   return NextResponse.json(
+     {
+       error: "precondition_failed",
+       message: `document was updated elsewhere; expected the current rev`,
+       statusCode: 412,
+     },
+     { status: 412, headers: { ETag: `"rev:${currentRev}"` } },
+   );
+ }
 
 // --- store error mapping ---
 
@@ -195,13 +237,16 @@ function mapStoreError(error: OwnerDocumentsError): NextResponse {
       { status: 400 },
     );
   }
-  if (error.kind === "Conflict") {
-    return NextResponse.json(
-      { error: "Conflict", message: error.message, statusCode: 409 },
-      { status: 409 },
-    );
-  }
-  if (error.kind === "NotAMember") {
+   if (error.kind === "Conflict") {
+     return NextResponse.json(
+       { error: "Conflict", message: error.message, statusCode: 409 },
+       { status: 409 },
+     );
+   }
+   if (error.kind === "PreconditionFailed") {
+     return preconditionFailed(error.currentRev);
+   }
+   if (error.kind === "NotAMember") {
     return NextResponse.json(
       {
         error: "forbidden",
@@ -315,6 +360,13 @@ export async function handleDocumentGet(
  * only, and deleting a project will not reach it. A caller that wants a
  * document deleted with its project sends `projectId` on every PUT.
  *
+ * Optional preconditions:
+ * - `If-None-Match: *` — create-only: refuse with 412 if the document already
+ *   exists, so a first upload never clobbers a copy another device wrote.
+ * - `If-Match: "rev:<n>"` — optimistic concurrency: replace only if the stored
+ *   rev equals `<n>`; a stale rev is 409 (existing behavior). `If-None-Match: *`
+ *   cannot be combined with `If-Match`.
+ *
  * The mutation gate authenticates first (401) then rate-limits / origin-checks,
  * so unsigned traffic cannot exhaust the IP-keyed write budget (same rationale
  * as `gateProjectMutation` in project-route-handlers.ts).
@@ -399,34 +451,59 @@ export async function handleDocumentPut(
     );
   }
 
-  // If-Match: rev:<n> only. A bare number is malformed (no legacy support).
-  const precondition = parseDocumentIfMatch(request);
-  if (!precondition.ok) return precondition.response;
+   // If-None-Match: `*` means create-only (refuse to overwrite); absent/empty
+   // is unconditional. Any other value is a malformed 400.
+   const noneMatch = parseDocumentIfNoneMatch(request);
+   if (!noneMatch.ok) return noneMatch.response;
+   if (noneMatch.createOnly) {
+     const match = parseDocumentIfMatch(request);
+     if (!match.ok) return match.response;
+     if (match.expectedRev !== undefined || request.headers.get("If-Match")) {
+       return NextResponse.json(
+         {
+           error: "validation",
+           message: "If-None-Match cannot be combined with If-Match",
+           statusCode: 400,
+         },
+         { status: 400 },
+       );
+     }
+   }
 
-  // Store call.
-  const store = getPlatformStore().documentsFor(tenant.tenantId, tenant.userId);
-  const result = await store.put(
-    {
-      kind: kind as DocumentKind,
-      id,
-      projectId,
-      payload: body.payload,
-    },
-    precondition.expectedRev,
-  );
+   // If-Match: rev:<n> only. A bare number is malformed (no legacy support).
+   const precondition = parseDocumentIfMatch(request);
+   if (!precondition.ok) return precondition.response;
 
-  if (result.success) {
-    return documentResponse(result.value);
-  }
+   // Store call.
+   const store = getPlatformStore().documentsFor(tenant.tenantId, tenant.userId);
+   const result = await store.put(
+     {
+       kind: kind as DocumentKind,
+       id,
+       projectId,
+       payload: body.payload,
+     },
+     precondition.expectedRev,
+     { createOnly: noneMatch.createOnly },
+   );
 
-  return mapStoreError(result.error);
+   if (result.success) {
+     return documentResponse(result.value);
+   }
+
+   return mapStoreError(result.error);
 }
 
 /**
  * DELETE /api/tenants/[ownerId]/documents/[kind]/[id]
  *
- * Removes one document. Returns 204 whether or not a row existed — a delete of
- * a missing id is idempotent from the client's perspective.
+ * Removes one document. With no `If-Match` header (or an empty / `*` one),
+ * returns 204 whether or not a row existed — a delete of a missing id is
+ * idempotent from the client's perspective.
+ *
+ * Optional precondition: `If-Match: "rev:<n>"` deletes only if the stored rev
+ * equals `<n>`; a stale rev is 412 with the current ETag, and a missing row is
+ * 404. A malformed `If-Match` is 400.
  */
 export async function handleDocumentDelete(
   request: NextRequest,
@@ -448,16 +525,24 @@ export async function handleDocumentDelete(
   const gate = guardMutation(request, DOCUMENT_MUTATION_GUARD);
   if (gate) return gate;
 
-  // 3. requireTenant.
-  const tenant = await requireTenant(request, ownerId);
-  if (!tenant.ok) return tenant.response;
+   // 3. requireTenant.
+   const tenant = await requireTenant(request, ownerId);
+   if (!tenant.ok) return tenant.response;
 
-  // 4. Store call.
-  const store = getPlatformStore().documentsFor(tenant.tenantId, tenant.userId);
-  const result = await store.delete(kind as DocumentKind, id);
-  if (!result.success) {
-    return mapStoreError(result.error);
-  }
+   // 4. If-Match: rev:<n> only. A bare number is malformed (no legacy support).
+   const precondition = parseDocumentIfMatch(request);
+   if (!precondition.ok) return precondition.response;
 
-  return new NextResponse(null, { status: 204 });
+   // 5. Store call.
+   const store = getPlatformStore().documentsFor(tenant.tenantId, tenant.userId);
+   const result = await store.delete(
+     kind as DocumentKind,
+     id,
+     precondition.expectedRev,
+   );
+   if (!result.success) {
+     return mapStoreError(result.error);
+   }
+
+   return new NextResponse(null, { status: 204 });
 }

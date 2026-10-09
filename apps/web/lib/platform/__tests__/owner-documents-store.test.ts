@@ -1,8 +1,9 @@
-import { describe, it } from "vitest";
+import { describe, it, vi } from "vitest";
 import assert from "node:assert/strict";
 import { openPlatformDb } from "../platform-db";
 import { createSqlitePlatformDb } from "../sqlite-db";
 import { createOwnerDocumentsStore } from "../owner-documents-store";
+import type { PlatformDbSession } from "../db";
 import type { DocumentKind } from "../owner-documents-store";
 import { createSavedProjectsStore } from "../saved-projects-store";
 import { createOrgsRepository } from "../orgs-store";
@@ -39,6 +40,17 @@ function docCount(
         "SELECT COUNT(*) AS n FROM owner_documents WHERE owner_id = ? AND user_id = ? AND project_id = ?",
       )
       .get(ownerId, userId, projectId) as { n: number }
+  ).n;
+}
+
+function auditCount(
+  db: ReturnType<typeof openPlatformDb>,
+  action = "document.precondition_failed",
+): number {
+  return (
+    db
+      .prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action = ?")
+      .get(action) as { n: number }
   ).n;
 }
 
@@ -828,6 +840,426 @@ describe("owner-documents store", () => {
         0,
         "no document for a deleted org may survive",
       );
+    } finally {
+      db.close();
+    }
+  });
+
+  it("create-only on an absent row creates rev 1", async () => {
+    const db = openPlatformDb(":memory:");
+    const platformDb = createSqlitePlatformDb(db);
+    const store = createOwnerDocumentsStore(platformDb, "user-1", "user-1");
+    try {
+      const result = await store.put(
+        { kind: "workspace", id: "doc-1", payload: { v: "a" } },
+        undefined,
+        { createOnly: true },
+      );
+      assert.equal(result.success, true);
+      if (!result.success) return;
+      assert.equal(result.value.rev, 1);
+    } finally {
+      db.close();
+    }
+  });
+
+  it("create-only on an existing row returns PreconditionFailed with the current rev and changes nothing", async () => {
+    const db = openPlatformDb(":memory:");
+    const platformDb = createSqlitePlatformDb(db);
+    const store = createOwnerDocumentsStore(platformDb, "user-1", "user-1");
+    try {
+      // Put twice -> rev 2.
+      await store.put({ kind: "workspace", id: "doc-1", payload: { v: "A" } });
+      await store.put({ kind: "workspace", id: "doc-1", payload: { v: "B" } });
+
+      const result = await store.put(
+        { kind: "workspace", id: "doc-1", payload: { v: "C" } },
+        undefined,
+        { createOnly: true },
+      );
+      assert.equal(result.success, false);
+      if (!result.success) {
+        assert.equal(result.error.kind, "PreconditionFailed");
+        assert.equal(result.error.currentRev, 2);
+      }
+
+      const row = db
+        .prepare(
+          "SELECT payload, rev FROM owner_documents WHERE owner_id = ? AND user_id = ? AND kind = ? AND id = ?",
+        )
+        .get("user-1", "user-1", "workspace", "doc-1") as {
+        payload: string;
+        rev: number;
+      };
+      assert.deepEqual(JSON.parse(row.payload), { v: "B" });
+      assert.equal(row.rev, 2, "the existing row must be untouched");
+    } finally {
+      db.close();
+    }
+  });
+
+  it("create-only by a second author in the same org succeeds and leaves the first author's row alone", async () => {
+    const db = openPlatformDb(":memory:");
+    const platformDb = createSqlitePlatformDb(db);
+    const orgs = createOrgsRepository(platformDb);
+    await orgs.createOrg({
+      id: "org-1",
+      slug: "test-org",
+      name: "Test Org",
+      createdBy: "user-a",
+    });
+    await orgs.addMember("org-1", "user-a", "owner");
+    await orgs.addMember("org-1", "user-b", "member");
+    const firstAuthor = createOwnerDocumentsStore(platformDb, "org-1", "user-a");
+    const secondAuthor = createOwnerDocumentsStore(platformDb, "org-1", "user-b");
+    try {
+      // First author creates a row at rev 1.
+      const first = await firstAuthor.put({
+        kind: "workspace",
+        id: "doc-1",
+        payload: { v: "owned by user-a" },
+      });
+      assert.equal(first.success, true);
+
+      // Second author's createOnly on the SAME kind/id succeeds (the key
+      // includes user_id, so there is no conflict) — catches a missing
+      // user_id in the ON CONFLICT target.
+      const second = await secondAuthor.put(
+        { kind: "workspace", id: "doc-1", payload: { v: "owned by user-b" } },
+        undefined,
+        { createOnly: true },
+      );
+      assert.equal(second.success, true);
+      if (!second.success) return;
+      assert.equal(second.value.rev, 1);
+
+      // The first author's row must be untouched.
+      const aRow = db
+        .prepare(
+          "SELECT payload, rev FROM owner_documents WHERE owner_id = ? AND user_id = ? AND kind = ? AND id = ?",
+        )
+        .get("org-1", "user-a", "workspace", "doc-1") as {
+        payload: string;
+        rev: number;
+      };
+      assert.deepEqual(JSON.parse(aRow.payload), { v: "owned by user-a" });
+      assert.equal(aRow.rev, 1);
+    } finally {
+      db.close();
+    }
+  });
+
+  it("create-only by a non-member is NotAMember, not exists, and writes nothing", async () => {
+    const db = openPlatformDb(":memory:");
+    const platformDb = createSqlitePlatformDb(db);
+    const orgs = createOrgsRepository(platformDb);
+    await orgs.createOrgWithOwner(
+      { id: "org-1", slug: "test", name: "Test", createdBy: "founder" },
+      { actorId: "founder" },
+    );
+    await orgs.addMember("org-1", "user-a", "member");
+    // Plant a row for (org-1, user-b) so "exists" would be the wrong answer if
+    // the membership check did not run first.
+    db.prepare(
+      `INSERT INTO owner_documents
+          (owner_id, user_id, kind, id, project_id, rev, payload, updated_at, updated_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run("org-1", "user-b", "workspace", "doc-1", null, 1, "{}", 1, "user-b");
+    const store = createOwnerDocumentsStore(platformDb, "org-1", "user-b");
+    try {
+      const result = await store.put(
+        { kind: "workspace", id: "doc-1", payload: { v: "new" } },
+        undefined,
+        { createOnly: true },
+      );
+      assert.equal(result.success, false);
+      if (!result.success) assert.equal(result.error.kind, "NotAMember");
+
+      // The row must be unchanged and no audit row written.
+      const row = db
+        .prepare(
+          "SELECT rev, payload FROM owner_documents WHERE owner_id = ? AND user_id = ? AND kind = ? AND id = ?",
+        )
+        .get("org-1", "user-b", "workspace", "doc-1") as {
+        rev: number;
+        payload: string;
+      };
+      assert.equal(row.rev, 1);
+      assert.deepEqual(JSON.parse(row.payload), {});
+      assert.equal(
+        auditCount(db),
+        0,
+        "a NotAMember refusal writes no audit row",
+      );
+    } finally {
+      db.close();
+    }
+  });
+
+  it("two create-only puts started together: one creates, one is refused, one row", async () => {
+    const db = openPlatformDb(":memory:");
+    const platformDb = createSqlitePlatformDb(db);
+    const store = createOwnerDocumentsStore(platformDb, "user-1", "user-1");
+    try {
+      const [a, b] = await Promise.all([
+        store.put(
+          { kind: "workspace", id: "doc-1", payload: { v: "a" } },
+          undefined,
+          { createOnly: true },
+        ),
+        store.put(
+          { kind: "workspace", id: "doc-1", payload: { v: "b" } },
+          undefined,
+          { createOnly: true },
+        ),
+      ]);
+
+      const successes = [a, b].filter((r) => r.success);
+      const refusals = [a, b].filter((r) => !r.success);
+      assert.equal(successes.length, 1, "exactly one must create the row");
+      assert.equal(refusals.length, 1, "exactly one must be refused");
+
+      const count = db
+        .prepare(
+          "SELECT COUNT(*) AS n FROM owner_documents WHERE owner_id = ? AND user_id = ? AND kind = ? AND id = ?",
+        )
+        .get("user-1", "user-1", "workspace", "doc-1") as { n: number };
+      assert.equal(count.n, 1, "the row must exist exactly once");
+    } finally {
+      db.close();
+    }
+  });
+
+  it("conditional delete with the right rev deletes; with a stale rev deletes nothing and reports the current rev; on an absent row reports NotFound", async () => {
+    const db = openPlatformDb(":memory:");
+    const platformDb = createSqlitePlatformDb(db);
+    const store = createOwnerDocumentsStore(platformDb, "user-1", "user-1");
+    try {
+      await store.put({
+        kind: "workspace",
+        id: "doc-1",
+        payload: { v: "to delete" },
+      });
+
+      // Matching rev deletes.
+      const matched = await store.delete("workspace", "doc-1", 1);
+      assert.equal(matched.success, true);
+      if (!matched.success) return;
+      assert.equal(matched.value.deleted, true);
+
+      // Re-seed for the stale-rev case.
+      await store.put(
+        { kind: "workspace", id: "doc-1", payload: { v: "again" } },
+        undefined,
+        { createOnly: true },
+      );
+
+      // Stale rev: nothing deleted, reports current rev.
+      const stale = await store.delete("workspace", "doc-1", 999);
+      assert.equal(stale.success, false);
+      if (!stale.success) {
+        assert.equal(stale.error.kind, "PreconditionFailed");
+        assert.equal(stale.error.currentRev, 1);
+      }
+      const untouched = db
+        .prepare(
+          "SELECT rev FROM owner_documents WHERE owner_id = ? AND user_id = ? AND kind = ? AND id = ?",
+        )
+        .get("user-1", "user-1", "workspace", "doc-1") as { rev: number };
+      assert.equal(untouched.rev, 1, "a refused delete must not touch the row");
+
+      // Absent row: NotFound.
+      const missing = await store.delete("workspace", "does-not-exist", 1);
+      assert.equal(missing.success, false);
+      if (!missing.success) assert.equal(missing.error.kind, "NotFound");
+    } finally {
+      db.close();
+    }
+  });
+
+  it("conditional delete never touches another author's row with the same kind, id and rev", async () => {
+    const db = openPlatformDb(":memory:");
+    const platformDb = createSqlitePlatformDb(db);
+    const orgs = createOrgsRepository(platformDb);
+    await orgs.createOrg({
+      id: "org-1",
+      slug: "test-org",
+      name: "Test Org",
+      createdBy: "user-a",
+    });
+    await orgs.addMember("org-1", "user-a", "member");
+    await orgs.addMember("org-1", "user-b", "member");
+    const authorA = createOwnerDocumentsStore(platformDb, "org-1", "user-a");
+    const authorB = createOwnerDocumentsStore(platformDb, "org-1", "user-b");
+    try {
+      // Both authors write their own row at rev 1, same kind/id.
+      await authorA.put({
+        kind: "workspace",
+        id: "doc-1",
+        payload: { v: "A" },
+      });
+      await authorB.put({
+        kind: "workspace",
+        id: "doc-1",
+        payload: { v: "B" },
+      });
+
+      // A's delete at rev 1 must delete only A's row.
+      const deleted = await authorA.delete("workspace", "doc-1", 1);
+      assert.equal(deleted.success, true);
+      if (!deleted.success) return;
+      assert.equal(deleted.value.deleted, true);
+
+      // B's row must survive.
+      const bRow = db
+        .prepare(
+          "SELECT payload FROM owner_documents WHERE owner_id = ? AND user_id = ? AND kind = ? AND id = ?",
+        )
+        .get("org-1", "user-b", "workspace", "doc-1") as { payload: string };
+      assert.deepEqual(JSON.parse(bRow.payload), { v: "B" });
+    } finally {
+      db.close();
+    }
+  });
+
+  it("each refusal writes exactly one document.precondition_failed row with the detail, and success writes none", async () => {
+    const db = openPlatformDb(":memory:");
+    const platformDb = createSqlitePlatformDb(db);
+    const store = createOwnerDocumentsStore(platformDb, "user-1", "user-1");
+    try {
+      // Seed a row at rev 1, then bump to rev 2.
+      await store.put({ kind: "workspace", id: "doc-1", payload: { v: "a" } });
+      await store.put({ kind: "workspace", id: "doc-1", payload: { v: "b" } });
+
+      // Three refusals: stale PUT, create-only, conditional DELETE.
+      await store.put(
+        { kind: "workspace", id: "doc-1", payload: { v: "stale" } },
+        1, // stale rev
+      );
+      await store.put(
+        { kind: "workspace", id: "doc-1", payload: { v: "create" } },
+        undefined,
+        { createOnly: true },
+      );
+      await store.delete("workspace", "doc-1", 1); // stale rev
+
+      assert.equal(auditCount(db), 3, "three refusals = three audit rows");
+
+      // Verify the detail blob for each.
+      const rows = db
+        .prepare(
+          `SELECT grantee_type, grantee_id, subject_owner_id, subject_id
+             FROM audit_log WHERE action = ?
+            ORDER BY created_at`,
+        )
+        .all("document.precondition_failed") as Array<{
+        grantee_type: string;
+        grantee_id: string;
+        subject_owner_id: string;
+        subject_id: string;
+      }>;
+      assert.equal(rows.length, 3);
+      assert.deepEqual(JSON.parse(rows[0]!.grantee_id), {
+        method: "PUT",
+        sent: 1,
+        current: 2,
+      });
+      assert.deepEqual(JSON.parse(rows[1]!.grantee_id), {
+        method: "PUT",
+        sent: "*",
+        current: 2,
+      });
+      assert.deepEqual(JSON.parse(rows[2]!.grantee_id), {
+        method: "DELETE",
+        sent: 1,
+        current: 2,
+      });
+      for (const r of rows) {
+        assert.equal(r.grantee_type, "precondition");
+        assert.equal(r.subject_owner_id, "user-1");
+        assert.equal(r.subject_id, "workspace/doc-1");
+      }
+
+      // A matching-rev PUT, a createOnly on an absent id, a matching DELETE:
+      // none of these write an audit row.
+      await store.put(
+        { kind: "workspace", id: "doc-1", payload: { v: "ok" } },
+        2, // matching
+      );
+      await store.put(
+        { kind: "workspace", id: "doc-absent", payload: { v: "ok" } },
+        undefined,
+        { createOnly: true },
+      );
+      await store.delete("workspace", "doc-absent", 1); // matching
+
+      assert.equal(
+        auditCount(db),
+        3,
+        "a success must not add an audit row",
+      );
+
+      // An expectedRev PUT on an absent row (NotFound) writes no audit row.
+      await store.put(
+        { kind: "workspace", id: "doc-missing", payload: { v: "x" } },
+        999,
+      );
+      assert.equal(
+        auditCount(db),
+        3,
+        "a NotFound refusal must not add an audit row",
+      );
+    } finally {
+      db.close();
+    }
+  });
+
+  it("the conditional delete runs ONE delete statement carrying rev = ?", async () => {
+    const db = openPlatformDb(":memory:");
+    const platformDb = createSqlitePlatformDb(db);
+    const store = createOwnerDocumentsStore(platformDb, "user-1", "user-1");
+    const realTransaction = platformDb.transaction.bind(platformDb);
+    try {
+      await store.put({
+        kind: "workspace",
+        id: "doc-1",
+        payload: { v: "seed" },
+      });
+
+      const ran: string[] = [];
+      vi.spyOn(platformDb, "transaction").mockImplementation((fn) =>
+        realTransaction(async (tx: PlatformDbSession) => {
+          const wrapped: PlatformDbSession = {
+            get: tx.get,
+            all: tx.all,
+            run: (sql, params) => {
+              ran.push(sql);
+              return tx.run(sql, params);
+            },
+          };
+          return fn(wrapped);
+        }),
+      );
+
+      await store.delete("workspace", "doc-1", 1);
+
+      assert.ok(
+        ran.some(
+          (s) =>
+            s.includes("DELETE FROM owner_documents") && s.includes("AND rev = ?"),
+        ),
+        "the delete must carry rev = ?",
+      );
+      assert.equal(
+        ran.filter(
+          (s) =>
+            s.includes("DELETE FROM owner_documents") && !s.includes("user_id = ?"),
+        ).length,
+        0,
+        "no DELETE may omit user_id = ?",
+      );
+
+      vi.restoreAllMocks();
     } finally {
       db.close();
     }

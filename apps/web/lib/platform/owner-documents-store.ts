@@ -1,5 +1,6 @@
 import type { PlatformDb, PlatformDbSession } from "./db";
 import type { PersistenceError, Result } from "@hexagen/shared";
+import { appendAudit } from "./audit-log-store";
 
 export const DOCUMENT_KINDS = [
   "workspace",
@@ -32,7 +33,8 @@ export type OwnerDocumentsError =
   | PersistenceError
   | { kind: "InvalidInput"; message: string }
   | { kind: "UnknownProject"; message: string }
-  | { kind: "NotAMember"; message: string };
+  | { kind: "NotAMember"; message: string }
+  | { kind: "PreconditionFailed"; message: string; currentRev: number };
 
 export interface OwnerDocumentsStore {
   list(filter?: {
@@ -43,19 +45,21 @@ export interface OwnerDocumentsStore {
     kind: DocumentKind,
     id: string,
   ): Promise<Result<OwnerDocument | null, OwnerDocumentsError>>;
-  put(
-    input: {
-      kind: DocumentKind;
-      id: string;
-      projectId?: string | null;
-      payload: unknown;
-    },
-    expectedRev?: number,
-  ): Promise<Result<OwnerDocument, OwnerDocumentsError>>;
-  delete(
-    kind: DocumentKind,
-    id: string,
-  ): Promise<Result<{ deleted: boolean }, OwnerDocumentsError>>;
+   put(
+     input: {
+       kind: DocumentKind;
+       id: string;
+       projectId?: string | null;
+       payload: unknown;
+     },
+     expectedRev?: number,
+     options?: { createOnly?: boolean },
+   ): Promise<Result<OwnerDocument, OwnerDocumentsError>>;
+   delete(
+     kind: DocumentKind,
+     id: string,
+     expectedRev?: number,
+   ): Promise<Result<{ deleted: boolean }, OwnerDocumentsError>>;
 }
 
 function persistError(
@@ -68,6 +72,9 @@ function persistError(
   }
   if (kind === "Unknown") {
     return { kind, message, cause };
+  }
+  if (kind === "PreconditionFailed") {
+    return { kind, message, currentRev: 0 };
   }
   return { kind, message };
 }
@@ -199,10 +206,21 @@ export function createOwnerDocumentsStore(
        AND rev = @expected_rev
     RETURNING rev, updated_at
   `;
-  const selectKey = `
-    SELECT rev FROM owner_documents
-     WHERE owner_id = ? AND user_id = ? AND kind = ? AND id = ?
-  `;
+   const selectKey = `
+     SELECT rev FROM owner_documents
+      WHERE owner_id = ? AND user_id = ? AND kind = ? AND id = ?
+   `;
+   const insertOnly = `
+     INSERT INTO owner_documents
+       (owner_id, user_id, kind, id, project_id, rev, payload, updated_at, updated_by)
+     VALUES (@owner_id, @user_id, @kind, @id, @project_id, 1, @payload, @updated_at, @updated_by)
+     ON CONFLICT (owner_id, user_id, kind, id) DO NOTHING
+     RETURNING rev, updated_at
+   `;
+   const deleteAtRev = `
+     DELETE FROM owner_documents
+      WHERE owner_id = ? AND user_id = ? AND kind = ? AND id = ? AND rev = ?
+   `;
 
   return {
     async list(filter) {
@@ -285,7 +303,17 @@ export function createOwnerDocumentsStore(
       }
     },
 
-    async put(input, expectedRev?) {
+    async put(input, expectedRev?, options?) {
+      const createOnly = options?.createOnly ?? false;
+      if (createOnly && expectedRev !== undefined) {
+        return {
+          success: false,
+          error: persistError(
+            "InvalidInput",
+            "createOnly cannot be combined with expectedRev",
+          ),
+        };
+      }
       const kind = input.kind;
       const id = input.id;
       const projectId = input.projectId === undefined ? null : input.projectId;
@@ -332,18 +360,75 @@ export function createOwnerDocumentsStore(
             }
           }
 
-          const params = {
-            owner_id: ownerId,
-            user_id: userId,
-            kind,
-            id,
-            project_id: projectId,
-            payload: payloadJson,
-            updated_at: now,
-            updated_by: userId,
-          };
+           const params = {
+             owner_id: ownerId,
+             user_id: userId,
+             kind,
+             id,
+             project_id: projectId,
+             payload: payloadJson,
+             updated_at: now,
+             updated_by: userId,
+           };
 
-          if (expectedRev === undefined) {
+           if (createOnly) {
+             const written = await tx.get<{
+               rev: number;
+               updated_at: number;
+             }>(insertOnly, params);
+             if (written) {
+               return {
+                 success: true,
+                 value: {
+                   kind,
+                   id,
+                   projectId,
+                   rev: written.rev,
+                   payload: input.payload,
+                   updatedAt: written.updated_at,
+                 },
+               };
+             }
+             // Row already exists (or vanished between the two statements).
+             const existing = await tx.get<{ rev: number }>(selectKey, [
+               ownerId,
+               userId,
+               kind,
+               id,
+             ]);
+             if (!existing) {
+               return {
+                 success: false,
+                 error: persistError(
+                   "Conflict",
+                   "document write conflicted",
+                 ),
+               };
+             }
+             // Reuse grantee_* columns as a detail blob (no schema change).
+             await appendAudit(tx, {
+               actorId: userId,
+               action: "document.precondition_failed",
+               subjectOwnerId: ownerId,
+               subjectId: `${kind}/${id}`,
+               granteeType: "precondition",
+               granteeId: JSON.stringify({
+                 method: "PUT",
+                 sent: "*",
+                 current: existing.rev,
+               }),
+             });
+             return {
+               success: false,
+               error: {
+                 kind: "PreconditionFailed",
+                 message: "document already exists",
+                 currentRev: existing.rev,
+               },
+             };
+           }
+
+           if (expectedRev === undefined) {
             const written = await tx.get<{
               rev: number;
               updated_at: number;
@@ -406,6 +491,19 @@ export function createOwnerDocumentsStore(
               ),
             };
           }
+          // Reuse grantee_* columns as a detail blob (no schema change).
+          await appendAudit(tx, {
+            actorId: userId,
+            action: "document.precondition_failed",
+            subjectOwnerId: ownerId,
+            subjectId: `${kind}/${id}`,
+            granteeType: "precondition",
+            granteeId: JSON.stringify({
+              method: "PUT",
+              sent: expectedRev,
+              current: existing.rev,
+            }),
+          });
           return {
             success: false,
             error: persistError("Conflict", "document was updated elsewhere"),
@@ -433,10 +531,60 @@ export function createOwnerDocumentsStore(
       }
     },
 
-    async delete(kind, id) {
+     async delete(kind, id, expectedRev?) {
       try {
-        const result = await db.run(deleteDoc, [ownerId, userId, kind, id]);
-        return { success: true, value: { deleted: result.changes > 0 } };
+        if (expectedRev === undefined) {
+          const result = await db.run(deleteDoc, [ownerId, userId, kind, id]);
+          return { success: true, value: { deleted: result.changes > 0 } };
+        }
+        return await db.transaction(async (tx) => {
+          const result = await tx.run(deleteAtRev, [
+            ownerId,
+            userId,
+            kind,
+            id,
+            expectedRev,
+          ]);
+          if (result.changes > 0) {
+            return { success: true, value: { deleted: true } };
+          }
+          const existing = await tx.get<{ rev: number }>(selectKey, [
+            ownerId,
+            userId,
+            kind,
+            id,
+          ]);
+          if (!existing) {
+            return {
+              success: false,
+              error: persistError(
+                "NotFound",
+                `no document ${kind}/${id} for owner ${ownerId}`,
+              ),
+            };
+          }
+          // Reuse grantee_* columns as a detail blob (no schema change).
+          await appendAudit(tx, {
+            actorId: userId,
+            action: "document.precondition_failed",
+            subjectOwnerId: ownerId,
+            subjectId: `${kind}/${id}`,
+            granteeType: "precondition",
+            granteeId: JSON.stringify({
+              method: "DELETE",
+              sent: expectedRev,
+              current: existing.rev,
+            }),
+          });
+          return {
+            success: false,
+            error: {
+              kind: "PreconditionFailed",
+              message: "document was updated elsewhere",
+              currentRev: existing.rev,
+            },
+          };
+        });
       } catch (cause) {
         return {
           success: false,
