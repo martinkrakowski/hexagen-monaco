@@ -4,7 +4,11 @@ export interface PgMigration {
   version: number;
   name: string;
   sql: string;
-  /** Default true. False for SQL that cannot run inside a transaction; it must then be idempotent. */
+  /** Default true. With false the SQL and the bookkeeping row run outside a
+   * transaction; the migration must then be idempotent AND must be exactly ONE
+   * statement (Postgres runs a multi-statement query as one implicit
+   * transaction, so a second statement would put it back inside one). A
+   * transactional migration must not contain BEGIN or COMMIT. */
   transactional?: boolean;
 }
 

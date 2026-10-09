@@ -268,6 +268,13 @@ describe.each(backends)("db contract: %s", (name, make) => {
     await later;
   });
 
+  it("rejects named params given to a statement with none (postgres only)", async () => {
+    if (db.dialect !== "postgres") return;
+    await expect(db.run("SELECT 1 AS one", { key: "value" })).rejects.toThrow(
+      "named parameters were given to a statement that has none",
+    );
+  });
+
   it("isUniqueViolation and isForeignKeyViolation each recognise their own violation and not the other's", async () => {
     await db.run("INSERT INTO contract_t (id, name, val) VALUES (?, ?, ?)", [
       1,

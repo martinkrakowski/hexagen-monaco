@@ -1,9 +1,12 @@
+// A `kill -9` of the vitest process leaves this embedded server running and
+// its temp directory behind; nothing reaps them. Set PLATFORM_TEST_PG_URL to
+// an external server to avoid this.
 import { Pool } from "pg";
 import { createServer } from "node:net";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import EmbeddedPostgres from "embedded-postgres";
+import type EmbeddedPostgres from "embedded-postgres";
 import { runPgMigrations } from "../lib/platform/pg-migrate";
 import type { ProvidedContext } from "vitest";
 
@@ -76,35 +79,54 @@ export default async function setup(
   if (process.env.PLATFORM_TEST_PG_URL) {
     homeUrl = process.env.PLATFORM_TEST_PG_URL;
   } else {
-    // embedded-postgres refuses to run as root; require the env var instead.
-    const uid = process.getuid ? process.getuid() : -1;
-    if (uid === 0) {
-      throw new Error(
-        "PLATFORM_TEST_PG_URL is not set and embedded-postgres cannot run as root. " +
-          "Set PLATFORM_TEST_PG_URL to a postgres:// connection string to the home database.",
+    let port = 0;
+    let pgUser = "";
+    let pgPassword = "";
+
+    try {
+      const uid = process.getuid ? process.getuid() : -1;
+      if (uid === 0) throw new Error("running as root");
+
+      port = await getFreePort();
+      embeddedDir = await mkdtemp(join(tmpdir(), "embedded-pg-"));
+      pgUser = "postgres";
+      pgPassword = "password";
+
+      const { default: Ctor } = await import("embedded-postgres");
+      embedded = new Ctor({
+        databaseDir: embeddedDir,
+        port,
+        user: pgUser,
+        password: pgPassword,
+        initdbFlags: ["--locale=C", "--encoding=UTF8"],
+        postgresFlags: ["-c", "listen_addresses=127.0.0.1"],
+        createPostgresUser: false,
+      });
+
+      await embedded.initialise();
+      await embedded.start();
+    } catch (error) {
+      console.warn(
+        `[pg-global-setup] embedded-postgres could not start: ${
+          (error as Error).message ?? String(error)
+        }; set PLATFORM_TEST_PG_URL.`,
       );
+      context.provide("pgHomeUrl", "");
+      context.provide("pgTemplate", "");
+      context.provide("pgRun", run);
+      return () => Promise.resolve();
     }
 
-    const port = await getFreePort();
-    embeddedDir = await mkdtemp(join(tmpdir(), "embedded-pg-"));
-    const pgUser = "postgres";
-    const pgPassword = "password";
-
-    embedded = new EmbeddedPostgres({
-      databaseDir: embeddedDir,
-      port,
-      user: pgUser,
-      password: pgPassword,
-      initdbFlags: ["--locale=C", "--encoding=UTF8"],
-      createPostgresUser: false,
-    });
-
-    await embedded.initialise();
-    await embedded.start();
-    await embedded.createDatabase("hx_home");
-
-    // 127.0.0.1, not "localhost": the port was probed on that address.
-    homeUrl = `postgres://${pgUser}:${pgPassword}@127.0.0.1:${port}/hx_home`;
+    try {
+      await embedded!.createDatabase("hx_home");
+      homeUrl = `postgres://${pgUser}:${pgPassword}@127.0.0.1:${port}/hx_home`;
+    } catch (error) {
+      await embedded!.stop();
+      if (embeddedDir) {
+        await rm(embeddedDir, { recursive: true, force: true });
+      }
+      throw error;
+    }
   }
 
   // A connect timeout turns "nothing is listening for us" into a failure the
@@ -167,12 +189,11 @@ export default async function setup(
       );
     } finally {
       await tearDownPool.end();
-    }
-
-    if (embedded) {
-      await embedded.stop();
-      if (embeddedDir) {
-        await rm(embeddedDir, { recursive: true, force: true });
+      if (embedded) {
+        await embedded.stop();
+        if (embeddedDir) {
+          await rm(embeddedDir, { recursive: true, force: true });
+        }
       }
     }
   };

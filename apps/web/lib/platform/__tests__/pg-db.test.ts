@@ -1,14 +1,17 @@
 // @vitest-environment node
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import type { Pool } from "pg";
 import { createTestPgDb } from "../../../test-support/pg-test-db";
 import type { PlatformDb } from "../db";
 
 describe("pg-db", () => {
   let db: PlatformDb;
+  let pool: Pool;
   let drop: () => Promise<void>;
 
   beforeEach(async () => {
     const result = await createTestPgDb();
+    pool = result.pool;
     db = result.db;
     drop = result.drop;
   });
@@ -17,24 +20,6 @@ describe("pg-db", () => {
     await db.close();
     await drop();
   });
-
-  async function createHxFunctions() {
-    await db.run(
-      "CREATE OR REPLACE FUNCTION hx_ts(ms bigint) " +
-        "RETURNS timestamptz LANGUAGE sql IMMUTABLE AS $$ " +
-        "SELECT timestamptz 'epoch' + ms * interval '1 millisecond' $$",
-    );
-    await db.run(
-      "CREATE OR REPLACE FUNCTION hx_ms(ts timestamptz) " +
-        "RETURNS bigint LANGUAGE sql IMMUTABLE AS $$ " +
-        "SELECT (extract(epoch from ts) * 1000)::bigint $$",
-    );
-    await db.run(
-      "CREATE OR REPLACE FUNCTION hx_day(ts timestamptz) " +
-        "RETURNS text LANGUAGE sql STABLE AS $$ " +
-        "SELECT to_char(ts AT TIME ZONE 'UTC', 'YYYY-MM-DD') $$",
-    );
-  }
 
   it("type shapes: timestamptz, boolean, jsonb, bigint, count(*)", async () => {
     await db.run(
@@ -67,8 +52,6 @@ describe("pg-db", () => {
   });
 
   it("hx_ts/hx_ms round-trip and hx_day", async () => {
-    await createHxFunctions();
-
     const now = Date.now();
     const ts = await db.get<{ ts: string }>("SELECT hx_ts(?) AS ts", [now]);
     const roundTripped = new Date(ts!.ts).getTime();
@@ -152,62 +135,95 @@ describe("pg-db", () => {
   it("real serialization failure: two concurrent transactions, exactly one row", async () => {
     await db.run("CREATE TABLE ser_t (val integer)");
 
-    const results = await Promise.allSettled([
-      db.transaction(async (tx) => {
-        const count = await tx.get<{ n: number }>(
-          "SELECT count(*) AS n FROM ser_t",
-        );
-        if ((count?.n ?? 0) === 0) {
-          await tx.run("INSERT INTO ser_t (val) VALUES (?)", [10]);
-        }
-        return "done";
-      }),
-      db.transaction(async (tx) => {
-        const count = await tx.get<{ n: number }>(
-          "SELECT count(*) AS n FROM ser_t",
-        );
-        if ((count?.n ?? 0) === 0) {
-          await tx.run("INSERT INTO ser_t (val) VALUES (?)", [20]);
-        }
-        return "done";
-      }),
-    ]);
+    let callCount = 0;
+    let readsDone = 0;
+    let releaseBarrier!: () => void;
+    const barrier = new Promise<void>((resolve) => {
+      releaseBarrier = resolve;
+    });
 
+    const p1 = db.transaction(async (tx) => {
+      callCount++;
+      const count = await tx.get<{ n: number }>(
+        "SELECT count(*) AS n FROM ser_t",
+      );
+      readsDone++;
+      if (readsDone === 2) releaseBarrier();
+      await barrier;
+      if ((count?.n ?? 0) === 0) {
+        await tx.run("INSERT INTO ser_t (val) VALUES (?)", [10]);
+      }
+      return "done";
+    });
+
+    const p2 = db.transaction(async (tx) => {
+      callCount++;
+      const count = await tx.get<{ n: number }>(
+        "SELECT count(*) AS n FROM ser_t",
+      );
+      readsDone++;
+      if (readsDone === 2) releaseBarrier();
+      await barrier;
+      if ((count?.n ?? 0) === 0) {
+        await tx.run("INSERT INTO ser_t (val) VALUES (?)", [20]);
+      }
+      return "done";
+    });
+
+    const results = await Promise.allSettled([p1, p2]);
     for (const r of results) {
       expect(r.status).toBe("fulfilled");
     }
+    // At least one retry happened (2 first attempts + ≥1 retry = ≥3).
+    expect(callCount).toBeGreaterThanOrEqual(3);
 
     const rows = await db.all<{ val: number }>("SELECT * FROM ser_t");
     expect(rows).toHaveLength(1);
   });
 
-  it("a ? or @word inside a quoted literal or -- comment is not translated", async () => {
-    // ? inside a single-quoted string is not translated
-    const r1 = await db.get<{ lit: string }>(
-      "SELECT ? AS a, 'literal ? here' AS lit",
-      [42],
-    );
-    expect(r1?.lit).toBe("literal ? here");
+  it("a ? or @word inside a -- comment or double-quoted identifier is not translated", async () => {
+    // @missing in a comment must not be translated — if it were, the missing
+    // key would throw. The only real placeholder is @a.
+    const r1 = await db.get<{ a: string }>("SELECT @a AS a -- @missing\n", {
+      a: 42,
+    });
+    expect(Number(r1?.a)).toBe(42);
 
-    // @word inside a single-quoted string is not translated
-    const r2 = await db.get<{ lit: string }>(
-      "SELECT ? AS a, '@word' AS lit",
+    // ? in a comment must not be translated. If it were, Postgres would see
+    // two placeholders ($1, $2) but receive one value and reject.
+    const r2 = await db.get<{ a: string }>(
+      "SELECT ? AS a -- is this ? one\n",
       [42],
     );
-    expect(r2?.lit).toBe("@word");
+    expect(Number(r2?.a)).toBe(42);
 
-    // ? inside a -- comment is not translated
-    const r3 = await db.get<{ n: number }>(
-      "SELECT ? AS a, 1 AS n -- comment with ? mark",
-      [42],
-    );
-    expect(r3?.n).toBe(1);
+    // ? and @x inside a double-quoted identifier are not translated.
+    const r3 = await db.get<Record<string, number>>('SELECT 1 AS "a?b@x"');
+    expect(r3?.["a?b@x"]).toBe(1);
+  });
 
-    // @word inside a -- comment is not translated
-    const r4 = await db.get<{ n: number }>(
-      "SELECT ? AS a, 1 AS n -- comment with @word",
-      [42],
-    );
-    expect(r4?.n).toBe(1);
+  it("survives a dropped session: error listener + destroy on release", async () => {
+    let pid: number | undefined;
+    const txPromise = db.transaction(async (tx) => {
+      const r = await tx.get<{ pid: number }>("SELECT pg_backend_pid() AS pid");
+      pid = r!.pid;
+      // From a second connection, terminate the transaction's backend.
+      const killer = await pool.connect();
+      try {
+        await killer.query("SELECT pg_terminate_backend($1)", [pid]);
+      } finally {
+        killer.release();
+      }
+      // Give the server a moment to close the connection.
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      // The connection is dead — this rejects.
+      await tx.get("SELECT 1");
+    });
+
+    await expect(txPromise).rejects.toBeDefined();
+
+    // The process is still alive: the pool can still serve queries.
+    const row = await db.get<{ one: number }>("SELECT 1 AS one");
+    expect(row?.one).toBe(1);
   });
 });

@@ -17,7 +17,16 @@ export async function createTestPgDb(opts?: { empty?: boolean }): Promise<{
   const run = inject("pgRun");
   const template = inject("pgTemplate");
 
-  const name = `hx_${run}_${process.pid}_${counter++}`;
+  if (!homeUrl) {
+    throw new Error(
+      "no Postgres for tests: the embedded server could not start; set PLATFORM_TEST_PG_URL",
+    );
+  }
+
+  const suffix = [...Array(4)]
+    .map(() => Math.floor(Math.random() * 16).toString(16))
+    .join("");
+  const name = `hx_${run}_${process.pid}_${counter++}_${suffix}`;
 
   const homePool = new Pool({ connectionString: homeUrl });
   try {
@@ -33,7 +42,7 @@ export async function createTestPgDb(opts?: { empty?: boolean }): Promise<{
   }
 
   const dbUrl = homeUrl.replace(/\/[^/]+$/, `/${name}`);
-  const pool = createPgPool(dbUrl, { max: 4 });
+  const pool = createPgPool(dbUrl, { max: 2 });
   const db = createPgPlatformDb(pool);
 
   return {

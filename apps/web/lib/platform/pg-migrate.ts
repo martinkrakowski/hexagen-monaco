@@ -14,8 +14,12 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
 )
 `;
 
-function sha256(sql: string): string {
-  return createHash("sha256").update(sql).digest("hex");
+// A leading BOM and CRLF line endings must not change a checksum: the SQL is
+// the same text regardless of how the file was transferred.
+export function checksumOf(sql: string): string {
+  return createHash("sha256")
+    .update(sql.replace(/^\uFEFF/, "").replace(/\r\n?/g, "\n"))
+    .digest("hex");
 }
 
 export async function runPgMigrations(
@@ -29,6 +33,29 @@ export async function runPgMigrations(
       throw new Error(
         `Migration version ${migrations[i].version} at index ${i} breaks the sequence: versions must be 1, 2, 3, … with no gap or repeat`,
       );
+    }
+  }
+
+  // 1b. Validate migration SQL before touching the database.
+  for (const migration of migrations) {
+    if (migration.transactional === false) {
+      // A non-transactional migration must be exactly ONE statement: Postgres
+      // runs a multi-statement simple query inside an implicit transaction, so
+      // a second statement would silently put it back inside one. Count the
+      // semicolons that are followed by non-whitespace.
+      const extraStmts = (migration.sql.match(/;\s*\S/g) || []).length;
+      if (extraStmts > 0) {
+        throw new Error(
+          `migration ${migration.version} is non-transactional but has ${extraStmts + 1} statements; it must be exactly one`,
+        );
+      }
+    } else {
+      // A transactional migration must not manage its own transaction.
+      if (/\b(BEGIN|COMMIT)\b\s*;/i.test(migration.sql)) {
+        throw new Error(
+          `migration ${migration.version} contains BEGIN or COMMIT; a transactional migration must not manage its own transaction`,
+        );
+      }
     }
   }
 
@@ -62,9 +89,19 @@ export async function runPgMigrations(
       }
     }
 
+    // Refuse: the applied set must be exactly 1..k with no gap.
+    for (let i = 0; i < res.rows.length; i++) {
+      const expected = i + 1;
+      if (res.rows[i].version !== expected) {
+        throw new Error(
+          `the applied set is not a contiguous prefix of 1..k: version ${expected} is missing (found ${res.rows[i].version} at position ${i})`,
+        );
+      }
+    }
+
     // 6. Apply each known migration not yet applied, in order
     for (const migration of migrations) {
-      const migrationChecksum = sha256(migration.sql);
+      const migrationChecksum = checksumOf(migration.sql);
 
       if (appliedChecksums.has(migration.version)) {
         // Checksum mismatch check

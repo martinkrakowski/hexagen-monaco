@@ -2,7 +2,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import type { Pool } from "pg";
 import type { PgMigration } from "../pg-migrations/index";
-import { runPgMigrations } from "../pg-migrate";
+import { runPgMigrations, checksumOf } from "../pg-migrate";
 import { createTestPgDb } from "../../../test-support/pg-test-db";
 
 const EXPECTED_TABLES = [
@@ -150,5 +150,62 @@ describe("pg-migrate", () => {
     );
     expect(m.rows).toHaveLength(1);
     expect(m.rows[0]).toMatchObject({ version: 1, name: "init" });
+  });
+
+  it("checksumOf normalises BOM and CRLF to the same hash", () => {
+    const lf = "CREATE TABLE t (id integer)\n";
+    const crlf = "CREATE TABLE t (id integer)\r\n";
+    const bomCrlf = "\uFEFF" + crlf;
+    expect(checksumOf(lf)).toBe(checksumOf(crlf));
+    expect(checksumOf(lf)).toBe(checksumOf(bomCrlf));
+  });
+
+  it("a CRLF variant applies nothing against an LF-migrated database", async () => {
+    const lfSql = "CREATE TABLE norm_test (id integer)";
+    await runPgMigrations(pool, [{ version: 1, name: "init", sql: lfSql }]);
+    const crlfSql = lfSql.replace(/\n/g, "\r\n");
+    const { applied } = await runPgMigrations(pool, [
+      { version: 1, name: "init", sql: crlfSql },
+    ]);
+    expect(applied).toEqual([]);
+  });
+
+  it("an applied set that is not 1..k is refused", async () => {
+    const migrations: PgMigration[] = [
+      { version: 1, name: "first", sql: "SELECT 1;" },
+      { version: 2, name: "second", sql: "SELECT 2;" },
+      { version: 3, name: "third", sql: "SELECT 3;" },
+    ];
+    await pool.query(
+      "CREATE TABLE IF NOT EXISTS schema_migrations (version integer PRIMARY KEY, name text NOT NULL, checksum text NOT NULL, applied_at timestamptz NOT NULL DEFAULT now())",
+    );
+    await pool.query(
+      "INSERT INTO schema_migrations (version, name, checksum) VALUES (3, 'third', $1)",
+      [checksumOf("SELECT 3;")],
+    );
+    await expect(runPgMigrations(pool, migrations)).rejects.toThrow(
+      "1 is missing",
+    );
+  });
+
+  it("a non-transactional migration with more than one statement is refused", async () => {
+    const multi: PgMigration[] = [
+      {
+        version: 1,
+        name: "init",
+        sql: "CREATE TABLE t1 (id integer); CREATE TABLE t2 (id integer)",
+        transactional: false,
+      },
+    ];
+    await expect(runPgMigrations(pool, multi)).rejects.toThrow(
+      "non-transactional",
+    );
+  });
+
+  it("a transactional migration containing BEGIN or COMMIT is refused", async () => {
+    const withBegin: PgMigration[] = [
+      { version: 1, name: "init", sql: "CREATE TABLE t (id integer); BEGIN;" },
+    ];
+    await expect(runPgMigrations(pool, withBegin)).rejects.toThrow("BEGIN");
   });
 });

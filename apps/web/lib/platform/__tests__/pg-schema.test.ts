@@ -13,10 +13,18 @@ const sqliteTables = sqliteHandle
   )
   .all() as { name: string }[];
 
-function sqliteColumns(table: string): string[] {
-  return (
-    sqliteHandle.pragma(`table_info(${table})`) as Array<{ name: string }>
-  ).map((c) => c.name);
+function sqliteColumns(table: string): Array<{
+  name: string;
+  type: string;
+  notnull: number;
+  pk: number;
+}> {
+  return sqliteHandle.pragma(`table_info(${table})`) as Array<{
+    name: string;
+    type: string;
+    notnull: number;
+    pk: number;
+  }>;
 }
 
 // The three type lists from item 5 of the brief.
@@ -78,17 +86,87 @@ describe("pg-schema", () => {
     await drop();
   });
 
-  it("every SQLite table and column exists in Postgres", async () => {
+  it("every SQLite table and column exists in Postgres, with matching nullability and type", async () => {
     for (const table of sqliteTables) {
-      for (const column of sqliteColumns(table.name)) {
-        const row = await db.get<{ column_name: string }>(
-          "SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = $1 AND column_name = $2",
-          [table.name, column],
+      for (const col of sqliteColumns(table.name)) {
+        const fullCol = `${table.name}.${col.name}`;
+        const row = await db.get<{
+          column_name: string;
+          is_nullable: string;
+          data_type: string;
+        }>(
+          "SELECT column_name, is_nullable, data_type FROM information_schema.columns WHERE table_schema = 'public' AND table_name = $1 AND column_name = $2",
+          [table.name, col.name],
         );
+        expect(row, `Postgres is missing ${fullCol}`).toBeDefined();
+
+        // (i) nullability: SQLite notnull or pk membership vs is_nullable
+        const sqliteNotNull = col.notnull === 1 || col.pk > 0;
+        expect(row!.is_nullable, `${fullCol} nullability mismatch`).toBe(
+          sqliteNotNull ? "NO" : "YES",
+        );
+
+        // (ii) type mapping
+        const inTs = timestamptzColumns.includes(fullCol);
+        const inBool = booleanColumns.includes(fullCol);
+        const inJson = jsonbColumns.includes(fullCol);
+        const sqliteType = col.type.toUpperCase();
+        if (inTs) {
+          expect(row!.data_type, `${fullCol} should be timestamptz`).toBe(
+            "timestamp with time zone",
+          );
+        } else if (inBool) {
+          expect(row!.data_type, `${fullCol} should be boolean`).toBe(
+            "boolean",
+          );
+        } else if (inJson) {
+          expect(row!.data_type, `${fullCol} should be jsonb`).toBe("jsonb");
+        } else if (sqliteType === "TEXT") {
+          expect(row!.data_type, `${fullCol} should be text`).toBe("text");
+        } else if (sqliteType === "INTEGER") {
+          expect(
+            row!.data_type === "integer" || row!.data_type === "bigint",
+            `${fullCol} should be integer or bigint, got ${row!.data_type}`,
+          ).toBe(true);
+        } else if (sqliteType === "REAL") {
+          expect(row!.data_type, `${fullCol} should be double precision`).toBe(
+            "double precision",
+          );
+        }
+      }
+    }
+  });
+
+  it("index names and WHERE clauses match SQLite", async () => {
+    const sqliteIndexes = sqliteHandle
+      .prepare(
+        "SELECT name, sql FROM sqlite_master WHERE type = 'index' AND name NOT LIKE 'sqlite_%'",
+      )
+      .all() as Array<{ name: string; sql: string }>;
+
+    const pgIndexes = await db.all<{
+      indexname: string;
+      indexdef: string;
+    }>(
+      "SELECT indexname, indexdef FROM pg_indexes WHERE schemaname = 'public' AND indexname NOT LIKE '%_pkey'",
+    );
+
+    const sqliteNames = new Set(sqliteIndexes.map((i) => i.name));
+    const pgNames = new Set(pgIndexes.map((i) => i.indexname));
+
+    for (const name of sqliteNames) {
+      expect(pgNames.has(name), `Postgres is missing index ${name}`).toBe(true);
+    }
+
+    for (const idx of sqliteIndexes) {
+      const pgIdx = pgIndexes.find((i) => i.indexname === idx.name);
+      if (pgIdx) {
+        const sqliteHasWhere = idx.sql.includes("WHERE");
+        const pgHasWhere = pgIdx.indexdef.includes("WHERE");
         expect(
-          row,
-          `Postgres is missing ${table.name}.${column}`,
-        ).toBeDefined();
+          pgHasWhere,
+          `index ${idx.name}: SQLite WHERE=${sqliteHasWhere}, Postgres WHERE=${pgHasWhere}`,
+        ).toBe(sqliteHasWhere);
       }
     }
   });
@@ -198,9 +276,10 @@ describe("pg-schema", () => {
     expect(doc).toBeUndefined();
   });
 
-  it("an upper-case github_login is refused by the CHECK", async () => {
-    await expect(
-      db.run(
+  it("an upper-case github_login is refused by the CHECK (23514)", async () => {
+    let err: unknown;
+    try {
+      await db.run(
         "INSERT INTO users (id, name, email, github_login, created_at) VALUES (@id, @name, @email, @login, @at)",
         {
           id: "upper-1",
@@ -209,8 +288,12 @@ describe("pg-schema", () => {
           login: "UpperCase",
           at: new Date().toISOString(),
         },
-      ),
-    ).rejects.toThrow();
+      );
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toBeDefined();
+    expect((err as { code?: string }).code).toBe("23514");
   });
 
   it("saved_projects.rev defaults to 1", async () => {

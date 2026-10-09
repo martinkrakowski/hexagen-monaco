@@ -46,7 +46,8 @@ export function createPgPool(
   const pool = new Pool({
     connectionString,
     types,
-    options: "-c TimeZone=UTC -c idle_in_transaction_session_timeout=30000",
+    options:
+      "-c TimeZone=UTC -c idle_in_transaction_session_timeout=30000 -c DateStyle=ISO",
     max: opts.max ?? 10,
   });
 
@@ -177,6 +178,11 @@ function bindParams(
   const { text, paramNames } = scanSql(sql, cache);
 
   if (paramNames === null) {
+    if (params !== undefined && !Array.isArray(params)) {
+      throw new Error(
+        "named parameters were given to a statement that has none",
+      );
+    }
     const arr = (params as readonly SqlValue[] | undefined) ?? [];
     return {
       text,
@@ -201,15 +207,15 @@ type TxToken = { active: boolean };
 type SharedState = {
   cache: Map<string, { text: string; paramNames: string[] | null }>;
   nestedGuard: AsyncLocalStorage<TxToken>;
-  closed: boolean;
 };
 
 export function createPgPlatformDb(pool: Pool): PlatformDb {
   const state: SharedState = {
     cache: newCache(),
     nestedGuard: new AsyncLocalStorage<TxToken>(),
-    closed: false,
   };
+
+  let closing: Promise<void> | null = null;
 
   const run = async (sql: string, params?: SqlParams): Promise<RunResult> => {
     if (state.nestedGuard.getStore()?.active) {
@@ -263,6 +269,16 @@ export function createPgPlatformDb(pool: Pool): PlatformDb {
       const nestedGuard = state.nestedGuard;
       const cache = state.cache;
       const client = await pool.connect();
+
+      // An error event on a checked-out client (server-side session ended,
+      // backend restart, idle-in-transaction kill, …) would otherwise be
+      // unhandled and crash the process. Capture it so the finally below can
+      // destroy the broken connection instead of returning it to the pool.
+      let clientError: unknown;
+      const onClientError = (error: unknown) => {
+        clientError = error;
+      };
+      client.on("error", onClientError);
 
       try {
         for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
@@ -336,13 +352,14 @@ export function createPgPlatformDb(pool: Pool): PlatformDb {
 
         throw new Error("transaction loop exhausted without result");
       } finally {
-        client.release();
+        client.removeListener("error", onClientError);
+        client.release(clientError ? true : undefined);
       }
     },
-    close: async () => {
-      if (state.closed) return;
-      state.closed = true;
-      await pool.end();
+    close: () => {
+      if (closing) return closing;
+      closing = pool.end();
+      return closing;
     },
   };
 }
