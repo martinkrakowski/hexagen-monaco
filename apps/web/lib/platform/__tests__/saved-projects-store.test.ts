@@ -489,6 +489,14 @@ describe.each(BACKENDS)("saved projects stored timestamps (%s)", (kind) => {
       assert.equal(typeof afterUpdate.u, "number");
       assert.equal(afterUpdate.c, createdAt);
       assert.equal(afterUpdate.u, updatedTimestamp);
+
+      const loaded = must(await projects.loadProjects());
+      assert.equal(loaded.length, 1);
+      assert.equal(loaded[0].id, proj.id);
+      assert.equal(typeof loaded[0].createdAt, "number");
+      assert.equal(typeof loaded[0].updatedAt, "number");
+      assert.equal(loaded[0].createdAt, createdAt);
+      assert.equal(loaded[0].updatedAt, updatedTimestamp);
     } finally {
       await backend.close();
     }

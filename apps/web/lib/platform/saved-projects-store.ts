@@ -128,7 +128,7 @@ export function createSavedProjectsStore(
   ownerId: string,
 ): SavedProjectsStore {
   const selectAll =
-    "SELECT id, name, payload, created_at, updated_at, ord, rev, updated_by FROM saved_projects WHERE owner_id = ? ORDER BY ord ASC";
+    "SELECT id, name, payload, hx_ms(created_at) AS created_at, hx_ms(updated_at) AS updated_at, ord, rev, updated_by FROM saved_projects WHERE owner_id = ? ORDER BY ord ASC";
   const selectOne =
     "SELECT id, name, payload, created_at, updated_at, ord, rev, updated_by FROM saved_projects WHERE owner_id = ? AND id = ?";
   const minOrd =
