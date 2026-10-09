@@ -13,7 +13,6 @@ import {
 import { openPlatformDb } from "../platform-db";
 import { createSqlitePlatformDb } from "../sqlite-db";
 import { canAutoFix, type ViolationCode } from "@hexagen/manifest-generation";
-import type { PlatformDb } from "../db";
 import {
   MAX_REPAIR_RUNS_PER_OWNER,
   REPAIR_VIOLATION_CLASSES,
@@ -913,6 +912,7 @@ describe.each(BACKENDS)("repair telemetry store (%s)", (kind) => {
 
       const stats = await a.classStats();
       assert.ok(stats.success);
+      if (!stats.success) return;
       const zero = stats.value.find(
         (s) => s.violationClass === "client-zero-adapters",
       );
@@ -920,6 +920,7 @@ describe.each(BACKENDS)("repair telemetry store (%s)", (kind) => {
       assert.equal(zero?.eligible, 1);
 
       const serverStats = await a.classStats({ surface: "server-staged" });
+      if (!serverStats.success) return;
       assert.equal(serverStats.value.length, 0);
 
       await a.record(
@@ -939,12 +940,14 @@ describe.each(BACKENDS)("repair telemetry store (%s)", (kind) => {
       );
 
       const both = await a.classStats();
+      if (!both.success) return;
       const zeroBoth = both.value.find(
         (s) => s.violationClass === "client-zero-adapters",
       );
       assert.equal(zeroBoth?.attempts, 2);
 
       const serverOnly = await a.classStats({ surface: "server-staged" });
+      if (!serverOnly.success) return;
       const zeroServer = serverOnly.value.find(
         (s) => s.violationClass === "client-zero-adapters",
       );

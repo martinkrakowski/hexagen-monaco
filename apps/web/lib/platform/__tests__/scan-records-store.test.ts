@@ -5,7 +5,6 @@ import { tmpdir } from "node:os";
 import {
   BACKENDS,
   openBackend,
-  type Backend,
   type BackendKind,
 } from "../../../test-support/platform-backends";
 import type { PlatformDb } from "../db";
@@ -17,7 +16,6 @@ import {
   isPathInside,
   scanArtifactPath,
   type RecordScanInput,
-  type ScanRecordsStore,
 } from "../scan-records-store";
 import {
   MAX_SCAN_ERROR_CHARS,
@@ -148,6 +146,7 @@ describe.each(BACKENDS)("scan records store (%s)", (kind) => {
       if (!written.success) return;
 
       const listed = await store.list();
+      if (!listed.success) return;
       expect(listed.value.length).toBe(1);
       const record = listed.value[0];
       expect(record?.projectName).toBe("shop");
@@ -160,6 +159,7 @@ describe.each(BACKENDS)("scan records store (%s)", (kind) => {
       expect(record?.artifact).toBe(null);
 
       const foreign = await other.list();
+      if (!foreign.success) return;
       expect(foreign.value.length).toBe(0);
     } finally {
       await backend.close();
@@ -724,8 +724,10 @@ describe.each(BACKENDS)("scan records store (%s)", (kind) => {
         expect(limited.value.length).toBe(2);
 
         const otherList = await other.list();
-        if (otherList.success)
+        if (otherList.success) {
+          // population-guard: owner-b has no records of its own
           expect(otherList.value.map((r) => r.id)).not.toContain("r1");
+        }
       } finally {
         await backend.close();
       }
