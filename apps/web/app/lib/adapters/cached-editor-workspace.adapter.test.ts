@@ -2662,18 +2662,80 @@ describe("CachedEditorWorkspaceAdapter Item 2: discard + timer", () => {
       confirmed: true,
     });
     server.set(UUID, { payload: ws, rev: 1, updatedAt: 1000, projectId: UUID });
-
     await adapter.loadWorkspace(UUID);
+
+    const serverFetch = fetchImpl.getMockImplementation()!;
+    let putCount = 0;
+    let resolvePut!: (v: Response) => void;
+    fetchImpl.mockImplementation(
+      async (url: string | URL | Request, init?: RequestInit) => {
+        const href = String(url);
+        const method = (init?.method ?? "GET").toUpperCase();
+        if (method === "PUT") {
+          putCount++;
+          return new Promise<Response>((res) => {
+            resolvePut = (resp) => {
+              const body = JSON.parse(init!.body as string);
+              const id =
+                /\/api\/tenants\/(.+)\/documents\/workspace\/(.+)/.exec(
+                  href,
+                )![2]!;
+              const doc = server.get(id) ?? {
+                payload: body.payload,
+                rev: 0,
+                updatedAt: 0,
+                projectId: body.projectId ?? null,
+              };
+              doc.rev = putCount + 1;
+              doc.updatedAt = Date.now();
+              doc.projectId = body.projectId ?? null;
+              doc.payload = body.payload;
+              server.set(id, doc);
+              res(resp);
+            };
+          });
+        }
+        return serverFetch(
+          url as string | URL | Request,
+          init,
+        ) as unknown as Response;
+      },
+    );
+
+    // Save #1: timer armed, PUT #1 in flight.
     await adapter.saveWorkspace(UUID, makeWorkspace(2000));
-
-    // Fire the timer (write starts), then immediately clear.
     vi.advanceTimersByTime(REMOTE_DEBOUNCE_MS);
+    await Promise.resolve();
+    await Promise.resolve();
+    assert.equal(putCount, 1, "PUT is in flight");
 
-    await adapter.clearWorkspace(UUID);
-
-    // Advance timers: no PUT should fire (epoch bumped, timer cancelled).
+    // clearWorkspace must wait for the in-flight PUT (no re-timestamp).
+    const cwSpy = vi.spyOn(cache, "clearWorkspace");
+    const clearPromise = adapter.clearWorkspace(UUID);
+    await vi.advanceTimersByTimeAsync(0);
+    assert.equal(
+      cwSpy.mock.calls.length,
+      0,
+      "clearWorkspace waits for the in-flight write before clearing the cache",
+    );
+    // Resolve the in-flight PUT; the discard already bumped the epoch, so the
+    // write must not stamp, and no further PUT may leave for the server.
+    resolvePut(
+      new Response(
+        JSON.stringify({
+          kind: "workspace",
+          id: UUID,
+          projectId: UUID,
+          payload: {},
+          updatedAt: 2000,
+        }),
+        { status: 200, headers: { ETag: '"rev:2"' } },
+      ),
+    );
+    await clearPromise;
     await vi.advanceTimersByTimeAsync(REMOTE_DEBOUNCE_MS);
 
+    assert.equal(putCount, 1, "no PUT sent after the discard");
     assert.equal(server.has(UUID), false, "server copy deleted by clear");
     assert.equal(await cache.getLiftStamp(UUID), null, "no stamp left");
   });
@@ -2691,27 +2753,107 @@ describe("CachedEditorWorkspaceAdapter Item 3: chained write + discard", () => {
       confirmed: true,
     });
     server.set(UUID, { payload: ws, rev: 1, updatedAt: 1000, projectId: UUID });
-
     await adapter.loadWorkspace(UUID);
 
-    // Save #1: timer armed.
+    // A fake fetch whose PUT returns a promise the test resolves later, so a
+    // write is genuinely in flight while the discard lands.
+    const serverFetch = fetchImpl.getMockImplementation()!;
+    let putCount = 0;
+    const resolvers: Array<(v: Response) => void> = [];
+    fetchImpl.mockImplementation(
+      async (url: string | URL | Request, init?: RequestInit) => {
+        const href = String(url);
+        const method = (init?.method ?? "GET").toUpperCase();
+        if (method === "PUT") {
+          putCount++;
+          const idx = putCount - 1;
+          return new Promise<Response>((res) => {
+            resolvers[idx] = (resp) => {
+              const body = JSON.parse(init!.body as string);
+              const match =
+                /\/api\/tenants\/(.+)\/documents\/workspace\/(.+)/.exec(href)!;
+              const id = match[2]!;
+              const doc = server.get(id) ?? {
+                payload: body.payload,
+                rev: 0,
+                updatedAt: 0,
+                projectId: body.projectId ?? null,
+              };
+              doc.rev = putCount + 1;
+              doc.updatedAt = Date.now();
+              doc.projectId = body.projectId ?? null;
+              doc.payload = body.payload;
+              server.set(id, doc);
+              res(resp);
+            };
+          });
+        }
+        return serverFetch(
+          url as string | URL | Request,
+          init,
+        ) as unknown as Response;
+      },
+    );
+
+    // Save #1: timer armed, PUT #1 in flight.
     await adapter.saveWorkspace(UUID, makeWorkspace(2000));
-    // Save #2: cancels timer #1, arms timer #2.
+    vi.advanceTimersByTime(REMOTE_DEBOUNCE_MS);
+    await Promise.resolve();
+    await Promise.resolve();
+    assert.equal(putCount, 1, "first PUT is in flight");
+
+    // Schedule #2 while #1 is in flight; its timer fires and chains on #1.
     await adapter.saveWorkspace(UUID, makeWorkspace(3000));
+    vi.advanceTimersByTime(REMOTE_DEBOUNCE_MS);
+    await Promise.resolve();
+    await Promise.resolve();
 
-    // Fire both timers (only #2 fires).
-    await vi.advanceTimersByTimeAsync(REMOTE_DEBOUNCE_MS);
+    // Resolve #1 (it stamps rev 2); the chained #2 then sends PUT #2.
+    resolvers[0](
+      new Response(
+        JSON.stringify({
+          kind: "workspace",
+          id: UUID,
+          projectId: UUID,
+          payload: {},
+          updatedAt: 2000,
+        }),
+        { status: 200, headers: { ETag: '"rev:2"' } },
+      ),
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    assert.equal(putCount, 2, "second PUT sent after first resolves");
 
-    // Discard while the second write is in-flight (chained on the first).
-    await adapter.clearWorkspace(UUID);
+    // Discard while #2 is in flight: clearWorkspace must WAIT for #2.
+    const cwSpy = vi.spyOn(cache, "clearWorkspace");
+    const clearPromise = adapter.clearWorkspace(UUID);
+    await vi.advanceTimersByTimeAsync(0);
+    assert.equal(
+      cwSpy.mock.calls.length,
+      0,
+      "clearWorkspace waits for the in-flight write before clearing the cache",
+    );
+    resolvers[1](
+      new Response(
+        JSON.stringify({
+          kind: "workspace",
+          id: UUID,
+          projectId: UUID,
+          payload: {},
+          updatedAt: 3000,
+        }),
+        { status: 200, headers: { ETag: '"rev:3"' } },
+      ),
+    );
+    await clearPromise;
 
-    // The in-flight write should have completed and seen the epoch change.
     assert.equal(
       await cache.getLiftStamp(UUID),
       null,
       "no stamp after discard",
     );
     assert.equal(server.has(UUID), false, "server copy deleted");
+    assert.equal(putCount, 2, "exactly two PUTs");
   });
 });
 

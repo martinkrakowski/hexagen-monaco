@@ -893,13 +893,18 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
     const epochAtStart = epochNow;
 
     const prev = this.inFlight.get(sessionId) ?? Promise.resolve();
-    const current = prev.then(async () => {
+    // Item 2: keep a reference to THIS write's in-flight promise so the
+    // finally block only clears an entry it still owns. A later, chained
+    // write replaces the map entry; we must not delete that one, else a
+    // discard during the chained write would not wait for it.
+    const current: Promise<void> = prev.then(async () => {
       await this._doRemoteWrite(
         sessionId,
         workspace,
         userId,
         precondition,
         epochAtStart,
+        current,
       );
     });
     this.inFlight.set(sessionId, current);
@@ -911,6 +916,7 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
     userId: string,
     precondition: { ifMatch: number } | { createOnly: true },
     epochAtStart: number,
+    inFlightPromise: Promise<void>,
   ): Promise<void> {
     try {
       // Item 6: re-check paused, org, epoch after awaiting inFlight.
@@ -980,6 +986,13 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
       }
 
       const prevStamp = await this.cache.getLiftStamp(sessionId);
+      // Item 2: re-check the epoch immediately before stamping — a discard
+      // may have landed while we waited on the cache read, so stamping now
+      // would resurrect a stamp for a workspace that was just discarded.
+      if (epochAtStart !== (this.epochs.get(sessionId) ?? 0)) {
+        this.pendingPreconditions.delete(sessionId);
+        return;
+      }
       await this.tryStamp(sessionId, {
         ownerId: userId,
         rev: result.rev,
@@ -994,7 +1007,13 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
         this.pendingPreconditions.set(sessionId, { ifMatch: result.rev });
       }
     } finally {
-      this.inFlight.delete(sessionId);
+      // Item 2: only clear the entry if a later, chained write hasn't
+      // already replaced it; otherwise that write's in-flight promise would
+      // be removed by this write's finally, and a discard during it would
+      // not wait for it (and it could stamp after the discard).
+      if (this.inFlight.get(sessionId) === inFlightPromise) {
+        this.inFlight.delete(sessionId);
+      }
     }
   }
 
