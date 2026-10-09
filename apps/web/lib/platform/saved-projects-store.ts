@@ -145,7 +145,7 @@ export function createSavedProjectsStore(
    */
   const upsert = `
     INSERT INTO saved_projects (id, owner_id, name, payload, created_at, updated_at, ord)
-    VALUES (@id, @owner_id, @name, @payload, @created_at, @updated_at, @ord)
+    VALUES (@id, @owner_id, @name, @payload, hx_ts(@created_at), hx_ts(@updated_at), @ord)
     ON CONFLICT (owner_id, id) DO UPDATE SET
       name = excluded.name,
       payload = excluded.payload,
