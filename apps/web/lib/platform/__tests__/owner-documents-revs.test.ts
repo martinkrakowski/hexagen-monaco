@@ -18,7 +18,9 @@ async function makeSqlite(): Promise<Backend> {
   const handle = openPlatformDb(":memory:");
   return {
     db: createSqlitePlatformDb(handle),
-    cleanup: async () => handle.close(),
+    cleanup: async () => {
+      await handle.close();
+    },
   };
 }
 
@@ -283,9 +285,15 @@ describe.each(backends)("owner document revs: %s", (_name, make) => {
         await store.put({ kind: "workspace", id, payload: { v: "1" } });
         await store.put({ kind: "workspace", id, payload: { v: "2" } });
       }
-      const aCur = (await store.get("workspace", "doc-a")).value!.rev;
-      const bCur = (await store.get("workspace", "doc-b")).value!.rev;
-      const cCur = (await store.get("workspace", "doc-c")).value!.rev;
+      const aGet = await store.get("workspace", "doc-a");
+      assert.equal(aGet.success, true);
+      const aCur = aGet.value!.rev;
+      const bGet = await store.get("workspace", "doc-b");
+      assert.equal(bGet.success, true);
+      const bCur = bGet.value!.rev;
+      const cGet = await store.get("workspace", "doc-c");
+      assert.equal(cGet.success, true);
+      const cCur = cGet.value!.rev;
 
       // (a) stale PUT on doc-a: sent = current-1.
       const stalePut = await store.put(
