@@ -608,6 +608,19 @@ describe.each(BACKENDS)(
           "expiresAt is ORG_INVITE_TTL_DAYS after createdAt",
         );
 
+        // invite() returns the row it built; the same checks on the row READ BACK
+        // from the database are what prove the backend's timestamp handling.
+        const stored = defined(
+          (await orgs.listPendingInvites(org.id)).find(
+            (i) => i.githubLogin === "ada",
+          ),
+          "stored invite",
+        );
+        assert.equal(typeof stored.createdAt, "string");
+        assert.equal(typeof stored.expiresAt, "string");
+        assert.equal(new Date(stored.createdAt).getTime(), createdMs);
+        assert.equal(new Date(stored.expiresAt).getTime(), expiresMs);
+
         const joined = await orgs.acceptInvitesForLogin("ada-user", "ada");
         assert.deepEqual(joined, [org.id]);
 
@@ -659,10 +672,11 @@ describe.each(BACKENDS)("OrgsRepository.listPendingInvites (%s", (kind) => {
       assert.deepEqual(joined, [acme.id]);
 
       // Push the "backdated" invite into the past so expires_at > @now drops it.
-      const pastMs = Date.now() - 3_600_000;
+      // An ISO string: SQLite stores the text it compares, Postgres casts it.
+      const past = new Date(Date.now() - 3_600_000).toISOString();
       await backend.db.run(
-        "UPDATE org_invites SET expires_at = hx_ts(?) WHERE org_id = ? AND github_login = ?",
-        [pastMs, acme.id, "backdated"],
+        "UPDATE org_invites SET expires_at = ? WHERE org_id = ? AND github_login = ?",
+        [past, acme.id, "backdated"],
       );
 
       const acmePending = await orgs.listPendingInvites(acme.id);

@@ -247,6 +247,28 @@ describe.each(BACKENDS)("H1.2 — requireTenant (%s", (kind) => {
       });
       assert.equal(await orgs.getOrg(victim.id), null);
 
+      // The store's own guards, on both backends (the SQLite-only test above also
+      // has them, next to the orphan it plants with a pragma).
+      await assert.rejects(
+        () =>
+          orgs.createOrg({
+            id: victim.id,
+            slug: "takeover",
+            name: "Takeover",
+            createdBy: "attacker",
+          }),
+        /collides with an existing user/,
+      );
+      const org = await orgs.createOrg({
+        slug: "acme",
+        name: "Acme",
+        createdBy: victim.id,
+      });
+      await assert.rejects(
+        () => orgs.addMember(org.id, "attacker", "admin" as never),
+        /invalid org role/,
+      );
+
       await assert.rejects(
         () =>
           backend.db.run(

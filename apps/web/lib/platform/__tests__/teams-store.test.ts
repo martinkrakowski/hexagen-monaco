@@ -114,8 +114,8 @@ describe.each(BACKENDS)("TeamsRepository (%s", (kind) => {
       assert.equal(await teams.isMember(team1.id, "stranger"), false);
 
       const ids = await teams.listTeamIdsForUser("founder");
-      const sorted = [...ids].sort();
-      assert.deepEqual(ids, sorted);
+      // Both teams, and nothing else, in id order.
+      assert.deepEqual(ids, [team1.id, team2.id].sort());
 
       await assert.rejects(
         () => teams.addMember(team1.id, "stranger", { actorId: "founder" }),
