@@ -195,4 +195,88 @@ describe.each(backends)("owner document revs: %s", (_name, make) => {
       );
     }
   });
+
+  it("9. a refused precondition writes one row whose detail is {method, sent, current}; a success writes none", async () => {
+    const store = createOwnerDocumentsStore(db, "user-1", "user-1");
+    try {
+      // Three documents, each written twice. They share this author's counter,
+      // so doc-a reaches rev 2, doc-b rev 4, doc-c rev 6.
+      for (const id of ["doc-a", "doc-b", "doc-c"]) {
+        await store.put({ kind: "workspace", id, payload: { v: "1" } });
+        await store.put({ kind: "workspace", id, payload: { v: "2" } });
+      }
+      const aCur = (await store.get("workspace", "doc-a")).value!.rev;
+      const bCur = (await store.get("workspace", "doc-b")).value!.rev;
+      const cCur = (await store.get("workspace", "doc-c")).value!.rev;
+
+      // (a) stale PUT on doc-a: sent = current-1.
+      const stalePut = await store.put(
+        { kind: "workspace", id: "doc-a", payload: { v: "stale" } },
+        aCur - 1,
+      );
+      assert.equal(stalePut.success, false);
+      // (b) createOnly on existing doc-b: no expected rev was sent.
+      const createOnly = await store.put(
+        { kind: "workspace", id: "doc-b", payload: { v: "x" } },
+        undefined,
+        { createOnly: true },
+      );
+      assert.equal(createOnly.success, false);
+      // (c) stale DELETE on doc-c: sent = current-1.
+      const staleDel = await store.delete("workspace", "doc-c", cCur - 1);
+      assert.equal(staleDel.success, false);
+
+      // Each refusal wrote exactly one row, keyed by subject.
+      const rows = await db.all<{
+        subject_id: string;
+        grantee_type: unknown;
+        grantee_id: unknown;
+        detail: unknown;
+      }>(
+        "SELECT subject_id, grantee_type, grantee_id, detail FROM audit_log WHERE action = ?",
+        ["document.precondition_failed"],
+      );
+      assert.equal(rows.length, 3, "three refusals = three rows");
+
+      const bySubject = new Map(rows.map((r) => [r.subject_id, r]));
+      const a = bySubject.get("workspace/doc-a");
+      assert.ok(a, "doc-a refusal row must exist");
+      assert.deepEqual(
+        JSON.parse(a!.detail as string),
+        { method: "put", sent: aCur - 1, current: aCur },
+        "stale PUT detail",
+      );
+      assert.equal(a!.grantee_type, null, "grantee_type must be NULL");
+      assert.equal(a!.grantee_id, null, "grantee_id must be NULL");
+
+      const b = bySubject.get("workspace/doc-b");
+      assert.ok(b, "doc-b refusal row must exist");
+      assert.deepEqual(
+        JSON.parse(b!.detail as string),
+        { method: "put", sent: null, current: bCur },
+        "createOnly refusal detail",
+      );
+
+      const c = bySubject.get("workspace/doc-c");
+      assert.ok(c, "doc-c refusal row must exist");
+      assert.deepEqual(
+        JSON.parse(c!.detail as string),
+        { method: "delete", sent: cCur - 1, current: cCur },
+        "stale DELETE detail",
+      );
+
+      // A matching-PUT success writes no row.
+      await store.put(
+        { kind: "workspace", id: "doc-a", payload: { v: "ok" } },
+        aCur, // matching
+      );
+      const after = await db.get<{ n: number }>(
+        "SELECT COUNT(*) AS n FROM audit_log WHERE action = ?",
+        ["document.precondition_failed"],
+      );
+      assert.equal(after!.n, 3, "a success must not add an audit row");
+    } finally {
+      await cleanup();
+    }
+  });
 });

@@ -431,11 +431,18 @@ export function createOwnerDocumentsStore(
    * false when the cap suppressed it. The refusal result is unchanged either
    * way — the cap only bounds audit volume, not the error returned to the
    * caller.
+   *
+   * A3-00: the row's `detail` says what was refused: the store method that was
+   * tried, the rev the client sent (or null — e.g. a createOnly has no expected
+   * rev), and the document's current rev.
    */
   async function recordRefusal(
     tx: PlatformDbSession,
     kind: DocumentKind,
     id: string,
+    method: "put" | "delete",
+    sent: number | null,
+    current: number | null,
   ): Promise<boolean> {
     const since = new Date(now() - 60_000).toISOString();
     const subjectId = `${kind}/${id}`;
@@ -452,6 +459,7 @@ export function createOwnerDocumentsStore(
       action: "document.precondition_failed",
       subjectOwnerId: ownerId,
       subjectId,
+      detail: { method, sent, current },
     });
     return true;
   }
@@ -660,7 +668,14 @@ export function createOwnerDocumentsStore(
               // snapshot cannot see; not reachable on SQLite; on Postgres under
               // SERIALIZABLE the seam retries a serialization failure before
               // this could be observed; pinned by the Postgres store tests (B2b-2).
-              const audited = await recordRefusal(tx, kind, id);
+              const audited = await recordRefusal(
+                tx,
+                kind,
+                id,
+                "put",
+                null,
+                null,
+              );
               return {
                 success: false,
                 error: {
@@ -670,7 +685,14 @@ export function createOwnerDocumentsStore(
                 },
               };
             }
-            const audited = await recordRefusal(tx, kind, id);
+            const audited = await recordRefusal(
+              tx,
+              kind,
+              id,
+              "put",
+              null,
+              existing.rev,
+            );
             return {
               success: false,
               error: {
@@ -747,7 +769,14 @@ export function createOwnerDocumentsStore(
               ),
             };
           }
-          const audited = await recordRefusal(tx, kind, id);
+          const audited = await recordRefusal(
+            tx,
+            kind,
+            id,
+            "put",
+            expectedRev,
+            existing.rev,
+          );
           return {
             success: false,
             error: {
@@ -812,7 +841,14 @@ export function createOwnerDocumentsStore(
               ),
             };
           }
-          const audited = await recordRefusal(tx, kind, id);
+          const audited = await recordRefusal(
+            tx,
+            kind,
+            id,
+            "delete",
+            expectedRev,
+            existing.rev,
+          );
           return {
             success: false,
             error: {
