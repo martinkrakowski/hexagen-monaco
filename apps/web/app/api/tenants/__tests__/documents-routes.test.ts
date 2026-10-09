@@ -98,6 +98,17 @@ async function seedProject(
   assert.equal(created.success, true, "fixture project must be created");
 }
 
+// Reads the rev from a response ETag ("rev:<n>"). A3-00: revisions no longer
+// restart, so tests take the rev the response that wrote the doc carried and
+// assert relations (a later rev is greater; a failure's ETag is the current
+// rev) instead of literal 1/2.
+function revOf(res: { headers: Headers }): number {
+  const etag = res.headers.get("ETag") ?? "";
+  const m = /rev:(\d+)/.exec(etag);
+  assert.ok(m, `expected an ETag like rev:<n>, got: ${etag}`);
+  return Number(m[1]);
+}
+
 async function seedOrg(
   orgId: string,
   founder: string,
@@ -959,12 +970,16 @@ describe("document routes", () => {
     );
     assert.equal(matched.status, 204);
 
-    // Stale rev → 412 with ETag.
-    // Re-seed and bump to rev 2, then try to delete at rev 1 (stale).
-    await DETAIL_PUT(
+    // Stale rev -> 412 with the current ETag.
+    // Re-seed (a new rev), then bump with a MATCHING If-Match on the
+    // re-seed's rev, then delete at the re-seed's rev (now stale).
+    const reseed = await DETAIL_PUT(
       putReq(OWNER, KIND, DOC_ID, JSON.stringify({ payload: { v: "alive" } })),
       detailParams(OWNER, KIND, DOC_ID),
     );
+    assert.equal(reseed.status, 200);
+    const reseedRev = revOf(reseed);
+
     const bump = await DETAIL_PUT(
       putReq(
         OWNER,
@@ -972,20 +987,25 @@ describe("document routes", () => {
         DOC_ID,
         JSON.stringify({ payload: { v: "alive2" } }),
         {
-          "If-Match": '"rev:1"',
+          "If-Match": `"rev:${reseedRev}"`,
         },
       ),
       detailParams(OWNER, KIND, DOC_ID),
     );
-    assert.equal(bump.status, 200);
-    assert.match(bump.headers.get("ETag") ?? "", /rev:2/);
+    assert.equal(bump.status, 200, "a matching If-Match must succeed");
+    const bumpRev = revOf(bump);
+    assert.ok(bumpRev > reseedRev, "a later write must exceed the earlier rev");
 
     const stale = await DETAIL_DELETE(
-      delReq(OWNER, KIND, DOC_ID, { "If-Match": '"rev:1"' }),
+      delReq(OWNER, KIND, DOC_ID, { "If-Match": `"rev:${reseedRev}"` }),
       detailParams(OWNER, KIND, DOC_ID),
     );
     assert.equal(stale.status, 412);
-    assert.match(stale.headers.get("ETag") ?? "", /rev:2/);
+    assert.equal(
+      revOf(stale),
+      bumpRev,
+      "the 412 ETag must carry the current rev",
+    );
     // Document must remain.
     const stillThere = await DETAIL_GET(
       new NextRequest(detailUrl(OWNER, KIND, DOC_ID)),
@@ -1084,7 +1104,10 @@ describe("document routes", () => {
       detailParams(OWNER, KIND, "doc-both-star"),
     );
     assert.equal(bothStar.status, 200);
-    assert.match(bothStar.headers.get("ETag") ?? "", /rev:1/);
+    assert.ok(
+      revOf(bothStar) > revOf(padded),
+      "a later create must exceed the earlier document's rev",
+    );
 
     // If-None-Match * + If-Match "rev:1" is 400.
     const bothMatch = await DETAIL_PUT(
