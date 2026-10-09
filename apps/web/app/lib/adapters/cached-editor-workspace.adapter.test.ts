@@ -57,6 +57,7 @@ interface ServerDoc {
 
 function makeServerFetch(
   store: Map<string, ServerDoc>,
+  validProjects: Set<string> = new Set(),
 ): MockedFunction<typeof fetch> {
   let revCounter = 0;
   const parseRev = (header: string | null): number | null => {
@@ -64,6 +65,11 @@ function makeServerFetch(
     const trimmed = header.trim().replaceAll('"', "");
     const match = /^rev:(\d+)$/.exec(trimmed);
     return match ? Number(match[1]) : null;
+  };
+  const nextRev = () => {
+    for (const doc of store.values())
+      revCounter = Math.max(revCounter, doc.rev);
+    return ++revCounter;
   };
   return vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
     const href = String(url);
@@ -94,37 +100,42 @@ function makeServerFetch(
       const ifMatch = parseRev(headers.get("If-Match"));
       const noneMatch = headers.get("If-None-Match");
 
+      // Item 11: validate projectId.
+      const projectId = body.projectId;
+      if (
+        projectId !== undefined &&
+        projectId !== null &&
+        !validProjects.has(projectId)
+      ) {
+        return new Response("project not found", { status: 400 });
+      }
+
       if (noneMatch === "*" && doc) {
         return new Response("exists", {
           status: 412,
           headers: { ETag: `"rev:${doc.rev}"` },
         });
       }
+      // Item 11: a 409 carries NO ETag (the real route's 409 has none).
       if (ifMatch !== null) {
         if (!doc) return new Response("not found", { status: 404 });
         if (ifMatch !== doc.rev) {
-          return new Response("conflict", {
-            status: 409,
-            headers: { ETag: `"rev:${doc.rev}"` },
-          });
+          return new Response("conflict", { status: 409 });
         }
         doc.payload = body.payload;
-        revCounter = Math.max(revCounter, doc.rev) + 1;
-        doc.rev = revCounter;
+        doc.rev = nextRev();
         doc.updatedAt = Date.now();
         doc.projectId = body.projectId ?? null;
       } else if (!doc) {
-        revCounter = revCounter + 1;
         store.set(id, {
           payload: body.payload,
-          rev: revCounter,
+          rev: nextRev(),
           updatedAt: Date.now(),
           projectId: body.projectId ?? null,
         });
       } else {
         doc.payload = body.payload;
-        revCounter = Math.max(revCounter, doc.rev) + 1;
-        doc.rev = revCounter;
+        doc.rev = nextRev();
         doc.updatedAt = Date.now();
         doc.projectId = body.projectId ?? null;
       }
@@ -186,7 +197,7 @@ function makeAdapters(options?: {
   userId?: string | null;
 }): TestAdapters {
   const server = new Map<string, ServerDoc>();
-  const fetchImpl = makeServerFetch(server);
+  const fetchImpl = makeServerFetch(server, new Set([UUID]));
   const cache = new IDBEditorWorkspaceAdapter();
   const remote = new HttpEditorWorkspaceAdapter(fetchImpl);
   const { warns, logger } = warnCollector();
@@ -523,6 +534,32 @@ describe("CachedEditorWorkspaceAdapter lift", () => {
 
     assert.ok(warns.some((w) => /created elsewhere before the lift/.test(w)));
     assert.equal(await cache.getLiftStamp(UUID), null, "no stamp on conflict");
+
+    // Item 10(b/c): conflict record + browser copy preserved + id paused.
+    const rec = await cache.getConflicts();
+    assert.ok(rec && rec.count === 1);
+    assert.equal(rec!.last[0]!.where, "lift");
+    assert.equal(rec!.last[0]!.stampRev, null);
+    assert.equal(rec!.last[0]!.serverRev, 1);
+
+    // Browser copy byte-identical (no overwrite).
+    const after = await cache.loadWorkspace(UUID);
+    assert.ok(after.success && after.value);
+    assert.deepEqual(
+      after.value,
+      makeWorkspace(1000),
+      "browser copy unchanged",
+    );
+
+    // A following save sends nothing (paused).
+    const beforePuts = putCallsOf(fetchImpl).length;
+    await adapter.saveWorkspace(UUID, makeWorkspace(2000));
+    await vi.advanceTimersByTimeAsync(REMOTE_DEBOUNCE_MS);
+    assert.equal(
+      putCallsOf(fetchImpl).length,
+      beforePuts,
+      "no PUT while paused",
+    );
   });
 
   it("the lift never deletes or rewrites the browser copy", async () => {
@@ -764,6 +801,149 @@ describe("CachedEditorWorkspaceAdapter AM2 conflict resolution", () => {
     }
   });
 
+  it("catch-up whose confirming GET fails is stamped unconfirmed, and the next save carries the new revision", async () => {
+    const { adapter, cache, server, fetchImpl } = makeAdapters();
+    const dirtyWs = makeWorkspace(2000);
+    await cache.saveWorkspace(UUID, dirtyWs);
+    await cache.setLiftStamp(UUID, {
+      ownerId: "user-1",
+      rev: 5,
+      syncedUpdatedAt: 1000,
+      confirmed: true,
+    });
+    server.set(UUID, {
+      payload: makeWorkspace(1000),
+      rev: 5,
+      updatedAt: 1000,
+      projectId: UUID,
+    });
+
+    // Load: dirty (2000 != 1000) + not moved (5 == 5) → catchUp.
+    // Override the confirming GET to fail.
+    let getAfterPut = false;
+    fetchImpl.mockImplementation(
+      async (url: string | URL | Request, init?: RequestInit) => {
+        const method = (init?.method ?? "GET").toUpperCase();
+        const match = /\/api\/tenants\/(.+)\/documents\/workspace\/(.+)/.exec(
+          String(url),
+        );
+        const id = match![2]!;
+        if (method === "GET" && getAfterPut) {
+          getAfterPut = false;
+          return new Response("server error", { status: 500 });
+        }
+        if (method === "GET") {
+          const doc = server.get(id);
+          if (!doc) return new Response(null, { status: 404 });
+          return new Response(
+            JSON.stringify({
+              kind: "workspace",
+              id,
+              projectId: doc.projectId,
+              payload: doc.payload,
+              updatedAt: doc.updatedAt,
+            }),
+            { status: 200, headers: { ETag: `"rev:${doc.rev}"` } },
+          );
+        }
+        if (method === "PUT") {
+          getAfterPut = true;
+          return new Response(
+            JSON.stringify({
+              kind: "workspace",
+              id,
+              projectId: UUID,
+              payload: dirtyWs,
+              updatedAt: 2000,
+            }),
+            { status: 200, headers: { ETag: '"rev:6"' } },
+          );
+        }
+        return new Response("nope", { status: 500 });
+      },
+    );
+
+    await adapter.loadWorkspace(UUID);
+
+    const stamp = await cache.getLiftStamp(UUID);
+    assert.ok(stamp, "stamp written after catchUp PUT");
+    assert.equal(stamp!.rev, 6, "rev from PUT");
+    assert.equal(stamp!.confirmed, false, "unconfirmed (GET failed)");
+
+    // Next save should carry rev 6 (from the stamp).
+    await adapter.saveWorkspace(UUID, makeWorkspace(3000));
+    await vi.advanceTimersByTimeAsync(REMOTE_DEBOUNCE_MS);
+
+    const puts = putCallsOf(fetchImpl);
+    const lastPut = puts[puts.length - 1]!;
+    const headers = new Headers(lastPut[1]!.headers);
+    assert.equal(headers.get("If-Match"), '"rev:6"', "next save carries rev 6");
+  });
+
+  it("catch-up that loses a race is recorded as a load conflict and pauses", async () => {
+    const { adapter, cache, server, fetchImpl, warns } = makeAdapters();
+    const dirtyWs = makeWorkspace(2000);
+    await cache.saveWorkspace(UUID, dirtyWs);
+    await cache.setLiftStamp(UUID, {
+      ownerId: "user-1",
+      rev: 5,
+      syncedUpdatedAt: 1000,
+      confirmed: true,
+    });
+    const cleanWs = makeWorkspace(1000);
+    server.set(UUID, {
+      payload: cleanWs,
+      rev: 5,
+      updatedAt: 1000,
+      projectId: UUID,
+    });
+
+    // GET returns rev 5 (server hasn't moved yet); PUT 409s because the
+    // server raced ahead to rev 7 between the GET and the PUT.
+    fetchImpl.mockImplementation(
+      async (url: string | URL | Request, init?: RequestInit) => {
+        const method = (init?.method ?? "GET").toUpperCase();
+        const match = /\/api\/tenants\/(.+)\/documents\/workspace\/(.+)/.exec(
+          String(url),
+        );
+        const id = match![2]!;
+        if (method === "GET") {
+          return new Response(
+            JSON.stringify({
+              kind: "workspace",
+              id,
+              projectId: UUID,
+              payload: cleanWs,
+              updatedAt: 1000,
+            }),
+            { status: 200, headers: { ETag: '"rev:5"' } },
+          );
+        }
+        if (method === "PUT") {
+          return new Response("conflict", {
+            status: 409,
+            headers: { ETag: '"rev:7"' },
+          });
+        }
+        if (method === "DELETE") return new Response(null, { status: 204 });
+        return new Response("nope", { status: 500 });
+      },
+    );
+
+    await adapter.loadWorkspace(UUID);
+
+    const rec = await cache.getConflicts();
+    assert.ok(rec);
+    assert.equal(rec.count, 1);
+    assert.equal(rec.last[0]!.where, "load");
+    assert.equal(rec.last[0]!.stampRev, 5);
+    assert.equal(rec.last[0]!.serverRev, 7);
+    assert.ok(
+      warns.some((w) => /catch-up PUT failed/.test(w)),
+      "warning logged",
+    );
+  });
+
   it("dirty cache, server moved: no PUT, no cache write, warning, next save sends nothing", async () => {
     const { adapter, cache, server, fetchImpl, warns } = makeAdapters();
     const oldWs = makeWorkspace(1000);
@@ -787,6 +967,13 @@ describe("CachedEditorWorkspaceAdapter AM2 conflict resolution", () => {
 
     assert.equal(putCallsOf(fetchImpl).length, 0, "no PUT on dirty+moved");
     assert.ok(warns.some((w) => /conflict/.test(w)));
+
+    // Item 10(b): conflict record with both revs.
+    const rec = await cache.getConflicts();
+    assert.ok(rec && rec.count === 1);
+    assert.equal(rec!.last[0]!.where, "load");
+    assert.equal(rec!.last[0]!.stampRev, 5);
+
     const after = await cache.loadWorkspace(UUID);
     assert.ok(after.success && after.value);
     assert.equal(after.value!.updatedAt, 3000, "local cache preserved");
@@ -826,6 +1013,94 @@ describe("CachedEditorWorkspaceAdapter AM2 conflict resolution", () => {
     await adapter.loadWorkspace(UUID);
     assert.ok(await cache.getLiftStamp(UUID), "stamp written");
     assert.equal(putCallsOf(fetchImpl).length, 0, "no PUT when payloads equal");
+  });
+});
+
+describe("CachedEditorWorkspaceAdapter Item 8: unconfirmed stamp", () => {
+  it("an unconfirmed stamp and a moved server: the browser copy is kept and a conflict is recorded", async () => {
+    const { adapter, cache, server, fetchImpl, warns } = makeAdapters();
+    const ws = makeWorkspace(1000);
+    await cache.saveWorkspace(UUID, ws);
+    await cache.setLiftStamp(UUID, {
+      ownerId: "user-1",
+      rev: 5,
+      syncedUpdatedAt: 1000,
+      confirmed: false,
+    });
+    server.set(UUID, {
+      payload: makeWorkspace(2000),
+      rev: 9,
+      updatedAt: 2000,
+      projectId: UUID,
+    });
+
+    await adapter.loadWorkspace(UUID);
+
+    const rec = await cache.getConflicts();
+    assert.ok(rec && rec.count === 1, "one conflict recorded");
+    assert.equal(rec!.last[0]!.where, "load");
+    assert.equal(rec!.last[0]!.stampRev, 5);
+    assert.equal(rec!.last[0]!.serverRev, 9);
+    assert.ok(warns.some((w) => /unconfirmed stamp/.test(w)));
+    assert.ok(warns.some((w) => /conflict/.test(w)));
+    // Browser copy preserved.
+    const after = await cache.loadWorkspace(UUID);
+    assert.ok(after.success && after.value);
+    assert.equal(after.value!.updatedAt, 1000);
+  });
+});
+
+describe("CachedEditorWorkspaceAdapter Item 9: deleted-elsewhere", () => {
+  it("a deleted-elsewhere with an own clean stamp does not lift", async () => {
+    const { adapter, cache, server, fetchImpl, warns } = makeAdapters();
+    const ws = makeWorkspace(1000);
+    await cache.saveWorkspace(UUID, ws);
+    await cache.setLiftStamp(UUID, {
+      ownerId: "user-1",
+      rev: 5,
+      syncedUpdatedAt: 1000,
+      confirmed: true,
+    });
+    // Server has no document (404).
+
+    await adapter.loadWorkspace(UUID);
+
+    assert.equal(
+      putCallsOf(fetchImpl).length,
+      0,
+      "no lift on deleted-elsewhere",
+    );
+    assert.ok(warns.some((w) => /deleted on another device/.test(w)));
+    const rec = await cache.getConflicts();
+    assert.ok(rec && rec.count === 1, "conflict recorded");
+    assert.equal(rec!.last[0]!.where, "deleted-elsewhere");
+    // Cache and stamp preserved.
+    const stamp = await cache.getLiftStamp(UUID);
+    assert.ok(stamp, "stamp preserved");
+    const after = await cache.loadWorkspace(UUID);
+    assert.ok(after.success && after.value);
+    assert.equal(after.value!.updatedAt, 1000, "browser copy preserved");
+  });
+
+  it("a deleted-elsewhere with a dirty cache lifts it", async () => {
+    const { adapter, cache, server, fetchImpl } = makeAdapters();
+    const dirtyWs = makeWorkspace(2000);
+    await cache.saveWorkspace(UUID, dirtyWs);
+    await cache.setLiftStamp(UUID, {
+      ownerId: "user-1",
+      rev: 5,
+      syncedUpdatedAt: 1000,
+      confirmed: true,
+    });
+    // Server has no document (404). Cache is dirty (2000 != 1000).
+
+    await adapter.loadWorkspace(UUID);
+
+    // Dirty cache → lift proceeds.
+    const puts = putCallsOf(fetchImpl);
+    assert.equal(puts.length, 1, "one PUT to lift");
+    const headers = new Headers(puts[0]![1]!.headers);
+    assert.equal(headers.get("If-None-Match"), "*", "createOnly lift");
   });
 });
 
@@ -1124,13 +1399,13 @@ describe("CachedEditorWorkspaceAdapter Item 6: pause + timer", () => {
   it("a timer armed under the personal tenant sends nothing after a switch to an organisation", async () => {
     const server = new Map<string, ServerDoc>();
     const calls: string[] = [];
-    const fetchImpl = makeServerFetch(server);
+    const fetchImpl = makeServerFetch(server, new Set([UUID]));
     // Override to track calls.
     fetchImpl.mockImplementation(
       async (url: string | URL | Request, init?: RequestInit) => {
         const method = (init?.method ?? "GET").toUpperCase();
         calls.push(method);
-        return makeServerFetch(server)(url, init);
+        return makeServerFetch(server, new Set([UUID]))(url, init);
       },
     );
 
@@ -1232,7 +1507,7 @@ describe("CachedEditorWorkspaceAdapter Item 6: pause + timer", () => {
       updatedAt: 3000,
       projectId: UUID,
     });
-    fetchImpl.mockImplementation(makeServerFetch(server));
+    fetchImpl.mockImplementation(makeServerFetch(server, new Set([UUID])));
 
     // Next load: dirty (3000 != 1000) + not moved? Server rev 9 != stamp rev 5 → moved → CONFLICT.
     // Hmm, need server rev == stamp rev for catchUp.
@@ -1321,6 +1596,57 @@ describe("CachedEditorWorkspaceAdapter Item 7/8: cache staleness", () => {
     const after = await cache.loadWorkspace(UUID);
     assert.ok(after.success && after.value);
     assert.equal(after.value!.updatedAt, 2000, "newer save preserved");
+  });
+});
+
+describe("CachedEditorWorkspaceAdapter Item 1: no self-conflict", () => {
+  it("two saves do not self-conflict: the second carries the rev the first returned", async () => {
+    const { adapter, cache, server, fetchImpl, warns } = makeAdapters();
+    const ws = makeWorkspace(1000);
+    await cache.saveWorkspace(UUID, ws);
+    server.set(UUID, { payload: ws, rev: 1, updatedAt: 1000, projectId: UUID });
+
+    await adapter.loadWorkspace(UUID);
+
+    await adapter.saveWorkspace(UUID, makeWorkspace(2000));
+    await vi.advanceTimersByTimeAsync(REMOTE_DEBOUNCE_MS);
+
+    await adapter.saveWorkspace(UUID, makeWorkspace(3000));
+    await vi.advanceTimersByTimeAsync(REMOTE_DEBOUNCE_MS);
+
+    const puts = putCallsOf(fetchImpl);
+    assert.equal(puts.length, 2, "two PUTs");
+    const h2 = new Headers(puts[1]![1]!.headers);
+    assert.equal(
+      h2.get("If-Match"),
+      '"rev:2"',
+      "second PUT carries rev from first",
+    );
+    assert.equal(warns.length, 0, "no warnings");
+    const rec = await cache.getConflicts();
+    assert.equal(rec?.count ?? 0, 0, "zero conflict records");
+  });
+
+  it("two saves from no stamp: first is createOnly, second carries the returned rev", async () => {
+    const { adapter, cache, fetchImpl, warns } = makeAdapters();
+    // No cache entry → load gets 404 → firstWriteAfter404 set, no lift.
+    await adapter.loadWorkspace(UUID);
+
+    await adapter.saveWorkspace(UUID, makeWorkspace(2000));
+    await vi.advanceTimersByTimeAsync(REMOTE_DEBOUNCE_MS);
+
+    await adapter.saveWorkspace(UUID, makeWorkspace(3000));
+    await vi.advanceTimersByTimeAsync(REMOTE_DEBOUNCE_MS);
+
+    const puts = putCallsOf(fetchImpl);
+    assert.equal(puts.length, 2, "two PUTs");
+    const h1 = new Headers(puts[0]![1]!.headers);
+    assert.equal(h1.get("If-None-Match"), "*", "first PUT is createOnly");
+    const h2 = new Headers(puts[1]![1]!.headers);
+    assert.equal(h2.get("If-Match"), '"rev:1"', "second PUT carries rev");
+    assert.equal(warns.length, 0, "no warnings");
+    const rec = await cache.getConflicts();
+    assert.equal(rec?.count ?? 0, 0, "zero conflict records");
   });
 });
 
@@ -1439,13 +1765,32 @@ describe("CachedEditorWorkspaceAdapter Item 11: first write", () => {
     assert.ok(
       warns.some((w) => /created elsewhere before the first save/.test(w)),
     );
+    // Item 10(c): conflict record + browser copy preserved + id paused.
+    const rec = await cache.getConflicts();
+    assert.ok(rec && rec.count === 1);
+    assert.equal(rec!.last[0]!.where, "first-save");
+    assert.equal(rec!.last[0]!.stampRev, null);
+
     assert.equal(
       putCallsOf(fetchImpl).length,
       1,
       "one PUT (the createOnly that got 412)",
     );
+    // Browser copy byte-identical (save wrote to cache, but server unchanged).
+    const after = await cache.loadWorkspace(UUID);
+    assert.ok(after.success && after.value);
     // Server keeps the other device's value.
     assert.equal(server.get(UUID)!.rev, 1);
+
+    // A following save sends nothing (paused).
+    const beforePuts = putCallsOf(fetchImpl).length;
+    await adapter.saveWorkspace(UUID, makeWorkspace(3000));
+    await vi.advanceTimersByTimeAsync(REMOTE_DEBOUNCE_MS);
+    assert.equal(
+      putCallsOf(fetchImpl).length,
+      beforePuts,
+      "no PUT while paused",
+    );
   });
 });
 
@@ -1477,6 +1822,11 @@ describe("CachedEditorWorkspaceAdapter Item 14: clearWorkspace", () => {
         /server copy changed on another device, not deleted/.test(w),
       ),
     );
+    // Item 10(b): conflict record for the discard's 412.
+    const rec = await cache.getConflicts();
+    assert.ok(rec && rec.count === 1);
+    assert.equal(rec!.last[0]!.where, "discard");
+    assert.equal(rec!.last[0]!.stampRev, 5);
     assert.equal(server.has(UUID), true, "server copy preserved");
     assert.equal(await cache.getLiftStamp(UUID), null, "stamp removed");
     const cacheAfter = await cache.loadWorkspace(UUID);
@@ -1752,8 +2102,38 @@ describe("CachedEditorWorkspaceAdapter conflict recording (Item 4)", () => {
     assert.equal(rec.last[19]!.id, "id-24", "newest kept");
   });
 
-  it("a failed record write does not fail load or save", async () => {
-    const { adapter, cache, server } = makeAdapters();
+  it("a failed record write does not fail load (dirty + moved conflict)", async () => {
+    const { adapter, cache, server, warns } = makeAdapters();
+    const dirtyWs = makeWorkspace(2000);
+    await cache.saveWorkspace(UUID, dirtyWs);
+    await cache.setLiftStamp(UUID, {
+      ownerId: "user-1",
+      rev: 5,
+      syncedUpdatedAt: 1000,
+      confirmed: true,
+    });
+    server.set(UUID, {
+      payload: makeWorkspace(1000),
+      rev: 9,
+      updatedAt: 2000,
+      projectId: UUID,
+    });
+
+    // Cache is dirty (2000 != 1000) and server moved (9 != 5) → load conflict.
+    vi.spyOn(cache, "recordConflict").mockImplementationOnce(async () => {
+      throw new Error("storage error");
+    });
+
+    const result = await adapter.loadWorkspace(UUID);
+    assert.ok(
+      result.success && result.value,
+      "load succeeds even if record write fails",
+    );
+    assert.ok(warns.some((w) => /conflict/.test(w)));
+  });
+
+  it("a failed record write does not fail save (409 conflict)", async () => {
+    const { adapter, cache, server, fetchImpl, warns } = makeAdapters();
     await cache.saveWorkspace(UUID, makeWorkspace(1000));
     await cache.setLiftStamp(UUID, {
       ownerId: "user-1",
@@ -1768,15 +2148,47 @@ describe("CachedEditorWorkspaceAdapter conflict recording (Item 4)", () => {
       projectId: UUID,
     });
 
-    // Make recordConflict throw — load/save must still succeed.
+    await adapter.loadWorkspace(UUID);
+
+    server.set(UUID, {
+      payload: makeWorkspace(1000),
+      rev: 9,
+      updatedAt: 1000,
+      projectId: UUID,
+    });
+    fetchImpl.mockImplementation(
+      async (url: string | URL | Request, init?: RequestInit) => {
+        const method = (init?.method ?? "GET").toUpperCase();
+        const match = /\/api\/tenants\/(.+)\/documents\/workspace\/(.+)/.exec(
+          String(url),
+        );
+        const id = match![2]!;
+        if (method === "GET") {
+          const doc = server.get(id);
+          if (!doc) return new Response(null, { status: 404 });
+          return new Response(
+            JSON.stringify({
+              kind: "workspace",
+              id,
+              projectId: doc.projectId,
+              payload: doc.payload,
+              updatedAt: doc.updatedAt,
+            }),
+            { status: 200, headers: { ETag: `"rev:${doc.rev}"` } },
+          );
+        }
+        if (method === "PUT") return new Response("conflict", { status: 409 });
+        if (method === "DELETE") return new Response(null, { status: 204 });
+        return new Response("nope", { status: 500 });
+      },
+    );
+
     vi.spyOn(cache, "recordConflict").mockImplementationOnce(async () => {
       throw new Error("storage error");
     });
 
-    const result = await adapter.loadWorkspace(UUID);
-    assert.ok(
-      result.success && result.value,
-      "load succeeds even if record write fails",
-    );
+    const saveResult = await adapter.saveWorkspace(UUID, makeWorkspace(2000));
+    assert.ok(saveResult.success, "save succeeds even if record write fails");
+    await vi.advanceTimersByTimeAsync(REMOTE_DEBOUNCE_MS);
   });
 });

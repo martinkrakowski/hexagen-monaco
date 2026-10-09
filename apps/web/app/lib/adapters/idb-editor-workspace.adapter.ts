@@ -10,7 +10,13 @@ const WORKSPACE_KEY_PREFIX = "hexagen:workspace:";
 const LIFT_STAMP_KEY = "hexagen:workspace-lift";
 const CONFLICTS_KEY = "hexagen:workspace-conflicts";
 
-export type ConflictWhere = "load" | "save" | "lift" | "first-save" | "discard";
+export type ConflictWhere =
+  | "load"
+  | "save"
+  | "lift"
+  | "first-save"
+  | "discard"
+  | "deleted-elsewhere";
 
 export interface ConflictEntry {
   id: string;

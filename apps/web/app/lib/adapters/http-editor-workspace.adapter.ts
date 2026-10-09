@@ -366,6 +366,16 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
   private readonly epochs = new Map<string, number>();
   /** Per-id in-flight remote write, so two PUTs can't self-conflict. */
   private readonly inFlight = new Map<string, Promise<void>>();
+  /**
+   * The precondition this tab armed for the pending or in-flight write. When a
+   * write succeeds, a still-pending write that holds the SAME precondition is
+   * rebased to { ifMatch: result.rev } so the next PUT carries the rev the
+   * first one established (Item 1).
+   */
+  private readonly pendingPreconditions = new Map<
+    string,
+    { ifMatch: number } | { createOnly: true }
+  >();
 
   constructor(
     private readonly cache: EditorWorkspaceCachePort,
@@ -404,6 +414,7 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
       clearTimeout(existing);
       this.writeTimers.delete(sessionId);
     }
+    this.pendingPreconditions.delete(sessionId);
   }
 
   private async cacheStaleSince(
@@ -504,6 +515,21 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
       return cacheResult;
     }
     if (!dirty && moved) {
+      // Item 8: unconfirmed stamp + moved server → treat as conflict.
+      if (!stamp.confirmed) {
+        this.cancelWriteTimer(sessionId);
+        await this.recordConflictEntry(
+          sessionId,
+          "load",
+          stamp.rev,
+          readResult.rev,
+        );
+        this.logger.warn(
+          `workspace ${sessionId} conflict: unconfirmed stamp, server moved (cache rev=${stamp.rev}, server rev=${readResult.rev})`,
+        );
+        this.pausedIds.add(sessionId);
+        return cacheResult;
+      }
       if (await this.cacheStaleSince(sessionId, cacheResult)) {
         return this.cache.loadWorkspace(sessionId);
       }
@@ -541,6 +567,16 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
     }
   }
 
+  /** Item 1: compare two preconditions for equality. */
+  private preconditionMatches(
+    a: { ifMatch: number } | { createOnly: true },
+    b: { ifMatch: number } | { createOnly: true },
+  ): boolean {
+    if ("createOnly" in a) return "createOnly" in b;
+    if ("createOnly" in b) return false;
+    return a.ifMatch === b.ifMatch;
+  }
+
   private async recordConflictEntry(
     sessionId: string,
     where: ConflictWhere,
@@ -574,6 +610,22 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
     // Foreign stamp: do not lift.
     if (stamp !== null && stamp.ownerId !== userId) {
       return cacheResult;
+    }
+    // Item 9: own stamp + clean cache → deleted elsewhere, keep browser copy.
+    if (stamp !== null && stamp.ownerId === userId && stamp.confirmed) {
+      if (cacheEntry.updatedAt === stamp.syncedUpdatedAt) {
+        this.logger.warn(
+          `workspace ${sessionId}: deleted on another device; kept in this browser, not uploaded again`,
+        );
+        await this.recordConflictEntry(
+          sessionId,
+          "deleted-elsewhere",
+          stamp.rev,
+          null,
+        );
+        this.pausedIds.add(sessionId);
+        return cacheResult;
+      }
     }
 
     // LIFT: create-only PUT with the cache value.
@@ -658,11 +710,27 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
       { ifMatch: stamp.rev },
     );
     if (!putResult.ok) {
+      // Item 7(a): a 409/412 from catchUp's PUT is a conflict like the others.
       this.logger.warn(
         `workspace ${sessionId} catch-up PUT failed: ${putResult.message}`,
       );
+      await this.recordConflictEntry(
+        sessionId,
+        "load",
+        stamp.rev,
+        putResult.reason === "conflict" ? (putResult.serverRev ?? null) : null,
+      );
+      this.pausedIds.add(sessionId);
+      this.cancelWriteTimer(sessionId);
       return { success: true, value: cacheEntry };
     }
+    // Item 7(b): stamp unconfirmed after PUT, before confirming GET.
+    await this.tryStamp(sessionId, {
+      ownerId: userId,
+      rev: putResult.rev,
+      syncedUpdatedAt: cacheEntry.updatedAt,
+      confirmed: false,
+    });
     const confirmResult = await this.remote.read(userId, sessionId);
     if (!confirmResult.ok) {
       this.logger.warn(`workspace ${sessionId} catch-up confirm failed`);
@@ -730,12 +798,16 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
     // Item 3: capture the precondition at schedule time.
     const precondition: { ifMatch: number } | { createOnly: true } =
       stamp !== null ? { ifMatch: stamp.rev } : { createOnly: true };
+    this.pendingPreconditions.set(sessionId, precondition);
     const existing = this.writeTimers.get(sessionId);
     if (existing) clearTimeout(existing);
     this.writeTimers.set(
       sessionId,
       setTimeout(() => {
-        void this.doRemoteWrite(sessionId, workspace, userId, precondition);
+        const pending = this.pendingPreconditions.get(sessionId);
+        if (pending) {
+          void this.doRemoteWrite(sessionId, workspace, userId, pending);
+        }
       }, REMOTE_DEBOUNCE_MS),
     );
 
@@ -753,11 +825,9 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
     // Item 6: nothing if paused, org switched in, or epoch changed.
     if (this.pausedIds.has(sessionId)) return;
     if (this.tenantIdSource() !== null) return;
-    const epoch = this.epochs.get(sessionId) ?? 0;
-    if (epoch !== (this.epochs.get(sessionId) ?? 0)) return; // epoch captured below
-
+    const epochNow = this.epochs.get(sessionId) ?? 0;
     this.writeTimers.delete(sessionId);
-    const epochAtStart = this.epochs.get(sessionId) ?? 0;
+    const epochAtStart = epochNow;
 
     const prev = this.inFlight.get(sessionId) ?? Promise.resolve();
     const current = prev.then(async () => {
@@ -837,6 +907,15 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
       }
 
       this.firstWriteAfter404.delete(sessionId);
+
+      // Item 3/6: if a discard bumped the epoch, delete the copy but don't
+      // write a stamp (the discard cleared the cache+stamp already).
+      if (epochAtStart !== (this.epochs.get(sessionId) ?? 0)) {
+        await this.remote.delete(userId, sessionId, result.rev);
+        this.pendingPreconditions.delete(sessionId);
+        return;
+      }
+
       const prevStamp = await this.cache.getLiftStamp(sessionId);
       await this.tryStamp(sessionId, {
         ownerId: userId,
@@ -845,10 +924,11 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
         confirmed: prevStamp?.confirmed ?? false,
       });
 
-      // Item 12: if the epoch changed during this write, delete the copy
-      // (a clear happened while the PUT was in flight).
-      if (epochAtStart !== (this.epochs.get(sessionId) ?? 0)) {
-        await this.remote.delete(userId, sessionId, result.rev);
+      // Item 1: rebase any pending write that still holds the precondition
+      // this PUT used, so the next send carries the rev just confirmed.
+      const pending = this.pendingPreconditions.get(sessionId);
+      if (pending && this.preconditionMatches(pending, precondition)) {
+        this.pendingPreconditions.set(sessionId, { ifMatch: result.rev });
       }
     } finally {
       this.inFlight.delete(sessionId);
@@ -860,12 +940,12 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
   ): Promise<Result<void, PersistenceError>> {
     // Item 12: increment epoch before anything else.
     this.epochs.set(sessionId, (this.epochs.get(sessionId) ?? 0) + 1);
-    // Item 13: await any in-flight write for this id.
-    const inFlight = this.inFlight.get(sessionId);
-    if (inFlight) await inFlight.catch(() => {});
-
+    // Item 6: cancel the timer BEFORE awaiting the in-flight write so a
+    // deferred timer cannot fire during the wait and re-create the document.
     this.cancelWriteTimer(sessionId);
     this.firstWriteAfter404.delete(sessionId);
+    const inFlight = this.inFlight.get(sessionId);
+    if (inFlight) await inFlight.catch(() => {});
 
     // AM1: org tenant → cache only.
     if (this.tenantIdSource() !== null) {
