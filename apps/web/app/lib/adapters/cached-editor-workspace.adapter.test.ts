@@ -2553,6 +2553,44 @@ describe("CachedEditorWorkspaceAdapter Item 1: save after a failed discard", () 
     assert.equal(stamp!.confirmed, true, "stamp is a normal confirmed one");
   });
 
+  it("T4 after a load resolves a marker with nothing in the cache, the next save creates the server copy", async () => {
+    const { adapter, cache, server, fetchImpl } = makeAdapters();
+    const ws = makeWorkspace(1000);
+    await cache.saveWorkspace(UUID, ws);
+    await cache.setLiftStamp(UUID, {
+      ownerId: "user-1",
+      rev: 5,
+      syncedUpdatedAt: 1000,
+      confirmed: true,
+    });
+    server.set(UUID, { payload: ws, rev: 5, updatedAt: 1000, projectId: UUID });
+    const serverFetch = fetchImpl.getMockImplementation()!;
+
+    // Discard whose DELETE fails → marker on rev 5, cache cleared.
+    fetchImpl.mockImplementation(
+      async () => new Response("nope", { status: 500 }),
+    );
+    await adapter.clearWorkspace(UUID);
+    const mark = await cache.getLiftStamp(UUID);
+    assert.ok(mark && mark.discarded, "discard marker written");
+
+    // Load: the DELETE now succeeds; nothing in the cache, so the load is empty.
+    fetchImpl.mockImplementation(serverFetch);
+    const result = await adapter.loadWorkspace(UUID);
+    assert.equal(result.success && result.value, null);
+    assert.equal(await cache.getLiftStamp(UUID), null, "marker dropped");
+    assert.equal(server.has(UUID), false, "server copy deleted");
+
+    // A save after that load must reach the server, as after any empty load.
+    await adapter.saveWorkspace(UUID, makeWorkspace(2000));
+    await vi.advanceTimersByTimeAsync(REMOTE_DEBOUNCE_MS);
+    const putCalls = putCallsOf(fetchImpl);
+    assert.equal(putCalls.length, 1, "the save is sent");
+    const putHeaders = new Headers((putCalls[0]![1] as RequestInit).headers);
+    assert.equal(putHeaders.get("If-None-Match"), "*", "PUT is create-only");
+    assert.equal(server.has(UUID), true, "server has the new copy");
+  });
+
   it("T3 a load whose marker-DELETE fails again keeps the marker and returns the new cache entry without a PUT", async () => {
     const { adapter, cache, server, fetchImpl } = makeAdapters();
     const ws = makeWorkspace(1000);
