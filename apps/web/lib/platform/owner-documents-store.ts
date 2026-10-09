@@ -149,7 +149,7 @@ export function deleteDocumentsOfMember(
   ownerId: string,
   userId: string,
 ): Promise<number> {
-  // A3-00: deliberately does NOT touch owner_document_revs. A removed member
+  // Deliberately does NOT touch owner_document_revs. A removed member
   // who is re-added, or a document under a re-created project, must not restart.
   return session
     .run("DELETE FROM owner_documents WHERE owner_id = ? AND user_id = ?", [
@@ -163,7 +163,7 @@ export function deleteDocumentsOfOwner(
   session: PlatformDbSession,
   ownerId: string,
 ): Promise<number> {
-  // A3-00: deliberately does NOT touch owner_document_revs. An org delete (and
+  // Deliberately does NOT touch owner_document_revs. An org delete (and
   // the project cascade that follows it) must not restart a member's revs.
   return session
     .run("DELETE FROM owner_documents WHERE owner_id = ?", [ownerId])
@@ -352,7 +352,7 @@ export function createOwnerDocumentsStore(
     SELECT 1 AS ok FROM saved_projects
      WHERE owner_id = ? AND id = ?
   `;
-  // A3-00: the per-author-per-tenant rev high-water mark. The counter is read
+  // Per-author-per-tenant rev high-water mark. The counter is read
   // with `counterRead` (on `tx`, one row) before the write, and the write takes
   // its rev from that read plus `bumpOwnerDocumentRev` raises it on the same tx.
   // Both the read and the raise happen on `tx` in the same callback, so two
@@ -403,7 +403,7 @@ export function createOwnerDocumentsStore(
        DELETE FROM owner_documents
         WHERE owner_id = ? AND user_id = ? AND kind = ? AND id = ? AND rev = ?
     `;
-  // A3-00: raise the per-author counter to the rev a write produced, on the same
+  // Raise the per-author counter to the rev a write produced, on the same
   // tx as the write that produced it. The read (counterRead above) and this
   // write of the counter row are both in the transaction, so two writers of
   // different keys in one tenant collide on this row and one is retried on PG.
@@ -432,7 +432,7 @@ export function createOwnerDocumentsStore(
    * way — the cap only bounds audit volume, not the error returned to the
    * caller.
    *
-   * A3-00: the row's `detail` says what was refused, in the route layer's
+   * The row's `detail` says what was refused, in the route layer's
    * vocabulary: the HTTP method ("PUT"/"DELETE"), the rev the client sent
    * ("*" when no If-Match was sent, e.g. a refused createOnly), and the
    * document's current rev.
@@ -466,7 +466,7 @@ export function createOwnerDocumentsStore(
   }
 
   /**
-   * A3-00: raises this author's per-tenant counter to `rev`, in the same tx as
+   * Raises this author's per-tenant counter to `rev`, in the same tx as
    * the write that produced it. Called only when a write produced a row; refused
    * writes and conditional deletes do not touch the counter (a removed member, a
    * member's removal, an org delete, or the project cascade must not restart it).
@@ -668,7 +668,7 @@ export function createOwnerDocumentsStore(
               // The insert saw a conflicting row that this transaction's
               // snapshot cannot see; not reachable on SQLite; on Postgres under
               // SERIALIZABLE the seam retries a serialization failure before
-              // this could be observed; pinned by the Postgres store tests (B2b-2).
+              // this could be observed; pinned by the Postgres store tests.
               const audited = await recordRefusal(
                 tx,
                 kind,

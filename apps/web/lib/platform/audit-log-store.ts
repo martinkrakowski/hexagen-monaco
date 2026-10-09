@@ -49,7 +49,7 @@ export interface AuditEntry {
   granteeType?: string | null;
   granteeId?: string | null;
   /**
-   * A3-00: structured what-was-refused, JSON-encoded by appendAudit. Present
+   * Structured what-was-refused, JSON-encoded by appendAudit. Present
    * only on rows a store writes for a refused precondition; NULL on every row
    * written before this column existed and on every non-refusal row.
    */

@@ -281,7 +281,7 @@ export function openPlatformDb(dbPath: string): Database.Database {
     CREATE INDEX IF NOT EXISTS idx_owner_documents_project
       ON owner_documents (owner_id, project_id);
 
-    -- A3-00: per-author-per-tenant rev high-water mark. NO foreign key (so the
+    -- Per-author-per-tenant rev high-water mark. NO foreign key (so the
     -- saved_projects ON DELETE CASCADE cannot touch it — the reported bug returns
     -- through the cascade). The counter is moved only by document writes that go
     -- through the store, so deletes, member removal, org deletion and the
@@ -487,7 +487,7 @@ function migrateOrgInvitesExpiry(db: Database.Database): void {
 }
 
 /**
- * A3-00: `audit_log.detail`, nullable JSON text.
+ * `audit_log.detail`, nullable JSON text.
  *
  * Fresh files receive `detail TEXT` in the CREATE TABLE above. Old files get it
  * by ALTER: a column-presence guard makes the add a no-op once present, so it is
@@ -500,7 +500,7 @@ function migrateAuditLogDetail(db: Database.Database): void {
 }
 
 /**
- * A3-00: `owner_document_revs`, backfilled from existing document revs.
+ * `owner_document_revs`, backfilled from existing document revs.
  *
  * The table is created in the big exec (IF NOT EXISTS), so it always exists by
  * the time this helper runs. The backfill is keyed on DATA state and runs on
