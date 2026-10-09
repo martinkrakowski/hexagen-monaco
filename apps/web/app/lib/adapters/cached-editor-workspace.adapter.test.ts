@@ -1931,21 +1931,19 @@ describe("CachedEditorWorkspaceAdapter Item 1: no self-conflict", () => {
     await adapter.loadWorkspace(UUID);
 
     let resolvePut!: (v: Response) => void;
-    fetchImpl.mockImplementationOnce(
-      async (url: string | URL | Request) => {
-        return new Promise((resolve) => {
-          resolvePut = (r) => {
-            const id = /\/workspace\/(.+)/.exec(String(url))![1]!;
-            const doc = server.get(id);
-            if (doc) {
-              doc.rev = 2;
-              doc.updatedAt = Date.now();
-            }
-            resolve(r);
-          };
-        });
-      },
-    );
+    fetchImpl.mockImplementationOnce(async (url: string | URL | Request) => {
+      return new Promise((resolve) => {
+        resolvePut = (r) => {
+          const id = /\/workspace\/(.+)/.exec(String(url))![1]!;
+          const doc = server.get(id);
+          if (doc) {
+            doc.rev = 2;
+            doc.updatedAt = Date.now();
+          }
+          resolve(r);
+        };
+      });
+    });
 
     await adapter.saveWorkspace(UUID, makeWorkspace(2000));
     vi.advanceTimersByTime(REMOTE_DEBOUNCE_MS);
@@ -1971,7 +1969,11 @@ describe("CachedEditorWorkspaceAdapter Item 1: no self-conflict", () => {
     await vi.advanceTimersByTimeAsync(0);
 
     const put2Headers = new Headers(putCallsOf(fetchImpl)[1]![1]!.headers);
-    assert.equal(put2Headers.get("If-Match"), '"rev:2"', "second PUT carries the new rev");
+    assert.equal(
+      put2Headers.get("If-Match"),
+      '"rev:2"',
+      "second PUT carries the new rev",
+    );
     assert.equal(warns.length, 0, "no warnings");
     const rec = await cache.getConflicts();
     assert.equal(rec?.count ?? 0, 0, "zero conflict records");
@@ -2224,25 +2226,23 @@ describe("CachedEditorWorkspaceAdapter Item 14: clearWorkspace", () => {
 
     let resolvePut!: (v: Response) => void;
     let resolveGetDelay!: () => void;
-    fetchImpl.mockImplementationOnce(
-      async (url: string | URL | Request) => {
-        return new Promise((resolve) => {
-          resolvePut = (r) => {
-            idb.getDelay = () =>
-              new Promise<void>((resolve) => {
-                resolveGetDelay = resolve;
-              });
-            const id = /\/workspace\/(.+)/.exec(String(url))![1]!;
-            const doc = server.get(id);
-            if (doc) {
-              doc.rev = 6;
-              doc.updatedAt = Date.now();
-            }
-            resolve(r);
-          };
-        });
-      },
-    );
+    fetchImpl.mockImplementationOnce(async (url: string | URL | Request) => {
+      return new Promise((resolve) => {
+        resolvePut = (r) => {
+          idb.getDelay = () =>
+            new Promise<void>((resolve) => {
+              resolveGetDelay = resolve;
+            });
+          const id = /\/workspace\/(.+)/.exec(String(url))![1]!;
+          const doc = server.get(id);
+          if (doc) {
+            doc.rev = 6;
+            doc.updatedAt = Date.now();
+          }
+          resolve(r);
+        };
+      });
+    });
 
     await adapter.saveWorkspace(UUID, makeWorkspace(2000));
     vi.advanceTimersByTime(REMOTE_DEBOUNCE_MS);
@@ -3222,11 +3222,7 @@ describe("CachedEditorWorkspaceAdapter Item 2: discard + timer", () => {
     assert.equal(warns.length, 0, "no warnings");
     const rec = await cache.getConflicts();
     assert.equal(rec?.count ?? 0, 0, "zero conflict records");
-    assert.equal(
-      adapter["pausedIds"].has(UUID),
-      false,
-      "id not paused",
-    );
+    assert.equal(adapter["pausedIds"].has(UUID), false, "id not paused");
   });
 });
 
