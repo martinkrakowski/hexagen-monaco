@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, it, vi } from "vitest";
 import assert from "node:assert/strict";
 import { mkdtempSync } from "node:fs";
@@ -6,10 +7,23 @@ import { join } from "node:path";
 
 import { openPlatformDb, ORG_INVITE_TTL_DAYS } from "../platform-db";
 import { createSqlitePlatformDb } from "../sqlite-db";
-import type { PlatformDbSession } from "../db";
-import { createOrgsRepository, LastOwnerError } from "../orgs-store";
-import { createTeamsRepository } from "../teams-store";
-import { createAuditLogRepository } from "../audit-log-store";
+import type { PlatformDb, PlatformDbSession } from "../db";
+import {
+  createOrgsRepository,
+  LastOwnerError,
+  type OrgsRepository,
+} from "../orgs-store";
+import {
+  BACKENDS,
+  openBackend,
+  failOnSql,
+} from "../../../test-support/platform-backends";
+import type { Backend } from "../../../test-support/platform-backends";
+
+function defined<T>(v: T | undefined | null, what: string): T {
+  if (v === undefined || v === null) throw new Error("expected " + what);
+  return v;
+}
 
 function fixture() {
   const path = join(
@@ -22,118 +36,108 @@ function fixture() {
     db,
     platformDb,
     orgs: createOrgsRepository(platformDb),
-    teams: createTeamsRepository(platformDb),
-    audit: createAuditLogRepository(platformDb),
   };
 }
 
 type Fx = ReturnType<typeof fixture>;
 
-const seedOrg = (fx: Fx, id = "org-acme") =>
-  fx.orgs.createOrg({
+const seedOrg = (orgs: OrgsRepository, id = "org-acme") =>
+  orgs.createOrg({
     id,
     slug: id,
     name: "Acme",
     createdBy: "founder",
   });
 
-const countTeamRows = (db: Fx["db"], userId: string) =>
-  (
-    db
-      .prepare("SELECT COUNT(*) AS n FROM team_members WHERE user_id = ?")
-      .get(userId) as { n: number }
+const countTeamRows = async (db: PlatformDb, userId: string) =>
+  defined(
+    await db.get<{ n: number }>(
+      "SELECT COUNT(*) AS n FROM team_members WHERE user_id = ?",
+      [userId],
+    ),
+    "team rows",
   ).n;
 
-/**
- * Backdates an invite's expiry by writing the column directly.
- *
- * The store has no "expire this now" method and should not: the only way an
- * invite expires in production is the clock passing `expires_at`, so the test
- * moves the deadline rather than the clock. Writing the column is honest about
- * what it is simulating.
- */
-const backdate = (db: Fx["db"], orgId: string, login: string) =>
-  db
-    .prepare(
-      "UPDATE org_invites SET expires_at = ? WHERE org_id = ? AND github_login = ?",
-    )
-    .run(new Date(Date.now() - 1000).toISOString(), orgId, login);
+const backdate = async (db: PlatformDb, orgId: string, login: string) =>
+  await db.run(
+    "UPDATE org_invites SET expires_at = ? WHERE org_id = ? AND github_login = ?",
+    [new Date(Date.now() - 1000).toISOString(), orgId, login],
+  );
 
-describe("H1.2 — org membership invariants", () => {
+describe.each(BACKENDS)("H1.2 — org membership invariants (%s", (kind) => {
   it("an org can never lose its last owner: removal and demotion both refuse", async () => {
-    // The unrecoverable one. An org with zero owners can never again pass
-    // `requireOwnerRole`, so no route can add a member, invite anyone, or
-    // delete it — and there is no way back in through the API.
-    const fx = fixture();
+    const backend = await openBackend(kind);
     try {
-      await seedOrg(fx);
-      await fx.orgs.addMember("org-acme", "founder", "owner");
+      const orgs = backend.store.orgs;
+      await seedOrg(orgs);
+      await orgs.addMember("org-acme", "founder", "owner");
 
       await assert.rejects(
-        () => fx.orgs.removeMember("org-acme", "founder"),
+        () => orgs.removeMember("org-acme", "founder"),
         LastOwnerError,
       );
       await assert.rejects(
-        () => fx.orgs.addMember("org-acme", "founder", "member"),
+        () => orgs.addMember("org-acme", "founder", "member"),
         LastOwnerError,
       );
 
       // Non-vacuity: the refusals left the membership exactly as it was, so
       // they are refusals rather than a partially applied mutation.
-      assert.equal(await fx.orgs.memberRole("org-acme", "founder"), "owner");
+      assert.equal(await orgs.memberRole("org-acme", "founder"), "owner");
     } finally {
-      fx.db.close();
+      await backend.close();
     }
   });
 
   it("with a SECOND owner present, the same two calls succeed", async () => {
-    // Without this, the test above passes just as well against a store that
-    // refuses every removal and every demotion.
-    const fx = fixture();
+    const backend = await openBackend(kind);
     try {
-      await seedOrg(fx);
-      await fx.orgs.addMember("org-acme", "founder", "owner");
-      await fx.orgs.addMember("org-acme", "second", "owner");
-      await fx.orgs.addMember("org-acme", "third", "owner");
+      const orgs = backend.store.orgs;
+      await seedOrg(orgs);
+      await orgs.addMember("org-acme", "founder", "owner");
+      await orgs.addMember("org-acme", "second", "owner");
+      await orgs.addMember("org-acme", "third", "owner");
 
       // Three owners, so the demotion leaves two and the removal leaves one:
       // each call is the same call the previous test rejected, differing only
       // in whether another owner remains.
-      await fx.orgs.addMember("org-acme", "founder", "member");
-      assert.equal(await fx.orgs.memberRole("org-acme", "founder"), "member");
+      await orgs.addMember("org-acme", "founder", "member");
+      assert.equal(await orgs.memberRole("org-acme", "founder"), "member");
 
-      await fx.orgs.removeMember("org-acme", "second");
-      assert.equal(await fx.orgs.memberRole("org-acme", "second"), null);
-      assert.equal(await fx.orgs.memberRole("org-acme", "third"), "owner");
+      await orgs.removeMember("org-acme", "second");
+      assert.equal(await orgs.memberRole("org-acme", "second"), null);
+      assert.equal(await orgs.memberRole("org-acme", "third"), "owner");
     } finally {
-      fx.db.close();
+      await backend.close();
     }
   });
 
   it("removing a member clears their team rows in the SAME transaction", async () => {
-    const fx = fixture();
+    const backend = await openBackend(kind);
     try {
-      await seedOrg(fx);
-      await fx.orgs.addMember("org-acme", "founder", "owner");
-      await fx.orgs.addMember("org-acme", "dev-1", "member");
-      const team = await fx.teams.createTeam({
+      const orgs = backend.store.orgs;
+      const teams = backend.store.teams;
+      await seedOrg(orgs);
+      await orgs.addMember("org-acme", "founder", "owner");
+      await orgs.addMember("org-acme", "dev-1", "member");
+      const team = await teams.createTeam({
         orgId: "org-acme",
         slug: "platform",
         name: "Platform",
         createdBy: "founder",
       });
-      await fx.teams.addMember(team.id, "dev-1");
-      assert.equal(countTeamRows(fx.db, "dev-1"), 1);
+      await teams.addMember(team.id, "dev-1", { actorId: "founder" });
+      assert.equal(await countTeamRows(backend.db, "dev-1"), 1);
 
-      await fx.orgs.removeMember("org-acme", "dev-1");
-      assert.equal(await fx.orgs.memberRole("org-acme", "dev-1"), null);
+      await orgs.removeMember("org-acme", "dev-1");
+      assert.equal(await orgs.memberRole("org-acme", "dev-1"), null);
       assert.equal(
-        countTeamRows(fx.db, "dev-1"),
+        await countTeamRows(backend.db, "dev-1"),
         0,
         "a team membership outliving its org membership is a grant nobody can see or revoke",
       );
     } finally {
-      fx.db.close();
+      await backend.close();
     }
   });
 
@@ -141,119 +145,132 @@ describe("H1.2 — org membership invariants", () => {
     // `ON CONFLICT DO UPDATE SET role = excluded.role` reports changes = 1
     // even when the role is identical, so a `.changes > 0` gate would record a
     // role change that did not happen.
-    const fx = fixture();
+    const backend = await openBackend(kind);
     try {
-      await seedOrg(fx);
-      await fx.orgs.addMember("org-acme", "founder", "owner", {
+      const orgs = backend.store.orgs;
+      const audit = backend.store.audit;
+      await seedOrg(orgs);
+      await orgs.addMember("org-acme", "founder", "owner", {
         actorId: "founder",
       });
-      await fx.orgs.addMember("org-acme", "dev-1", "member", {
+      await orgs.addMember("org-acme", "dev-1", "member", {
         actorId: "founder",
       });
-      assert.equal(await fx.audit.countFor("org.member.add", "org-acme"), 2);
+      assert.equal(await audit.countFor("org.member.add", "org-acme"), 2);
 
-      await fx.orgs.addMember("org-acme", "dev-1", "member", {
+      await orgs.addMember("org-acme", "dev-1", "member", {
         actorId: "founder",
       });
       assert.equal(
-        await fx.audit.countFor("org.member.add", "org-acme"),
+        await audit.countFor("org.member.add", "org-acme"),
         2,
         "a duplicate add is not a second add",
       );
       assert.equal(
-        await fx.audit.countFor("org.member.role_change", "org-acme"),
+        await audit.countFor("org.member.role_change", "org-acme"),
         0,
         "a re-add at the same role is not a role change",
       );
 
-      await fx.orgs.addMember("org-acme", "dev-1", "owner", {
+      await orgs.addMember("org-acme", "dev-1", "owner", {
         actorId: "founder",
       });
       assert.equal(
-        await fx.audit.countFor("org.member.role_change", "org-acme"),
+        await audit.countFor("org.member.role_change", "org-acme"),
         1,
       );
       assert.equal(
-        await fx.audit.countFor("org.member.add", "org-acme"),
+        await audit.countFor("org.member.add", "org-acme"),
         2,
         "a promotion is not an add",
       );
     } finally {
-      fx.db.close();
+      await backend.close();
     }
   });
 
   it("removing someone who is not a member writes no audit row", async () => {
-    const fx = fixture();
+    const backend = await openBackend(kind);
     try {
-      await seedOrg(fx);
-      await fx.orgs.addMember("org-acme", "founder", "owner");
-      await fx.orgs.removeMember("org-acme", "stranger", {
+      const orgs = backend.store.orgs;
+      const audit = backend.store.audit;
+      await seedOrg(orgs);
+      await orgs.addMember("org-acme", "founder", "owner");
+      await orgs.removeMember("org-acme", "stranger", {
         actorId: "founder",
       });
       assert.equal(
-        await fx.audit.countFor("org.member.remove", "org-acme"),
+        await audit.countFor("org.member.remove", "org-acme"),
         0,
         "an audit row for a removal that hit nothing is indistinguishable from a real one",
       );
     } finally {
-      fx.db.close();
+      await backend.close();
     }
   });
 });
 
-describe("H1.2 — invitations", () => {
+describe.each(BACKENDS)("H1.2 — invitations (%s", (kind) => {
   it("a pending invite becomes a membership at sign-in, audited once", async () => {
-    const fx = fixture();
+    const backend = await openBackend(kind);
     try {
-      await seedOrg(fx);
-      await fx.orgs.addMember("org-acme", "founder", "owner");
-      await fx.orgs.invite("org-acme", "Ada", "member", {
+      const orgs = backend.store.orgs;
+      await seedOrg(orgs);
+      await orgs.addMember("org-acme", "founder", "owner");
+      await orgs.invite("org-acme", "Ada", "member", {
         actorId: "founder",
       });
-      assert.equal(await fx.audit.countFor("org.invite", "org-acme"), 1);
-      assert.equal(await fx.orgs.memberRole("org-acme", "ada-user"), null);
+      assert.equal(
+        await backend.store.audit.countFor("org.invite", "org-acme"),
+        1,
+      );
+      assert.equal(await orgs.memberRole("org-acme", "ada-user"), null);
 
       // Case differs from the invite on purpose: GitHub logins are
       // case-insensitive and `@Ada` must meet `ada`.
-      const joined = await fx.orgs.acceptInvitesForLogin("ada-user", "ada");
+      const joined = await orgs.acceptInvitesForLogin("ada-user", "ada");
       assert.deepEqual(joined, ["org-acme"]);
-      assert.equal(await fx.orgs.memberRole("org-acme", "ada-user"), "member");
-      assert.equal(await fx.audit.countFor("org.invite.accept", "org-acme"), 1);
+      assert.equal(await orgs.memberRole("org-acme", "ada-user"), "member");
+      assert.equal(
+        await backend.store.audit.countFor("org.invite.accept", "org-acme"),
+        1,
+      );
 
       // A second sign-in must not re-grant or re-log: the invite is spent.
-      const again = await fx.orgs.acceptInvitesForLogin("ada-user", "ada");
+      const again = await orgs.acceptInvitesForLogin("ada-user", "ada");
       assert.deepEqual(again, []);
       assert.equal(
-        await fx.audit.countFor("org.invite.accept", "org-acme"),
+        await backend.store.audit.countFor("org.invite.accept", "org-acme"),
         1,
         "acceptance is recorded exactly once",
       );
-      assert.deepEqual(await fx.orgs.listPendingInvites("org-acme"), []);
+      assert.deepEqual(await orgs.listPendingInvites("org-acme"), []);
     } finally {
-      fx.db.close();
+      await backend.close();
     }
   });
 
   it("re-sending an identical pending invite writes no second audit row", async () => {
-    const fx = fixture();
+    const backend = await openBackend(kind);
     try {
-      await seedOrg(fx);
-      await fx.orgs.invite("org-acme", "ada", "member", { actorId: "founder" });
-      await fx.orgs.invite("org-acme", "ada", "member", { actorId: "founder" });
+      const orgs = backend.store.orgs;
+      const audit = backend.store.audit;
+      await seedOrg(orgs);
+      await orgs.invite("org-acme", "ada", "member", { actorId: "founder" });
+      await orgs.invite("org-acme", "ada", "member", { actorId: "founder" });
       assert.equal(
-        await fx.audit.countFor("org.invite", "org-acme"),
+        await audit.countFor("org.invite", "org-acme"),
         1,
         "an outstanding invitation re-sent unchanged is not a new invitation",
       );
 
       // A changed ROLE is a real event and must be recorded.
-      await fx.orgs.invite("org-acme", "ada", "owner", { actorId: "founder" });
-      assert.equal(await fx.audit.countFor("org.invite", "org-acme"), 2);
-      const [pending] = await fx.orgs.listPendingInvites("org-acme");
+      await orgs.invite("org-acme", "ada", "owner", { actorId: "founder" });
+      assert.equal(await audit.countFor("org.invite", "org-acme"), 2);
+      const [pending] = await orgs.listPendingInvites("org-acme");
       assert.equal(pending.role, "owner");
     } finally {
-      fx.db.close();
+      await backend.close();
     }
   });
 
@@ -265,55 +282,67 @@ describe("H1.2 — invitations", () => {
     //
     // The trigger stands in for that failure: it is the only way to make the
     // second statement fail after the first has run.
-    const fx = fixture();
+    const backend = await openBackend(kind);
     try {
-      await seedOrg(fx);
-      await fx.orgs.invite("org-acme", "ada", "member", { actorId: "founder" });
-      fx.db.exec(`
-        CREATE TRIGGER block_org_members BEFORE INSERT ON org_members
-        BEGIN SELECT RAISE(ABORT, 'membership write failed'); END;
-      `);
+      const orgs = backend.store.orgs;
+      await seedOrg(orgs);
+      await orgs.invite("org-acme", "ada", "member", {
+        actorId: "founder",
+      });
+
+      // Block the membership INSERT inside acceptInvitesForLogin's transaction,
+      // then unblock before the retry.
+      let blocked = true;
+      const decorated = failOnSql(
+        backend.db,
+        (sql) => blocked && sql.includes("INSERT INTO org_members"),
+        new Error("boom"),
+      );
+      const brokenOrgs = createOrgsRepository(decorated);
 
       await assert.rejects(() =>
-        fx.orgs.acceptInvitesForLogin("ada-user", "ada"),
+        brokenOrgs.acceptInvitesForLogin("ada-user", "ada"),
       );
 
-      fx.db.exec("DROP TRIGGER block_org_members");
-      const pending = await fx.orgs.listPendingInvites("org-acme");
+      blocked = false;
+
+      const pending = await brokenOrgs.listPendingInvites("org-acme");
       assert.equal(
         pending.length,
         1,
         "the acceptance stamp must roll back with the failed membership write",
       );
-      assert.equal(pending[0].acceptedAt, null);
+      assert.equal(pending[0]?.acceptedAt, null);
       assert.equal(
-        await fx.audit.countFor("org.invite.accept", "org-acme"),
+        await backend.store.audit.countFor("org.invite.accept", "org-acme"),
         0,
         "no acceptance happened, so no acceptance may be recorded",
       );
 
       // And the invite is still redeemable, which is the whole point.
-      assert.deepEqual(await fx.orgs.acceptInvitesForLogin("ada-user", "ada"), [
-        "org-acme",
-      ]);
+      assert.deepEqual(
+        await brokenOrgs.acceptInvitesForLogin("ada-user", "ada"),
+        ["org-acme"],
+      );
     } finally {
-      fx.db.close();
+      await backend.close();
     }
   });
 
   it("acceptance never DEMOTES an existing membership", async () => {
     // An invite issued as `member` to someone who has since become an owner
     // would otherwise strip their ownership the moment they signed in.
-    const fx = fixture();
+    const backend = await openBackend(kind);
     try {
-      await seedOrg(fx);
-      await fx.orgs.addMember("org-acme", "ada-user", "owner");
-      await fx.orgs.invite("org-acme", "ada", "member", { actorId: "founder" });
+      const orgs = backend.store.orgs;
+      await seedOrg(orgs);
+      await orgs.addMember("org-acme", "ada-user", "owner");
+      await orgs.invite("org-acme", "ada", "member", { actorId: "founder" });
 
-      await fx.orgs.acceptInvitesForLogin("ada-user", "ada");
-      assert.equal(await fx.orgs.memberRole("org-acme", "ada-user"), "owner");
+      await orgs.acceptInvitesForLogin("ada-user", "ada");
+      assert.equal(await orgs.memberRole("org-acme", "ada-user"), "owner");
     } finally {
-      fx.db.close();
+      await backend.close();
     }
   });
 
@@ -322,21 +351,22 @@ describe("H1.2 — invitations", () => {
     // as a member in the meantime must not be silently swallowed by the
     // conflict clause — the inviter granted ownership and acceptance is where
     // that grant lands. Promote on owner-invite, never demote on member-invite.
-    const fx = fixture();
+    const backend = await openBackend(kind);
     try {
-      await seedOrg(fx);
-      await fx.orgs.invite("org-acme", "ada", "owner", { actorId: "founder" });
-      await fx.orgs.addMember("org-acme", "ada-user", "member");
+      const orgs = backend.store.orgs;
+      await seedOrg(orgs);
+      await orgs.invite("org-acme", "ada", "owner", { actorId: "founder" });
+      await orgs.addMember("org-acme", "ada-user", "member");
 
-      await fx.orgs.acceptInvitesForLogin("ada-user", "ada");
-      assert.equal(await fx.orgs.memberRole("org-acme", "ada-user"), "owner");
+      await orgs.acceptInvitesForLogin("ada-user", "ada");
+      assert.equal(await orgs.memberRole("org-acme", "ada-user"), "owner");
     } finally {
-      fx.db.close();
+      await backend.close();
     }
   });
 });
 
-describe("H1.2 — invite expiry", () => {
+describe.each(BACKENDS)("H1.2 — invite expiry (%s", (kind) => {
   it("an EXPIRED invite does not become a membership, while a live one does", async () => {
     // The hijack this closes: a GitHub login can be renamed and the freed
     // handle re-registered by a stranger. An invite that never expires is a
@@ -344,53 +374,54 @@ describe("H1.2 — invite expiry", () => {
     //
     // The live invite is asserted FIRST and in the same run, so the refusal
     // below is the expiry rule rather than acceptance being broken outright.
-    const fx = fixture();
+    const backend = await openBackend(kind);
     try {
-      await seedOrg(fx, "org-live");
-      await seedOrg(fx, "org-stale");
-      await fx.orgs.invite("org-live", "ada", "member", { actorId: "founder" });
-      await fx.orgs.invite("org-stale", "ada", "member", {
-        actorId: "founder",
-      });
-      backdate(fx.db, "org-stale", "ada");
+      const orgs = backend.store.orgs;
+      await seedOrg(orgs, "org-live");
+      await seedOrg(orgs, "org-stale");
+      const audit = { actorId: "founder" };
+      await orgs.invite("org-live", "ada", "member", audit);
+      await orgs.invite("org-stale", "ada", "member", audit);
+      await backdate(backend.db, "org-stale", "ada");
 
-      const joined = await fx.orgs.acceptInvitesForLogin("ada-user", "ada");
-
+      const joined = await orgs.acceptInvitesForLogin("ada-user", "ada");
       assert.deepEqual(
         joined,
         ["org-live"],
         "the unexpired invite must still be redeemed — otherwise this test proves nothing about expiry",
       );
-      assert.equal(await fx.orgs.memberRole("org-live", "ada-user"), "member");
+      assert.equal(await orgs.memberRole("org-live", "ada-user"), "member");
       assert.equal(
-        await fx.orgs.memberRole("org-stale", "ada-user"),
+        await orgs.memberRole("org-stale", "ada-user"),
         null,
         "an expired invite must not grant membership",
       );
       assert.equal(
-        await fx.audit.countFor("org.invite.accept", "org-stale"),
+        await backend.store.audit.countFor("org.invite.accept", "org-stale"),
         0,
         "skipping an expired invite is not an acceptance",
       );
     } finally {
-      fx.db.close();
+      await backend.close();
     }
   });
 
   it("an expired invite is left in place as evidence, not deleted", async () => {
-    const fx = fixture();
+    const backend = await openBackend(kind);
     try {
-      await seedOrg(fx);
-      await fx.orgs.invite("org-acme", "ada", "member", { actorId: "founder" });
-      backdate(fx.db, "org-acme", "ada");
-      await fx.orgs.acceptInvitesForLogin("ada-user", "ada");
+      const orgs = backend.store.orgs;
+      await seedOrg(orgs);
+      await orgs.invite("org-acme", "ada", "member", { actorId: "founder" });
+      await backdate(backend.db, "org-acme", "ada");
+      await orgs.acceptInvitesForLogin("ada-user", "ada");
 
-      const row = fx.db
-        .prepare(
+      const row = defined(
+        await backend.db.get<{ accepted_at: string | null }>(
           "SELECT accepted_at FROM org_invites WHERE org_id = ? AND github_login = ?",
-        )
-        .get("org-acme", "ada") as { accepted_at: string | null } | undefined;
-      assert.ok(row, "the row is the record that someone was invited");
+          ["org-acme", "ada"],
+        ),
+        "expired invite row",
+      );
       assert.equal(
         row.accepted_at,
         null,
@@ -398,39 +429,146 @@ describe("H1.2 — invite expiry", () => {
       );
 
       // And it is not offered as pending, because it can no longer be redeemed.
-      assert.deepEqual(await fx.orgs.listPendingInvites("org-acme"), []);
+      assert.deepEqual(await orgs.listPendingInvites("org-acme"), []);
     } finally {
-      fx.db.close();
+      await backend.close();
     }
   });
 
   it("re-inviting revives an expired invite with a fresh deadline", async () => {
     // The only route back for a lapsed invitation, and a genuine event, so it
     // is audited even though the (org, login, role) triple is unchanged.
-    const fx = fixture();
+    const backend = await openBackend(kind);
     try {
-      await seedOrg(fx);
-      await fx.orgs.invite("org-acme", "ada", "member", { actorId: "founder" });
-      backdate(fx.db, "org-acme", "ada");
+      const orgs = backend.store.orgs;
+      const audit = backend.store.audit;
+      await seedOrg(orgs);
+      await orgs.invite("org-acme", "ada", "member", { actorId: "founder" });
+      await backdate(backend.db, "org-acme", "ada");
 
-      const revived = await fx.orgs.invite("org-acme", "ada", "member", {
+      const revived = await orgs.invite("org-acme", "ada", "member", {
         actorId: "founder",
       });
       assert.ok(revived.expiresAt > new Date().toISOString());
-      assert.equal(await fx.audit.countFor("org.invite", "org-acme"), 2);
+      assert.equal(await audit.countFor("org.invite", "org-acme"), 2);
 
-      const joined = await fx.orgs.acceptInvitesForLogin("ada-user", "ada");
+      const joined = await orgs.acceptInvitesForLogin("ada-user", "ada");
       assert.deepEqual(joined, ["org-acme"]);
     } finally {
-      fx.db.close();
+      await backend.close();
     }
   });
 
+  // SQLite-only: these two tests rebuild the org_invites table from scratch
+  // (DROP TABLE + CREATE TABLE) and reopen the database FILE to exercise the
+  // backfill migration — a SQLite-on-disk operation with no Postgres analogue.
+  it.runIf(kind === "sqlite")(
+    "legacy invites created before the column get a real deadline, not ''",
+    async () => {
+      // The backfill: '' would sort before any ISO timestamp and read as
+      // "already expired", silently voiding every live invitation on the volume.
+      const fx = fixture();
+      try {
+        const orgs = fx.orgs;
+        await seedOrg(orgs);
+        // Simulate the pre-migration shape by rebuilding the table without the
+        // column, then reopening the database so the migration runs.
+        fx.db.exec(`
+        DROP TABLE org_invites;
+        CREATE TABLE org_invites (
+          org_id TEXT NOT NULL,
+          github_login TEXT NOT NULL COLLATE NOCASE,
+          role TEXT NOT NULL,
+          invited_by TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          accepted_at TEXT,
+          PRIMARY KEY (org_id, github_login)
+        );
+      `);
+        fx.db
+          .prepare(
+            "INSERT INTO org_invites (org_id, github_login, role, invited_by, created_at, accepted_at) VALUES (?, ?, ?, ?, ?, NULL)",
+          )
+          .run(
+            "org-acme",
+            "ada",
+            "member",
+            "founder",
+            new Date().toISOString(),
+          );
+        const path = fx.db.name;
+        fx.db.close();
+
+        const db = openPlatformDb(path);
+        const platformDb = createSqlitePlatformDb(db);
+        try {
+          const orgs = createOrgsRepository(platformDb);
+          const [pending] = await orgs.listPendingInvites("org-acme");
+          assert.ok(pending, "the migrated invite must still be redeemable");
+          assert.match(
+            pending.expiresAt,
+            /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/,
+          );
+          assert.deepEqual(
+            await orgs.acceptInvitesForLogin("ada-user", "ada"),
+            ["org-acme"],
+          );
+        } finally {
+          db.close();
+        }
+      } finally {
+        // fx.db is already closed above; closing twice is a no-op error, so
+        // guard rather than double-close.
+        if (fx.db.open) fx.db.close();
+      }
+    },
+  );
+
+  it.runIf(kind === "sqlite")(
+    "a crash BETWEEN the ALTER and the backfill still repairs on the next open",
+    async () => {
+      // The migration is two statements. If the process dies after the ALTER
+      // lands but before the UPDATE, the column exists with '' rows — so a
+      // backfill gated on "column missing" would never run again and every
+      // legacy invite would stay permanently expired. The backfill is keyed on
+      // the DATA state ('' rows) and runs on every open for exactly this case.
+      const fx = fixture();
+      try {
+        const orgs = fx.orgs;
+        await seedOrg(orgs);
+        await orgs.invite("org-acme", "ada", "member", { actorId: "founder" });
+        // Simulate the interrupted state: column present, backfill never ran.
+        fx.db
+          .prepare("UPDATE org_invites SET expires_at = '' WHERE org_id = ?")
+          .run("org-acme");
+        const path = fx.db.name;
+        fx.db.close();
+
+        const db = openPlatformDb(path);
+        const platformDb = createSqlitePlatformDb(db);
+        try {
+          const orgs = createOrgsRepository(platformDb);
+          const [pending] = await orgs.listPendingInvites("org-acme");
+          assert.ok(pending, "the repaired invite must still be redeemable");
+          assert.match(
+            pending.expiresAt,
+            /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/,
+          );
+        } finally {
+          db.close();
+        }
+      } finally {
+        if (fx.db.open) fx.db.close();
+      }
+    },
+  );
+
   it("a new invite expires ORG_INVITE_TTL_DAYS out, in the format comparisons assume", async () => {
-    const fx = fixture();
+    const backend = await openBackend(kind);
     try {
-      await seedOrg(fx);
-      const invite = await fx.orgs.invite("org-acme", "ada", "member", {
+      const orgs = backend.store.orgs;
+      await seedOrg(orgs);
+      const invite = await orgs.invite("org-acme", "ada", "member", {
         actorId: "founder",
       });
       const days =
@@ -447,105 +585,21 @@ describe("H1.2 — invite expiry", () => {
         /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/,
       );
     } finally {
-      fx.db.close();
-    }
-  });
-
-  it("legacy invites created before the column get a real deadline, not ''", async () => {
-    // The backfill: '' would sort before any ISO timestamp and read as
-    // "already expired", silently voiding every live invitation on the volume.
-    const fx = fixture();
-    try {
-      await seedOrg(fx);
-      // Simulate the pre-migration shape by rebuilding the table without the
-      // column, then reopening the database so the migration runs.
-      fx.db.exec(`
-        DROP TABLE org_invites;
-        CREATE TABLE org_invites (
-          org_id TEXT NOT NULL,
-          github_login TEXT NOT NULL COLLATE NOCASE,
-          role TEXT NOT NULL,
-          invited_by TEXT NOT NULL,
-          created_at TEXT NOT NULL,
-          accepted_at TEXT,
-          PRIMARY KEY (org_id, github_login)
-        );
-      `);
-      fx.db
-        .prepare(
-          "INSERT INTO org_invites (org_id, github_login, role, invited_by, created_at, accepted_at) VALUES (?, ?, ?, ?, ?, NULL)",
-        )
-        .run("org-acme", "ada", "member", "founder", new Date().toISOString());
-      const path = fx.db.name;
-      fx.db.close();
-
-      const db = openPlatformDb(path);
-      const platformDb = createSqlitePlatformDb(db);
-      try {
-        const orgs = createOrgsRepository(platformDb);
-        const [pending] = await orgs.listPendingInvites("org-acme");
-        assert.ok(pending, "the migrated invite must still be redeemable");
-        assert.match(
-          pending.expiresAt,
-          /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/,
-        );
-        assert.deepEqual(await orgs.acceptInvitesForLogin("ada-user", "ada"), [
-          "org-acme",
-        ]);
-      } finally {
-        db.close();
-      }
-    } finally {
-      // fx.db is already closed above; closing twice is a no-op error, so
-      // guard rather than double-close.
-      if (fx.db.open) fx.db.close();
-    }
-  });
-
-  it("a crash BETWEEN the ALTER and the backfill still repairs on the next open", async () => {
-    // The migration is two statements. If the process dies after the ALTER
-    // lands but before the UPDATE, the column exists with '' rows — so a
-    // backfill gated on "column missing" would never run again and every
-    // legacy invite would stay permanently expired. The backfill is keyed on
-    // the DATA state ('' rows) and runs on every open for exactly this case.
-    const fx = fixture();
-    try {
-      await seedOrg(fx);
-      await fx.orgs.invite("org-acme", "ada", "member", { actorId: "founder" });
-      // Simulate the interrupted state: column present, backfill never ran.
-      fx.db
-        .prepare("UPDATE org_invites SET expires_at = '' WHERE org_id = ?")
-        .run("org-acme");
-      const path = fx.db.name;
-      fx.db.close();
-
-      const db = openPlatformDb(path);
-      const platformDb = createSqlitePlatformDb(db);
-      try {
-        const orgs = createOrgsRepository(platformDb);
-        const [pending] = await orgs.listPendingInvites("org-acme");
-        assert.ok(pending, "the repaired invite must still be redeemable");
-        assert.match(
-          pending.expiresAt,
-          /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/,
-        );
-      } finally {
-        db.close();
-      }
-    } finally {
-      if (fx.db.open) fx.db.close();
+      await backend.close();
     }
   });
 });
 
-describe("H1.2 — changeMemberRole", () => {
+describe.each(BACKENDS)("H1.2 — changeMemberRole (%s", (kind) => {
   it("changeMemberRole on a non-member returns false and adds nobody", async () => {
-    const fx = fixture();
+    const backend = await openBackend(kind);
     try {
-      await seedOrg(fx);
-      await fx.orgs.addMember("org-acme", "founder", "owner");
+      const orgs = backend.store.orgs;
+      const audit = backend.store.audit;
+      await seedOrg(orgs);
+      await orgs.addMember("org-acme", "founder", "owner");
 
-      const result = await fx.orgs.changeMemberRole(
+      const result = await orgs.changeMemberRole(
         "org-acme",
         "stranger",
         "member",
@@ -553,92 +607,96 @@ describe("H1.2 — changeMemberRole", () => {
       );
       assert.equal(result, false);
       assert.equal(
-        await fx.orgs.memberRole("org-acme", "stranger"),
+        await orgs.memberRole("org-acme", "stranger"),
         null,
         "not a member, so no membership may appear",
       );
       assert.equal(
-        await fx.audit.countFor("org.member.add", "org-acme"),
+        await audit.countFor("org.member.add", "org-acme"),
         0,
         "a role change must never write an org.member.add row",
       );
       assert.equal(
-        await fx.audit.countFor("org.member.role_change", "org-acme"),
+        await audit.countFor("org.member.role_change", "org-acme"),
         0,
       );
     } finally {
-      fx.db.close();
+      await backend.close();
     }
   });
 
   it("changeMemberRole to the same role writes no audit row", async () => {
-    const fx = fixture();
+    const backend = await openBackend(kind);
     try {
-      await seedOrg(fx);
-      await fx.orgs.addMember("org-acme", "founder", "owner");
-      await fx.orgs.addMember("org-acme", "dev-1", "member", {
+      const orgs = backend.store.orgs;
+      const audit = backend.store.audit;
+      await seedOrg(orgs);
+      await orgs.addMember("org-acme", "founder", "owner");
+      await orgs.addMember("org-acme", "dev-1", "member", {
         actorId: "founder",
       });
       // One real role change happened in setup (none here yet — addMember wrote
       // an `add` row, not a `role_change`).
       assert.equal(
-        await fx.audit.countFor("org.member.role_change", "org-acme"),
+        await audit.countFor("org.member.role_change", "org-acme"),
         0,
       );
 
-      const result = await fx.orgs.changeMemberRole(
+      const result = await orgs.changeMemberRole(
         "org-acme",
         "dev-1",
         "member",
         { actorId: "founder" },
       );
       assert.equal(result, true);
-      assert.equal(await fx.orgs.memberRole("org-acme", "dev-1"), "member");
+      assert.equal(await orgs.memberRole("org-acme", "dev-1"), "member");
       assert.equal(
-        await fx.audit.countFor("org.member.role_change", "org-acme"),
+        await audit.countFor("org.member.role_change", "org-acme"),
         0,
         "a role change to the same role writes no audit row",
       );
       assert.equal(
-        await fx.audit.countFor("org.member.add", "org-acme"),
+        await audit.countFor("org.member.add", "org-acme"),
         1,
         "the original add is untouched",
       );
     } finally {
-      fx.db.close();
+      await backend.close();
     }
   });
 
   it("changeMemberRole demoting the last owner throws LastOwnerError and changes nothing", async () => {
-    const fx = fixture();
+    const backend = await openBackend(kind);
     try {
-      await seedOrg(fx);
-      await fx.orgs.addMember("org-acme", "founder", "owner");
+      const orgs = backend.store.orgs;
+      const audit = backend.store.audit;
+      await seedOrg(orgs);
+      await orgs.addMember("org-acme", "founder", "owner");
 
       await assert.rejects(
         () =>
-          fx.orgs.changeMemberRole("org-acme", "founder", "member", {
+          orgs.changeMemberRole("org-acme", "founder", "member", {
             actorId: "founder",
           }),
         LastOwnerError,
       );
       assert.equal(
-        await fx.orgs.memberRole("org-acme", "founder"),
+        await orgs.memberRole("org-acme", "founder"),
         "owner",
         "the refusal is atomic: the owner's role reads back as owner",
       );
       assert.equal(
-        await fx.audit.countFor("org.member.role_change", "org-acme"),
+        await audit.countFor("org.member.role_change", "org-acme"),
         0,
         "a refused demotion writes no role_change row",
       );
       assert.equal(
-        await fx.audit.countFor("org.member.add", "org-acme"),
+        await audit.countFor("org.member.add", "org-acme"),
         0,
         "a refused demotion must not insert a membership under any isolation",
       );
     } finally {
-      fx.db.close();
+      await backend.close();
     }
   });
 
@@ -647,82 +705,80 @@ describe("H1.2 — changeMemberRole", () => {
     // called addMember, which INSERTS on conflict. A removal landing between
     // the read and the write re-adds the member. changeMemberRole reads on `tx`
     // inside its own transaction, so there is no window to re-add.
-    const fx = fixture();
+    const backend = await openBackend(kind, { pgMax: 6 });
     try {
-      await seedOrg(fx);
-      await fx.orgs.addMember("org-acme", "founder", "owner");
-      await fx.orgs.addMember("org-acme", "second", "owner");
-      await fx.orgs.addMember("org-acme", "dev-1", "member");
+      const orgs = backend.store.orgs;
+      await seedOrg(orgs);
+      await orgs.addMember("org-acme", "founder", "owner");
+      await orgs.addMember("org-acme", "second", "owner");
+      await orgs.addMember("org-acme", "dev-1", "member");
 
-      // Order 1: removeMember runs first, changeMemberRole second.
+      // Two operations started together; either may win, the member ends gone.
       await Promise.all([
-        fx.orgs.removeMember("org-acme", "dev-1"),
-        fx.orgs.changeMemberRole("org-acme", "dev-1", "owner", {
+        orgs.removeMember("org-acme", "dev-1"),
+        orgs.changeMemberRole("org-acme", "dev-1", "owner", {
           actorId: "founder",
         }),
       ]);
       assert.equal(
-        await fx.orgs.memberRole("org-acme", "dev-1"),
+        await orgs.memberRole("org-acme", "dev-1"),
         null,
         "remove-then-change: the member is gone, not re-added",
       );
 
-      // Reset for the other order.
-      await fx.orgs.addMember("org-acme", "dev-1", "member");
+      await orgs.addMember("org-acme", "dev-1", "member");
 
-      // Order 2: changeMemberRole runs first, removeMember second.
       await Promise.all([
-        fx.orgs.changeMemberRole("org-acme", "dev-1", "owner", {
+        orgs.changeMemberRole("org-acme", "dev-1", "owner", {
           actorId: "founder",
         }),
-        fx.orgs.removeMember("org-acme", "dev-1"),
+        orgs.removeMember("org-acme", "dev-1"),
       ]);
       assert.equal(
-        await fx.orgs.memberRole("org-acme", "dev-1"),
+        await orgs.memberRole("org-acme", "dev-1"),
         null,
         "change-then-remove: the member is gone, not left as an owner",
       );
     } finally {
-      fx.db.close();
+      await backend.close();
     }
   });
 
   it("changeMemberRole runs an UPDATE and never the member upsert", async () => {
     // Structural guarantee, not an isolation one: a role change must never
     // INSERT a row, because an INSERT ... ON CONFLICT would re-create a
-    // membership removed between the caller's check and the write. This test
+    // membership removed between the caller's read and the write. This test
     // wraps db.transaction to record every SQL handed to tx.run, so it captures
     // the statement the store actually issues (upsertMember would surface as
     // `INSERT INTO org_members`, updateMemberRole as `UPDATE org_members SET
     // role`) independent of the statement cache, and fails the moment the
     // upsert comes back.
-    const fx = fixture();
+    const backend = await openBackend(kind);
     try {
-      await seedOrg(fx);
-      await fx.orgs.addMember("org-acme", "founder", "owner");
-      await fx.orgs.addMember("org-acme", "dev-1", "member", {
+      const orgs = backend.store.orgs;
+      await seedOrg(orgs);
+      await orgs.addMember("org-acme", "founder", "owner");
+      await orgs.addMember("org-acme", "dev-1", "member", {
         actorId: "founder",
       });
 
       const ran: string[] = [];
-      const realTransaction = fx.platformDb.transaction.bind(fx.platformDb);
-      const spy = vi
-        .spyOn(fx.platformDb, "transaction")
-        .mockImplementation((fn) =>
-          realTransaction(async (tx) => {
-            const wrapped: PlatformDbSession = {
-              get: tx.get,
-              all: tx.all,
-              run: (sql, params) => {
-                ran.push(sql);
-                return tx.run(sql, params);
-              },
-            };
-            return fn(wrapped);
-          }),
-        );
+      const realTransaction = backend.db.transaction.bind(backend.db);
+      const spy = vi.spyOn(backend.db, "transaction").mockImplementation((fn) =>
+        realTransaction(async (tx) => {
+          const wrapped: PlatformDbSession = {
+            get: tx.get,
+            all: tx.all,
+            run: (sql, params) => {
+              ran.push(sql);
+              return tx.run(sql, params);
+            },
+          };
+          return fn(wrapped);
+        }),
+      );
       try {
-        await fx.orgs.changeMemberRole("org-acme", "dev-1", "owner", {
+        await orgs.changeMemberRole("org-acme", "dev-1", "owner", {
           actorId: "founder",
         });
       } finally {
@@ -739,7 +795,7 @@ describe("H1.2 — changeMemberRole", () => {
         "changeMemberRole must never run the member upsert",
       );
     } finally {
-      fx.db.close();
+      await backend.close();
     }
   });
 });
