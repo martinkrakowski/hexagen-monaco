@@ -9,6 +9,7 @@ import {
 import type { SavedProject } from "@hexagen/shared";
 import { BACKENDS, openBackend } from "../../../test-support/platform-backends";
 import type { PlatformDb } from "../db";
+import { ORG_INVITE_TTL_MS } from "../platform-db";
 
 function defined<T>(v: T | undefined | null, what: string): T {
   if (v === undefined || v === null) throw new Error("expected " + what);
@@ -561,3 +562,119 @@ describe.each(BACKENDS)(
     });
   },
 );
+
+describe.each(BACKENDS)(
+  "OrgsRepository.invite — timestamp shape (%s",
+  (kind) => {
+    it("OR2 invite timestamps are ISO strings for the right instants", async () => {
+      const backend = await openBackend(kind);
+      try {
+        const orgs = backend.store.orgs;
+        const org = await orgs.createOrgWithOwner(
+          { slug: "acme", name: "Acme", createdBy: "owner-1" },
+          { actorId: "owner-1" },
+        );
+        const before = Date.now();
+        const invite = await orgs.invite(org.id, "ada", "member", {
+          actorId: "owner-1",
+        });
+        const after = Date.now();
+
+        // Strings, not Date objects or numbers: a type leaking through here would
+        // break the instant comparisons every other seam makes on these values.
+        assert.equal(typeof invite.createdAt, "string");
+        assert.equal(typeof invite.expiresAt, "string");
+        assert.equal(invite.acceptedAt, null);
+
+        const createdMs = new Date(invite.createdAt).getTime();
+        assert.ok(
+          Number.isFinite(createdMs),
+          "createdAt is a parseable instant",
+        );
+        assert.ok(
+          createdMs >= before - 5_000 && createdMs <= after + 5_000,
+          "createdAt is the instant of the invite",
+        );
+        const expiresMs = new Date(invite.expiresAt).getTime();
+        assert.ok(
+          Number.isFinite(expiresMs),
+          "expiresAt is a parseable instant",
+        );
+        assert.ok(
+          Math.abs(expiresMs - createdMs - ORG_INVITE_TTL_MS) < 5_000,
+          "expiresAt is ORG_INVITE_TTL_DAYS after createdAt",
+        );
+
+        const joined = await orgs.acceptInvitesForLogin("ada-user", "ada");
+        assert.deepEqual(joined, [org.id]);
+
+        const members = await orgs.listMembers(org.id);
+        const member = defined(
+          members.find((m) => m.userId === "ada-user"),
+          "accepted invite member",
+        );
+        assert.equal(typeof member.createdAt, "string");
+        // Parsing must not throw and must yield a finite instant.
+        assert.ok(
+          Number.isFinite(new Date(member.createdAt).getTime()),
+          "listMembers createdAt is an ISO instant",
+        );
+      } finally {
+        await backend.close();
+      }
+    });
+  },
+);
+
+describe.each(BACKENDS)("OrgsRepository.listPendingInvites (%s", (kind) => {
+  it("OR3 pending lists: unaccepted and unexpired only, this org's only, ordered by login", async () => {
+    const backend = await openBackend(kind);
+    try {
+      const orgs = backend.store.orgs;
+      const acme = await orgs.createOrgWithOwner(
+        { slug: "acme", name: "Acme", createdBy: "owner-1" },
+        { actorId: "owner-1" },
+      );
+      const beta = await orgs.createOrgWithOwner(
+        { slug: "beta", name: "Beta", createdBy: "owner-1" },
+        { actorId: "owner-1" },
+      );
+      const audit = { actorId: "owner-1" };
+      // Three in org A (one accepted, one backdated-expired, one live) plus two
+      // more live; one live in org B to pin the org_id term.
+      await orgs.invite(acme.id, "accepted", "member", audit);
+      await orgs.invite(acme.id, "backdated", "member", audit);
+      await orgs.invite(acme.id, "live", "member", audit);
+      await orgs.invite(acme.id, "amy", "member", audit);
+      await orgs.invite(acme.id, "zoe", "member", audit);
+      await orgs.invite(beta.id, "live", "member", audit);
+
+      const joined = await orgs.acceptInvitesForLogin(
+        "user-accepted",
+        "accepted",
+      );
+      assert.deepEqual(joined, [acme.id]);
+
+      // Push the "backdated" invite into the past so expires_at > @now drops it.
+      const pastMs = Date.now() - 3_600_000;
+      await backend.db.run(
+        "UPDATE org_invites SET expires_at = hx_ts(?) WHERE org_id = ? AND github_login = ?",
+        [pastMs, acme.id, "backdated"],
+      );
+
+      const acmePending = await orgs.listPendingInvites(acme.id);
+      // accepted excluded (accepted_at IS NULL); backdated excluded (expires_at >
+      // @now); beta's invite excluded (org_id term); remainder ordered by login.
+      assert.deepEqual(
+        acmePending.map((i) => i.githubLogin),
+        ["amy", "live", "zoe"],
+      );
+      assert.deepEqual(
+        (await orgs.listPendingInvites(beta.id)).map((i) => i.githubLogin),
+        ["live"],
+      );
+    } finally {
+      await backend.close();
+    }
+  });
+});
