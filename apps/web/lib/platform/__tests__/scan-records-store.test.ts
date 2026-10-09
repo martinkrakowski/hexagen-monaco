@@ -707,10 +707,9 @@ describe.each(BACKENDS)("scan records store (%s)", (kind) => {
         const limited = must(await store.list({ limit: 2 }));
         expect(limited.length).toBe(2);
 
-        const otherList = await other.list();
+        const otherList = must(await other.list());
         // population-guard: owner-b has no records of its own
-        if (otherList.success)
-          expect(otherList.value.map((r) => r.id)).not.toContain("r1");
+        expect(otherList.map((r) => r.id)).not.toContain("r1");
       } finally {
         await backend.close();
       }
@@ -808,7 +807,6 @@ describe.each(BACKENDS)("scan records store (%s)", (kind) => {
           now: NOW,
         });
         expect(written.success).toBe(true);
-        const rec = must(written).record;
 
         const got = must(await store.get("sc6"));
         expect(got.findingsSample).toEqual(sample);
