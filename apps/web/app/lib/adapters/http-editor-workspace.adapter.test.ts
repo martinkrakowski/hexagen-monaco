@@ -169,6 +169,35 @@ describe("HttpEditorWorkspaceAdapter PUT", () => {
     if (!result.ok) assert.equal(result.reason, "conflict");
     assert.equal(puts, 1, "exactly one PUT, no retry");
   });
+
+  it("a successful PUT without an ETag is an error, never revision 0", async () => {
+    const fetchImpl = vi.fn(async () => {
+      return new Response(
+        JSON.stringify({
+          kind: "workspace",
+          id: "ws1",
+          projectId: "proj-uuid",
+          payload: { files: {} },
+          updatedAt: 200,
+        }),
+        { status: 200 },
+      );
+    }) as unknown as MockedFunction<typeof fetch>;
+
+    const adapter = new HttpEditorWorkspaceAdapter(fetchImpl);
+    const result = await adapter.write(
+      "owner1",
+      "ws1",
+      { files: {} },
+      "proj-uuid",
+      { ifMatch: 3 },
+    );
+    assert.equal(result.ok, false);
+    if (!result.ok) {
+      assert.equal(result.reason, "error");
+      assert.match(result.message, /missing ETag/);
+    }
+  });
 });
 
 describe("HttpEditorWorkspaceAdapter 413", () => {

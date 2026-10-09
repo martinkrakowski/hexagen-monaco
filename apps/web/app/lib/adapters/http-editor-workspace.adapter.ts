@@ -280,7 +280,15 @@ export class HttpEditorWorkspaceAdapter {
         };
       }
       const newRev = revFromEtag(response.headers.get("ETag"));
-      return { ok: true, rev: newRev ?? 0 };
+      if (newRev === null) {
+        return {
+          ok: false,
+          reason: "error",
+          status: response.status,
+          message: "missing ETag",
+        };
+      }
+      return { ok: true, rev: newRev };
     } catch (cause) {
       return {
         ok: false,
