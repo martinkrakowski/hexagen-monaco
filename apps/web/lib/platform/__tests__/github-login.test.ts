@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, it } from "vitest";
 import assert from "node:assert/strict";
 import { mkdtempSync } from "node:fs";
@@ -5,8 +6,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import Database from "better-sqlite3";
 import { openPlatformDb } from "../platform-db";
-import { createSqlitePlatformDb } from "../sqlite-db";
-import { createAuthRepository } from "../auth-store";
+import { BACKENDS, openBackend } from "../../../test-support/platform-backends";
+import type { PlatformDb } from "../db";
+
+function defined<T>(v: T | undefined | null, what: string): T {
+  if (v === undefined || v === null) throw new Error("expected " + what);
+  return v;
+}
 
 function tmpDbPath(prefix: string): string {
   return join(mkdtempSync(join(tmpdir(), prefix)), "platform.db");
@@ -18,28 +24,33 @@ function tmpDbPath(prefix: string): string {
  * captured at sign-in and backfilled only on the next sign-in — a migration
  * must never call GitHub.
  */
-describe("P-A1 — users.github_login", () => {
+describe.each(BACKENDS)("P-A1 — users.github_login (%s", (kind) => {
   it("persists the handle and is idempotent across repeat sign-ins", async () => {
-    const db = openPlatformDb(tmpDbPath("hexagen-login-set-"));
+    const backend = await openBackend(kind);
     try {
-      const auth = createAuthRepository(createSqlitePlatformDb(db));
+      const auth = backend.store.auth;
       const user = await auth.createUser({
         name: "Ada",
         email: "ada@example.com",
         emailVerified: null,
       });
 
-      const before = db
-        .prepare("SELECT github_login FROM users WHERE id = ?")
-        .get(user.id) as { github_login: string | null };
+      const before = defined(
+        await backend.db.get<{ github_login: string | null }>(
+          "SELECT github_login FROM users WHERE id = ?",
+          [user.id],
+        ),
+        "user row before login",
+      );
       assert.equal(before.github_login, null, "starts unset");
 
       await auth.setGithubLogin(user.id, "ada");
       await auth.setGithubLogin(user.id, "ada");
 
-      const rows = db
-        .prepare("SELECT github_login FROM users WHERE github_login = ?")
-        .all("ada");
+      const rows = await backend.db.all<{ github_login: string | null }>(
+        "SELECT github_login FROM users WHERE github_login = ?",
+        ["ada"],
+      );
       assert.equal(rows.length, 1, "a repeat sign-in must not duplicate");
       assert.equal((await auth.getUserByGithubLogin("ada"))?.id, user.id);
 
@@ -50,27 +61,38 @@ describe("P-A1 — users.github_login", () => {
       });
       await assert.rejects(
         () => auth.setGithubLogin(other.id, "ada"),
-        /UNIQUE/,
-        "a second user must not claim the same handle",
+        (err: unknown) => {
+          assert.equal(
+            backend.db.isUniqueViolation(err),
+            true,
+            "a second user must not claim the same handle",
+          );
+          return true;
+        },
       );
     } finally {
-      db.close();
+      await backend.close();
     }
   });
 
   it("canonicalizes mixed-case logins so Ada and ada are one identity", async () => {
-    const db = openPlatformDb(tmpDbPath("hexagen-login-case-"));
+    const backend = await openBackend(kind);
     try {
-      const auth = createAuthRepository(createSqlitePlatformDb(db));
+      const auth = backend.store.auth;
       const user = await auth.createUser({
         name: "Ada",
         email: "ada@example.com",
         emailVerified: null,
       });
       await auth.setGithubLogin(user.id, "  Ada ");
-      const stored = db
-        .prepare("SELECT github_login FROM users WHERE id = ?")
-        .get(user.id) as { github_login: string | null };
+
+      const stored = defined(
+        await backend.db.get<{ github_login: string | null }>(
+          "SELECT github_login FROM users WHERE id = ?",
+          [user.id],
+        ),
+        "user row after login",
+      );
       assert.equal(stored.github_login, "ada");
       assert.equal((await auth.getUserByGithubLogin("ADA"))?.id, user.id);
       assert.equal((await auth.getUserByGithubLogin("Ada"))?.id, user.id);
@@ -82,17 +104,24 @@ describe("P-A1 — users.github_login", () => {
       });
       await assert.rejects(
         () => auth.setGithubLogin(other.id, "ADA"),
-        /UNIQUE/,
+        (err: unknown) => {
+          assert.equal(
+            backend.db.isUniqueViolation(err),
+            true,
+            "a second user must not claim the same handle",
+          );
+          return true;
+        },
       );
     } finally {
-      db.close();
+      await backend.close();
     }
   });
 
   it("a user with no handle still authenticates (existing accounts)", async () => {
-    const db = openPlatformDb(tmpDbPath("hexagen-login-null-"));
+    const backend = await openBackend(kind);
     try {
-      const auth = createAuthRepository(createSqlitePlatformDb(db));
+      const auth = backend.store.auth;
       const user = await auth.createUser({
         name: "Legacy",
         email: "legacy@example.com",
@@ -114,39 +143,76 @@ describe("P-A1 — users.github_login", () => {
         "unknown provider account does not authenticate",
       );
     } finally {
-      db.close();
+      await backend.close();
     }
   });
 
-  it("the handle is unique, and any number of users may have none", () => {
-    const db = openPlatformDb(tmpDbPath("hexagen-login-unique-"));
+  it("the handle is unique, and any number of users may have none", async () => {
+    const backend = await openBackend(kind);
     try {
-      const insert = db.prepare(
-        "INSERT INTO users (id, name, email, email_verified, image, github_login, created_at) VALUES (?,?,?,?,?,?,?)",
-      );
       const now = new Date().toISOString();
+      const insert =
+        "INSERT INTO users (id, github_login, created_at) VALUES (?, ?, ?)";
 
       // Both directions of the partial index, in one test: NULLs coexist…
-      insert.run("u1", "One", "one@example.com", null, null, null, now);
-      insert.run("u2", "Two", "two@example.com", null, null, null, now);
-      const nulls = db
-        .prepare("SELECT COUNT(*) AS n FROM users WHERE github_login IS NULL")
-        .get() as { n: number };
+      await backend.db.run(insert, ["u1", null, now]);
+      await backend.db.run(insert, ["u2", null, now]);
+      const nulls = defined(
+        await backend.db.get<{ n: number }>(
+          "SELECT COUNT(*) AS n FROM users WHERE github_login IS NULL",
+          [],
+        ),
+        "null count",
+      );
       assert.equal(nulls.n, 2, "multiple NULL handles are allowed");
 
       // …while a duplicate non-NULL handle is rejected.
-      insert.run("u3", "Three", "three@example.com", null, null, "dup", now);
-      assert.throws(
-        () =>
-          insert.run("u4", "Four", "four@example.com", null, null, "dup", now),
-        /UNIQUE/,
-        "a second user must not claim the same handle",
+      await backend.db.run(insert, ["u3", "dup", now]);
+      await assert.rejects(
+        () => backend.db.run(insert, ["u4", "dup", now]),
+        (err: unknown) => {
+          assert.equal(
+            backend.db.isUniqueViolation(err),
+            true,
+            "a second user must not claim the same handle",
+          );
+          return true;
+        },
+      );
+
+      // A mixed-case duplicate: Ada after ada.
+      await backend.db.run(insert, ["u5", "ada", now]);
+      await assert.rejects(
+        () => backend.db.run(insert, ["u6", "Ada", now]),
+        (err: unknown) => {
+          if (kind === "sqlite") {
+            assert.equal(
+              backend.db.isUniqueViolation(err),
+              true,
+              "mixed-case dup is a NOCASE unique violation on SQLite",
+            );
+          } else {
+            assert.equal(
+              (err as { code?: string }).code,
+              "23514",
+              "mixed-case dup trips the lower-case CHECK on Postgres",
+            );
+          }
+          return true;
+        },
       );
     } finally {
-      db.close();
+      await backend.close();
     }
   });
+});
 
+/**
+ * The two tests below reopen a database FILE and inspect the SQLite schema
+ * directly (`new Database`, `db.pragma`). They have no Postgres analogue and
+ * stay outside `describe.each`.
+ */
+describe("P-A1 — migration of a legacy users table", () => {
   it("migrates a legacy users table that predates the column", () => {
     const path = tmpDbPath("hexagen-login-migrate-");
     const legacy = new Database(path);
