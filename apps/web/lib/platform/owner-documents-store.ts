@@ -30,15 +30,21 @@ export interface OwnerDocument {
 export type OwnerDocumentSummary = Omit<OwnerDocument, "payload">;
 
 export type OwnerDocumentsError =
-  | PersistenceError
+  | Exclude<PersistenceError, { kind: "Conflict" }>
   | { kind: "InvalidInput"; message: string }
   | { kind: "UnknownProject"; message: string }
   | { kind: "NotAMember"; message: string }
-  | { kind: "Conflict"; message: string; currentRev?: number }
+  | {
+    kind: "Conflict";
+    message: string;
+    currentRev?: number;
+    audited?: boolean;
+  }
   | {
     kind: "PreconditionFailed";
     message: string;
     currentRev: number;
+    audited?: boolean;
   };
 
 export interface OwnerDocumentsStore {
@@ -68,7 +74,7 @@ export interface OwnerDocumentsStore {
 }
 
 function persistError(
-  kind: OwnerDocumentsError["kind"],
+  kind: Exclude<OwnerDocumentsError["kind"], "PreconditionFailed">,
   message: string,
   cause?: unknown,
 ): OwnerDocumentsError {

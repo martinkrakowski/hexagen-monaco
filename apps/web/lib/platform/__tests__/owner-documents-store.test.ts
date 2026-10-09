@@ -1269,11 +1269,7 @@ describe("owner-documents store", () => {
         .get("user-1", "user-1", "workspace", "doc-1") as { n: number };
       assert.equal(count.n, 1, "the row must exist exactly once");
 
-      assert.equal(
-        auditCount(db),
-        1,
-        "exactly one audit row for the refusal",
-      );
+      assert.equal(auditCount(db), 1, "exactly one audit row for the refusal");
     } finally {
       db.close();
     }
@@ -1549,7 +1545,11 @@ describe("owner-documents store", () => {
       assert.equal(first.success, false);
       if (!first.success) {
         assert.equal(first.error.kind, "Conflict");
-        assert.equal(first.error.audited, true, "first refusal writes an audit row");
+        assert.equal(
+          first.error.audited,
+          true,
+          "first refusal writes an audit row",
+        );
       }
 
       // 5 seconds later — within the same minute cap.
@@ -1561,7 +1561,11 @@ describe("owner-documents store", () => {
       assert.equal(second.success, false);
       if (!second.success) {
         assert.equal(second.error.kind, "Conflict");
-        assert.equal(second.error.audited, false, "second refusal is rate-capped");
+        assert.equal(
+          second.error.audited,
+          false,
+          "second refusal is rate-capped",
+        );
       }
 
       assert.equal(
@@ -1592,8 +1596,16 @@ describe("owner-documents store", () => {
     vi.useFakeTimers();
     vi.setSystemTime(1_000_000_000_000);
     try {
-      await authorA.put({ kind: "workspace", id: "doc-1", payload: { v: "a" } });
-      await authorB.put({ kind: "workspace", id: "doc-2", payload: { v: "b" } });
+      await authorA.put({
+        kind: "workspace",
+        id: "doc-1",
+        payload: { v: "a" },
+      });
+      await authorB.put({
+        kind: "workspace",
+        id: "doc-2",
+        payload: { v: "b" },
+      });
 
       // Both at the same time, different docs, different authors: two rows.
       const [refuseA, refuseB] = await Promise.all([
@@ -1608,8 +1620,12 @@ describe("owner-documents store", () => {
       ]);
       assert.equal(refuseA.success, false);
       assert.equal(refuseB.success, false);
-      if (!refuseA.success) assert.equal(refuseA.error.audited, true);
-      if (!refuseB.success) assert.equal(refuseB.error.audited, true);
+      if (!refuseA.success && refuseA.error.kind === "Conflict") {
+        assert.equal(refuseA.error.audited, true);
+      }
+      if (!refuseB.success && refuseB.error.kind === "Conflict") {
+        assert.equal(refuseB.error.audited, true);
+      }
 
       assert.equal(
         auditCount(db),
@@ -1636,7 +1652,9 @@ describe("owner-documents store", () => {
         999,
       );
       assert.equal(first.success, false);
-      if (!first.success) assert.equal(first.error.audited, true);
+      if (!first.success && first.error.kind === "Conflict") {
+        assert.equal(first.error.audited, true);
+      }
 
       // 61 seconds later — past the cap.
       vi.setSystemTime(1_000_000_061_000);
@@ -1647,14 +1665,14 @@ describe("owner-documents store", () => {
       assert.equal(second.success, false);
       if (!second.success) {
         assert.equal(second.error.kind, "Conflict");
-        assert.equal(second.error.audited, true, "61s later a new row is written");
+        assert.equal(
+          second.error.audited,
+          true,
+          "61s later a new row is written",
+        );
       }
 
-      assert.equal(
-        auditCount(db),
-        2,
-        "two audit rows: one per minute window",
-      );
+      assert.equal(auditCount(db), 2, "two audit rows: one per minute window");
     } finally {
       db.close();
       vi.useRealTimers();

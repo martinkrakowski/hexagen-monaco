@@ -189,9 +189,7 @@ function invalidIfNoneMatch(): { ok: false; response: NextResponse } {
  */
 function parseDocumentIfNoneMatch(
   request: NextRequest,
-):
-  | { ok: true; createOnly: boolean }
-  | { ok: false; response: NextResponse } {
+): { ok: true; createOnly: boolean } | { ok: false; response: NextResponse } {
   const raw = request.headers.get("If-None-Match");
   if (raw == null) return { ok: true, createOnly: false };
   const trimmed = raw.trim();
@@ -457,20 +455,20 @@ export async function handleDocumentPut(
   // is unconditional. Any other value is a malformed 400.
   const noneMatch = parseDocumentIfNoneMatch(request);
   if (!noneMatch.ok) return noneMatch.response;
-   if (noneMatch.createOnly) {
-     const match = parseDocumentIfMatch(request);
-     if (!match.ok) return match.response;
-     if (match.expectedRev !== undefined) {
-       return NextResponse.json(
-         {
-           error: "validation",
-           message: "If-None-Match cannot be combined with If-Match",
-           statusCode: 400,
-         },
-         { status: 400 },
-       );
-     }
-   }
+  if (noneMatch.createOnly) {
+    const match = parseDocumentIfMatch(request);
+    if (!match.ok) return match.response;
+    if (match.expectedRev !== undefined) {
+      return NextResponse.json(
+        {
+          error: "validation",
+          message: "If-None-Match cannot be combined with If-Match",
+          statusCode: 400,
+        },
+        { status: 400 },
+      );
+    }
+  }
 
   // If-Match: rev:<n> only. A bare number is malformed (no legacy support).
   const precondition = parseDocumentIfMatch(request);
@@ -503,10 +501,10 @@ export async function handleDocumentPut(
       method: "PUT",
       kind: kind as DocumentKind,
       id,
-       sent: noneMatch.createOnly ? "*" : precondition.expectedRev,
-       current: storeErr.currentRev,
-       audited: storeErr.audited,
-     });
+      sent: noneMatch.createOnly ? "*" : precondition.expectedRev,
+      current: storeErr.currentRev,
+      audited: storeErr.audited,
+    });
   }
 
   return mapStoreError(result.error);
@@ -558,21 +556,21 @@ export async function handleDocumentDelete(
     id,
     precondition.expectedRev,
   );
-   if (!result.success) {
-     const storeErr = result.error;
-     if (storeErr.kind === "PreconditionFailed") {
-       // eslint-disable-next-line no-console -- operator-facing diagnostic for repeated refusals
-       console.warn("[documents] precondition failed", {
-         method: "DELETE",
-         kind: kind as DocumentKind,
-         id,
-          sent: precondition.expectedRev ?? "*",
-          current: storeErr.currentRev,
-          audited: storeErr.audited,
-        });
-     }
-     return mapStoreError(result.error);
-   }
+  if (!result.success) {
+    const storeErr = result.error;
+    if (storeErr.kind === "PreconditionFailed") {
+      // eslint-disable-next-line no-console -- operator-facing diagnostic for repeated refusals
+      console.warn("[documents] precondition failed", {
+        method: "DELETE",
+        kind: kind as DocumentKind,
+        id,
+        sent: precondition.expectedRev ?? "*",
+        current: storeErr.currentRev,
+        audited: storeErr.audited,
+      });
+    }
+    return mapStoreError(result.error);
+  }
 
   return new NextResponse(null, { status: 204 });
 }

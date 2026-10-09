@@ -1124,9 +1124,15 @@ describe("document routes", () => {
 
     // 2. Stale-If-Match PUT: 409, one audit row.
     const stale = await DETAIL_PUT(
-      putReq(OWNER, KIND, "doc-1", JSON.stringify({ payload: { v: "stale" } }), {
-        "If-Match": '"rev:1"',
-      }),
+      putReq(
+        OWNER,
+        KIND,
+        "doc-1",
+        JSON.stringify({ payload: { v: "stale" } }),
+        {
+          "If-Match": '"rev:1"',
+        },
+      ),
       detailParams(OWNER, KIND, "doc-1"),
     );
     assert.equal(stale.status, 409);
