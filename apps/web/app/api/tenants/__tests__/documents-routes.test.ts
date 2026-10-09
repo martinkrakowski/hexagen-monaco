@@ -892,7 +892,11 @@ describe("document routes", () => {
     assert.equal(res.status, 412);
     const etag = res.headers.get("ETag");
     assert.match(etag ?? "", /rev:1/);
-    const body = (await res.json()) as { error: string; statusCode: number };
+    const body = (await res.json()) as {
+      error: string;
+      statusCode: number;
+      message: string;
+    };
     assert.equal(body.error, "precondition_failed");
     assert.equal(body.statusCode, 412);
     assert.match(body.message, /already exists/);

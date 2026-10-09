@@ -198,10 +198,7 @@ function parseDocumentIfNoneMatch(
   return invalidIfNoneMatch();
 }
 
-function preconditionFailed(
-  currentRev: number,
-  message: string,
-): NextResponse {
+function preconditionFailed(currentRev: number, message: string): NextResponse {
   return NextResponse.json(
     {
       error: "precondition_failed",
