@@ -499,9 +499,10 @@ export async function handleDocumentPut(
       method: "PUT",
       kind: kind as DocumentKind,
       id,
-      sent: noneMatch.createOnly ? "*" : precondition.expectedRev,
-      current: storeErr.currentRev,
-    });
+       sent: noneMatch.createOnly ? "*" : precondition.expectedRev,
+       current: storeErr.currentRev,
+       audited: storeErr.audited,
+     });
   }
 
   return mapStoreError(result.error);
@@ -561,9 +562,10 @@ export async function handleDocumentDelete(
          method: "DELETE",
          kind: kind as DocumentKind,
          id,
-         sent: precondition.expectedRev ?? "*",
-         current: storeErr.currentRev,
-       });
+          sent: precondition.expectedRev ?? "*",
+          current: storeErr.currentRev,
+          audited: storeErr.audited,
+        });
      }
      return mapStoreError(result.error);
    }

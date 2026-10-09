@@ -1356,9 +1356,13 @@ describe("owner-documents store", () => {
     }
   });
 
-  it("each refusal writes exactly one document.precondition_failed row with the detail, and success writes none", async () => {
+  it("each refusal writes exactly one document.precondition_failed row with NULL grantee columns, and success writes none", async () => {
     const db = openPlatformDb(":memory:");
     const platformDb = createSqlitePlatformDb(db);
+    // Fake timers so appendAudit's `new Date()` and the store's rate-limit
+    // check both read the same clock. Set a concrete base time.
+    vi.useFakeTimers();
+    vi.setSystemTime(1_000_000_000_000);
     const store = createOwnerDocumentsStore(platformDb, "user-1", "user-1");
     try {
       // Seed a row at rev 1, then bump to rev 2.
@@ -1366,6 +1370,8 @@ describe("owner-documents store", () => {
       await store.put({ kind: "workspace", id: "doc-1", payload: { v: "b" } });
 
       // Three refusals: stale PUT, create-only, conditional DELETE.
+      // Advance past the 60s cap between each so each writes its own row.
+      vi.setSystemTime(1_000_000_061_000);
       const stalePut = await store.put(
         { kind: "workspace", id: "doc-1", payload: { v: "stale" } },
         1, // stale rev
@@ -1374,7 +1380,9 @@ describe("owner-documents store", () => {
       if (!stalePut.success) {
         assert.equal(stalePut.error.kind, "Conflict");
         assert.equal(stalePut.error.currentRev, 2);
+        assert.equal(stalePut.error.audited, true);
       }
+      vi.setSystemTime(1_000_000_122_000);
       const createOnly = await store.put(
         { kind: "workspace", id: "doc-1", payload: { v: "create" } },
         undefined,
@@ -1384,18 +1392,21 @@ describe("owner-documents store", () => {
       if (!createOnly.success) {
         assert.equal(createOnly.error.kind, "PreconditionFailed");
         assert.equal(createOnly.error.currentRev, 2);
+        assert.equal(createOnly.error.audited, true);
       }
+      vi.setSystemTime(1_000_000_183_000);
       const staleDel = await store.delete("workspace", "doc-1", 1); // stale rev
       assert.equal(staleDel.success, false);
       if (!staleDel.success) {
         assert.equal(staleDel.error.kind, "PreconditionFailed");
         assert.equal(staleDel.error.currentRev, 2);
+        assert.equal(staleDel.error.audited, true);
       }
 
       assert.equal(auditCount(db), 3, "three refusals = three audit rows");
 
-      // Verify each refusal row by subject + action (not by position), with
-      // NULL grantee columns since the audit row carries no detail.
+      // Verify each row by subject + action (not by position), with NULL
+      // grantee columns since the audit row carries no detail.
       const bySubject = db
         .prepare(
           `SELECT subject_owner_id, subject_id, grantee_type, grantee_id
@@ -1446,6 +1457,135 @@ describe("owner-documents store", () => {
       );
     } finally {
       db.close();
+      vi.useRealTimers();
+    }
+  });
+
+  it("two refusals of the same document within a minute write one audit row", async () => {
+    const db = openPlatformDb(":memory:");
+    const platformDb = createSqlitePlatformDb(db);
+    vi.useFakeTimers();
+    vi.setSystemTime(1_000_000_000_000);
+    const store = createOwnerDocumentsStore(platformDb, "user-1", "user-1");
+    try {
+      await store.put({ kind: "workspace", id: "doc-1", payload: { v: "a" } });
+
+      const first = await store.put(
+        { kind: "workspace", id: "doc-1", payload: { v: "stale" } },
+        999, // stale rev
+      );
+      assert.equal(first.success, false);
+      if (!first.success) {
+        assert.equal(first.error.kind, "Conflict");
+        assert.equal(first.error.audited, true, "first refusal writes an audit row");
+      }
+
+      // 5 seconds later — within the same minute cap.
+      vi.setSystemTime(1_000_000_005_000);
+      const second = await store.put(
+        { kind: "workspace", id: "doc-1", payload: { v: "stale2" } },
+        999, // stale rev
+      );
+      assert.equal(second.success, false);
+      if (!second.success) {
+        assert.equal(second.error.kind, "Conflict");
+        assert.equal(second.error.audited, false, "second refusal is rate-capped");
+      }
+
+      assert.equal(
+        auditCount(db),
+        1,
+        "only one audit row for two refusals within a minute",
+      );
+    } finally {
+      db.close();
+      vi.useRealTimers();
+    }
+  });
+
+  it("a refusal of another document, and one by another author, each write their own", async () => {
+    const db = openPlatformDb(":memory:");
+    const platformDb = createSqlitePlatformDb(db);
+    const orgs = createOrgsRepository(platformDb);
+    await orgs.createOrg({
+      id: "org-1",
+      slug: "test",
+      name: "Test",
+      createdBy: "user-a",
+    });
+    await orgs.addMember("org-1", "user-a", "owner");
+    await orgs.addMember("org-1", "user-b", "member");
+    const authorA = createOwnerDocumentsStore(platformDb, "org-1", "user-a");
+    const authorB = createOwnerDocumentsStore(platformDb, "org-1", "user-b");
+    vi.useFakeTimers();
+    vi.setSystemTime(1_000_000_000_000);
+    try {
+      await authorA.put({ kind: "workspace", id: "doc-1", payload: { v: "a" } });
+      await authorB.put({ kind: "workspace", id: "doc-2", payload: { v: "b" } });
+
+      // Both at the same time, different docs, different authors: two rows.
+      const [refuseA, refuseB] = await Promise.all([
+        authorA.put(
+          { kind: "workspace", id: "doc-1", payload: { v: "stale" } },
+          999,
+        ),
+        authorB.put(
+          { kind: "workspace", id: "doc-2", payload: { v: "stale" } },
+          999,
+        ),
+      ]);
+      assert.equal(refuseA.success, false);
+      assert.equal(refuseB.success, false);
+      if (!refuseA.success) assert.equal(refuseA.error.audited, true);
+      if (!refuseB.success) assert.equal(refuseB.error.audited, true);
+
+      assert.equal(
+        auditCount(db),
+        2,
+        "different docs/authors each write their own row",
+      );
+    } finally {
+      db.close();
+      vi.useRealTimers();
+    }
+  });
+
+  it("a refusal 61 seconds later writes a second row", async () => {
+    const db = openPlatformDb(":memory:");
+    const platformDb = createSqlitePlatformDb(db);
+    vi.useFakeTimers();
+    vi.setSystemTime(1_000_000_000_000);
+    const store = createOwnerDocumentsStore(platformDb, "user-1", "user-1");
+    try {
+      await store.put({ kind: "workspace", id: "doc-1", payload: { v: "a" } });
+
+      const first = await store.put(
+        { kind: "workspace", id: "doc-1", payload: { v: "stale1" } },
+        999,
+      );
+      assert.equal(first.success, false);
+      if (!first.success) assert.equal(first.error.audited, true);
+
+      // 61 seconds later — past the cap.
+      vi.setSystemTime(1_000_000_061_000);
+      const second = await store.put(
+        { kind: "workspace", id: "doc-1", payload: { v: "stale2" } },
+        999,
+      );
+      assert.equal(second.success, false);
+      if (!second.success) {
+        assert.equal(second.error.kind, "Conflict");
+        assert.equal(second.error.audited, true, "61s later a new row is written");
+      }
+
+      assert.equal(
+        auditCount(db),
+        2,
+        "two audit rows: one per minute window",
+      );
+    } finally {
+      db.close();
+      vi.useRealTimers();
     }
   });
 
