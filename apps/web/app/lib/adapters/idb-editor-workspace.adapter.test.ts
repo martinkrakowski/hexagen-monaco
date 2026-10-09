@@ -16,9 +16,14 @@ vi.mock("idb-keyval", () => ({
   del: vi.fn(async (key: string) => {
     idb.store.delete(key);
   }),
+  update: vi.fn(async (key: string, updater: (val: unknown) => unknown) => {
+    const current = idb.store.get(key);
+    idb.store.set(key, updater(current));
+  }),
 }));
 
 import { IDBEditorWorkspaceAdapter } from "./idb-editor-workspace.adapter";
+import { set, update } from "idb-keyval";
 import type { PersistedEditorWorkspace } from "@hexagen/shared";
 
 const WORKSPACE_KEY = "hexagen:workspace:";
@@ -191,5 +196,28 @@ describe("IDBEditorWorkspaceAdapter loadWorkspace", () => {
     const good = await adapter.loadWorkspace("good");
     assert.ok(good.success && good.value !== null);
     assert.equal(good.value?.sessionId, "good");
+  });
+});
+
+describe("IDBEditorWorkspaceAdapter recordConflict", () => {
+  beforeEach(() => {
+    idb.store.clear();
+    update.mockClear();
+    set.mockClear();
+  });
+
+  it("recordConflict goes through one update() call", async () => {
+    const adapter = new IDBEditorWorkspaceAdapter();
+    await adapter.recordConflict({
+      id: "c1",
+      at: new Date().toISOString(),
+      where: "load",
+      stampRev: 1,
+      serverRev: 2,
+    });
+    assert.equal(update.mock.calls.length, 1, "single update() call");
+    assert.equal(update.mock.calls[0]![0], "hexagen:workspace-conflicts");
+    // Single transaction: not a read-then-set pair.
+    assert.equal(set.mock.calls.length, 0, "no separate set() call");
   });
 });
