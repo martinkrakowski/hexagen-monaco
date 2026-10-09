@@ -281,7 +281,7 @@ describe("pg-schema", () => {
     expect(doc).toBeUndefined();
   });
 
-  it("0002 is applied on top of 0001 (schema_migrations has versions 1 and 2)", async () => {
+  it("0002 and 0003 are applied (schema_migrations has versions 1, 2 and 3)", async () => {
     const versions = await db.all<{ version: number }>(
       "SELECT version FROM schema_migrations ORDER BY version",
     );

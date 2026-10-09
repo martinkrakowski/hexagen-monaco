@@ -52,7 +52,7 @@ describe("pg-migrate", () => {
 
   it("a fresh database gets all migrations and all tables", async () => {
     const { applied } = await runPgMigrations(pool);
-    expect(applied).toEqual(PG_MIGRATIONS.map((m) => m.version));
+    expect(applied).toEqual([1, 2, 3]);
 
     const m = await pool.query<{
       version: number;
