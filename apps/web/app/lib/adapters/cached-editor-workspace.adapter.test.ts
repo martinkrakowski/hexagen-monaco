@@ -1083,7 +1083,17 @@ describe("CachedEditorWorkspaceAdapter Item 9: deleted-elsewhere", () => {
     assert.ok(stamp, "stamp preserved");
     const after = await cache.loadWorkspace(UUID);
     assert.ok(after.success && after.value);
-    assert.equal(after.value!.updatedAt, 1000, "browser copy preserved");
+    assert.deepEqual(after.value, ws, "cache entry byte-identical");
+
+    // A following save sends nothing (paused).
+    const beforePuts = putCallsOf(fetchImpl).length;
+    await adapter.saveWorkspace(UUID, makeWorkspace(2000));
+    await vi.advanceTimersByTimeAsync(REMOTE_DEBOUNCE_MS);
+    assert.equal(
+      putCallsOf(fetchImpl).length,
+      beforePuts,
+      "no PUT while paused",
+    );
   });
 });
 
