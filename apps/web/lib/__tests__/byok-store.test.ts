@@ -23,6 +23,17 @@ function fixture(over: Partial<KeyMetadata> = {}): KeyMetadata {
   };
 }
 
+function must<T>(
+  result: { success: true; value: T } | { success: false; error: unknown },
+): T {
+  if (!result.success) {
+    throw new Error(
+      `expected success, got error: ${JSON.stringify(result.error)}`,
+    );
+  }
+  return result.value;
+}
+
 describe.each(BACKENDS)("byok-store (%s)", (kind) => {
   let backend: ByokBackend;
   beforeEach(async () => {
@@ -111,6 +122,25 @@ describe.each(BACKENDS)("byok-store (%s)", (kind) => {
     });
     const after = await backend.store.revocation.isRevoked("user-1", "openai");
     assert.strictEqual(after.success && after.value, true);
+
+    // A second revoke for the same (user, provider) with a different key id
+    // hits the DO UPDATE path — the row must carry the NEW key id, not a
+    // duplicate row.
+    const secondRevoke = await backend.store.revocation.revoke({
+      userId: "user-1",
+      provider: "openai",
+      keyId: "key-2",
+      revokedAt: "2026-01-03T00:00:00.000Z",
+      revokedBy: "admin",
+    });
+    assert.strictEqual(secondRevoke.success, true);
+
+    const rows = await backend.db.all<{ key_id: string }>(
+      "SELECT key_id FROM byok_revocations WHERE user_id = ? AND provider = ?",
+      ["user-1", "openai"],
+    );
+    assert.strictEqual(rows.length, 1);
+    assert.strictEqual(rows[0].key_id, "key-2");
   });
 
   // Decision 8 condition tests: each guards against a missing WHERE clause.
@@ -198,14 +228,13 @@ describe.each(BACKENDS)("byok-store (%s)", (kind) => {
     );
     await backend.store.metadata.markRevoked("revoke", "admin");
 
-    const kept = await backend.store.metadata.findByKeyId("keep");
-    assert.strictEqual(kept.success && kept.value?.revokedAt, null);
-    const revoked = await backend.store.metadata.findByKeyId("revoke");
-    assert.strictEqual(
-      revoked.success && revoked.value?.revokedAt !== null,
-      true,
-    );
-    assert.strictEqual(revoked.success && revoked.value?.revokedBy, "admin");
+    const kept = must(await backend.store.metadata.findByKeyId("keep"));
+    assert.ok(kept, "expected key 'keep' to be found");
+    assert.strictEqual(kept!.revokedAt, null);
+    const revoked = must(await backend.store.metadata.findByKeyId("revoke"));
+    assert.ok(revoked, "expected key 'revoke' to be found");
+    assert.strictEqual(revoked!.revokedAt !== null, true);
+    assert.strictEqual(revoked!.revokedBy, "admin");
   });
 
   it("20 concurrent stores for one user and provider get 20 distinct write_seq values", async () => {
@@ -225,6 +254,15 @@ describe.each(BACKENDS)("byok-store (%s)", (kind) => {
     const seqs = rows.map((r) => r.write_seq);
     const uniq = new Set(seqs);
     assert.strictEqual(uniq.size, 20);
+
+    // findByUserAndProvider must return the key with the GREATEST write_seq,
+    // not the one ordered first/ascending.
+    const maxRow = rows.reduce((a, b) => (a.write_seq > b.write_seq ? a : b));
+    const current = await backend.store.metadata.findByUserAndProvider(
+      "user-1",
+      "openai",
+    );
+    assert.strictEqual(current.success && current.value?.keyId, maxRow.key_id);
   });
 
   it("write_seq increases across sequential stores", async () => {
@@ -249,14 +287,15 @@ describe.each(BACKENDS)("byok-store (%s)", (kind) => {
   });
 
   it("createdAt and revokedAt round-trip as ISO strings", async () => {
-    const createdAt = "2026-01-01T00:00:00.000Z";
+    const createdAt = "2026-01-01T00:00:00.123Z";
+    const revokedAt = "2026-02-02T00:00:00.456Z";
     await backend.store.metadata.store(fixture({ keyId: "time-1", createdAt }));
     await backend.store.metadata.markRevoked("time-1", "admin");
     await backend.store.revocation.revoke({
       userId: "user-1",
       provider: "openai",
       keyId: "time-1",
-      revokedAt: "2026-02-02T00:00:00.000Z",
+      revokedAt,
       revokedBy: "admin",
     });
 
@@ -264,18 +303,18 @@ describe.each(BACKENDS)("byok-store (%s)", (kind) => {
     assert.strictEqual(meta.success && meta.value?.createdAt, createdAt);
     assert.strictEqual(meta.success && typeof meta.value?.revokedAt, "string");
     assert.strictEqual(meta.success && typeof meta.value?.revokedBy, "string");
-    new Date(
-      meta.success && meta.value?.revokedAt
-        ? (meta.value!.revokedAt as string)
-        : "",
-    ).getTime();
+    assert.ok(
+      meta.success &&
+        meta.value?.revokedAt &&
+        new Date(meta.value.revokedAt as string).getTime() > 0,
+    );
 
     const raw = await backend.db.get<{ revoked_at: string }>(
       "SELECT revoked_at FROM byok_revocations WHERE user_id = ? AND provider = ?",
       ["user-1", "openai"],
     );
-    assert.strictEqual(typeof raw!.revoked_at, "string");
-    new Date(raw!.revoked_at).getTime();
+    assert.strictEqual(raw!.revoked_at, revokedAt);
+    assert.ok(new Date(raw!.revoked_at).getTime() > 0);
   });
 
   it("the store runs on any PlatformDb: store, find, revoke", async () => {
@@ -336,21 +375,19 @@ describe.each(BACKENDS)("byok-store (%s)", (kind) => {
       `expected kA or kB, got ${current.value?.keyId}`,
     );
 
-    // On Postgres: write_seq values are distinct, and the current key has
-    // the greater write_seq (the one nextval handed it last).
-    if (backend.kind === "postgres") {
-      const rows = await backend.db.all<{ key_id: string; write_seq: number }>(
-        "SELECT key_id, write_seq FROM byok_key_metadata WHERE user_id = ? AND provider = ?",
-        ["user-1", "openai"],
-      );
-      assert.strictEqual(rows.length, 2);
-      const seqMap = new Map(rows.map((r) => [r.key_id, r.write_seq]));
-      const aSeq = seqMap.get("kA")!;
-      const bSeq = seqMap.get("kB")!;
-      assert.notStrictEqual(aSeq, bSeq);
-      const expected = aSeq > bSeq ? "kA" : "kB";
-      assert.strictEqual(current.value?.keyId, expected);
-    }
+    // write_seq values are distinct on both backends, and the current key
+    // has the greater write_seq (the one the backend handed it last).
+    const rows = await backend.db.all<{ key_id: string; write_seq: number }>(
+      "SELECT key_id, write_seq FROM byok_key_metadata WHERE user_id = ? AND provider = ?",
+      ["user-1", "openai"],
+    );
+    assert.strictEqual(rows.length, 2);
+    const seqMap = new Map(rows.map((r) => [r.key_id, r.write_seq]));
+    const aSeq = seqMap.get("kA")!;
+    const bSeq = seqMap.get("kB")!;
+    assert.notStrictEqual(aSeq, bSeq);
+    const expected = aSeq > bSeq ? "kA" : "kB";
+    assert.strictEqual(current.value?.keyId, expected);
   });
 
   it("close returns a Promise and a second close resolves", async () => {
@@ -387,9 +424,10 @@ describe("byok-store (durable across reopen — AUD-007)", () => {
 
     // A fresh handle on the same file is what a container restart looks like.
     const second = createByokStore(dbPath);
-    const meta = await second.metadata.findByKeyId("key-1");
-    assert.strictEqual(meta.success && meta.value?.revokedAt !== null, true);
-    assert.strictEqual(meta.success && meta.value?.revokedBy, "admin");
+    const meta = must(await second.metadata.findByKeyId("key-1"));
+    assert.ok(meta, "expected key to be found after reopen");
+    assert.strictEqual(meta!.revokedAt !== null, true);
+    assert.strictEqual(meta!.revokedBy, "admin");
 
     const revoked = await second.revocation.isRevoked("user-1", "openai");
     assert.strictEqual(revoked.success && revoked.value, true);
@@ -414,14 +452,17 @@ describe("byok-store (durable across reopen — AUD-007)", () => {
     const pool = createPgPool(url, { max: 2 });
     const db2 = createPgPlatformDb(pool);
     const store2 = createByokStoreOn(db2);
+    try {
+      const meta = must(await store2.metadata.findByKeyId("key-1"));
+      assert.ok(meta, "expected key to be found after reopen");
+      assert.strictEqual(meta!.revokedAt !== null, true);
+      assert.strictEqual(meta!.revokedBy, "admin");
 
-    const meta = await store2.metadata.findByKeyId("key-1");
-    assert.strictEqual(meta.success && meta.value?.revokedAt !== null, true);
-    assert.strictEqual(meta.success && meta.value?.revokedBy, "admin");
-
-    const revoked = await store2.revocation.isRevoked("user-1", "openai");
-    assert.strictEqual(revoked.success && revoked.value, true);
-    await store2.close();
-    await drop();
+      const revoked = await store2.revocation.isRevoked("user-1", "openai");
+      assert.strictEqual(revoked.success && revoked.value, true);
+    } finally {
+      await store2.close();
+      await drop();
+    }
   });
 });
