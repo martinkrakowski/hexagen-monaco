@@ -202,8 +202,8 @@ describe("IDBEditorWorkspaceAdapter loadWorkspace", () => {
 describe("IDBEditorWorkspaceAdapter recordConflict", () => {
   beforeEach(() => {
     idb.store.clear();
-    update.mockClear();
-    set.mockClear();
+    vi.mocked(update).mockClear();
+    vi.mocked(set).mockClear();
   });
 
   it("recordConflict goes through one update() call", async () => {
@@ -215,9 +215,17 @@ describe("IDBEditorWorkspaceAdapter recordConflict", () => {
       stampRev: 1,
       serverRev: 2,
     });
-    assert.equal(update.mock.calls.length, 1, "single update() call");
-    assert.equal(update.mock.calls[0]![0], "hexagen:workspace-conflicts");
-    // Single transaction: not a read-then-set pair.
-    assert.equal(set.mock.calls.length, 0, "no separate set() call");
+    // Single transaction: recordConflict goes through update() once and not a
+    // separate get()/set() pair.
+    assert.equal(
+      vi.mocked(update).mock.calls.length,
+      1,
+      "single update() call",
+    );
+    assert.equal(
+      vi.mocked(update).mock.calls[0]![0],
+      "hexagen:workspace-conflicts",
+    );
+    assert.equal(vi.mocked(set).mock.calls.length, 0, "no separate set() call");
   });
 });
