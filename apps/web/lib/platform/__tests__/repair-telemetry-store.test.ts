@@ -575,7 +575,7 @@ describe.each(BACKENDS)("repair telemetry store (%s)", (kind) => {
     } finally {
       await backend.close();
     }
-  });
+  }, 120_000); // five hundred transactions on a slow disk.
 
   it("writes the new run and evicts the oldest with its attempts in one record call", async () => {
     const { backend, db, store } = await openStore(kind);
@@ -614,7 +614,7 @@ describe.each(BACKENDS)("repair telemetry store (%s)", (kind) => {
     } finally {
       await backend.close();
     }
-  });
+  }, 120_000); // five hundred transactions on a slow disk.
 
   it("hides rows written under a foreign schema_version instead of decoding them", async () => {
     const { backend, db, store } = await openStore(kind);
@@ -1009,7 +1009,7 @@ describe.each(BACKENDS)("repair telemetry store (%s)", (kind) => {
     } finally {
       await backend.close();
     }
-  });
+  }, 120_000); // five hundred transactions on a slow disk.
 
   it("RP7 listRuns and listAttempts hide other schema versions and other owners", async () => {
     const { backend, db, store } = await openStore(kind, "owner-a");

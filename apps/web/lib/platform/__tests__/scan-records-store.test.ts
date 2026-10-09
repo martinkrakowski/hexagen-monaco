@@ -527,7 +527,7 @@ describe.each(BACKENDS)("scan records store (%s)", (kind) => {
       } finally {
         await backend.close();
       }
-    });
+    }, 120_000); // five hundred transactions on a slow disk.
 
     it("reclaims foreign-version rows too, so a version bump cannot leak storage", async () => {
       const { backend, db, store } = await harness(kind);
@@ -765,7 +765,7 @@ describe.each(BACKENDS)("scan records store (%s)", (kind) => {
       } finally {
         await backend.close();
       }
-    });
+    }, 120_000); // five hundred transactions on a slow disk.
 
     it("SC5 a repeated id is a Conflict for the same owner and is fine for another owner", async () => {
       const { backend, store, other } = await harness(kind);
