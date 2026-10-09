@@ -34,7 +34,9 @@ import {
 } from "./scan-records-store";
 import {
   createOwnerDocumentsStore,
+  type ListDocumentsResult,
   type OwnerDocumentsStore,
+  listDocumentsAuthoredBy,
 } from "./owner-documents-store";
 
 export interface PlatformStore {
@@ -53,6 +55,16 @@ export interface PlatformStore {
   scansFor(ownerId: string): ScanRecordsStore;
   /** Per-person working documents: tenant AND author, both from the session. */
   documentsFor(ownerId: string, userId: string): OwnerDocumentsStore;
+  /**
+   * Every document `userId` authored, in every tenant. For that user's own
+   * account export only — `userId` is the JWT `sub`, the author, never request
+   * input. Bounded by `limit` rows and `maxChars` of payload text.
+   */
+  documentsAuthoredBy(
+    userId: string,
+    limit: number,
+    maxChars: number,
+  ): Promise<ListDocumentsResult>;
   /**
    * Where this store expects scan artifact bytes to live. Exposed so a route
    * can write the file and mkdir the directory -- the row store itself does no
@@ -93,6 +105,9 @@ export function createPlatformStore(
     },
     documentsFor(ownerId, userId) {
       return createOwnerDocumentsStore(platformDb, ownerId, userId);
+    },
+    documentsAuthoredBy(userId, limit, maxChars) {
+      return listDocumentsAuthoredBy(platformDb, userId, limit, maxChars);
     },
     async isProjectsInitialized(ownerId) {
       return ownerState.isInitialized(ownerId);

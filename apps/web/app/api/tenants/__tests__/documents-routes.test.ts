@@ -845,10 +845,10 @@ describe("document routes", () => {
       new NextRequest(detailUrl(OWNER, KIND, DOC_ID)),
       detailParams(OWNER, KIND, DOC_ID),
     );
-     assert.equal(got.status, 404);
+    assert.equal(got.status, 404);
   });
 
-  it("If-None-Match * on an absent document creates it (200, ETag \"rev:1\")", async () => {
+  it('If-None-Match * on an absent document creates it (200, ETag "rev:1")', async () => {
     signedInAs(OWNER);
     const res = await DETAIL_PUT(
       putReq(
@@ -865,7 +865,7 @@ describe("document routes", () => {
     assert.match(etag ?? "", /rev:1/);
   });
 
-  it("If-None-Match * on an existing document is 412 with ETag \"rev:<current>\", body error precondition_failed, and the stored document is unchanged", async () => {
+  it('If-None-Match * on an existing document is 412 with ETag "rev:<current>", body error precondition_failed, and the stored document is unchanged', async () => {
     signedInAs(OWNER);
     // Seed a document.
     await DETAIL_PUT(
@@ -910,26 +910,19 @@ describe("document routes", () => {
     signedInAs(OWNER);
     // Non-* value: 400.
     const badValue = await DETAIL_PUT(
-      putReq(
-        OWNER,
-        KIND,
-        DOC_ID,
-        JSON.stringify({ payload: {} }),
-        { "If-None-Match": '"rev:1"' },
-      ),
+      putReq(OWNER, KIND, DOC_ID, JSON.stringify({ payload: {} }), {
+        "If-None-Match": '"rev:1"',
+      }),
       detailParams(OWNER, KIND, DOC_ID),
     );
     assert.equal(badValue.status, 400);
 
     // * with If-Match: 400.
     const combined = await DETAIL_PUT(
-      putReq(
-        OWNER,
-        KIND,
-        DOC_ID,
-        JSON.stringify({ payload: {} }),
-        { "If-None-Match": "*", "If-Match": '"rev:1"' },
-      ),
+      putReq(OWNER, KIND, DOC_ID, JSON.stringify({ payload: {} }), {
+        "If-None-Match": "*",
+        "If-Match": '"rev:1"',
+      }),
       detailParams(OWNER, KIND, DOC_ID),
     );
     assert.equal(combined.status, 400);
@@ -968,9 +961,15 @@ describe("document routes", () => {
       detailParams(OWNER, KIND, DOC_ID),
     );
     const bump = await DETAIL_PUT(
-      putReq(OWNER, KIND, DOC_ID, JSON.stringify({ payload: { v: "alive2" } }), {
-        "If-Match": '"rev:1"',
-      }),
+      putReq(
+        OWNER,
+        KIND,
+        DOC_ID,
+        JSON.stringify({ payload: { v: "alive2" } }),
+        {
+          "If-Match": '"rev:1"',
+        },
+      ),
       detailParams(OWNER, KIND, DOC_ID),
     );
     assert.equal(bump.status, 200);

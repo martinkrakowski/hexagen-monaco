@@ -163,23 +163,23 @@ function parseDocumentIfMatch(
     return { ok: true, expectedRev: rev };
   }
 
-   // No legacy numeric form for documents: a bare number is malformed.
-   return malformedIfMatch();
- }
+  // No legacy numeric form for documents: a bare number is malformed.
+  return malformedIfMatch();
+}
 
 function invalidIfNoneMatch(): { ok: false; response: NextResponse } {
-   return {
-     ok: false,
-     response: NextResponse.json(
-       {
-         error: "validation",
-         message: "Invalid If-None-Match precondition",
-         statusCode: 400,
-       },
-       { status: 400 },
-     ),
-   };
- }
+  return {
+    ok: false,
+    response: NextResponse.json(
+      {
+        error: "validation",
+        message: "Invalid If-None-Match precondition",
+        statusCode: 400,
+      },
+      { status: 400 },
+    ),
+  };
+}
 
 /**
  * Parses `If-None-Match` for documents. Absent, empty, or `*` all mean
@@ -188,26 +188,24 @@ function invalidIfNoneMatch(): { ok: false; response: NextResponse } {
  * value that is not `*` after trimming) is a malformed 400.
  */
 function parseDocumentIfNoneMatch(
-   request: NextRequest,
-):
-   | { ok: true; createOnly: boolean }
-   | { ok: false; response: NextResponse } {
-   const raw = request.headers.get("If-None-Match");
-   if (raw == null || raw === "" || raw === "*")
-     return { ok: true, createOnly: raw === "*" };
-   return invalidIfNoneMatch();
- }
+  request: NextRequest,
+): { ok: true; createOnly: boolean } | { ok: false; response: NextResponse } {
+  const raw = request.headers.get("If-None-Match");
+  if (raw == null || raw === "" || raw === "*")
+    return { ok: true, createOnly: raw === "*" };
+  return invalidIfNoneMatch();
+}
 
 function preconditionFailed(currentRev: number): NextResponse {
-   return NextResponse.json(
-     {
-       error: "precondition_failed",
-       message: `document was updated elsewhere; expected the current rev`,
-       statusCode: 412,
-     },
-     { status: 412, headers: { ETag: `"rev:${currentRev}"` } },
-   );
- }
+  return NextResponse.json(
+    {
+      error: "precondition_failed",
+      message: `document was updated elsewhere; expected the current rev`,
+      statusCode: 412,
+    },
+    { status: 412, headers: { ETag: `"rev:${currentRev}"` } },
+  );
+}
 
 // --- store error mapping ---
 
@@ -237,16 +235,16 @@ function mapStoreError(error: OwnerDocumentsError): NextResponse {
       { status: 400 },
     );
   }
-   if (error.kind === "Conflict") {
-     return NextResponse.json(
-       { error: "Conflict", message: error.message, statusCode: 409 },
-       { status: 409 },
-     );
-   }
-   if (error.kind === "PreconditionFailed") {
-     return preconditionFailed(error.currentRev);
-   }
-   if (error.kind === "NotAMember") {
+  if (error.kind === "Conflict") {
+    return NextResponse.json(
+      { error: "Conflict", message: error.message, statusCode: 409 },
+      { status: 409 },
+    );
+  }
+  if (error.kind === "PreconditionFailed") {
+    return preconditionFailed(error.currentRev);
+  }
+  if (error.kind === "NotAMember") {
     return NextResponse.json(
       {
         error: "forbidden",
@@ -451,47 +449,47 @@ export async function handleDocumentPut(
     );
   }
 
-   // If-None-Match: `*` means create-only (refuse to overwrite); absent/empty
-   // is unconditional. Any other value is a malformed 400.
-   const noneMatch = parseDocumentIfNoneMatch(request);
-   if (!noneMatch.ok) return noneMatch.response;
-   if (noneMatch.createOnly) {
-     const match = parseDocumentIfMatch(request);
-     if (!match.ok) return match.response;
-     if (match.expectedRev !== undefined || request.headers.get("If-Match")) {
-       return NextResponse.json(
-         {
-           error: "validation",
-           message: "If-None-Match cannot be combined with If-Match",
-           statusCode: 400,
-         },
-         { status: 400 },
-       );
-     }
-   }
+  // If-None-Match: `*` means create-only (refuse to overwrite); absent/empty
+  // is unconditional. Any other value is a malformed 400.
+  const noneMatch = parseDocumentIfNoneMatch(request);
+  if (!noneMatch.ok) return noneMatch.response;
+  if (noneMatch.createOnly) {
+    const match = parseDocumentIfMatch(request);
+    if (!match.ok) return match.response;
+    if (match.expectedRev !== undefined || request.headers.get("If-Match")) {
+      return NextResponse.json(
+        {
+          error: "validation",
+          message: "If-None-Match cannot be combined with If-Match",
+          statusCode: 400,
+        },
+        { status: 400 },
+      );
+    }
+  }
 
-   // If-Match: rev:<n> only. A bare number is malformed (no legacy support).
-   const precondition = parseDocumentIfMatch(request);
-   if (!precondition.ok) return precondition.response;
+  // If-Match: rev:<n> only. A bare number is malformed (no legacy support).
+  const precondition = parseDocumentIfMatch(request);
+  if (!precondition.ok) return precondition.response;
 
-   // Store call.
-   const store = getPlatformStore().documentsFor(tenant.tenantId, tenant.userId);
-   const result = await store.put(
-     {
-       kind: kind as DocumentKind,
-       id,
-       projectId,
-       payload: body.payload,
-     },
-     precondition.expectedRev,
-     { createOnly: noneMatch.createOnly },
-   );
+  // Store call.
+  const store = getPlatformStore().documentsFor(tenant.tenantId, tenant.userId);
+  const result = await store.put(
+    {
+      kind: kind as DocumentKind,
+      id,
+      projectId,
+      payload: body.payload,
+    },
+    precondition.expectedRev,
+    { createOnly: noneMatch.createOnly },
+  );
 
-   if (result.success) {
-     return documentResponse(result.value);
-   }
+  if (result.success) {
+    return documentResponse(result.value);
+  }
 
-   return mapStoreError(result.error);
+  return mapStoreError(result.error);
 }
 
 /**
@@ -525,24 +523,24 @@ export async function handleDocumentDelete(
   const gate = guardMutation(request, DOCUMENT_MUTATION_GUARD);
   if (gate) return gate;
 
-   // 3. requireTenant.
-   const tenant = await requireTenant(request, ownerId);
-   if (!tenant.ok) return tenant.response;
+  // 3. requireTenant.
+  const tenant = await requireTenant(request, ownerId);
+  if (!tenant.ok) return tenant.response;
 
-   // 4. If-Match: rev:<n> only. A bare number is malformed (no legacy support).
-   const precondition = parseDocumentIfMatch(request);
-   if (!precondition.ok) return precondition.response;
+  // 4. If-Match: rev:<n> only. A bare number is malformed (no legacy support).
+  const precondition = parseDocumentIfMatch(request);
+  if (!precondition.ok) return precondition.response;
 
-   // 5. Store call.
-   const store = getPlatformStore().documentsFor(tenant.tenantId, tenant.userId);
-   const result = await store.delete(
-     kind as DocumentKind,
-     id,
-     precondition.expectedRev,
-   );
-   if (!result.success) {
-     return mapStoreError(result.error);
-   }
+  // 5. Store call.
+  const store = getPlatformStore().documentsFor(tenant.tenantId, tenant.userId);
+  const result = await store.delete(
+    kind as DocumentKind,
+    id,
+    precondition.expectedRev,
+  );
+  if (!result.success) {
+    return mapStoreError(result.error);
+  }
 
-   return new NextResponse(null, { status: 204 });
+  return new NextResponse(null, { status: 204 });
 }
