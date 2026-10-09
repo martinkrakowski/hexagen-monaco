@@ -385,7 +385,9 @@ describe.each(backends)("owner document revs: %s", (_name, make) => {
     try {
       await store.put({ kind: "workspace", id: "doc-1", payload: { v: "1" } });
       await store.put({ kind: "workspace", id: "doc-1", payload: { v: "2" } });
-      const n = (await store.get("workspace", "doc-1")).value!.rev;
+      const got = await store.get("workspace", "doc-1");
+      assert.equal(got.success, true);
+      const n = got.value!.rev;
 
       // Member removal deletes the member's documents, but must NOT touch the
       // counter (a re-added member, or a doc under a re-created project, would
@@ -431,7 +433,9 @@ describe.each(backends)("owner document revs: %s", (_name, make) => {
     try {
       await store.put({ kind: "workspace", id: "doc-1", payload: { v: "1" } });
       await store.put({ kind: "workspace", id: "doc-1", payload: { v: "2" } });
-      const n = (await store.get("workspace", "doc-1")).value!.rev;
+      const got = await store.get("workspace", "doc-1");
+      assert.equal(got.success, true);
+      const n = got.value!.rev;
 
       // Delete the owner's documents the same way an org delete does: through
       // the session, inside a transaction. The counter must not be touched.

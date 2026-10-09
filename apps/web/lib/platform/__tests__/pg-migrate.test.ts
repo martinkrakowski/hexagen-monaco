@@ -92,7 +92,7 @@ describe("pg-migrate", () => {
       "SELECT last_rev FROM owner_document_revs WHERE owner_id = $1 AND user_id = $2",
       ["o-1", "u-1"],
     );
-    expect(row.rows).toHaveLength(1, "exactly one counter row is backfilled");
+    expect(row.rows.length).toBe(1);
     expect(row.rows[0].last_rev).toBe(4);
   });
 
