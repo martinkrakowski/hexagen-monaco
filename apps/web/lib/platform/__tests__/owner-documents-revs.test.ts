@@ -501,10 +501,11 @@ describe.each(backends)("owner document revs: %s", (_name, make) => {
         batch.push(
           store
             .put({ kind: "workspace", id, payload: { v: i } })
-            .then((r): Res =>
-              r.success
-                ? { ok: true, id, rev: r.value.rev }
-                : { ok: false, id, reason: r.error.kind },
+            .then(
+              (r): Res =>
+                r.success
+                  ? { ok: true, id, rev: r.value.rev }
+                  : { ok: false, id, reason: r.error.kind },
             ),
         );
       }
@@ -515,10 +516,11 @@ describe.each(backends)("owner document revs: %s", (_name, make) => {
         batch.push(
           store
             .put({ kind: "workspace", id: "seed", payload: { v: i } }, seedRev)
-            .then((r): Res =>
-              r.success
-                ? { ok: true, id: "seed", rev: r.value.rev }
-                : { ok: false, id: "seed", reason: r.error.kind },
+            .then(
+              (r): Res =>
+                r.success
+                  ? { ok: true, id: "seed", rev: r.value.rev }
+                  : { ok: false, id: "seed", reason: r.error.kind },
             ),
         );
       }

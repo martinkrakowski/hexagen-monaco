@@ -136,7 +136,8 @@ describe("owner_documents schema", () => {
           "SELECT project_id FROM owner_documents WHERE owner_id = ? AND user_id = ? AND kind = ? AND id = ?",
         )
         .get("owner-1", "user-1", "workspace", "doc-1") as
-        { project_id: null } | undefined;
+        | { project_id: null }
+        | undefined;
       assert.ok(row, "the row must exist");
       assert.equal(row.project_id, null);
     } finally {
