@@ -31,37 +31,58 @@ export interface EditorWorkspaceCachePort extends EditorWorkspacePersistencePort
 
 /**
  * Default userIdSource: fetches `GET /api/auth/session` once, reads `user.sub`,
- * caches a non-null answer in memory, returns null on any failure or when there
- * is no user. `null` means signed out or offline — every method goes straight
- * to the cache.
+ * caches the result in memory (a non-null id, or a 30 s null cache for a signed-
+ * out / offline / failed session), and returns null otherwise.
+ *
+ * Concurrent callers share a single in-flight fetch; a signed-out answer is
+ * cached for 30 s so an offline browser does not hammer `/api/auth/session` on
+ * every save.
  */
 let cachedUserId: string | undefined;
+let nullUntil: number = 0;
+let inFlight: Promise<string | null> | null = null;
 
-export async function defaultUserIdSource(): Promise<string | null> {
+export function defaultUserIdSource(): Promise<string | null> {
   if (cachedUserId !== undefined) return cachedUserId;
-  try {
-    const response = await fetch("/api/auth/session");
-    if (!response.ok) return null;
-    const data = (await response.json()) as { user?: { sub?: unknown } };
-    const sub = data?.user?.sub;
-    if (typeof sub === "string" && sub.length > 0) {
-      cachedUserId = sub;
-      return sub;
+  const now = Date.now();
+  if (now < nullUntil) return null;
+  if (inFlight !== null) return inFlight;
+  inFlight = (async () => {
+    try {
+      const response = await fetch("/api/auth/session");
+      if (!response.ok) {
+        nullUntil = Date.now() + 30_000;
+        return null;
+      }
+      const data = (await response.json()) as { user?: { sub?: unknown } };
+      const sub = data?.user?.sub;
+      if (typeof sub === "string" && sub.length > 0) {
+        cachedUserId = sub;
+        return sub;
+      }
+      nullUntil = Date.now() + 30_000;
+      return null;
+    } catch {
+      nullUntil = Date.now() + 30_000;
+      return null;
+    } finally {
+      inFlight = null;
     }
-    return null;
-  } catch {
-    return null;
-  }
+  })();
+  return inFlight;
 }
 
 /**
  * Item 15: resets the cached user id so the next call to
  * `defaultUserIdSource` re-fetches `/api/auth/session`. Called when a remote
  * response is 401/403 — a tab whose session ended must stop addressing the
- * old account's URL.
+ * old account's URL. Clears all three caches: the id, the null-cache timer,
+ * and the in-flight promise.
  */
 export function resetCachedUserId(): void {
   cachedUserId = undefined;
+  nullUntil = 0;
+  inFlight = null;
 }
 
 /** Client copy of the server's id pattern (pinned by test to avoid drift). */
