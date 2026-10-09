@@ -8,7 +8,7 @@ import {
 } from "../orgs-store";
 import type { SavedProject } from "@hexagen/shared";
 import { BACKENDS, openBackend } from "../../../test-support/platform-backends";
-import type { PlatformDb } from "../db";
+import type { PlatformDb, SqlValue } from "../db";
 import { ORG_INVITE_TTL_MS } from "../platform-db";
 
 function defined<T>(v: T | undefined | null, what: string): T {
@@ -32,6 +32,9 @@ const docCount = async (db: PlatformDb, ownerId: string, userId: string) =>
     ),
     "document count",
   ).n;
+
+const count = async (db: PlatformDb, sql: string, ...args: SqlValue[]) =>
+  defined(await db.get<{ n: number }>(sql, args), "count").n;
 
 describe.each(BACKENDS)("OrgsRepository.listOrgsForUser (%s", (kind) => {
   it("returns this caller's orgs with roles, and nobody else's", async () => {
@@ -678,3 +681,182 @@ describe.each(BACKENDS)("OrgsRepository.listPendingInvites (%s", (kind) => {
     }
   });
 });
+
+describe.each(BACKENDS)("OrgsRepository.changeMemberRole (%s", (kind) => {
+  it("OR4 changeMemberRole touches only the named member of the named org", async () => {
+    const backend = await openBackend(kind);
+    try {
+      const orgs = backend.store.orgs;
+      const acme = await orgs.createOrgWithOwner(
+        { slug: "acme", name: "Acme", createdBy: "owner-1" },
+        { actorId: "owner-1" },
+      );
+      const beta = await orgs.createOrgWithOwner(
+        { slug: "beta", name: "Beta", createdBy: "owner-1" },
+        { actorId: "owner-1" },
+      );
+      const audit = { actorId: "owner-1" };
+      await orgs.addMember(acme.id, "u", "member", audit);
+      await orgs.addMember(beta.id, "u", "member", audit);
+      await orgs.addMember(acme.id, "other", "member", audit);
+
+      const role = async (orgId: string, userId: string) =>
+        defined(
+          await backend.db.get<{ role: string }>(
+            "SELECT role FROM org_members WHERE org_id = ? AND user_id = ?",
+            [orgId, userId],
+          ),
+          "member row",
+        ).role;
+
+      const changed = await orgs.changeMemberRole(acme.id, "u", "owner", audit);
+      assert.equal(changed, true, "a real role change reports true");
+      assert.equal(await role(acme.id, "u"), "owner");
+      assert.equal(
+        await role(acme.id, "other"),
+        "member",
+        "the other member of org 1 is untouched",
+      );
+      assert.equal(
+        await role(beta.id, "u"),
+        "member",
+        "the same user in org 2 is untouched",
+      );
+
+      // An unknown org id returns false and creates no membership row.
+      const noop = await orgs.changeMemberRole("nope-org", "u", "owner", audit);
+      assert.equal(noop, false, "an unknown org id is not a member");
+      assert.equal(await orgs.memberRole("nope-org", "u"), null);
+      assert.equal(
+        await count(
+          backend.db,
+          "SELECT COUNT(*) AS n FROM org_members WHERE org_id = ? AND user_id = ?",
+          "nope-org",
+          "u",
+        ),
+        0,
+        "no row is created for an unknown org id",
+      );
+    } finally {
+      await backend.close();
+    }
+  });
+});
+
+describe.each(BACKENDS)(
+  "OrgsRepository.removeMember — team and document scoping (%s",
+  (kind) => {
+    it("OR6 removing a member clears only that org's team rows and documents", async () => {
+      const backend = await openBackend(kind);
+      try {
+        const orgs = backend.store.orgs;
+        const teams = backend.store.teams;
+        const docs = (ownerId: string, userId: string) =>
+          backend.store.documentsFor(ownerId, userId);
+        const audit = { actorId: "owner-1" };
+        // row count shorthand
+        const n = (sql: string, ...args: SqlValue[]) =>
+          count(backend.db, sql, ...args);
+
+        const acme = await orgs.createOrgWithOwner(
+          { slug: "acme", name: "Acme", createdBy: "owner-1" },
+          { actorId: "owner-1" },
+        );
+        const beta = await orgs.createOrgWithOwner(
+          { slug: "beta", name: "Beta", createdBy: "owner-1" },
+          { actorId: "owner-1" },
+        );
+        await orgs.addMember(acme.id, "u", "member", audit);
+        await orgs.addMember(beta.id, "u", "member", audit);
+        const team1 = await teams.createTeam({
+          orgId: acme.id,
+          slug: "t1",
+          name: "T1",
+          createdBy: "owner-1",
+        });
+        const team2 = await teams.createTeam({
+          orgId: beta.id,
+          slug: "t2",
+          name: "T2",
+          createdBy: "owner-1",
+        });
+        await teams.addMember(team1.id, "u", audit);
+        await teams.addMember(team2.id, "u", audit);
+        must(
+          await docs(acme.id, "u").put({
+            kind: "workspace",
+            id: "doc-1",
+            payload: {},
+          }),
+        );
+        must(
+          await docs(beta.id, "u").put({
+            kind: "workspace",
+            id: "doc-2",
+            payload: {},
+          }),
+        );
+
+        // Non-vacuity: org 2's membership, its team row and its document exist.
+        assert.equal(
+          await n(
+            "SELECT COUNT(*) AS n FROM org_members WHERE org_id = ? AND user_id = ?",
+            beta.id,
+            "u",
+          ),
+          1,
+        );
+        assert.equal(
+          await n(
+            "SELECT COUNT(*) AS n FROM team_members WHERE team_id = ? AND user_id = ?",
+            team2.id,
+            "u",
+          ),
+          1,
+        );
+        assert.equal(await docCount(backend.db, beta.id, "u"), 1);
+
+        await orgs.removeMember(acme.id, "u", audit);
+
+        // Org 1's team rows and documents are cleared...
+        assert.equal(
+          await n(
+            "SELECT COUNT(*) AS n FROM org_members WHERE org_id = ? AND user_id = ?",
+            acme.id,
+            "u",
+          ),
+          0,
+        );
+        assert.equal(
+          await n(
+            "SELECT COUNT(*) AS n FROM team_members WHERE team_id = ? AND user_id = ?",
+            team1.id,
+            "u",
+          ),
+          0,
+        );
+        assert.equal(await docCount(backend.db, acme.id, "u"), 0);
+        // ...and org 2's membership, team row and document survive.
+        assert.equal(
+          await n(
+            "SELECT COUNT(*) AS n FROM org_members WHERE org_id = ? AND user_id = ?",
+            beta.id,
+            "u",
+          ),
+          1,
+        );
+        assert.equal(
+          await n(
+            "SELECT COUNT(*) AS n FROM team_members WHERE team_id = ? AND user_id = ?",
+            team2.id,
+            "u",
+          ),
+          1,
+        );
+        assert.equal(await docCount(backend.db, beta.id, "u"), 1);
+      } finally {
+        await backend.close();
+      }
+    });
+  },
+);
