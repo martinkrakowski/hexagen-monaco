@@ -22,8 +22,8 @@ async function makeSqlite(): Promise<Backend> {
   };
 }
 
-async function makePg(): Promise<Backend> {
-  const result = await createTestPgDb();
+async function makePg(max = 2): Promise<Backend> {
+  const result = await createTestPgDb({ max });
   return {
     db: result.db,
     cleanup: async () => {
@@ -35,8 +35,26 @@ async function makePg(): Promise<Backend> {
 
 const backends: Array<[string, () => Promise<Backend>]> = [
   ["sqlite", makeSqlite],
-  ["postgres", makePg],
+  ["postgres", () => makePg(8)],
 ];
+
+// A saved_projects row, written via raw SQL with hx_ts(@at) so the timestamp
+// column is accepted on both backends. createProjectRecord is not used here:
+// it binds epoch-ms created_at/updated_at directly, which Postgres rejects
+// (22008) — a pre-existing saved-projects-store limitation outside A3-00's rev
+// scope. deleteProjectRecord (plain DELETE) is used for the cascade, per the
+// brief. The point of test 4 is the document counter through the FK cascade.
+async function createProjectRow(
+  db: PlatformDb,
+  ownerId: string,
+  id: string,
+): Promise<void> {
+  const at = Date.now();
+  await db.run(
+    "INSERT INTO saved_projects (id, owner_id, name, payload, created_at, updated_at, ord, rev) VALUES (@id, @oid, @name, @payload, hx_ts(@at), hx_ts(@at), @ord, 1)",
+    { id, oid: ownerId, name: "P", payload: "{}", at, ord: 0 },
+  );
+}
 
 describe.each(backends)("owner document revs: %s", (_name, make) => {
   let db: PlatformDb;
@@ -196,6 +214,66 @@ describe.each(backends)("owner document revs: %s", (_name, make) => {
     }
   });
 
+  it("4. a delete of the project row cascades the document; re-creating it takes a rev above the old one and the stale If-Match is refused", async () => {
+    const projects = createSavedProjectsStore(db, "user-1");
+    const store = createOwnerDocumentsStore(db, "user-1", "user-1");
+    try {
+      await createProjectRow(db, "user-1", "proj-a");
+      await store.put({
+        kind: "workspace",
+        id: "doc-1",
+        payload: { v: "a" },
+        projectId: "proj-a",
+      }); // rev 1
+      await store.put({
+        kind: "workspace",
+        id: "doc-1",
+        payload: { v: "b" },
+        projectId: "proj-a",
+      }); // rev 2
+      const lastRev = 2;
+
+      // Deleting the project row cascades to its documents (DB-level FK), but
+      // does NOT touch the per-author counter.
+      const dropped = await projects.deleteProjectRecord("proj-a");
+      assert.equal(dropped.success, true);
+
+      // Re-create the project row and the document; the new rev must exceed the
+      // old one because the counter was not reset by the cascade.
+      await createProjectRow(db, "user-1", "proj-a");
+      const re = await store.put({
+        kind: "workspace",
+        id: "doc-1",
+        payload: { v: "new" },
+        projectId: "proj-a",
+      });
+      assert.equal(re.success, true);
+      assert.ok(
+        re.value.rev > lastRev,
+        `re-created rev ${re.value.rev} must exceed the pre-delete rev ${lastRev}`,
+      );
+
+      // The old If-Match (= lastRev) is refused and the new copy is untouched.
+      const stale = await store.put(
+        { kind: "workspace", id: "doc-1", payload: { v: "stale" } },
+        lastRev,
+      );
+      assert.equal(stale.success, false);
+      if (!stale.success) {
+        assert.equal(stale.error.kind, "Conflict");
+        assert.equal(stale.error.currentRev, re.value.rev);
+      }
+      const row = await db.get<{ payload: string; rev: number }>(
+        "SELECT payload, rev FROM owner_documents WHERE owner_id = ? AND user_id = ? AND kind = ? AND id = ?",
+        ["user-1", "user-1", "workspace", "doc-1"],
+      );
+      assert.deepEqual(JSON.parse(row!.payload), { v: "new" });
+      assert.equal(row!.rev, re.value.rev, "the re-created copy is untouched");
+    } finally {
+      await cleanup();
+    }
+  });
+
   it("9. a refused precondition writes one row whose detail is {method, sent, current}; a success writes none", async () => {
     const store = createOwnerDocumentsStore(db, "user-1", "user-1");
     try {
@@ -275,6 +353,112 @@ describe.each(backends)("owner document revs: %s", (_name, make) => {
         ["document.precondition_failed"],
       );
       assert.equal(after!.n, 3, "a success must not add an audit row");
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it("C. two writers started together get two different revs; the counter ends at the larger", async () => {
+    const store = createOwnerDocumentsStore(db, "user-1", "user-1");
+    try {
+      // Seed doc-1 at rev 1; the counter is now 1.
+      await store.put({ kind: "workspace", id: "seed", payload: { v: "s" } });
+      const before = await db.get<{ last_rev: number }>(
+        "SELECT last_rev FROM owner_document_revs WHERE owner_id = ? AND user_id = ?",
+        ["user-1", "user-1"],
+      );
+      assert.ok(before, "the seed put must have raised the counter");
+      const counterBefore = before!.last_rev;
+      assert.equal(counterBefore, 1);
+
+      const N = 8;
+      type Res =
+        | { ok: true; id: string; rev: number }
+        | { ok: false; id: string; reason: string };
+      const batch: Promise<Res>[] = [];
+      // Four new documents (each inserts a new key).
+      for (let i = 0; i < 4; i++) {
+        const id = `new-${i}`;
+        batch.push(
+          store
+            .put({ kind: "workspace", id, payload: { v: i } })
+            .then(
+              (r): Res =>
+                r.success
+                  ? { ok: true, id, rev: r.value.rev }
+                  : { ok: false, id, reason: r.error.kind },
+            ),
+        );
+      }
+      // Four conditional updates of the SAME existing document, each betting
+      // on the seed rev 1. Exactly one can win (rev=1 matches once); the rest
+      // are refused as stale (409).
+      for (let i = 0; i < 4; i++) {
+        batch.push(
+          store
+            .put({ kind: "workspace", id: "seed", payload: { v: i } }, 1)
+            .then(
+              (r): Res =>
+                r.success
+                  ? { ok: true, id: "seed", rev: r.value.rev }
+                  : { ok: false, id: "seed", reason: r.error.kind },
+            ),
+        );
+      }
+      const results = await Promise.all(batch);
+
+      const successes = results.filter(
+        (r): r is { ok: true; id: string; rev: number } => r.ok,
+      );
+      const refusals = results.filter((r) => !r.ok && r.reason === "Conflict");
+      assert.equal(
+        successes.length + refusals.length,
+        N,
+        "successes + stale-409 refusals must account for all N",
+      );
+
+      // (a) every successful rev is distinct;
+      const revs = successes.map((r) => r.rev);
+      assert.equal(
+        new Set(revs).size,
+        revs.length,
+        "successful revs must be distinct",
+      );
+      // (b) none is at or below the counter before the race;
+      assert.ok(
+        revs.every((r) => r > counterBefore),
+        "every rev must exceed the pre-race counter",
+      );
+      // (c) the counter ends at the largest rev handed out;
+      const after = await db.get<{ last_rev: number }>(
+        "SELECT last_rev FROM owner_document_revs WHERE owner_id = ? AND user_id = ?",
+        ["user-1", "user-1"],
+      );
+      assert.equal(
+        after!.last_rev,
+        Math.max(...revs),
+        "counter ends at the largest rev",
+      );
+      // (d) each successful writer's stored row carries the rev it was told;
+      for (const r of successes) {
+        const row = await db.get<{ rev: number }>(
+          "SELECT rev FROM owner_documents WHERE owner_id = ? AND user_id = ? AND kind = ? AND id = ?",
+          ["user-1", "user-1", "workspace", r.id],
+        );
+        assert.ok(row, `stored row for ${r.id} must exist`);
+        assert.equal(
+          row!.rev,
+          r.rev,
+          `stored rev of ${r.id} must match its writer's rev`,
+        );
+      }
+      // (e) exactly one update of the seed won and the rest were refused as
+      // stale (not as NotFound / not a retry exhaustion):
+      assert.equal(
+        refusals.filter((r) => r.id === "seed").length,
+        3,
+        "exactly three seed updates must be refused as stale",
+      );
     } finally {
       await cleanup();
     }
