@@ -16,9 +16,16 @@ name: "PR-Agent Correctness Review"
 # difference between the two arms. A small record per pull request (arm,
 # findings, which were valid) decides between them.
 #
-# Pin is the multi-arch index digest of pragent/pr-agent:0.42.0-github_action,
-# the same as pr-agent.yml. The two workflows are upgraded together, in a
-# change of their own, so a difference in findings can be attributed.
+# It runs PR-Agent's /review tool, not /improve. /improve makes a second model
+# call that scores every suggestion and drops one that scores 0; that step was
+# seen to throw away a real defect (a cross-author read) because the model
+# argued the diff "intended" it. /review has no scoring call: what the model
+# reports is posted, up to a fixed number of findings.
+#
+# Pin is the multi-arch index digest of pragent/pr-agent:0.47.0-github_action.
+# The UI reviewer in pr-agent.yml stays on 0.42.0 until its own upgrade: /review
+# posts each finding as a line comment only from a later version on
+# (pr_reviewer.inline_key_issues), so this workflow could not wait for it.
 
 on:
   pull_request:
@@ -66,7 +73,7 @@ jobs:
           echo "PR #$PR -> $model" >> "$GITHUB_STEP_SUMMARY"
 
       - name: "PR Agent"
-        uses: docker://pragent/pr-agent@sha256:b81235c3bddc551939a1feca8926f4b6e8abcec2ae5bf4620424f8f56dd9cb93 # 0.42.0-github_action
+        uses: docker://pragent/pr-agent@sha256:31b9aac6ab067bada9a0c1b001d30ebc500ea4487e00a93c18c59b9ef5fa66db # 0.47.0-github_action
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OPENROUTER__KEY: ${{ secrets.OPENROUTER_KEY }}
@@ -78,27 +85,41 @@ jobs:
           config.fallback_models: '["openrouter/anthropic/claude-haiku-4.5"]'
           config.custom_model_max_tokens: "128000"
           config.max_model_tokens: "70000"
+          openrouter.max_tokens: "8000"
           # Conventions and the recorded false-positive classes, so this
           # reviewer does not re-raise what past reviews refuted. DESIGN.md is
           # left out: it belongs to the UI reviewer.
           config.repo_context_files: '["AGENTS.md", "best_practices.md"]'
           config.repo_context_max_lines: "3000"
           config.ai_timeout: "600"
-          # Appends model, tokens, time and call count to the comment where the
-          # pinned version supports it. It is not relied on for cost: the log of
-          # this step is the record of calls and model time.
+          # Appends model, tokens, time, call count and estimated cost to the
+          # comment. The log of this step stays the record of calls and model time.
           config.output_run_details: "true"
+          config.output_run_cost: "true"
           # The toml's ignore rule keeps the UI reviewer inside apps/web. This
           # reviewer reads the whole repository, minus generated output.
           ignore.regex: "[]"
           ignore.glob: '["**/dist/**", "**/*.tsbuildinfo", "yarn.lock"]'
           openrouter.reasoning_effort: "medium"
-          pr_reviewer.require_ticket_analysis_review: "false"
-          github_action_config.auto_review: "false"
+          github_action_config.auto_review: "true"
           github_action_config.auto_describe: "false"
-          github_action_config.auto_improve: "true"
+          github_action_config.auto_improve: "false"
           github_action_config.pr_actions: '["opened", "reopened", "ready_for_review"]'
-          pr_code_suggestions.extra_instructions: |
+          # /review: findings only. No effort estimate, no test check, no labels
+          # (labels would need a wider token), no ticket lookup. Each finding is a
+          # line comment.
+          pr_reviewer.require_ticket_analysis_review: "false"
+          pr_reviewer.require_estimate_effort_to_review: "false"
+          pr_reviewer.require_tests_review: "false"
+          pr_reviewer.require_security_review: "true"
+          pr_reviewer.enable_review_labels_security: "false"
+          pr_reviewer.enable_review_labels_effort: "false"
+          pr_reviewer.inline_key_issues: "true"
+          # The default is 3, and what is over the number is dropped silently. One
+          # change to a route and its store can break several rules below at once.
+          pr_reviewer.num_max_findings: "8"
+          # Replaces the toml's value, which is written for the UI reviewer.
+          pr_reviewer.extra_instructions: |
             You are the correctness reviewer for hexagen-monaco, a TypeScript monorepo: a
             Next.js web app (apps/web) with route handlers and a platform store layer
             (apps/web/lib/platform) over SQLite and Postgres behind one database seam;
@@ -215,31 +236,17 @@ jobs:
               reachable.
             - A fix that only turns a failure from loud to quiet.
 
-            Prefer one real defect to five plausible ones. Do not acknowledge, praise or
-            summarise.
-          # On, so each finding is a line-anchored comment. With it off PR-Agent
-          # collapses everything into one summary table.
-          pr_code_suggestions.commitable_code_suggestions: "true"
-          # On: a run that finds nothing says so in a comment. Without it a run whose
-          # findings were all discarded, or whose answer could not be parsed, leaves
-          # nothing behind and the guard below cannot tell it from a review.
-          pr_code_suggestions.publish_output_no_suggestions: "true"
-          pr_code_suggestions.focus_only_on_problems: "true"
-          pr_code_suggestions.num_code_suggestions_per_chunk: "5"
-          pr_code_suggestions.max_number_of_calls: "5"
-          pr_code_suggestions.parallel_calls: "true"
-          pr_code_suggestions.suggestions_score_threshold: "0"
+            Report a real defect even when you cannot write its complete fix: say what
+            is wrong and what a fix must do. Prefer one real defect to five plausible
+            ones. Do not acknowledge, praise or summarise.
 
-      # PR-Agent exits 0 when it could not produce a review, and also when the
-      # model's answer could not be parsed or every finding was discarded: a green
-      # check would then claim work that never happened. So the step fails when
-      # PR-Agent says it failed, and also when no comment at all was left since
-      # this run began (with publish_output_no_suggestions on, a real review
-      # always leaves one).
-      #
-      # A limit of this check: the UI reviewer posts as the same bot, so on a
-      # pull request where it comments in the same minutes, its comment satisfies
-      # this guard too. The guard catches the silent run only when both are silent.
+      # PR-Agent can exit 0 without having produced a review: it posts a failure
+      # notice, or, when it cannot parse the model's answer, posts nothing at
+      # all. A green check must not claim work that never happened, so this step
+      # fails unless /review left its own comment in this run: one that BEGINS
+      # "## PR Reviewer Guide", created or updated since the run began. The UI
+      # reviewer posts as the same bot but never under that heading, so its
+      # comments cannot stand in for this one.
       - name: "Fail if the review did not actually run"
         if: always()
         env:
@@ -249,12 +256,13 @@ jobs:
         run: |
           set -euo pipefail
           gh api --paginate --slurp --method GET "repos/${GITHUB_REPOSITORY}/issues/${PR}/comments" > "$RUNNER_TEMP/issue.json"
-          gh api --paginate --slurp --method GET "repos/${GITHUB_REPOSITORY}/pulls/${PR}/comments" > "$RUNNER_TEMP/review.json"
-          MINE='[.[][] | select(.user.login == "github-actions[bot]") | select(.created_at >= $since)]'
-          failed=$(jq --arg since "$STARTED_AT" "$MINE | map(select(.body | test(\"Failed to generate\"))) | length" "$RUNNER_TEMP/issue.json")
-          posted_issue=$(jq --arg since "$STARTED_AT" "$MINE | length" "$RUNNER_TEMP/issue.json")
-          posted_review=$(jq --arg since "$STARTED_AT" "$MINE | length" "$RUNNER_TEMP/review.json")
-          for n in "$failed" "$posted_issue" "$posted_review"; do
+          gh api --paginate --slurp --method GET "repos/${GITHUB_REPOSITORY}/pulls/${PR}/comments" > "$RUNNER_TEMP/line.json"
+          MINE='[.[][] | select(.user.login == "github-actions[bot]") | select(.updated_at >= $since)]'
+          count() { jq --arg since "$STARTED_AT" "$MINE | map(select(.body | test(\"$1\"))) | length" "$2"; }
+          failed=$(count "Failed to generate" "$RUNNER_TEMP/issue.json")
+          review=$(count "^## PR Reviewer Guide" "$RUNNER_TEMP/issue.json")
+          lines=$(count "." "$RUNNER_TEMP/line.json")
+          for n in "$failed" "$review" "$lines"; do
             case "$n" in
               ''|*[!0-9]*)
                 echo "Expected an integer from the comment scan, got: $n"
@@ -262,12 +270,14 @@ jobs:
                 ;;
             esac
           done
+          echo "/review: $review guide comment(s). Line comments by the bot in this window (either reviewer): $lines. Failure notices: $failed."
+          status=0
           if [ "$failed" -gt 0 ]; then
             echo "PR-Agent reported it could not generate a review."
-            exit 1
+            status=1
           fi
-          if [ $((posted_issue + posted_review)) -eq 0 ]; then
-            echo "PR-Agent left no comment in this run: it did not review this pull request."
-            exit 1
+          if [ "$review" -eq 0 ]; then
+            echo "/review left nothing in this run: it did not review this pull request."
+            status=1
           fi
-          echo "This run left $posted_issue comment(s) and $posted_review line comment(s)."
+          exit "$status"

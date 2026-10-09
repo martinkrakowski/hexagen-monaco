@@ -22,11 +22,13 @@ Not a merge gate. Posts a DESIGN.md-focused review on PR `opened` / `reopened` /
 
 Not a merge gate. A second PR-Agent reviewer beside the UI one, for the whole repository: tenant and author scope on store calls, what can commit between a route's check and the store's write, deletion and its cascades, input that fails open, swallowed errors, tests that assert less than their name, secrets in logs, manifests and workflows. Runs once per pull request on `opened` / `reopened` / `ready_for_review`; drafts are skipped; there are no slash commands on this workflow.
 
+**Tool:** PR-Agent's `/review`, each finding a line comment, at most eight. Not `/improve`: its second model call scores every suggestion and drops one that scores 0, and was seen to drop a real defect. A guard step fails the check unless `/review` left its own comment ("PR Reviewer Guide") in the run.
+
 **Models:** even-numbered pull requests are reviewed by `openrouter/openai/gpt-6.1-sol`, odd-numbered by `openrouter/anthropic/claude-sonnet-5.5`, with the same prompt and caps; fallback `openrouter/anthropic/claude-haiku-4.5`. The step summary names the arm. A record per pull request (arm, findings, which were valid) decides between the two.
 
 **Config:** everything lives in the workflow's `env` block. `.pr_agent.toml` is the UI reviewer's and is still read (from the default branch) for anything the env block does not set; in particular the env block clears the toml's `[ignore].regex`, which would otherwise hide every file outside `apps/web`.
 
-**Secret and pin:** the same `OPENROUTER_KEY` and the same `0.42.0-github_action` digest as `pr-agent.yml`. Upgrade the two together.
+**Secret and pin:** the same `OPENROUTER_KEY` as `pr-agent.yml`; the `0.47.0-github_action` digest, ahead of the UI reviewer's `0.42.0` (line comments from `/review` need the later version). The UI reviewer's upgrade is a change of its own.
 
 ---
 
