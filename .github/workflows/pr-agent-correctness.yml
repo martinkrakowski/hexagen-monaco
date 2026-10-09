@@ -11,8 +11,8 @@ name: "PR-Agent Correctness Review"
 # all the ignore rule: the toml drops every file outside apps/web, and this
 # reviewer must see them.
 #
-# Two models take turns, by pull-request number (even: GPT-6.1 Sol, odd: Hy4
-# preview), with the same prompt, caps and fallback, so the model is the only
+# Two models take turns, by pull-request number (even: GPT-6.1 Sol, odd: Claude
+# Sonnet 5.5), with the same prompt, caps and fallback, so the model is the only
 # difference between the two arms. A small record per pull request (arm,
 # findings, which were valid) decides between them.
 #
@@ -61,7 +61,7 @@ jobs:
           case "$PR" in
             ''|*[!0-9]*) echo "not a PR number: '$PR'" >&2; exit 1 ;;
           esac
-          if [ $((PR % 2)) -eq 0 ]; then model="openrouter/openai/gpt-6.1-sol"; else model="openrouter/tencent/hy4-preview"; fi
+          if [ $((PR % 2)) -eq 0 ]; then model="openrouter/openai/gpt-6.1-sol"; else model="openrouter/anthropic/claude-sonnet-5.5"; fi
           echo "model=$model" >> "$GITHUB_OUTPUT"
           echo "PR #$PR -> $model" >> "$GITHUB_STEP_SUMMARY"
 

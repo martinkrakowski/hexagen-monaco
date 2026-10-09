@@ -22,7 +22,7 @@ Not a merge gate. Posts a DESIGN.md-focused review on PR `opened` / `reopened` /
 
 Not a merge gate. A second PR-Agent reviewer beside the UI one, for the whole repository: tenant and author scope on store calls, what can commit between a route's check and the store's write, deletion and its cascades, input that fails open, swallowed errors, tests that assert less than their name, secrets in logs, manifests and workflows. Runs once per pull request on `opened` / `reopened` / `ready_for_review`; drafts are skipped; there are no slash commands on this workflow.
 
-**Models:** even-numbered pull requests are reviewed by `openrouter/openai/gpt-6.1-sol`, odd-numbered by `openrouter/tencent/hy4-preview`, with the same prompt and caps; fallback `openrouter/anthropic/claude-haiku-4.5`. The step summary names the arm. A record per pull request (arm, findings, which were valid) decides between the two.
+**Models:** even-numbered pull requests are reviewed by `openrouter/openai/gpt-6.1-sol`, odd-numbered by `openrouter/anthropic/claude-sonnet-5.5`, with the same prompt and caps; fallback `openrouter/anthropic/claude-haiku-4.5`. The step summary names the arm. A record per pull request (arm, findings, which were valid) decides between the two.
 
 **Config:** everything lives in the workflow's `env` block. `.pr_agent.toml` is the UI reviewer's and is still read (from the default branch) for anything the env block does not set; in particular the env block clears the toml's `[ignore].regex`, which would otherwise hide every file outside `apps/web`.
 
