@@ -98,58 +98,52 @@ describe("HttpEditorWorkspaceAdapter PUT", () => {
       "ws1",
       { files: {} },
       "proj-uuid",
-      3,
+      { ifMatch: 3 },
     );
     assert.ok(withRev.ok);
     const withRevHeaders = new Headers(fetchImpl.mock.calls[0]![1]!.headers);
-    assert.equal(withRevHeaders.get("If-Match"), "rev:3");
+    assert.equal(withRevHeaders.get("If-Match"), '"rev:3"');
+    assert.equal(withRevHeaders.get("If-None-Match"), null);
 
     const withoutRev = await adapter.write(
       "owner1",
       "ws1",
       { files: {} },
       "proj-uuid",
-      null,
+      { createOnly: true },
     );
     assert.ok(withoutRev.ok);
     const noRevHeaders = new Headers(fetchImpl.mock.calls[1]![1]!.headers);
+    assert.equal(noRevHeaders.get("If-None-Match"), "*");
     assert.equal(noRevHeaders.get("If-Match"), null);
   });
 
-  it("the first PUT after a 404 carries no If-Match", async () => {
+  it("a create-only write sends If-None-Match: * and no If-Match", async () => {
     const fetchImpl = vi.fn(async (_url: string | URL, init?: RequestInit) => {
-      const method = (init?.method ?? "GET").toUpperCase();
-      if (method === "GET") return new Response(null, { status: 404 });
-      if (method === "PUT") {
-        const headers = new Headers(init?.headers);
-        assert.equal(headers.get("If-Match"), null);
-        return new Response(
-          JSON.stringify({
-            kind: "workspace",
-            id: "ws1",
-            projectId: "proj",
-            payload: { files: {} },
-            updatedAt: 200,
-          }),
-          { status: 200, headers: { ETag: '"rev:1"' } },
-        );
-      }
-      return new Response("nope", { status: 500 });
+      const headers = new Headers(init?.headers);
+      assert.equal(headers.get("If-None-Match"), "*");
+      assert.equal(headers.get("If-Match"), null);
+      return new Response(
+        JSON.stringify({
+          kind: "workspace",
+          id: "ws1",
+          projectId: "proj-uuid",
+          payload: {},
+          updatedAt: 100,
+        }),
+        { status: 200, headers: { ETag: '"rev:1"' } },
+      );
     }) as unknown as MockedFunction<typeof fetch>;
 
     const adapter = new HttpEditorWorkspaceAdapter(fetchImpl);
-    const readResult = await adapter.read("owner1", "ws1");
-    assert.equal(readResult.ok, false);
-    if (!readResult.ok) assert.equal(readResult.reason, "not_found");
-
-    const writeResult = await adapter.write(
+    const result = await adapter.write(
       "owner1",
       "ws1",
       { files: {} },
       "proj-uuid",
-      null,
+      { createOnly: true },
     );
-    assert.ok(writeResult.ok);
+    assert.ok(result.ok);
   });
 
   it("409 comes back as a conflict, not a retry: exactly one PUT", async () => {
@@ -169,7 +163,7 @@ describe("HttpEditorWorkspaceAdapter PUT", () => {
       "ws1",
       { files: {} },
       "proj-uuid",
-      3,
+      { ifMatch: 3 },
     );
     assert.equal(result.ok, false);
     if (!result.ok) assert.equal(result.reason, "conflict");
@@ -188,13 +182,9 @@ describe("HttpEditorWorkspaceAdapter 413", () => {
     }) as unknown as MockedFunction<typeof fetch>;
 
     const adapter = new HttpEditorWorkspaceAdapter(fetchImpl);
-    const result = await adapter.write(
-      "owner1",
-      "ws1",
-      payload,
-      "proj-uuid",
-      null,
-    );
+    const result = await adapter.write("owner1", "ws1", payload, "proj-uuid", {
+      createOnly: true,
+    });
     assert.equal(result.ok, false);
     if (!result.ok && result.reason === "too_large") {
       const computedBody = JSON.stringify({ payload, projectId: "proj-uuid" });

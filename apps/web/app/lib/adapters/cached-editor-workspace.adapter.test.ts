@@ -58,6 +58,13 @@ interface ServerDoc {
 function makeServerFetch(
   store: Map<string, ServerDoc>,
 ): MockedFunction<typeof fetch> {
+  let revCounter = 0;
+  const parseRev = (header: string | null): number | null => {
+    if (!header) return null;
+    const trimmed = header.trim().replaceAll('"', "");
+    const match = /^rev:(\d+)$/.exec(trimmed);
+    return match ? Number(match[1]) : null;
+  };
   return vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
     const href = String(url);
     const method = (init?.method ?? "GET").toUpperCase();
@@ -83,29 +90,43 @@ function makeServerFetch(
     if (method === "PUT") {
       const body = JSON.parse(init?.body as string);
       const doc = store.get(id);
-      const ifMatch = new Headers(init?.headers).get("If-Match");
-      if (doc && ifMatch) {
-        const expected = Number(ifMatch.replace("rev:", ""));
-        if (expected !== doc.rev) {
+      const headers = new Headers(init?.headers);
+      const ifMatch = parseRev(headers.get("If-Match"));
+      const noneMatch = headers.get("If-None-Match");
+
+      if (noneMatch === "*" && doc) {
+        return new Response("exists", {
+          status: 412,
+          headers: { ETag: `"rev:${doc.rev}"` },
+        });
+      }
+      if (ifMatch !== null) {
+        if (!doc) return new Response("not found", { status: 404 });
+        if (ifMatch !== doc.rev) {
           return new Response("conflict", {
             status: 409,
             headers: { ETag: `"rev:${doc.rev}"` },
           });
         }
-      }
-      if (!doc && ifMatch) return new Response("not found", { status: 404 });
-      if (doc) {
         doc.payload = body.payload;
-        doc.rev = doc.rev + 1;
+        revCounter = Math.max(revCounter, doc.rev) + 1;
+        doc.rev = revCounter;
         doc.updatedAt = Date.now();
         doc.projectId = body.projectId ?? null;
-      } else {
+      } else if (!doc) {
+        revCounter = revCounter + 1;
         store.set(id, {
           payload: body.payload,
-          rev: 1,
+          rev: revCounter,
           updatedAt: Date.now(),
           projectId: body.projectId ?? null,
         });
+      } else {
+        doc.payload = body.payload;
+        revCounter = Math.max(revCounter, doc.rev) + 1;
+        doc.rev = revCounter;
+        doc.updatedAt = Date.now();
+        doc.projectId = body.projectId ?? null;
       }
       const d = store.get(id)!;
       return new Response(
@@ -121,6 +142,16 @@ function makeServerFetch(
     }
 
     if (method === "DELETE") {
+      const doc = store.get(id);
+      const headers = new Headers(init?.headers);
+      const ifMatch = parseRev(headers.get("If-Match"));
+      if (!doc) return new Response(null, { status: 404 });
+      if (ifMatch !== null && ifMatch !== doc.rev) {
+        return new Response("conflict", {
+          status: 412,
+          headers: { ETag: `"rev:${doc.rev}"` },
+        });
+      }
       store.delete(id);
       return new Response(null, { status: 204 });
     }
@@ -484,7 +515,7 @@ describe("CachedEditorWorkspaceAdapter save + AM rules", () => {
     assert.equal(puts.length, 1, "exactly one PUT");
     const init = puts[0]![1]!;
     const headers = new Headers(init.headers);
-    assert.equal(headers.get("If-Match"), "rev:5");
+    assert.equal(headers.get("If-Match"), '"rev:5"', "If-Match from stamp rev");
   });
 
   it("a 409 on save: one PUT, a warning, local edits kept, no further PUT until next load", async () => {
@@ -620,7 +651,7 @@ describe("CachedEditorWorkspaceAdapter save + AM rules", () => {
     const puts = putCallsOf(fetchImpl);
     assert.equal(puts.length, 1, "one PUT");
     const headers = new Headers(puts[0]![1]!.headers);
-    assert.equal(headers.get("If-Match"), "rev:5", "If-Match from stamp rev");
+    assert.equal(headers.get("If-Match"), '"rev:5"', "If-Match from stamp rev");
   });
 });
 
@@ -680,7 +711,7 @@ describe("CachedEditorWorkspaceAdapter AM2 conflict resolution", () => {
     assert.equal(puts.length, 1, "one catch-up PUT during load");
     const init = puts[0]![1]!;
     const headers = new Headers(init.headers);
-    assert.equal(headers.get("If-Match"), "rev:5", "If-Match from stamp rev");
+    assert.equal(headers.get("If-Match"), '"rev:5"', "If-Match from stamp rev");
 
     const stamp = await cache.getLiftStamp(UUID);
     assert.ok(stamp, "stamp updated after catch-up");
@@ -927,7 +958,7 @@ describe("CachedEditorWorkspaceAdapter clearWorkspace", () => {
     await adapter.clearWorkspace(UUID);
 
     const methods = allMethodsOf(fetchImpl);
-    assert.deepEqual(methods, ["GET", "DELETE"]);
+    assert.deepEqual(methods, ["DELETE"]);
     const cacheAfter = await cache.loadWorkspace(UUID);
     assert.equal(
       cacheAfter.success && cacheAfter.value,
@@ -1307,6 +1338,34 @@ describe("CachedEditorWorkspaceAdapter Item 11: first write", () => {
           );
         }
         if (method === "PUT") {
+          const headers = new Headers(init?.headers);
+          if (headers.get("If-None-Match") === "*") {
+            const doc = server.get(id);
+            if (doc) {
+              return new Response("exists", {
+                status: 412,
+                headers: { ETag: `"rev:${doc.rev}"` },
+              });
+            }
+            const body = JSON.parse(init?.body as string);
+            server.set(id, {
+              payload: body.payload,
+              rev: 1,
+              updatedAt: Date.now(),
+              projectId: body.projectId ?? null,
+            });
+            const d = server.get(id)!;
+            return new Response(
+              JSON.stringify({
+                kind: "workspace",
+                id,
+                projectId: d.projectId,
+                payload: d.payload,
+                updatedAt: d.updatedAt,
+              }),
+              { status: 200, headers: { ETag: `"rev:${d.rev}"` } },
+            );
+          }
           return new Response("nope", { status: 500 });
         }
         return new Response("nope", { status: 500 });
@@ -1324,19 +1383,20 @@ describe("CachedEditorWorkspaceAdapter Item 11: first write", () => {
       projectId: UUID,
     });
 
-    // Save → timer fires → firstWriteAfter404 → GET → 200 → "created elsewhere", no PUT.
+    // Save → timer fires → createOnly PUT → 412 (exists) → "created elsewhere", no overwrite.
     await adapter.saveWorkspace(UUID, makeWorkspace(2000));
     await vi.advanceTimersByTimeAsync(REMOTE_DEBOUNCE_MS);
 
-    assert.equal(
-      putCallsOf(fetchImpl).length,
-      0,
-      "no PUT when server has the document",
-    );
     assert.ok(
       warns.some((w) => /created elsewhere before the first save/.test(w)),
     );
-    assert.equal(server.get(UUID)!.rev, 1, "server keeps other device's value");
+    assert.equal(
+      putCallsOf(fetchImpl).length,
+      1,
+      "one PUT (the createOnly that got 412)",
+    );
+    // Server keeps the other device's value.
+    assert.equal(server.get(UUID)!.rev, 1);
   });
 });
 
@@ -1362,7 +1422,7 @@ describe("CachedEditorWorkspaceAdapter Item 14: clearWorkspace", () => {
     await adapter.clearWorkspace(UUID);
 
     const methods = allMethodsOf(fetchImpl);
-    assert.deepEqual(methods, ["GET"], "only GET (no DELETE when moved)");
+    assert.deepEqual(methods, ["DELETE"], "one conditional DELETE");
     assert.ok(
       warns.some((w) =>
         /server copy changed on another device, not deleted/.test(w),

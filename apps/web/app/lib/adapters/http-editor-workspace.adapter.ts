@@ -115,6 +115,7 @@ export type WriteResult =
 
 export type DeleteResult =
   | { ok: true; deleted: boolean }
+  | { ok: false; reason: "conflict"; serverRev?: number; message: string }
   | {
       ok: false;
       reason: "unauthenticated" | "rate_limited" | "error";
@@ -208,14 +209,16 @@ export class HttpEditorWorkspaceAdapter {
     id: string,
     payload: unknown,
     projectId: string,
-    ifMatch: number | null,
+    precondition: { ifMatch: number } | { createOnly: true },
   ): Promise<WriteResult> {
     const body = JSON.stringify({ payload, projectId });
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
     };
-    if (ifMatch !== null) {
-      headers["If-Match"] = `rev:${ifMatch}`;
+    if ("createOnly" in precondition) {
+      headers["If-None-Match"] = "*";
+    } else {
+      headers["If-Match"] = `"rev:${precondition.ifMatch}"`;
     }
     try {
       const response = await this.fetchImpl(this.documentUrlFor(ownerId, id), {
@@ -238,7 +241,7 @@ export class HttpEditorWorkspaceAdapter {
           status: response.status,
         };
       }
-      if (response.status === 409) {
+      if (response.status === 409 || response.status === 412) {
         return {
           ok: false,
           reason: "conflict",
@@ -282,13 +285,19 @@ export class HttpEditorWorkspaceAdapter {
   }
 
   /**
-   * DELETE the server-side document. 404 is treated as idempotent success
-   * (matching the server's "204 whether or not a row existed" contract).
+   * DELETE the server-side document, conditional on `ifMatch`. The route
+   * requires `If-Match: "rev:<n>"`; a stale rev is 412, and 404 means the
+   * document is already gone (treat as done).
    */
-  async delete(ownerId: string, id: string): Promise<DeleteResult> {
+  async delete(
+    ownerId: string,
+    id: string,
+    ifMatch: number,
+  ): Promise<DeleteResult> {
     try {
       const response = await this.fetchImpl(this.documentUrlFor(ownerId, id), {
         method: "DELETE",
+        headers: { "If-Match": `"rev:${ifMatch}"` },
       });
       if (response.status === 401 || response.status === 403) {
         return {
@@ -306,6 +315,14 @@ export class HttpEditorWorkspaceAdapter {
       }
       if (response.status === 404) {
         return { ok: true, deleted: false };
+      }
+      if (response.status === 412) {
+        return {
+          ok: false,
+          reason: "conflict",
+          serverRev: revFromEtag(response.headers.get("ETag")) ?? undefined,
+          message: "Document was updated elsewhere",
+        };
       }
       if (!response.ok) {
         return {
@@ -526,18 +543,25 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
       return cacheResult;
     }
 
-    // LIFT: PUT (no If-Match) with the cache value.
+    // LIFT: create-only PUT with the cache value.
     const putResult = await this.remote.write(
       userId,
       sessionId,
       cacheEntry,
       sessionId,
-      null,
+      { createOnly: true },
     );
     if (!putResult.ok) {
-      this.logger.warn(
-        `workspace ${sessionId} lift PUT failed: ${putResult.message}`,
-      );
+      if (putResult.reason === "conflict") {
+        this.logger.warn(
+          `workspace ${sessionId} conflict: created elsewhere before the lift`,
+        );
+      } else {
+        this.logger.warn(
+          `workspace ${sessionId} lift PUT failed: ${putResult.message}`,
+        );
+      }
+      this.pausedIds.add(sessionId);
       return cacheResult;
     }
     const putRev = putResult.rev;
@@ -592,7 +616,7 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
       sessionId,
       cacheEntry,
       sessionId,
-      stamp.rev,
+      { ifMatch: stamp.rev },
     );
     if (!putResult.ok) {
       this.logger.warn(
@@ -664,14 +688,15 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
       return cacheResult;
     }
 
-    // Item 3: capture the rev at schedule time, not at fire time.
-    const ifMatch = stamp !== null ? stamp.rev : null;
+    // Item 3: capture the precondition at schedule time.
+    const precondition: { ifMatch: number } | { createOnly: true } =
+      stamp !== null ? { ifMatch: stamp.rev } : { createOnly: true };
     const existing = this.writeTimers.get(sessionId);
     if (existing) clearTimeout(existing);
     this.writeTimers.set(
       sessionId,
       setTimeout(() => {
-        void this.doRemoteWrite(sessionId, workspace, userId, ifMatch);
+        void this.doRemoteWrite(sessionId, workspace, userId, precondition);
       }, REMOTE_DEBOUNCE_MS),
     );
 
@@ -684,7 +709,7 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
     sessionId: string,
     workspace: PersistedEditorWorkspace,
     userId: string,
-    ifMatch: number | null,
+    precondition: { ifMatch: number } | { createOnly: true },
   ): Promise<void> {
     // Item 6: nothing if paused, org switched in, or epoch changed.
     if (this.pausedIds.has(sessionId)) return;
@@ -701,7 +726,7 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
         sessionId,
         workspace,
         userId,
-        ifMatch,
+        precondition,
         epochAtStart,
       );
     });
@@ -712,7 +737,7 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
     sessionId: string,
     workspace: PersistedEditorWorkspace,
     userId: string,
-    ifMatch: number | null,
+    precondition: { ifMatch: number } | { createOnly: true },
     epochAtStart: number,
   ): Promise<void> {
     try {
@@ -721,35 +746,25 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
       if (this.tenantIdSource() !== null) return;
       if (epochAtStart !== (this.epochs.get(sessionId) ?? 0)) return;
 
-      // Item 11: first-write-after-404 does a GET first.
-      const putIfMatch = ifMatch;
-      if (ifMatch === null && this.firstWriteAfter404.has(sessionId)) {
-        const probe = await this.remote.read(userId, sessionId);
-        if (probe.ok) {
-          // Another device created it — don't overwrite.
-          this.logger.warn(
-            `workspace ${sessionId} conflict: created elsewhere before the first save`,
-          );
-          this.pausedIds.add(sessionId);
-          this.firstWriteAfter404.delete(sessionId);
-          return;
-        }
-        // Still 404 → PUT without If-Match.
-      }
-
       const result = await this.remote.write(
         userId,
         sessionId,
         workspace,
         sessionId,
-        putIfMatch,
+        precondition,
       );
       if (!result.ok) {
         switch (result.reason) {
           case "conflict":
-            this.logger.warn(
-              `workspace ${sessionId} save conflict: one PUT, server rev=${result.serverRev ?? "unknown"}`,
-            );
+            if ("createOnly" in precondition) {
+              this.logger.warn(
+                `workspace ${sessionId} conflict: created elsewhere before the first save`,
+              );
+            } else {
+              this.logger.warn(
+                `workspace ${sessionId} save conflict: one PUT, server rev=${result.serverRev ?? "unknown"}`,
+              );
+            }
             this.pausedIds.add(sessionId);
             break;
           case "too_large":
@@ -782,7 +797,7 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
       // Item 12: if the epoch changed during this write, delete the copy
       // (a clear happened while the PUT was in flight).
       if (epochAtStart !== (this.epochs.get(sessionId) ?? 0)) {
-        await this.remote.delete(userId, sessionId);
+        await this.remote.delete(userId, sessionId, result.rev);
       }
     } finally {
       this.inFlight.delete(sessionId);
@@ -823,21 +838,22 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
     const cacheResult = await this.cache.clearWorkspace(sessionId);
     if (!canDelete) return cacheResult;
 
-    // GET just before DELETE: rev must match stamp.rev.
-    const probe = await this.remote.read(userId, sessionId);
-    if (!probe.ok) return cacheResult;
-    if (probe.rev !== stamp!.rev) {
-      this.logger.warn(
-        `workspace ${sessionId}: server copy changed on another device, not deleted`,
-      );
-      return cacheResult;
-    }
-
-    const deleteResult = await this.remote.delete(userId, sessionId);
+    // ONE conditional DELETE with the stamp's revision.
+    const deleteResult = await this.remote.delete(
+      userId,
+      sessionId,
+      stamp!.rev,
+    );
     if (!deleteResult.ok) {
-      this.logger.warn(
-        `workspace ${sessionId} server delete failed: ${deleteResult.message}`,
-      );
+      if (deleteResult.reason === "conflict") {
+        this.logger.warn(
+          `workspace ${sessionId}: server copy changed on another device, not deleted`,
+        );
+      } else {
+        this.logger.warn(
+          `workspace ${sessionId} server delete failed: ${deleteResult.message}`,
+        );
+      }
     }
     return cacheResult;
   }
