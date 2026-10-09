@@ -5,7 +5,6 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { NextRequest } from "next/server";
-import Database from "better-sqlite3";
 
 vi.mock("next-auth/jwt", () => ({ getToken: vi.fn() }));
 vi.mock("../store", async (importOriginal) => {
@@ -24,11 +23,6 @@ import { createAuthRepository } from "../auth-store";
 import { BACKENDS, openBackend } from "../../../test-support/platform-backends";
 import { requireTenant } from "../require-owner";
 import { getPlatformStore } from "../store";
-
-function defined<T>(v: T | undefined | null, what: string): T {
-  if (v === undefined || v === null) throw new Error("expected " + what);
-  return v;
-}
 
 function orgsOnTempDb() {
   const path = join(

@@ -18,7 +18,6 @@ import {
   openBackend,
   failOnSql,
 } from "../../../test-support/platform-backends";
-import type { Backend } from "../../../test-support/platform-backends";
 
 function defined<T>(v: T | undefined | null, what: string): T {
   if (v === undefined || v === null) throw new Error("expected " + what);
@@ -38,8 +37,6 @@ function fixture() {
     orgs: createOrgsRepository(platformDb),
   };
 }
-
-type Fx = ReturnType<typeof fixture>;
 
 const seedOrg = (orgs: OrgsRepository, id = "org-acme") =>
   orgs.createOrg({

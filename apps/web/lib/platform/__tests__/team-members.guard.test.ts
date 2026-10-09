@@ -7,7 +7,7 @@ import {
   NotAnOrgMemberError,
   UnknownTeamError,
 } from "../teams-store";
-import { createOrgsRepository, type OrgsRepository } from "../orgs-store";
+import { createOrgsRepository } from "../orgs-store";
 import type { PlatformDb } from "../db";
 import {
   BACKENDS,
@@ -19,14 +19,6 @@ function defined<T>(v: T | undefined | null, what: string): T {
   if (v === undefined || v === null) throw new Error("expected " + what);
   return v;
 }
-
-const seedOrg = (orgs: OrgsRepository, id = "org-acme") =>
-  orgs.createOrg({
-    id,
-    slug: id,
-    name: "Acme",
-    createdBy: "founder",
-  });
 
 const countTeamRows = async (db: PlatformDb, userId: string) =>
   defined(

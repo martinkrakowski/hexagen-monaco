@@ -7,7 +7,6 @@ import { join } from "node:path";
 import Database from "better-sqlite3";
 import { openPlatformDb } from "../platform-db";
 import { BACKENDS, openBackend } from "../../../test-support/platform-backends";
-import type { PlatformDb } from "../db";
 
 function defined<T>(v: T | undefined | null, what: string): T {
   if (v === undefined || v === null) throw new Error("expected " + what);

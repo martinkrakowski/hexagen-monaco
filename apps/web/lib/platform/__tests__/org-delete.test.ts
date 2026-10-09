@@ -2,7 +2,6 @@
 import { describe, it } from "vitest";
 import assert from "node:assert/strict";
 import { createOrgsRepository, OrgOwnsProjectsError } from "../orgs-store";
-import type { SavedProject } from "@hexagen/shared";
 import {
   BACKENDS,
   openBackend,
@@ -250,7 +249,6 @@ describe.each(BACKENDS)(
     it("is one transaction: a failing final delete leaves every row intact", async () => {
       const backend = await openBackend(kind);
       try {
-        const orgs = backend.store.orgs;
         const { org, team } = await seedOrg(backend);
         // Prove the org IS deletable in the success case first — a trigger that
         // fires on an undeletable org proves nothing about atomicity.

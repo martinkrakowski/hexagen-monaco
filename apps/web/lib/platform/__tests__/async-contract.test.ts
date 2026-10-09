@@ -38,11 +38,6 @@ async function assertPromisesSettle(
   assert.deepEqual(rejected, [...expectedRejections]);
 }
 
-function defined<T>(v: T | undefined | null, what: string): T {
-  if (v === undefined || v === null) throw new Error("expected " + what);
-  return v;
-}
-
 function must<T>(
   r: { success: true; value: T } | { success: false; error: unknown },
 ): T {
