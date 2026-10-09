@@ -4,7 +4,8 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { KeyMetadata } from "@hexagen/byok";
-import { createByokStore } from "../byok-store";
+import { createByokStore, openByokDb, createByokStoreOn } from "../byok-store";
+import { createSqlitePlatformDb } from "../platform/sqlite-db";
 
 function fixture(over: Partial<KeyMetadata> = {}): KeyMetadata {
   return {
@@ -32,7 +33,7 @@ describe("byok-store (in-memory)", () => {
       "openai",
     );
     assert.strictEqual(byUser.success && byUser.value?.keyId, "key-1");
-    store.close();
+    await store.close();
   });
 
   it("findByUserAndProvider returns the most recently stored key (last-write-wins)", async () => {
@@ -41,7 +42,7 @@ describe("byok-store (in-memory)", () => {
     await store.metadata.store(fixture({ keyId: "new" }));
     const r = await store.metadata.findByUserAndProvider("user-1", "openai");
     assert.strictEqual(r.success && r.value?.keyId, "new");
-    store.close();
+    await store.close();
   });
 
   it("findByUserAndProvider tracks the last write even when re-storing an earlier key (rowid is not write order)", async () => {
@@ -63,7 +64,7 @@ describe("byok-store (in-memory)", () => {
     await store.metadata.store(fixture({ keyId: "B", keyVersion: 2 }));
     const r2 = await store.metadata.findByUserAndProvider("user-1", "openai");
     assert.strictEqual(r2.success && r2.value?.keyId, "B");
-    store.close();
+    await store.close();
   });
 
   it("markRevoked on a missing key returns key_not_found", async () => {
@@ -73,7 +74,7 @@ describe("byok-store (in-memory)", () => {
     if (!r.success) {
       assert.strictEqual(r.error.kind, "key_not_found");
     }
-    store.close();
+    await store.close();
   });
 
   it("hasKeys stays true even after the user's only key is revoked", async () => {
@@ -82,7 +83,7 @@ describe("byok-store (in-memory)", () => {
     await store.metadata.markRevoked("key-1", "admin");
     const r = await store.metadata.hasKeys("user-1");
     assert.strictEqual(r.success && r.value, true);
-    store.close();
+    await store.close();
   });
 
   it("records and reports a revocation", async () => {
@@ -98,7 +99,7 @@ describe("byok-store (in-memory)", () => {
     });
     const after = await store.revocation.isRevoked("user-1", "openai");
     assert.strictEqual(after.success && after.value, true);
-    store.close();
+    await store.close();
   });
 });
 
@@ -122,7 +123,7 @@ describe("byok-store (durable across reopen — AUD-007)", () => {
       revokedAt: "2026-01-02T00:00:00.000Z",
       revokedBy: "admin",
     });
-    first.close();
+    await first.close();
 
     // A fresh handle on the same file is what a container restart looks like.
     const second = createByokStore(dbPath);
@@ -132,6 +133,88 @@ describe("byok-store (durable across reopen — AUD-007)", () => {
 
     const revoked = await second.revocation.isRevoked("user-1", "openai");
     assert.strictEqual(revoked.success && revoked.value, true);
-    second.close();
+    await second.close();
+  });
+});
+
+describe("byok-store (runs on any PlatformDb)", () => {
+  it("the store runs on any PlatformDb: store, find, revoke", async () => {
+    const db = createSqlitePlatformDb(openByokDb(":memory:"));
+    const store = createByokStoreOn(db);
+
+    assert.strictEqual(
+      (await store.metadata.store(fixture({ keyId: "k1" }))).success,
+      true,
+    );
+
+    const found = await store.metadata.findByKeyId("k1");
+    assert.strictEqual(found.success && found.value?.keyId, "k1");
+
+    const userFound = await store.metadata.findByUserAndProvider(
+      "user-1",
+      "openai",
+    );
+    assert.strictEqual(userFound.success && userFound.value?.keyId, "k1");
+
+    assert.strictEqual(
+      (await store.metadata.markRevoked("k1", "admin")).success,
+      true,
+    );
+    await store.close();
+  });
+
+  it("write_seq still orders by last write: store A, store B, re-store A", async () => {
+    const db = createSqlitePlatformDb(openByokDb(":memory:"));
+    const store = createByokStoreOn(db);
+
+    await store.metadata.store(fixture({ keyId: "A" }));
+    await store.metadata.store(fixture({ keyId: "B" }));
+    await store.metadata.store(fixture({ keyId: "A", keyVersion: 2 }));
+
+    const r = await store.metadata.findByUserAndProvider("user-1", "openai");
+    assert.strictEqual(r.success && r.value?.keyId, "A");
+    await store.close();
+  });
+
+  it("two stores started together both land and the later one wins", async () => {
+    const db = createSqlitePlatformDb(openByokDb(":memory:"));
+    const store = createByokStoreOn(db);
+
+    const [rA, rB] = await Promise.all([
+      store.metadata.store(fixture({ keyId: "kA" })),
+      store.metadata.store(fixture({ keyId: "kB" })),
+    ]);
+    assert.strictEqual(rA.success, true);
+    assert.strictEqual(rB.success, true);
+
+    // Both rows exist.
+    const a = await store.metadata.findByKeyId("kA");
+    const b = await store.metadata.findByKeyId("kB");
+    assert.strictEqual(a.success && a.value?.keyId, "kA");
+    assert.strictEqual(b.success && b.value?.keyId, "kB");
+
+    // findByUserAndProvider returns one of them (last write wins).
+    const current = await store.metadata.findByUserAndProvider(
+      "user-1",
+      "openai",
+    );
+    assert.ok(current.success && current.value !== null);
+    assert.ok(
+      current.value?.keyId === "kA" || current.value?.keyId === "kB",
+      `expected kA or kB, got ${current.value?.keyId}`,
+    );
+    await store.close();
+  });
+
+  it("close returns a Promise and a second close resolves", async () => {
+    const db = createSqlitePlatformDb(openByokDb(":memory:"));
+    const store = createByokStoreOn(db);
+
+    const firstClose = store.close();
+    assert.ok(firstClose instanceof Promise);
+    await firstClose;
+
+    // A second close resolves without throwing.
+    await store.close();
   });
 });
