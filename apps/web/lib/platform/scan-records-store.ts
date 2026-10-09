@@ -226,7 +226,7 @@ const RECORD_COLUMNS = `
   id, project_name, repo_ref, tier, verdict, exit_code, files_scanned,
   findings_fresh, findings_baselined, findings_stale, findings_expired,
   layout_excerpt, report_markdown, error_message, findings_sample,
-  artifact_path, artifact_bytes, created_at
+  artifact_path, artifact_bytes, hx_ms(created_at) AS created_at
 `;
 
 function persistError(
@@ -449,9 +449,9 @@ export function createScanRecordsStore(
       @id, @owner_id, @schema_version, @project_name, @repo_ref, @tier, @verdict,
       @exit_code, @files_scanned, @findings_fresh, @findings_baselined,
       @findings_stale, @findings_expired, @layout_excerpt, @report_markdown,
-      @error_message, @findings_sample, @artifact_path, @artifact_bytes,
-      @created_at
-    )
+       @error_message, @findings_sample, @artifact_path, @artifact_bytes,
+       hx_ts(@created_at)
+     )
   `;
 
   // Retention is version-BLIND on purpose. Gating eviction on schema_version
@@ -461,7 +461,7 @@ export function createScanRecordsStore(
     SELECT id, artifact_path FROM scan_records
      WHERE owner_id = @owner_id
      ORDER BY created_at DESC, rowid DESC
-     LIMIT -1 OFFSET @keep
+      LIMIT 9223372036854775807 OFFSET @keep
   `;
   const deleteById = "DELETE FROM scan_records WHERE owner_id = ? AND id = ?";
 
@@ -469,7 +469,7 @@ export function createScanRecordsStore(
     SELECT ${RECORD_COLUMNS} FROM scan_records
      WHERE owner_id = @owner_id
        AND schema_version = @schema_version
-       AND (@repo_ref IS NULL OR repo_ref = @repo_ref)
+       AND (CAST(@repo_ref AS TEXT) IS NULL OR repo_ref = @repo_ref)
      ORDER BY created_at DESC, rowid DESC
      LIMIT @limit
   `;
@@ -495,15 +495,15 @@ export function createScanRecordsStore(
   // updating once an owner passes the limit.
   const selectTrend = `
     SELECT * FROM (
-      SELECT id, created_at, verdict, findings_fresh, findings_baselined,
+      SELECT id, hx_ms(created_at) AS created_at, verdict, findings_fresh, findings_baselined,
              rowid AS insertion_seq
         FROM scan_records
-       WHERE owner_id = @owner_id
-         AND schema_version = @schema_version
-         AND (@repo_ref IS NULL OR repo_ref = @repo_ref)
-       ORDER BY created_at DESC, insertion_seq DESC
+     WHERE owner_id = @owner_id
+       AND schema_version = @schema_version
+       AND (CAST(@repo_ref AS TEXT) IS NULL OR repo_ref = @repo_ref)
+     ORDER BY created_at DESC, insertion_seq DESC
        LIMIT @limit
-    )
+    ) AS recent
     ORDER BY created_at ASC, insertion_seq ASC
   `;
 
