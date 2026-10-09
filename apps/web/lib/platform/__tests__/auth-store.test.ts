@@ -119,7 +119,10 @@ describe.each(BACKENDS)("auth store + NextAuth adapter (%s)", (kind) => {
       assert.equal(fetched.session.expires.getTime(), expires1.getTime());
 
       const expires2 = new Date("2027-01-01T00:00:00.000Z");
-      const updated = await store.auth.updateSession({ sessionToken, expires: expires2 });
+      const updated = await store.auth.updateSession({
+        sessionToken,
+        expires: expires2,
+      });
       assert.ok(updated);
       assert.equal(updated.expires.getTime(), expires2.getTime());
 
@@ -195,10 +198,7 @@ describe.each(BACKENDS)("auth store + NextAuth adapter (%s)", (kind) => {
       const found = await store.auth.getUserByGithubLogin("ADA");
       assert.ok(found);
       assert.equal(found.id, user.id);
-      assert.equal(
-        await store.auth.getUserByGithubLogin("bob"),
-        null,
-      );
+      assert.equal(await store.auth.getUserByGithubLogin("bob"), null);
     } finally {
       await backend.close();
     }

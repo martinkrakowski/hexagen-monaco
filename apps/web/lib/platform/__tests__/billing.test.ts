@@ -151,8 +151,14 @@ describe.each(BACKENDS)("billing store (%s)", (kind) => {
         ["user-1"],
       );
       assert.equal(typeof row?.u, "number");
-      assert.ok(row!.u >= before - 10_000, `updated_at ${row!.u} should be after ${before}`);
-      assert.ok(row!.u <= after + 10_000, `updated_at ${row!.u} should be before ${after}`);
+      assert.ok(
+        row!.u >= before - 10_000,
+        `updated_at ${row!.u} should be after ${before}`,
+      );
+      assert.ok(
+        row!.u <= after + 10_000,
+        `updated_at ${row!.u} should be before ${after}`,
+      );
     } finally {
       await backend.close();
     }

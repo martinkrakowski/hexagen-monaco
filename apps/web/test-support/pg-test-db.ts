@@ -7,7 +7,10 @@ let counter = 0;
 
 /** A fresh database; cloned from the migrated template by default, or empty
  * when `{ empty: true }` is passed. `drop()` ends the pool and drops it. */
-export async function createTestPgDb(opts?: { empty?: boolean; max?: number }): Promise<{
+export async function createTestPgDb(opts?: {
+  empty?: boolean;
+  max?: number;
+}): Promise<{
   pool: Pool;
   db: PlatformDb;
   url: string;
@@ -42,7 +45,7 @@ export async function createTestPgDb(opts?: { empty?: boolean; max?: number }): 
   }
 
   const dbUrl = homeUrl.replace(/\/[^/]+$/, `/${name}`);
-   const pool = createPgPool(dbUrl, { max: opts?.max ?? 2 });
+  const pool = createPgPool(dbUrl, { max: opts?.max ?? 2 });
   const db = createPgPlatformDb(pool);
 
   return {

@@ -24,7 +24,8 @@ export async function openBackend(
 ): Promise<Backend> {
   if (kind === "sqlite") {
     const db = createSqlitePlatformDb(openPlatformDb(":memory:"));
-    const artifactsDir = opts?.artifactsDir ?? mkdtempSync(join(tmpdir(), "hx-artifacts-"));
+    const artifactsDir =
+      opts?.artifactsDir ?? mkdtempSync(join(tmpdir(), "hx-artifacts-"));
     return {
       kind,
       db,
@@ -37,7 +38,8 @@ export async function openBackend(
   }
 
   const { db, drop } = await createTestPgDb({ max: opts?.pgMax });
-  const artifactsDir = opts?.artifactsDir ?? mkdtempSync(join(tmpdir(), "hx-artifacts-"));
+  const artifactsDir =
+    opts?.artifactsDir ?? mkdtempSync(join(tmpdir(), "hx-artifacts-"));
   let dropped = false;
   return {
     kind,

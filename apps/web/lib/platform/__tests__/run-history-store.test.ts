@@ -125,7 +125,12 @@ describe.each(BACKENDS)("run history store (%s)", (kind) => {
       const now = noonUtcDaysAgo(0);
       const first = await runs.record({
         runId: "run-1",
-        telemetry: { ...telemetry, stage: 3, servedFromCache: true, usedLLM: false },
+        telemetry: {
+          ...telemetry,
+          stage: 3,
+          servedFromCache: true,
+          usedLLM: false,
+        },
         now,
       });
       assert.equal(typeof first.createdAt, "number");
@@ -134,7 +139,12 @@ describe.each(BACKENDS)("run history store (%s)", (kind) => {
       assert.equal(first.usedLlm, false);
       const second = await runs.record({
         runId: "run-2",
-        telemetry: { ...telemetry, stage: 3, servedFromCache: false, usedLLM: true },
+        telemetry: {
+          ...telemetry,
+          stage: 3,
+          servedFromCache: false,
+          usedLLM: true,
+        },
         now,
       });
       assert.equal(typeof second.createdAt, "number");
@@ -196,9 +206,24 @@ describe.each(BACKENDS)("run history store (%s)", (kind) => {
       const d = noonUtcDaysAgo(1);
       const projA = "11111111-1111-4111-8111-111111111111";
       const projB = "22222222-2222-4222-8222-222222222222";
-      await runs.record({ runId: "r1", projectId: projA, telemetry: { ...telemetry, stage: 3 }, now: d });
-      await runs.record({ runId: "r2", projectId: projB, telemetry: { ...telemetry, stage: 3 }, now: d + 1 });
-      await runs.record({ runId: "r3", projectId: projA, telemetry: { ...telemetry, stage: 3 }, now: d + 2 });
+      await runs.record({
+        runId: "r1",
+        projectId: projA,
+        telemetry: { ...telemetry, stage: 3 },
+        now: d,
+      });
+      await runs.record({
+        runId: "r2",
+        projectId: projB,
+        telemetry: { ...telemetry, stage: 3 },
+        now: d + 1,
+      });
+      await runs.record({
+        runId: "r3",
+        projectId: projA,
+        telemetry: { ...telemetry, stage: 3 },
+        now: d + 2,
+      });
 
       const limited = await runs.list({ limit: 2 });
       assert.equal(limited.length, 2);
@@ -233,7 +258,11 @@ describe.each(BACKENDS)("run history store (%s)", (kind) => {
 
       // Day boundary: two events same run on prevDay (distinct → 1), one on today
       await runs.record({ runId: "run-a", telemetry, now: prevDay });
-      await runs.record({ runId: "run-a", telemetry: { ...telemetry, stage: 4 }, now: prevDay });
+      await runs.record({
+        runId: "run-a",
+        telemetry: { ...telemetry, stage: 4 },
+        now: prevDay,
+      });
       await runs.record({ runId: "run-b", telemetry, now: midnight });
 
       const trend = await runs.trend(30);
