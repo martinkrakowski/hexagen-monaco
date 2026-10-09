@@ -614,6 +614,9 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
         if (cacheResult.success && cacheResult.value !== null) {
           return this.maybeLift(sessionId, userId, cacheResult);
         }
+        // No server copy and nothing local: as after any empty load, the
+        // first save creates the server copy.
+        this.firstWriteAfter404.add(sessionId);
         return { success: true, value: null };
       }
       // GET failed (offline/error) → keep marker; honor any cache entry.
@@ -630,6 +633,9 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
         if (cacheResult.success && cacheResult.value !== null) {
           return this.maybeLift(sessionId, userId, cacheResult);
         }
+        // No server copy and nothing local: as after any empty load, the
+        // first save creates the server copy.
+        this.firstWriteAfter404.add(sessionId);
         return { success: true, value: null };
       }
       // DELETE failed → keep marker; honor any cache entry.
