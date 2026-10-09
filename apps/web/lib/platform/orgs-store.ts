@@ -503,8 +503,8 @@ export function createOrgsRepository(db: PlatformDb): OrgsRepository {
       // Gate on affected rows: an audit row for a removal that hit nothing
       // records an event that did not happen, and a reader cannot tell it from
       // a real removal.
+      await deleteDocumentsOfMember(tx, orgId, userId);
       if (removed.changes > 0) {
-        await deleteDocumentsOfMember(tx, orgId, userId);
         await audited(tx, audit, {
           action: "org.member.remove",
           subjectOwnerId: orgId,
