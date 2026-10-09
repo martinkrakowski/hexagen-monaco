@@ -320,6 +320,7 @@ export function createOwnerDocumentsStore(
   db: PlatformDb,
   ownerId: string,
   userId: string,
+  now: () => number = Date.now,
 ): OwnerDocumentsStore {
   const selectList = `
     SELECT kind, id, project_id, rev, updated_at
@@ -376,9 +377,49 @@ export function createOwnerDocumentsStore(
      RETURNING rev, updated_at
    `;
   const deleteAtRev = `
-     DELETE FROM owner_documents
-      WHERE owner_id = ? AND user_id = ? AND kind = ? AND id = ? AND rev = ?
+      DELETE FROM owner_documents
+       WHERE owner_id = ? AND user_id = ? AND kind = ? AND id = ? AND rev = ?
    `;
+  const refusalRecent = `
+    SELECT 1 FROM audit_log
+     WHERE action = ?
+       AND actor_id = ?
+       AND subject_owner_id = ?
+       AND subject_id = ?
+       AND created_at > ?
+     LIMIT 1
+  `;
+
+  /**
+   * Records a precondition-failure audit row, capped at one per
+   * (actor, document) per minute. Returns true when a row was written and
+   * false when the cap suppressed it. The refusal result is unchanged either
+   * way — the cap only bounds audit volume, not the error returned to the
+   * caller.
+   */
+  async function recordRefusal(
+    tx: PlatformDbSession,
+    kind: DocumentKind,
+    id: string,
+  ): Promise<boolean> {
+    const since = new Date(now() - 60_000).toISOString();
+    const subjectId = `${kind}/${id}`;
+    const exists = await tx.get<{ n: number } | undefined>(refusalRecent, [
+      "document.precondition_failed",
+      userId,
+      ownerId,
+      subjectId,
+      since,
+    ]);
+    if (exists) return false;
+    await appendAudit(tx, {
+      actorId: userId,
+      action: "document.precondition_failed",
+      subjectOwnerId: ownerId,
+      subjectId,
+    });
+    return true;
+  }
 
   return {
     async list(filter) {
@@ -555,23 +596,28 @@ export function createOwnerDocumentsStore(
               id,
             ]);
             if (!existing) {
+              // The insert saw a conflicting row that this transaction's
+              // snapshot cannot see; not reachable on SQLite; on Postgres under
+              // SERIALIZABLE the seam retries a serialization failure before
+              // this could be observed; pinned by the Postgres store tests (B2b-2).
+              const audited = await recordRefusal(tx, kind, id);
               return {
                 success: false,
-                error: persistError("Conflict", "document write conflicted"),
+                error: {
+                  kind: "Conflict",
+                  message: "document write conflicted",
+                  audited,
+                },
               };
             }
-            await appendAudit(tx, {
-              actorId: userId,
-              action: "document.precondition_failed",
-              subjectOwnerId: ownerId,
-              subjectId: `${kind}/${id}`,
-            });
+            const audited = await recordRefusal(tx, kind, id);
             return {
               success: false,
               error: {
                 kind: "PreconditionFailed",
                 message: "document already exists",
                 currentRev: existing.rev,
+                audited,
               },
             };
           }
@@ -639,18 +685,14 @@ export function createOwnerDocumentsStore(
               ),
             };
           }
-          await appendAudit(tx, {
-            actorId: userId,
-            action: "document.precondition_failed",
-            subjectOwnerId: ownerId,
-            subjectId: `${kind}/${id}`,
-          });
+          const audited = await recordRefusal(tx, kind, id);
           return {
             success: false,
             error: {
               kind: "Conflict",
               message: "document was updated elsewhere",
               currentRev: existing.rev,
+              audited,
             },
           };
         });
@@ -708,18 +750,14 @@ export function createOwnerDocumentsStore(
               ),
             };
           }
-          await appendAudit(tx, {
-            actorId: userId,
-            action: "document.precondition_failed",
-            subjectOwnerId: ownerId,
-            subjectId: `${kind}/${id}`,
-          });
+          const audited = await recordRefusal(tx, kind, id);
           return {
             success: false,
             error: {
               kind: "PreconditionFailed",
               message: "document was updated elsewhere",
               currentRev: existing.rev,
+              audited,
             },
           };
         });
