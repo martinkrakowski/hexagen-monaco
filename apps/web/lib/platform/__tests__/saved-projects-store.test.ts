@@ -651,4 +651,30 @@ describe.each(BACKENDS)("saved projects stored timestamps (%s)", (kind) => {
       await backend.close();
     }
   });
+
+  it("the payload round-trips as the same JSON value", async () => {
+    const backend = await openBackend(kind);
+    try {
+      const projects = backend.store.projectsFor("owner-a");
+      const proj: SavedProject = {
+        id: "11111111-1111-4111-8111-111111111111",
+        name: "round-trip",
+        schemaVersion: 4,
+        createdAt: 1_700_000_000_000,
+        updatedAt: 1_700_000_001_000,
+        formState: {
+          nested: { a: 1, b: [null, 2, "text"] },
+          float: 1.5,
+          long: "x".repeat(5000),
+          unicode: "naïve Ünïcode ✓ 日本",
+        },
+        manifestYaml: "",
+      };
+      must(await projects.createProjectRecord(proj));
+      const loaded = must(await projects.getProject(proj.id));
+      assert.deepEqual(loaded, proj);
+    } finally {
+      await backend.close();
+    }
+  });
 });
