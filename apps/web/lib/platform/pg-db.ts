@@ -15,6 +15,8 @@ const NESTED_TX_ERROR =
 const PLAIN_IN_TX_ERROR =
   "plain db call inside a transaction: use the tx session passed to the callback";
 const TX_FINISHED_ERROR = "transaction is finished";
+const UNSUPPORTED_SQL_ERROR = (what: string) =>
+  `the seam's placeholder scanner does not support ${what} in a statement`;
 
 function errorHasCode(error: unknown, code: string): boolean {
   if (error === null || typeof error !== "object") return false;
@@ -34,8 +36,12 @@ export function createPgPool(
   types.setTypeParser(1184, (text: string) =>
     defaultTsParser(text).toISOString(),
   );
+  // `timestamp without time zone` carries no offset in its text, and the
+  // parser would read it in the Node process's zone. Every session runs with
+  // TimeZone=UTC, so such a value (`now()::timestamp`, `ts AT TIME ZONE 'UTC'`)
+  // is UTC: say so before parsing.
   types.setTypeParser(1114, (text: string) =>
-    defaultTsParser(text).toISOString(),
+    defaultTsParser(`${text}+00`).toISOString(),
   );
   types.setTypeParser(16, (text: string) => (text === "t" ? 1 : 0));
   types.setTypeParser(3802, (text: string) => text);
@@ -79,6 +85,26 @@ function scanSql(
 
   while (i < sql.length) {
     const ch = sql[i];
+
+    // What this scanner does not understand it refuses, so a `?` or `@name`
+    // inside one of these can never be rewritten silently: a block comment, a
+    // dollar-quoted string, and an escape string (E'…', where \' does not end
+    // the literal). No store statement uses them. A `?` outside a literal is
+    // ALWAYS a placeholder: the jsonb operators `?`, `?|` and `?&` must be
+    // written as functions (jsonb_exists, jsonb_exists_any, jsonb_exists_all).
+    if (ch === "/" && sql[i + 1] === "*") {
+      throw new Error(UNSUPPORTED_SQL_ERROR("a block comment"));
+    }
+    if (ch === "$" && /^\$[A-Za-z_]*\$/.test(sql.slice(i, i + 64))) {
+      throw new Error(UNSUPPORTED_SQL_ERROR("a dollar-quoted string"));
+    }
+    if (
+      (ch === "E" || ch === "e") &&
+      sql[i + 1] === "'" &&
+      (i === 0 || !/[A-Za-z0-9_$]/.test(sql[i - 1]))
+    ) {
+      throw new Error(UNSUPPORTED_SQL_ERROR("an escape string (E'…')"));
+    }
 
     // Single-quoted literal ('...'), with '' as an escaped quote
     if (ch === "'") {

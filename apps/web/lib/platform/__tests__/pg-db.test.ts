@@ -181,6 +181,34 @@ describe("pg-db", () => {
     expect(rows).toHaveLength(1);
   });
 
+  it("a timestamp without time zone is read as UTC, whatever the process's zone", async () => {
+    // The harness and CI may run in UTC, where a local-time reading would be
+    // right by accident. Compare against the timestamptz of the same instant.
+    const row = await db.get<{ plain: string; zoned: string }>(
+      "SELECT (timestamptz '2026-03-01 12:00:00+00')::timestamp AS plain, timestamptz '2026-03-01 12:00:00+00' AS zoned",
+    );
+    expect(row?.plain).toBe("2026-03-01T12:00:00.000Z");
+    expect(row?.plain).toBe(row?.zoned);
+  });
+
+  it("a statement with a block comment, a dollar-quoted string or an escape string is refused, not rewritten", async () => {
+    await expect(db.get("SELECT 1 /* is this ? one */")).rejects.toThrow(
+      /does not support a block comment/,
+    );
+    await expect(db.get("SELECT $$ what? $$ AS a")).rejects.toThrow(
+      /does not support a dollar-quoted string/,
+    );
+    await expect(db.get("SELECT $tag$ @x $tag$ AS a")).rejects.toThrow(
+      /does not support a dollar-quoted string/,
+    );
+    await expect(db.get("SELECT E'it\\'s ?' AS a")).rejects.toThrow(
+      /does not support an escape string/,
+    );
+    // A column that merely ends in e, followed by a literal, is not one.
+    const ok = await db.get<{ a: string }>("SELECT 'x' AS a WHERE 'e'='e'");
+    expect(ok?.a).toBe("x");
+  });
+
   it("a ? or @word inside a -- comment or double-quoted identifier is not translated", async () => {
     // @missing in a comment must not be translated — if it were, the missing
     // key would throw. The only real placeholder is @a.

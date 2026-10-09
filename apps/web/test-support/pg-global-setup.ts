@@ -129,6 +129,50 @@ export default async function setup(
     }
   }
 
+  // From here on a failure must not leave the embedded server running: vitest
+  // gets a teardown only when this function returns.
+  const stopEmbedded = async () => {
+    if (!embedded) return;
+    await embedded.stop().catch(() => undefined);
+    if (embeddedDir) {
+      await rm(embeddedDir, { recursive: true, force: true });
+    }
+  };
+  try {
+    await prepareTemplate(homeUrl, templateName);
+  } catch (error) {
+    await stopEmbedded();
+    throw error;
+  }
+
+  context.provide("pgHomeUrl", homeUrl);
+  context.provide("pgTemplate", templateName);
+  context.provide("pgRun", run);
+
+  const elapsed = Date.now() - startTime;
+  const wasEmbedded = embedded !== null;
+  console.log(
+    `[pg-global-setup] start-up took ${elapsed}ms (${wasEmbedded ? "embedded" : "server"})`,
+  );
+
+  return async () => {
+    // Teardown: drop the template and stop the embedded server.
+    const tearDownPool = new Pool({ connectionString: homeUrl });
+    try {
+      await tearDownPool.query(
+        `DROP DATABASE IF EXISTS ${templateName} WITH (FORCE)`,
+      );
+    } finally {
+      await tearDownPool.end();
+      await stopEmbedded();
+    }
+  };
+}
+
+async function prepareTemplate(
+  homeUrl: string,
+  templateName: string,
+): Promise<void> {
   // A connect timeout turns "nothing is listening for us" into a failure the
   // run reports, not a hang.
   const homePool = new Pool({
@@ -169,32 +213,4 @@ export default async function setup(
   } finally {
     await templatePool.end();
   }
-
-  context.provide("pgHomeUrl", homeUrl);
-  context.provide("pgTemplate", templateName);
-  context.provide("pgRun", run);
-
-  const elapsed = Date.now() - startTime;
-  const wasEmbedded = embedded !== null;
-  console.log(
-    `[pg-global-setup] start-up took ${elapsed}ms (${wasEmbedded ? "embedded" : "server"})`,
-  );
-
-  return async () => {
-    // Teardown: drop the template and stop the embedded server.
-    const tearDownPool = new Pool({ connectionString: homeUrl });
-    try {
-      await tearDownPool.query(
-        `DROP DATABASE IF EXISTS ${templateName} WITH (FORCE)`,
-      );
-    } finally {
-      await tearDownPool.end();
-      if (embedded) {
-        await embedded.stop();
-        if (embeddedDir) {
-          await rm(embeddedDir, { recursive: true, force: true });
-        }
-      }
-    }
-  };
 }
