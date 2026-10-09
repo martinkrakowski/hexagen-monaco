@@ -434,6 +434,41 @@ describe("H1.2 — PATCH /api/orgs/[orgId]/members/[userId]", () => {
     assert.equal(res.status, 200);
     assert.equal(await store.orgs.memberRole(ORG, "founder"), "member");
   });
+
+  it("PATCH for a member removed between the request's checks and the write is 404 and adds nobody", async () => {
+    // The race this closes: the OLD PATCH pre-read membership (non-atomic) then
+    // called addMember, which INSERTS on conflict — so a removal in between
+    // re-added the member. The route now has no pre-read and calls
+    // changeMemberRole, which reads on `tx`; this test simulates the
+    // interleaving the transaction must survive regardless of route shape.
+    const store = await seedOrg("owner", "founder");
+    await store.orgs.addMember(ORG, "dev-1", "member");
+
+    signedInAs("founder");
+    const changeMemberRole = store.orgs.changeMemberRole.bind(store.orgs);
+    const spy = vi
+      .spyOn(store.orgs, "changeMemberRole")
+      .mockImplementationOnce(async (orgId, userId, role, audit) => {
+        // The member is removed inside the call that was meant to change their
+        // role: the real method's own read on `tx` must now see no row.
+        await store.orgs.removeMember(orgId, userId);
+        return changeMemberRole(orgId, userId, role, audit);
+      });
+    try {
+      const res = await changeRole(
+        patchMember("dev-1", { role: "member" }),
+        memberParams("dev-1"),
+      );
+      assert.equal(res.status, 404);
+      assert.equal(
+        await store.orgs.memberRole(ORG, "dev-1"),
+        null,
+        "the member must not be re-added by the role change",
+      );
+    } finally {
+      spy.mockRestore();
+    }
+  });
 });
 
 describe("P-U0b — GET /api/orgs/[orgId]/members", () => {

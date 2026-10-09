@@ -153,6 +153,17 @@ export interface OrgsRepository {
   getOrg(orgId: string): Promise<Org | null>;
   getOrgBySlug(slug: string): Promise<Org | null>;
   /**
+   * Changes the role of an EXISTING member, in one transaction. Returns false
+   * and writes nothing when the user is not a member (the route's 404).
+   * @throws LastOwnerError
+   */
+  changeMemberRole(
+    orgId: string,
+    userId: string,
+    role: OrgRole,
+    audit?: OrgAuditContext,
+  ): Promise<boolean>;
+  /**
    * Adds the member, or changes an existing member's role.
    * @throws LastOwnerError when it would demote the org's only owner.
    */
@@ -483,6 +494,40 @@ export function createOrgsRepository(db: PlatformDb): OrgsRepository {
       });
     });
 
+  const changeMemberRoleTx = (
+    orgId: string,
+    userId: string,
+    role: OrgRole,
+    audit?: OrgAuditContext,
+  ): Promise<boolean> =>
+    db.transaction(async (tx) => {
+      const existing = await tx.get<{ role: OrgRole }>(selectMemberRow, [
+        orgId,
+        userId,
+      ]);
+      // No row: not a member. Returns false so the route can 404, and writes
+      // nothing — a role change must never re-add a member that was removed
+      // between the caller's check and this write.
+      if (!existing) return false;
+      // Same role: no write, no audit row, no invariant check.
+      if (existing.role === role) return true;
+      await guardLastOwner(tx, orgId, userId, existing.role);
+      await tx.run(upsertMember, {
+        org_id: orgId,
+        user_id: userId,
+        role,
+        created_at: new Date().toISOString(),
+      });
+      await audited(tx, audit, {
+        action: "org.member.role_change",
+        subjectOwnerId: orgId,
+        subjectId: orgId,
+        granteeType: "user",
+        granteeId: userId,
+      });
+      return true;
+    });
+
   // ONE transaction, so a failure in either statement rolls back both: a user
   // dropped from the org but left in its teams is the orphan this prevents,
   // and the reverse (teams cleared, org row surviving) is just as wrong.
@@ -725,6 +770,10 @@ export function createOrgsRepository(db: PlatformDb): OrgsRepository {
     async addMember(orgId, userId, role, audit) {
       assertRole(role);
       await addMemberTx(orgId, userId, role, audit);
+    },
+    async changeMemberRole(orgId, userId, role, audit) {
+      assertRole(role);
+      return changeMemberRoleTx(orgId, userId, role, audit);
     },
     async removeMember(orgId, userId, audit) {
       await removeMemberTx(orgId, userId, audit);

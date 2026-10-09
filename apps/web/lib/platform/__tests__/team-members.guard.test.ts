@@ -14,6 +14,7 @@ import {
   UnknownTeamError,
 } from "../teams-store";
 import { createAuditLogRepository } from "../audit-log-store";
+import { createProjectSharesRepository } from "../project-shares-store";
 
 function fixture() {
   const path = join(
@@ -27,6 +28,7 @@ function fixture() {
     orgs: createOrgsRepository(platformDb),
     teams: createTeamsRepository(platformDb),
     audit: createAuditLogRepository(platformDb),
+    shares: createProjectSharesRepository(platformDb),
   };
 }
 
@@ -558,6 +560,118 @@ describe("P-A2 — team membership invariants", () => {
         await teams.isMember(team.id, "dev-1"),
         false,
         "the membership must roll back when its audit row cannot be written",
+      );
+    } finally {
+      db.close();
+    }
+  });
+});
+
+describe("P-A4 — grants made to a team die with the team", () => {
+  const PROJECT = "proj-shared";
+
+  it("deleting a team revokes the grants made to it and no other grant", async () => {
+    const { db, orgs, teams, shares } = fixture();
+    try {
+      const org = await orgs.createOrg({
+        slug: "acme",
+        name: "Acme",
+        createdBy: "owner-1",
+      });
+      await orgs.addMember(org.id, "owner-1", "owner");
+      const team = await teams.createTeam({
+        orgId: org.id,
+        slug: "platform",
+        name: "Platform",
+        createdBy: "owner-1",
+      });
+      const otherTeam = await teams.createTeam({
+        orgId: org.id,
+        slug: "design",
+        name: "Design",
+        createdBy: "owner-1",
+      });
+
+      // Three live grants on one project: to the team, to another team, to a
+      // user. Planting uses the no-actor form (grantNow), which writes the row
+      // unconditionally — the deletion under test is the only revocation path.
+      await shares.grant({
+        ownerId: org.id,
+        projectId: PROJECT,
+        granteeType: "team",
+        granteeId: team.id,
+        role: "read",
+        grantedBy: "owner-1",
+      });
+      await shares.grant({
+        ownerId: org.id,
+        projectId: PROJECT,
+        granteeType: "team",
+        granteeId: otherTeam.id,
+        role: "write",
+        grantedBy: "owner-1",
+      });
+      await shares.grant({
+        ownerId: org.id,
+        projectId: PROJECT,
+        granteeType: "user",
+        granteeId: "user-other",
+        role: "read",
+        grantedBy: "owner-1",
+      });
+      assert.equal(
+        (await shares.listForProject(org.id, PROJECT)).length,
+        3,
+        "setup: three live grants on the project",
+      );
+
+      await teams.deleteTeam(team.id, { actorId: "owner-1" });
+
+      const after = await shares.listForProject(org.id, PROJECT);
+      assert.equal(after.length, 2, "only the deleted team's grant is revoked");
+      const granteeIds = after.map((s) => s.granteeId).sort();
+      assert.deepEqual(
+        granteeIds,
+        [otherTeam.id, "user-other"].sort(),
+        "the other team's grant and the user's grant survive",
+      );
+    } finally {
+      db.close();
+    }
+  });
+
+  it("deleting an id that is not a team revokes nothing", async () => {
+    const { db, orgs, teams, shares } = fixture();
+    try {
+      const org = await orgs.createOrg({
+        slug: "acme",
+        name: "Acme",
+        createdBy: "owner-1",
+      });
+      await orgs.addMember(org.id, "owner-1", "owner");
+
+      // A live team-shaped grant for an id that is NOT a team row.
+      await shares.grant({
+        ownerId: org.id,
+        projectId: PROJECT,
+        granteeType: "team",
+        granteeId: "not-a-team",
+        role: "read",
+        grantedBy: "owner-1",
+      });
+      assert.equal(
+        (await shares.listForProject(org.id, PROJECT)).length,
+        1,
+        "setup: the planted grant is live",
+      );
+
+      await teams.deleteTeam("not-a-team", { actorId: "owner-1" });
+
+      const after = await shares.listForProject(org.id, PROJECT);
+      assert.equal(
+        after.length,
+        1,
+        "no team row existed, so nothing is revoked",
       );
     } finally {
       db.close();
