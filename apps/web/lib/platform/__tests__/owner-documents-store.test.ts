@@ -833,3 +833,18 @@ describe("owner-documents store", () => {
     }
   });
 });
+
+describe("owner-documents store, shared read", () => {
+  it("a second member reads nothing of the first member's documents through the shared read", async () => {
+    const db = openPlatformDb(":memory:");
+    const platformDb = createSqlitePlatformDb(db);
+    const second = createOwnerDocumentsStore(platformDb, "user-2", "user-2");
+    try {
+      const got = await second.getShared("workspace", "doc-1");
+      assert.equal(got.success, true);
+      if (got.success) assert.equal(got.value, null);
+    } finally {
+      db.close();
+    }
+  });
+});
