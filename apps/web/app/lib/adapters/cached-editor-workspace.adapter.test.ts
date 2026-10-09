@@ -1651,6 +1651,148 @@ describe("CachedEditorWorkspaceAdapter Item 1: no self-conflict", () => {
     const rec = await cache.getConflicts();
     assert.equal(rec?.count ?? 0, 0, "zero conflict records");
   });
+
+  it("a second save while the first createOnly PUT is in flight follows it with If-Match and nothing is paused", async () => {
+    const { adapter, cache, fetchImpl, warns } = makeAdapters();
+    await cache.saveWorkspace(UUID, makeWorkspace(1000));
+    // Simulate a prior 404 load: firstWriteAfter404 set, no stamp.
+    adapter["firstWriteAfter404"].add(UUID);
+
+    let resolvePut!: (v: Response) => void;
+    fetchImpl.mockImplementation(
+      async (url: string | URL | Request, init?: RequestInit) => {
+        const method = (init?.method ?? "GET").toUpperCase();
+        if (method === "GET") return new Response(null, { status: 404 });
+        if (method === "PUT") {
+          return new Promise((resolve) => {
+            resolvePut = (r) => resolve(r);
+          });
+        }
+        return new Response("nope", { status: 500 });
+      },
+    );
+
+    await adapter.saveWorkspace(UUID, makeWorkspace(2000));
+    vi.advanceTimersByTime(REMOTE_DEBOUNCE_MS);
+    await Promise.resolve();
+    await Promise.resolve();
+    assert.ok(resolvePut, "PUT in flight");
+
+    await adapter.saveWorkspace(UUID, makeWorkspace(3000));
+
+    resolvePut(
+      new Response(
+        JSON.stringify({
+          kind: "workspace",
+          id: UUID,
+          projectId: UUID,
+          payload: {},
+          updatedAt: 2000,
+        }),
+        { status: 200, headers: { ETag: '"rev:1"' } },
+      ),
+    );
+    await vi.advanceTimersByTimeAsync(REMOTE_DEBOUNCE_MS);
+
+    const puts = putCallsOf(fetchImpl);
+    assert.equal(puts.length, 2, "two PUTs");
+    const h2 = new Headers(puts[1]![1]!.headers);
+    assert.equal(
+      h2.get("If-Match"),
+      '"rev:1"',
+      "second PUT carries rev from first",
+    );
+    assert.equal(warns.length, 0, "no warnings");
+    const rec = await cache.getConflicts();
+    assert.equal(rec?.count ?? 0, 0, "zero conflict records");
+  });
+
+  it("a second save while the first stamped PUT is in flight follows it with the new revision", async () => {
+    const { adapter, cache, server, fetchImpl, warns } = makeAdapters();
+    const ws = makeWorkspace(1000);
+    await cache.saveWorkspace(UUID, ws);
+    await cache.setLiftStamp(UUID, {
+      ownerId: "user-1",
+      rev: 5,
+      syncedUpdatedAt: 1000,
+      confirmed: true,
+    });
+    server.set(UUID, { payload: ws, rev: 5, updatedAt: 1000, projectId: UUID });
+
+    await adapter.loadWorkspace(UUID);
+
+    let resolvePut!: (v: Response) => void;
+    fetchImpl.mockImplementation(
+      async (url: string | URL | Request, init?: RequestInit) => {
+        const method = (init?.method ?? "GET").toUpperCase();
+        const match = /\/api\/tenants\/(.+)\/documents\/workspace\/(.+)/.exec(
+          String(url),
+        );
+        const id = match![2]!;
+        if (method === "GET") {
+          const doc = server.get(id);
+          if (!doc) return new Response(null, { status: 404 });
+          return new Response(
+            JSON.stringify({
+              kind: "workspace",
+              id,
+              projectId: doc.projectId,
+              payload: doc.payload,
+              updatedAt: doc.updatedAt,
+            }),
+            { status: 200, headers: { ETag: `"rev:${doc.rev}"` } },
+          );
+        }
+        if (method === "PUT") {
+          return new Promise((resolve) => {
+            resolvePut = (r) => {
+              const doc = server.get(id);
+              if (doc) {
+                doc.rev = 6;
+                doc.updatedAt = Date.now();
+              }
+              resolve(r);
+            };
+          });
+        }
+        if (method === "DELETE") {
+          server.delete(id);
+          return new Response(null, { status: 204 });
+        }
+        return new Response("nope", { status: 500 });
+      },
+    );
+
+    await adapter.saveWorkspace(UUID, makeWorkspace(2000));
+    vi.advanceTimersByTime(REMOTE_DEBOUNCE_MS);
+    await Promise.resolve();
+    await Promise.resolve();
+    assert.ok(resolvePut, "PUT in flight");
+
+    await adapter.saveWorkspace(UUID, makeWorkspace(3000));
+
+    resolvePut(
+      new Response(
+        JSON.stringify({
+          kind: "workspace",
+          id: UUID,
+          projectId: UUID,
+          payload: {},
+          updatedAt: 2000,
+        }),
+        { status: 200, headers: { ETag: '"rev:6"' } },
+      ),
+    );
+    await vi.advanceTimersByTimeAsync(REMOTE_DEBOUNCE_MS);
+
+    const puts = putCallsOf(fetchImpl);
+    assert.equal(puts.length, 2, "two PUTs");
+    const h2 = new Headers(puts[1]![1]!.headers);
+    assert.equal(h2.get("If-Match"), '"rev:6"', "second PUT carries new rev");
+    assert.equal(warns.length, 0, "no warnings");
+    const rec = await cache.getConflicts();
+    assert.equal(rec?.count ?? 0, 0, "zero conflict records");
+  });
 });
 
 describe("CachedEditorWorkspaceAdapter Item 11: first write", () => {
