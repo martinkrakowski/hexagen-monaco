@@ -1008,6 +1008,35 @@ describe("owner-documents store", () => {
     }
   });
 
+  it("listDocumentsAuthoredBy reports the size cut when both ceilings are passed, and the row cut when only that one is", async () => {
+    const db = openPlatformDb(":memory:");
+    const platformDb = createSqlitePlatformDb(db);
+    const docs = createOwnerDocumentsStore(platformDb, "user-a", "user-a");
+    try {
+      const p = { v: "aaa" };
+      const len = JSON.stringify(p).length;
+      for (const id of ["d-1", "d-2", "d-3", "d-4"]) {
+        await docs.put({ kind: "workspace", id, payload: p });
+      }
+      // Four stored, limit three (so the row ceiling is passed), and a budget
+      // that fits one: the size cut decided, and one item is kept.
+      const both = await listDocumentsAuthoredBy(platformDb, "user-a", 3, len);
+      assert.equal(both.items.length, 1);
+      assert.equal(both.truncatedBy, "size");
+      // The same rows with room for all three: only the row ceiling was passed.
+      const rowsOnly = await listDocumentsAuthoredBy(
+        platformDb,
+        "user-a",
+        3,
+        len * 10,
+      );
+      assert.equal(rowsOnly.items.length, 3);
+      assert.equal(rowsOnly.truncatedBy, "rows");
+    } finally {
+      db.close();
+    }
+  });
+
   it("listDocumentsAuthoredBy rejects a non-integer or negative limit or maxChars with RangeError", async () => {
     const db = openPlatformDb(":memory:");
     const platformDb = createSqlitePlatformDb(db);

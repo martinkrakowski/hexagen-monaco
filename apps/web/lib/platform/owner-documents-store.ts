@@ -260,10 +260,12 @@ export async function listDocumentsAuthoredBy(
     kept.push(c);
   }
 
-  const truncatedBy: TruncationReason | null = rowsTruncated
-    ? "rows"
-    : sizeTruncated
-      ? "size"
+  // When both ceilings were passed, the size cut is the one that decided what
+  // was kept (it fell inside the first `limit` rows), so it is the one reported.
+  const truncatedBy: TruncationReason | null = sizeTruncated
+    ? "size"
+    : rowsTruncated
+      ? "rows"
       : null;
 
   const items: AuthoredDocument[] = [];
