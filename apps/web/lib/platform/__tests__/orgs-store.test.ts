@@ -1,72 +1,93 @@
+// @vitest-environment node
 import { describe, it } from "vitest";
 import assert from "node:assert/strict";
-import { createPlatformStore } from "../store";
-import { openPlatformDb } from "../platform-db";
-import { createSqlitePlatformDb } from "../sqlite-db";
 import {
-  createOrgsRepository,
   DuplicateOrgSlugError,
   LastOwnerError,
   OrgOwnsProjectsError,
 } from "../orgs-store";
-import { createOwnerDocumentsStore } from "../owner-documents-store";
-import { createSavedProjectsStore } from "../saved-projects-store";
 import type { SavedProject } from "@hexagen/shared";
+import { BACKENDS, openBackend } from "../../../test-support/platform-backends";
+import type { PlatformDb } from "../db";
 
-describe("OrgsRepository.listOrgsForUser", () => {
+function defined<T>(v: T | undefined | null, what: string): T {
+  if (v === undefined || v === null) throw new Error("expected " + what);
+  return v;
+}
+
+function must<T>(
+  r: { success: true; value: T } | { success: false; error: unknown },
+): T {
+  if (!r.success)
+    throw new Error(`expected success, got ${JSON.stringify(r.error)}`);
+  return r.value;
+}
+
+const docCount = async (db: PlatformDb, ownerId: string, userId: string) =>
+  defined(
+    await db.get<{ n: number }>(
+      "SELECT COUNT(*) AS n FROM owner_documents WHERE owner_id = ? AND user_id = ?",
+      [ownerId, userId],
+    ),
+    "document count",
+  ).n;
+
+describe.each(BACKENDS)("OrgsRepository.listOrgsForUser (%s", (kind) => {
   it("returns this caller's orgs with roles, and nobody else's", async () => {
-    const store = createPlatformStore(":memory:");
+    const backend = await openBackend(kind);
     try {
-      const acme = await store.orgs.createOrg({
+      const orgs = backend.store.orgs;
+      const acme = await orgs.createOrg({
         slug: "acme",
         name: "Acme",
         createdBy: "user-1",
       });
-      const beta = await store.orgs.createOrg({
+      const beta = await orgs.createOrg({
         slug: "beta",
         name: "Beta",
         createdBy: "user-2",
       });
-      await store.orgs.addMember(acme.id, "user-1", "owner");
-      await store.orgs.addMember(acme.id, "user-2", "member");
-      await store.orgs.addMember(beta.id, "user-2", "owner");
+      await orgs.addMember(acme.id, "user-1", "owner");
+      await orgs.addMember(acme.id, "user-2", "member");
+      await orgs.addMember(beta.id, "user-2", "owner");
 
-      const forUser1 = await store.orgs.listOrgsForUser("user-1");
+      const forUser1 = await orgs.listOrgsForUser("user-1");
       assert.equal(forUser1.length, 1);
       assert.equal(forUser1[0]?.id, acme.id);
       assert.equal(forUser1[0]?.slug, "acme");
       assert.equal(forUser1[0]?.name, "Acme");
       assert.equal(forUser1[0]?.role, "owner");
 
-      const forUser2 = await store.orgs.listOrgsForUser("user-2");
+      const forUser2 = await orgs.listOrgsForUser("user-2");
       assert.equal(forUser2.length, 2);
       const bySlug = Object.fromEntries(forUser2.map((o) => [o.slug, o.role]));
       assert.equal(bySlug.acme, "member");
       assert.equal(bySlug.beta, "owner");
 
-      const forStranger = await store.orgs.listOrgsForUser("nobody");
+      const forStranger = await orgs.listOrgsForUser("nobody");
       assert.equal(forStranger.length, 0);
     } finally {
-      await store.close();
+      await backend.close();
     }
   });
 });
 
-describe("OrgsRepository — typed error refusals", () => {
+describe.each(BACKENDS)("OrgsRepository — typed error refusals (%s", (kind) => {
   it("createOrgWithOwner with a taken slug rejects with DuplicateOrgSlugError and leaves no second org, no membership and no audit row", async () => {
-    const store = createPlatformStore(":memory:");
+    const backend = await openBackend(kind);
     try {
-      const org = await store.orgs.createOrgWithOwner(
+      const orgs = backend.store.orgs;
+      const org = await orgs.createOrgWithOwner(
         { slug: "acme", name: "Acme", createdBy: "founder" },
         { actorId: "founder" },
       );
 
       // Non-vacuity: "other" has no orgs yet.
-      assert.equal((await store.orgs.listOrgsForUser("other")).length, 0);
+      assert.equal((await orgs.listOrgsForUser("other")).length, 0);
 
       await assert.rejects(
         () =>
-          store.orgs.createOrgWithOwner(
+          orgs.createOrgWithOwner(
             { slug: "acme", name: "Acme Again", createdBy: "other" },
             { actorId: "other" },
           ),
@@ -82,69 +103,71 @@ describe("OrgsRepository — typed error refusals", () => {
 
       // No second org for "other".
       assert.equal(
-        (await store.orgs.listOrgsForUser("other")).length,
+        (await orgs.listOrgsForUser("other")).length,
         0,
         "the failed create must not list an org for the second user",
       );
       // No membership for "other" in the org.
       assert.equal(
-        await store.orgs.memberRole(org.id, "other"),
+        await orgs.memberRole(org.id, "other"),
         null,
         "the failed create must not add a membership",
       );
       // No second audit row: the original org.create is the only one.
       assert.equal(
-        await store.audit.countFor("org.create", org.id),
+        await backend.store.audit.countFor("org.create", org.id),
         1,
         "the failed create must not write an audit row",
       );
     } finally {
-      await store.close();
+      await backend.close();
     }
   });
 
   it("demoting or removing the last owner rejects with LastOwnerError and the member stays an owner", async () => {
-    const store = createPlatformStore(":memory:");
+    const backend = await openBackend(kind);
     try {
-      const org = await store.orgs.createOrgWithOwner(
+      const orgs = backend.store.orgs;
+      const org = await orgs.createOrgWithOwner(
         { slug: "acme", name: "Acme", createdBy: "founder" },
         { actorId: "founder" },
       );
 
       // Demoting: founder is the only owner, so demotion to member must refuse.
       await assert.rejects(
-        () => store.orgs.addMember(org.id, "founder", "member"),
+        () => orgs.addMember(org.id, "founder", "member"),
         (err: unknown) => {
           assert.ok(err instanceof LastOwnerError);
           return true;
         },
       );
       // The founder is still an owner — the refusal rolled back.
-      assert.equal(await store.orgs.memberRole(org.id, "founder"), "owner");
+      assert.equal(await orgs.memberRole(org.id, "founder"), "owner");
 
       // Removing the last owner must also refuse.
       await assert.rejects(
-        () => store.orgs.removeMember(org.id, "founder"),
+        () => orgs.removeMember(org.id, "founder"),
         (err: unknown) => {
           assert.ok(err instanceof LastOwnerError);
           return true;
         },
       );
-      assert.equal(await store.orgs.memberRole(org.id, "founder"), "owner");
+      assert.equal(await orgs.memberRole(org.id, "founder"), "owner");
     } finally {
-      await store.close();
+      await backend.close();
     }
   });
 
   it("deleteOrg of an org that owns a project rejects with OrgOwnsProjectsError; org, members and teams survive", async () => {
-    const store = createPlatformStore(":memory:");
+    const backend = await openBackend(kind);
     try {
-      const org = await store.orgs.createOrgWithOwner(
+      const orgs = backend.store.orgs;
+      const org = await orgs.createOrgWithOwner(
         { slug: "acme", name: "Acme", createdBy: "owner-1" },
         { actorId: "owner-1" },
       );
-      await store.orgs.addMember(org.id, "member-1", "member");
-      const team = await store.teams.createTeam({
+      await orgs.addMember(org.id, "member-1", "member");
+      const team = await backend.store.teams.createTeam({
         orgId: org.id,
         slug: "platform",
         name: "Platform",
@@ -158,13 +181,12 @@ describe("OrgsRepository — typed error refusals", () => {
         createdAt: Date.now(),
         updatedAt: Date.now(),
       } as SavedProject;
-      const created = await store
-        .projectsFor(org.id)
-        .createProjectRecord(project);
-      assert.equal(created.success, true, "fixture project must be created");
+      must(
+        await backend.store.projectsFor(org.id).createProjectRecord(project),
+      );
 
       await assert.rejects(
-        () => store.orgs.deleteOrg(org.id, { actorId: "owner-1" }),
+        () => orgs.deleteOrg(org.id, { actorId: "owner-1" }),
         (err: unknown) => {
           assert.ok(err instanceof OrgOwnsProjectsError);
           return true;
@@ -172,376 +194,370 @@ describe("OrgsRepository — typed error refusals", () => {
       );
 
       // Org survives.
-      assert.ok(
-        await store.orgs.getOrg(org.id),
-        "org must survive the refusal",
-      );
+      assert.ok(await orgs.getOrg(org.id), "org must survive the refusal");
       // Member survives.
       assert.equal(
-        await store.orgs.memberRole(org.id, "member-1"),
+        await orgs.memberRole(org.id, "member-1"),
         "member",
         "member must survive the refusal",
       );
       // Team survives.
-      const teams = await store.teams.listTeamsForOrg(org.id);
+      const teams = await backend.store.teams.listTeamsForOrg(org.id);
       assert.equal(teams.length, 1, "team must survive the refusal");
       assert.equal(teams[0]?.id, team.id);
     } finally {
-      await store.close();
+      await backend.close();
     }
   });
 });
 
-describe("OrgsRepository.acceptInvitesForLogin", () => {
+describe.each(BACKENDS)("OrgsRepository.acceptInvitesForLogin (%s", (kind) => {
   it("accepts only the signing-in login's invites, and leaves every other pending invite pending", async () => {
-    const store = createPlatformStore(":memory:");
+    const backend = await openBackend(kind);
     try {
-      const acme = await store.orgs.createOrg({
+      const orgs = backend.store.orgs;
+      const acme = await orgs.createOrg({
         slug: "acme",
         name: "Acme",
         createdBy: "user-1",
       });
-      const beta = await store.orgs.createOrg({
+      const beta = await orgs.createOrg({
         slug: "beta",
         name: "Beta",
         createdBy: "user-1",
       });
       const audit = { actorId: "user-1" };
-      await store.orgs.invite(acme.id, "ada", "member", audit);
-      await store.orgs.invite(acme.id, "grace", "member", audit);
-      await store.orgs.invite(beta.id, "grace", "owner", audit);
+      await orgs.invite(acme.id, "ada", "member", audit);
+      await orgs.invite(acme.id, "grace", "member", audit);
+      await orgs.invite(beta.id, "grace", "owner", audit);
 
-      const joined = await store.orgs.acceptInvitesForLogin("ada-user", "ada");
+      const joined = await orgs.acceptInvitesForLogin("ada-user", "ada");
       assert.deepEqual(joined, [acme.id]);
 
       // The UPDATE that stamps an invite accepted is keyed by org AND login.
       // Without that key it would stamp every invite in the table.
-      const acmePending = await store.orgs.listPendingInvites(acme.id);
+      const acmePending = await orgs.listPendingInvites(acme.id);
       assert.deepEqual(
         acmePending.map((i) => i.githubLogin),
         ["grace"],
       );
-      const betaPending = await store.orgs.listPendingInvites(beta.id);
+      const betaPending = await orgs.listPendingInvites(beta.id);
       assert.deepEqual(
         betaPending.map((i) => i.githubLogin),
         ["grace"],
       );
 
-      const later = await store.orgs.acceptInvitesForLogin(
-        "grace-user",
-        "grace",
-      );
+      const later = await orgs.acceptInvitesForLogin("grace-user", "grace");
       assert.deepEqual([...later].sort(), [acme.id, beta.id].sort());
-      assert.equal(await store.orgs.memberRole(beta.id, "grace-user"), "owner");
+      assert.equal(await orgs.memberRole(beta.id, "grace-user"), "owner");
     } finally {
-      await store.close();
+      await backend.close();
     }
   });
 });
 
-function docCount(
-  db: ReturnType<typeof openPlatformDb>,
-  ownerId: string,
-  userId: string,
-): number {
-  return (
-    db
-      .prepare(
-        "SELECT COUNT(*) AS n FROM owner_documents WHERE owner_id = ? AND user_id = ?",
-      )
-      .get(ownerId, userId) as { n: number }
-  ).n;
-}
+describe.each(BACKENDS)(
+  "org member removal — owner_documents cleanup (%s",
+  (kind) => {
+    it("removing a member deletes that member's documents under the org and nobody else's", async () => {
+      const backend = await openBackend(kind);
+      try {
+        const orgs = backend.store.orgs;
+        const docs = (ownerId: string, userId: string) =>
+          backend.store.documentsFor(ownerId, userId);
 
-describe("org member removal — owner_documents cleanup", () => {
-  function fixture() {
-    const db = openPlatformDb(":memory:");
-    const platformDb = createSqlitePlatformDb(db);
-    return {
-      db,
-      platformDb,
-      orgs: createOrgsRepository(platformDb),
-      docs: (ownerId: string, userId: string) =>
-        createOwnerDocumentsStore(platformDb, ownerId, userId),
-    };
-  }
+        const org = await orgs.createOrgWithOwner(
+          { slug: "acme", name: "Acme", createdBy: "owner-1" },
+          { actorId: "owner-1" },
+        );
+        await orgs.addMember(org.id, "member-2", "member");
+        await orgs.addMember(org.id, "member-3", "member");
 
-  it("removing a member deletes that member's documents under the org and nobody else's", async () => {
-    const f = fixture();
-    try {
-      const org = await f.orgs.createOrgWithOwner(
-        { slug: "acme", name: "Acme", createdBy: "owner-1" },
-        { actorId: "owner-1" },
-      );
-      await f.orgs.addMember(org.id, "member-2", "member");
-      await f.orgs.addMember(org.id, "member-3", "member");
+        const docs2 = docs(org.id, "member-2");
+        const docs3 = docs(org.id, "member-3");
+        const personal2 = docs("member-2", "member-2");
 
-      const docs2 = f.docs(org.id, "member-2");
-      const docs3 = f.docs(org.id, "member-3");
-      const personal2 = f.docs("member-2", "member-2");
+        must(await docs2.put({ kind: "workspace", id: "doc-2a", payload: {} }));
+        must(await docs2.put({ kind: "workspace", id: "doc-2b", payload: {} }));
+        must(await docs3.put({ kind: "workspace", id: "doc-3a", payload: {} }));
+        must(await docs3.put({ kind: "workspace", id: "doc-3b", payload: {} }));
+        must(
+          await personal2.put({
+            kind: "workspace",
+            id: "doc-personal",
+            payload: {},
+          }),
+        );
 
-      await docs2.put({ kind: "workspace", id: "doc-2a", payload: {} });
-      await docs2.put({ kind: "workspace", id: "doc-2b", payload: {} });
-      await docs3.put({ kind: "workspace", id: "doc-3a", payload: {} });
-      await docs3.put({ kind: "workspace", id: "doc-3b", payload: {} });
-      await personal2.put({
-        kind: "workspace",
-        id: "doc-personal",
-        payload: {},
-      });
+        assert.equal(
+          await docCount(backend.db, org.id, "member-2"),
+          2,
+          "setup: member-2 has 2 org docs",
+        );
+        assert.equal(
+          await docCount(backend.db, org.id, "member-3"),
+          2,
+          "setup: member-3 has 2 org docs",
+        );
+        assert.equal(
+          await docCount(backend.db, "member-2", "member-2"),
+          1,
+          "setup: member-2 has 1 personal doc",
+        );
 
-      assert.equal(
-        docCount(f.db, org.id, "member-2"),
-        2,
-        "setup: member-2 has 2 org docs",
-      );
-      assert.equal(
-        docCount(f.db, org.id, "member-3"),
-        2,
-        "setup: member-3 has 2 org docs",
-      );
-      assert.equal(
-        docCount(f.db, "member-2", "member-2"),
-        1,
-        "setup: member-2 has 1 personal doc",
-      );
+        await orgs.removeMember(org.id, "member-2", { actorId: "owner-1" });
 
-      await f.orgs.removeMember(org.id, "member-2", { actorId: "owner-1" });
+        assert.equal(
+          await docCount(backend.db, org.id, "member-2"),
+          0,
+          "removed member's org documents must be gone",
+        );
+        assert.equal(
+          await docCount(backend.db, org.id, "member-3"),
+          2,
+          "other member's org documents must remain",
+        );
+        assert.equal(
+          await docCount(backend.db, "member-2", "member-2"),
+          1,
+          "removed member's personal documents must remain",
+        );
+      } finally {
+        await backend.close();
+      }
+    });
 
-      assert.equal(
-        docCount(f.db, org.id, "member-2"),
-        0,
-        "removed member's org documents must be gone",
-      );
-      assert.equal(
-        docCount(f.db, org.id, "member-3"),
-        2,
-        "other member's org documents must remain",
-      );
-      assert.equal(
-        docCount(f.db, "member-2", "member-2"),
-        1,
-        "removed member's personal documents must remain",
-      );
-    } finally {
-      f.db.close();
-    }
-  });
+    it("deleteOrg with a user id as the org id deletes no personal document", async () => {
+      const backend = await openBackend(kind);
+      try {
+        const userId = "user-self";
+        const docs = backend.store.documentsFor(userId, userId);
+        must(
+          await docs.put({
+            kind: "workspace",
+            id: "doc-personal",
+            payload: {},
+          }),
+        );
 
-  it("deleteOrg with a user id as the org id deletes no personal document", async () => {
-    const f = fixture();
-    try {
-      const userId = "user-self";
-      await f.docs(userId, userId).put({
-        kind: "workspace",
-        id: "doc-personal",
-        payload: {},
-      });
+        await backend.store.orgs.deleteOrg(userId, { actorId: userId });
 
-      // Not an org: no org row is removed, so nothing of this id's may go.
-      await f.orgs.deleteOrg(userId, { actorId: userId });
+        assert.equal(
+          await docCount(backend.db, userId, userId),
+          1,
+          "deleteOrg(userId) must not delete personal documents",
+        );
+      } finally {
+        await backend.close();
+      }
+    });
 
-      assert.equal(
-        docCount(f.db, userId, userId),
-        1,
-        "deleteOrg(userId) must not delete personal documents",
-      );
-    } finally {
-      f.db.close();
-    }
-  });
+    it("removeMember with a user id as the org id deletes no personal document", async () => {
+      const backend = await openBackend(kind);
+      try {
+        const userId = "user-self";
+        const docs = backend.store.documentsFor(userId, userId);
+        must(
+          await docs.put({
+            kind: "workspace",
+            id: "doc-personal",
+            payload: {},
+          }),
+        );
 
-  it("removeMember with a user id as the org id deletes no personal document", async () => {
-    const f = fixture();
-    try {
-      const userId = "user-self";
-      const docs = f.docs(userId, userId);
-      await docs.put({ kind: "workspace", id: "doc-personal", payload: {} });
+        await backend.store.orgs.removeMember(userId, userId);
 
-      // No membership row exists for a user id as org_id: changes will be 0,
-      // so the delete guard never fires.
-      await f.orgs.removeMember(userId, userId);
+        assert.equal(
+          await docCount(backend.db, userId, userId),
+          1,
+          "removeMember(userId, userId) must not delete personal documents",
+        );
+      } finally {
+        await backend.close();
+      }
+    });
 
-      assert.equal(
-        docCount(f.db, userId, userId),
-        1,
-        "removeMember(userId, userId) must not delete personal documents",
-      );
-    } finally {
-      f.db.close();
-    }
-  });
+    it("removing someone who is not a member deletes no document", async () => {
+      const backend = await openBackend(kind);
+      try {
+        const orgs = backend.store.orgs;
+        const docs = (ownerId: string, userId: string) =>
+          backend.store.documentsFor(ownerId, userId);
 
-  it("removing someone who is not a member deletes no document", async () => {
-    const f = fixture();
-    try {
-      const org = await f.orgs.createOrgWithOwner(
-        { slug: "acme", name: "Acme", createdBy: "owner-1" },
-        { actorId: "owner-1" },
-      );
-      await f.orgs.addMember(org.id, "member-1", "member");
+        const org = await orgs.createOrgWithOwner(
+          { slug: "acme", name: "Acme", createdBy: "owner-1" },
+          { actorId: "owner-1" },
+        );
+        await orgs.addMember(org.id, "member-1", "member");
 
-      const docs1 = f.docs(org.id, "member-1");
-      await docs1.put({ kind: "workspace", id: "doc-1", payload: {} });
+        const docs1 = docs(org.id, "member-1");
+        must(await docs1.put({ kind: "workspace", id: "doc-1", payload: {} }));
 
-      // A row under the org written by someone with no membership row. The
-      // store now checks membership inside its transaction, so the stranger
-      // cannot use `put`; insert the row via raw SQL to plant the fixture
-      // (the point of this test is that a removal which removes no membership
-      // deletes nothing, this row included).
-      f.db
-        .prepare(
+        await backend.db.run(
           `INSERT INTO owner_documents
-            (owner_id, user_id, kind, id, rev, payload, updated_at)
-           VALUES (?, ?, ?, ?, 1, ?, ?)`,
-        )
-        .run(org.id, "stranger", "workspace", "doc-s", "{}", Date.now());
+          (owner_id, user_id, kind, id, rev, payload, updated_at)
+         VALUES (?, ?, ?, ?, 1, ?, hx_ts(?))`,
+          [org.id, "stranger", "workspace", "doc-s", "{}", Date.now()],
+        );
 
-      await f.orgs.removeMember(org.id, "stranger", { actorId: "owner-1" });
+        await orgs.removeMember(org.id, "stranger", { actorId: "owner-1" });
 
-      assert.equal(
-        docCount(f.db, org.id, "member-1"),
-        1,
-        "non-member removal must not touch existing documents",
-      );
-      assert.equal(
-        docCount(f.db, org.id, "stranger"),
-        1,
-        "a removal that removed no membership deletes no document",
-      );
-    } finally {
-      f.db.close();
-    }
-  });
+        assert.equal(
+          await docCount(backend.db, org.id, "member-1"),
+          1,
+          "non-member removal must not touch existing documents",
+        );
+        assert.equal(
+          await docCount(backend.db, org.id, "stranger"),
+          1,
+          "a removal that removed no membership deletes no document",
+        );
+      } finally {
+        await backend.close();
+      }
+    });
 
-  it("a removal refused by the last-owner guard deletes no document", async () => {
-    const f = fixture();
-    try {
-      const org = await f.orgs.createOrgWithOwner(
-        { slug: "acme", name: "Acme", createdBy: "owner-1" },
-        { actorId: "owner-1" },
-      );
+    it("a removal refused by the last-owner guard deletes no document", async () => {
+      const backend = await openBackend(kind);
+      try {
+        const orgs = backend.store.orgs;
+        const docs = (ownerId: string, userId: string) =>
+          backend.store.documentsFor(ownerId, userId);
 
-      const docs = f.docs(org.id, "owner-1");
-      await docs.put({ kind: "workspace", id: "doc-1", payload: {} });
+        const org = await orgs.createOrgWithOwner(
+          { slug: "acme", name: "Acme", createdBy: "owner-1" },
+          { actorId: "owner-1" },
+        );
 
-      await assert.rejects(
-        () => f.orgs.removeMember(org.id, "owner-1"),
-        LastOwnerError,
-      );
+        const doc = docs(org.id, "owner-1");
+        must(await doc.put({ kind: "workspace", id: "doc-1", payload: {} }));
 
-      assert.equal(
-        docCount(f.db, org.id, "owner-1"),
-        1,
-        "a refused removal must not delete documents",
-      );
-    } finally {
-      f.db.close();
-    }
-  });
-});
+        await assert.rejects(
+          () => orgs.removeMember(org.id, "owner-1"),
+          LastOwnerError,
+        );
 
-describe("org deletion — owner_documents cleanup", () => {
-  function fixture() {
-    const db = openPlatformDb(":memory:");
-    const platformDb = createSqlitePlatformDb(db);
-    return {
-      db,
-      platformDb,
-      orgs: createOrgsRepository(platformDb),
-      docs: (ownerId: string, userId: string) =>
-        createOwnerDocumentsStore(platformDb, ownerId, userId),
-    };
-  }
+        assert.equal(
+          await docCount(backend.db, org.id, "owner-1"),
+          1,
+          "a refused removal must not delete documents",
+        );
+      } finally {
+        await backend.close();
+      }
+    });
+  },
+);
 
-  it("deleting an org deletes every document it owns and no other owner's", async () => {
-    const f = fixture();
-    try {
-      const org = await f.orgs.createOrgWithOwner(
-        { slug: "acme", name: "Acme", createdBy: "owner-1" },
-        { actorId: "owner-1" },
-      );
-      await f.orgs.addMember(org.id, "user-1", "member");
-      await f.orgs.addMember(org.id, "user-2", "member");
+describe.each(BACKENDS)(
+  "org deletion — owner_documents cleanup (%s",
+  (kind) => {
+    it("deleting an org deletes every document it owns and no other owner's", async () => {
+      const backend = await openBackend(kind);
+      try {
+        const orgs = backend.store.orgs;
+        const docs = (ownerId: string, userId: string) =>
+          backend.store.documentsFor(ownerId, userId);
 
-      await f.docs(org.id, "user-1").put({
-        kind: "workspace",
-        id: "doc-1",
-        payload: {},
-      });
-      await f.docs(org.id, "user-2").put({
-        kind: "workspace",
-        id: "doc-2",
-        payload: {},
-      });
-      // A different tenant's document must survive. Personal tenant: owner === author.
-      await f.docs("user-3", "user-3").put({
-        kind: "workspace",
-        id: "doc-3",
-        payload: {},
-      });
+        const org = await orgs.createOrgWithOwner(
+          { slug: "acme", name: "Acme", createdBy: "owner-1" },
+          { actorId: "owner-1" },
+        );
+        await orgs.addMember(org.id, "user-1", "member");
+        await orgs.addMember(org.id, "user-2", "member");
 
-      assert.equal(
-        docCount(f.db, org.id, "user-1"),
-        1,
-        "setup: org has 2 docs",
-      );
-      assert.equal(docCount(f.db, org.id, "user-2"), 1);
+        must(
+          await docs(org.id, "user-1").put({
+            kind: "workspace",
+            id: "doc-1",
+            payload: {},
+          }),
+        );
+        must(
+          await docs(org.id, "user-2").put({
+            kind: "workspace",
+            id: "doc-2",
+            payload: {},
+          }),
+        );
+        // A different tenant's document must survive. Personal tenant: owner === author.
+        must(
+          await docs("user-3", "user-3").put({
+            kind: "workspace",
+            id: "doc-3",
+            payload: {},
+          }),
+        );
 
-      await f.orgs.deleteOrg(org.id, { actorId: "owner-1" });
+        assert.equal(
+          await docCount(backend.db, org.id, "user-1"),
+          1,
+          "setup: org has 2 docs",
+        );
+        assert.equal(await docCount(backend.db, org.id, "user-2"), 1);
 
-      assert.equal(
-        docCount(f.db, org.id, "user-1"),
-        0,
-        "deleted org's documents must be gone",
-      );
-      assert.equal(docCount(f.db, org.id, "user-2"), 0);
-      assert.equal(
-        docCount(f.db, "user-3", "user-3"),
-        1,
-        "another owner's documents must survive",
-      );
-    } finally {
-      f.db.close();
-    }
-  });
+        await orgs.deleteOrg(org.id, { actorId: "owner-1" });
 
-  it("a deletion refused because the org owns projects deletes no document", async () => {
-    const f = fixture();
-    try {
-      const org = await f.orgs.createOrgWithOwner(
-        { slug: "acme", name: "Acme", createdBy: "owner-1" },
-        { actorId: "owner-1" },
-      );
-      await f.orgs.addMember(org.id, "user-1", "member");
+        assert.equal(
+          await docCount(backend.db, org.id, "user-1"),
+          0,
+          "deleted org's documents must be gone",
+        );
+        assert.equal(await docCount(backend.db, org.id, "user-2"), 0);
+        assert.equal(
+          await docCount(backend.db, "user-3", "user-3"),
+          1,
+          "another owner's documents must survive",
+        );
+      } finally {
+        await backend.close();
+      }
+    });
 
-      const projects = createSavedProjectsStore(f.platformDb, org.id);
-      await projects.createProjectRecord({
-        id: "p-1",
-        name: "Project",
-        createdAt: 1,
-        updatedAt: 1,
-        formState: {},
-      } as unknown as SavedProject);
+    it("a deletion refused because the org owns projects deletes no document", async () => {
+      const backend = await openBackend(kind);
+      try {
+        const orgs = backend.store.orgs;
+        const docs = (ownerId: string, userId: string) =>
+          backend.store.documentsFor(ownerId, userId);
 
-      await f.docs(org.id, "user-1").put({
-        kind: "workspace",
-        id: "doc-1",
-        payload: {},
-      });
+        const org = await orgs.createOrgWithOwner(
+          { slug: "acme", name: "Acme", createdBy: "owner-1" },
+          { actorId: "owner-1" },
+        );
+        await orgs.addMember(org.id, "user-1", "member");
 
-      await assert.rejects(
-        () => f.orgs.deleteOrg(org.id, { actorId: "owner-1" }),
-        OrgOwnsProjectsError,
-      );
+        must(
+          await backend.store.projectsFor(org.id).createProjectRecord({
+            id: "p-1",
+            name: "Project",
+            createdAt: 1,
+            updatedAt: 1,
+            formState: {},
+          } as unknown as SavedProject),
+        );
 
-      assert.equal(
-        docCount(f.db, org.id, "user-1"),
-        1,
-        "a refused deletion must not delete documents",
-      );
-    } finally {
-      f.db.close();
-    }
-  });
-});
+        must(
+          await docs(org.id, "user-1").put({
+            kind: "workspace",
+            id: "doc-1",
+            payload: {},
+          }),
+        );
+
+        await assert.rejects(
+          () => orgs.deleteOrg(org.id, { actorId: "owner-1" }),
+          OrgOwnsProjectsError,
+        );
+
+        assert.equal(
+          await docCount(backend.db, org.id, "user-1"),
+          1,
+          "a refused deletion must not delete documents",
+        );
+      } finally {
+        await backend.close();
+      }
+    });
+  },
+);
