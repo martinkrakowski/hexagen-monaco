@@ -784,6 +784,135 @@ export class CachedEditorWorkspaceAdapter
     }
   }
 
+  /**
+   * Resolve a pending conflict toward the server: re-read the server's
+   * current rev, PUT the browser copy with it as If-Match, stamp the result
+   * unconfirmed. A failed resolve changes nothing.
+   */
+  async keepThisDeviceCopy(
+    sessionId: string,
+  ): Promise<Result<void, PersistenceError>> {
+    const pending = this.pendingConflicts.get(sessionId);
+    if (pending === undefined) {
+      return {
+        success: false,
+        error: {
+          kind: "NotFound",
+          message: `workspace ${sessionId} has no pending conflict`,
+        },
+      };
+    }
+    if (this.tenantIdSource() !== null) {
+      return {
+        success: false,
+        error: {
+          kind: "Unknown",
+          message: "workspace conflicts cannot be resolved for a tenant user",
+        },
+      };
+    }
+    const userId = await this.userIdSource();
+    if (userId === null) {
+      return {
+        success: false,
+        error: {
+          kind: "Unknown",
+          message: "workspace conflicts cannot be resolved without a user id",
+        },
+      };
+    }
+
+    // No timer PUT may race the resolve.
+    this.cancelWriteTimer(sessionId);
+    const inFlight = this.inFlight.get(sessionId);
+    if (inFlight) await inFlight.catch(() => {});
+
+    const readResult = await this.remote.read(userId, sessionId);
+    if (!readResult.ok) {
+      const message =
+        readResult.reason === "not_found"
+          ? "the other copy no longer exists"
+          : `the server copy could not be read: ${readResult.message}`;
+      return { success: false, error: { kind: "Unknown", message } };
+    }
+
+    const local = await this.cache.loadWorkspace(sessionId);
+    if (!local.success || local.value === null) {
+      return {
+        success: false,
+        error: {
+          kind: "Unknown",
+          message: `workspace ${sessionId} has no copy in this browser`,
+        },
+      };
+    }
+    const localValue = local.value;
+
+    const putResult = await this.remote.write(
+      userId,
+      sessionId,
+      localValue,
+      sessionId,
+      { ifMatch: readResult.rev },
+    );
+    if (!putResult.ok) {
+      if (putResult.reason === "conflict") {
+        this.pendingConflicts.set(sessionId, {
+          ...pending,
+          at: new Date().toISOString(),
+        });
+        return {
+          success: false,
+          error: { kind: "Conflict", message: "the other copy changed again" },
+        };
+      }
+      return {
+        success: false,
+        error: {
+          kind: "Unknown",
+          message: `the server copy could not be updated: ${putResult.message}`,
+        },
+      };
+    }
+
+    // Stamp directly (not via tryStamp, which swallows): a failed stamp must
+    // fail the resolve and leave the id paused and pending. The resolve stays
+    // idempotent because the read above re-reads the server's current rev.
+    try {
+      await this.cache.setLiftStamp(sessionId, {
+        ownerId: userId,
+        rev: putResult.rev,
+        syncedUpdatedAt: localValue.updatedAt,
+        confirmed: false,
+      });
+    } catch {
+      return {
+        success: false,
+        error: {
+          kind: "Unknown",
+          message: `workspace ${sessionId}: the lift stamp could not be written`,
+        },
+      };
+    }
+
+    this.pausedIds.delete(sessionId);
+    if (this.pendingConflicts.delete(sessionId)) {
+      this.notifyConflictListeners();
+    }
+
+    // If the user typed during the resolve, let the normal debounced PUT
+    // carry the newer value with the new stamp's rev.
+    const after = await this.cache.loadWorkspace(sessionId);
+    if (
+      after.success &&
+      after.value !== null &&
+      after.value.updatedAt !== localValue.updatedAt
+    ) {
+      await this.saveWorkspace(sessionId, after.value);
+    }
+    return { success: true, value: undefined };
+  }
+
   /** 404 path: lift the cache onto the server via an unconditional PUT. */
   private async maybeLift(
     sessionId: string,

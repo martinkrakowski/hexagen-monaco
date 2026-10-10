@@ -1,3 +1,6 @@
+import type { Result } from "../../errors/result.js";
+import type { PersistenceError } from "../../domain/persistence-error.js";
+
 /**
  * A workspace conflict awaiting the user's choice. Only the kinds that have
  * a server copy to choose against are offered; "discard" and
@@ -20,4 +23,8 @@ export interface EditorWorkspaceConflictPort {
   getPendingConflict(sessionId: string): PendingWorkspaceConflict | null;
   /** Called whenever any pending entry is added or removed. */
   subscribe(listener: () => void): () => void;
+  /** Resolve by keeping this device's copy: the server gets the browser copy. */
+  keepThisDeviceCopy(
+    sessionId: string,
+  ): Promise<Result<void, PersistenceError>>;
 }
