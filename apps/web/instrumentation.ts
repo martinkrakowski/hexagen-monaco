@@ -17,8 +17,10 @@ export async function register() {
       console.error("[unhandledRejection]", reason.message, reason.stack);
     });
 
-    const { startPlatformMigrations } =
-      await import("./lib/platform/pg-startup");
-    await startPlatformMigrations(process.env);
+    if ((process.env.DATABASE_URL ?? "").trim()) {
+      const { startPlatformMigrations } =
+        await import("./lib/platform/pg-startup");
+      await startPlatformMigrations(process.env);
+    }
   }
 }
