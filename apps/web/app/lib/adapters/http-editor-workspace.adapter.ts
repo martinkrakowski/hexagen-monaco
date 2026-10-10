@@ -425,8 +425,12 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
   private readonly epochs = new Map<string, number>();
   /** Per-id in-flight remote write, so two PUTs can't self-conflict. */
   private readonly inFlight = new Map<string, Promise<void>>();
-  /** ids for which a clearWorkspace is waiting on an in-flight write. */
-  private readonly discarding = new Set<string>();
+  /**
+   * ids for which one or more clearWorkspace calls are in flight. A counter so
+   * overlapping discards for the same id keep the document closed to saves
+   * until the LAST clearWorkspace has run its cache clear.
+   */
+  private readonly discarding = new Map<string, number>();
   /**
    * The precondition this tab armed for the pending or in-flight write. When a
    * write succeeds, a still-pending write that holds the SAME precondition is
@@ -1192,7 +1196,10 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
   async clearWorkspace(
     sessionId: string,
   ): Promise<Result<void, PersistenceError>> {
-    this.discarding.add(sessionId);
+    this.discarding.set(
+      sessionId,
+      (this.discarding.get(sessionId) ?? 0) + 1,
+    );
     try {
       // Item 12: increment epoch before anything else.
       this.epochs.set(sessionId, (this.epochs.get(sessionId) ?? 0) + 1);
@@ -1285,7 +1292,9 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
       }
       return cacheResult;
     } finally {
-      this.discarding.delete(sessionId);
+      const remaining = (this.discarding.get(sessionId) ?? 0) - 1;
+      if (remaining <= 0) this.discarding.delete(sessionId);
+      else this.discarding.set(sessionId, remaining);
     }
   }
 }

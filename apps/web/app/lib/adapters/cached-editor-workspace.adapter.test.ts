@@ -2722,6 +2722,63 @@ describe("CachedEditorWorkspaceAdapter Item 14: clearWorkspace", () => {
     );
   });
 
+  it("an overlapping discard keeps the workspace closed to saves until the last one ends", async () => {
+    const { adapter, cache, fetchImpl } = makeAdapters({ tenantId: "tenant-1" });
+    const ws = makeWorkspace(1000);
+    await cache.saveWorkspace(UUID, ws);
+    await cache.setLiftStamp(UUID, {
+      ownerId: "user-1",
+      rev: 5,
+      syncedUpdatedAt: 1000,
+      confirmed: true,
+    });
+    await adapter.loadWorkspace(UUID);
+
+    // Hold every clearWorkspace on its own resolver. The mock resolves without
+    // clearing the cache — this test targets the discarding counter only.
+    const resolvers: Array<() => void> = [];
+    vi.spyOn(cache, "clearWorkspace").mockImplementation(async (_sid: string) => {
+      const i = resolvers.length;
+      await new Promise<void>((resolve) => {
+        resolvers[i] = () => resolve();
+      });
+      return { success: true, value: undefined };
+    });
+
+    const saveSpy = vi.spyOn(cache, "saveWorkspace");
+
+    // Two overlapping clearWorkspace calls for the same id.
+    const clearP1 = adapter.clearWorkspace(UUID);
+    await vi.advanceTimersByTimeAsync(0);
+    const clearP2 = adapter.clearWorkspace(UUID);
+    await vi.advanceTimersByTimeAsync(0);
+
+    // The first ends while the second still waits.
+    resolvers[0]();
+    await clearP1;
+    await vi.advanceTimersByTimeAsync(0);
+
+    // A save during this window must still be refused: cache untouched.
+    saveSpy.mockClear();
+    const putsBefore = putCallsOf(fetchImpl).length;
+    await adapter.saveWorkspace(UUID, makeWorkspace(2000));
+    await vi.advanceTimersByTimeAsync(REMOTE_DEBOUNCE_MS);
+
+    assert.equal(
+      saveSpy.mock.calls.length,
+      0,
+      "save during overlapping discard writes nothing to the browser cache",
+    );
+    assert.equal(
+      putCallsOf(fetchImpl).length - putsBefore,
+      0,
+      "no PUT from a save during an overlapping discard",
+    );
+
+    resolvers[1]();
+    await clearP2;
+  });
+
   it("a discard landing during the stamp read before a write sends no PUT", async () => {
     const { adapter, cache, server, fetchImpl } = makeAdapters();
     const ws = makeWorkspace(1000);
