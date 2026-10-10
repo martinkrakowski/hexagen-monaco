@@ -1,3 +1,4 @@
+import type { Result } from "@hexagen/shared";
 import type { PlatformDb } from "./db";
 
 export interface StageTelemetryInput {
@@ -118,8 +119,18 @@ function rowToRecord(row: RunEventRow): RunEventRecord {
   };
 }
 
+/**
+ * The store has no failure mode of its own until now; the smallest error kind
+ * consistent with the sibling stores (owner-documents-store.ts:32) is a local
+ * union with an `InvalidInput` kind for values the schema let past but the
+ * database column cannot hold.
+ */
+export type RunHistoryError = { kind: "InvalidInput"; message: string };
+
 export interface RunHistoryRepository {
-  record(input: PersistRunEventInput): Promise<RunEventRecord>;
+  record(
+    input: PersistRunEventInput,
+  ): Promise<Result<RunEventRecord, RunHistoryError>>;
   list(options?: {
     projectId?: string;
     limit?: number;
@@ -208,6 +219,23 @@ export function createRunHistoryRepository(
         telemetry.outputTokensActual,
         await lookupPrice(telemetry.modelName),
       );
+      // run_events.cost_cents is an int4 on Postgres: a derived cost outside
+      // 0..2147483647 must be refused before any write or the bind throws
+      // "integer out of range" and the route answers 500.
+      if (
+        costCents !== null &&
+        (!Number.isSafeInteger(costCents) ||
+          costCents < 0 ||
+          costCents > 2_147_483_647)
+      ) {
+        return {
+          success: false,
+          error: {
+            kind: "InvalidInput",
+            message: `computed cost of ${costCents} cents does not fit the cost_cents integer column`,
+          },
+        };
+      }
       const record: RunEventRecord = {
         id: crypto.randomUUID(),
         runId: input.runId ?? crypto.randomUUID(),
@@ -245,7 +273,7 @@ export function createRunHistoryRepository(
         cost_cents: record.costCents,
         created_at: record.createdAt,
       }))!;
-      return rowToRecord(stored);
+      return { success: true, value: rowToRecord(stored) };
     },
     async list(options = {}) {
       const rows = await db.all<RunEventRow>(selectRecent, {
