@@ -13,16 +13,8 @@ export const savedProjectBodySchema = z
     id: z.string().uuid(),
     name: z.string().min(1),
     schemaVersion: z.number().int().positive(),
-    createdAt: z
-      .number()
-      .int()
-      .min(0)
-      .max(MAX_PROJECT_TIMESTAMP),
-    updatedAt: z
-      .number()
-      .int()
-      .min(0)
-      .max(MAX_PROJECT_TIMESTAMP),
+    createdAt: z.number().int().min(0).max(MAX_PROJECT_TIMESTAMP),
+    updatedAt: z.number().int().min(0).max(MAX_PROJECT_TIMESTAMP),
     formState: z.record(z.unknown()),
     manifestYaml: z.string(),
     githubLink: z.unknown().optional(),
