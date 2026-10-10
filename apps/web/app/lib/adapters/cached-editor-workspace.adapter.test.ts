@@ -3034,6 +3034,14 @@ describe("CachedEditorWorkspaceAdapter Item 15: identity reset", () => {
       defaultUserIdSource,
       logger,
     );
+    // A re-read to a different user makes the discard marker (owner user-1)
+    // foreign on the second load, so handleDiscardMarker must run only once.
+    const handleDiscardSpy = vi.spyOn(
+      adapter as unknown as {
+        handleDiscardMarker: (...args: unknown[]) => Promise<unknown>;
+      },
+      "handleDiscardMarker",
+    );
 
     await cache.setLiftStamp(UUID, {
       ownerId: "user-1",
@@ -3051,7 +3059,8 @@ describe("CachedEditorWorkspaceAdapter Item 15: identity reset", () => {
         const href = String(url);
         if (href.includes("/api/auth/session")) {
           sessionFetchCount++;
-          return new Response(JSON.stringify({ user: { sub: "user-1" } }), {
+          const sub = sessionFetchCount === 1 ? "user-1" : "user-2";
+          return new Response(JSON.stringify({ user: { sub } }), {
             status: 200,
           });
         }
@@ -3066,23 +3075,42 @@ describe("CachedEditorWorkspaceAdapter Item 15: identity reset", () => {
       },
     ) as never;
 
-    // First load: GET 401 → marker kept; resetCachedUserId should fire.
-    await adapter.loadWorkspace(UUID);
-    assert.ok(
-      (await cache.getLiftStamp(UUID))?.discarded,
-      "discard marker kept on 401",
-    );
-    assert.equal(sessionFetchCount, 1, "session fetched on first load");
+    try {
+      // First load: GET 401 → marker kept; resetCachedUserId should fire.
+      await adapter.loadWorkspace(UUID);
+      assert.ok(
+        (await cache.getLiftStamp(UUID))?.discarded,
+        "discard marker kept on 401",
+      );
+      assert.equal(sessionFetchCount, 1, "session fetched on first load");
+      assert.equal(
+        handleDiscardSpy.mock.calls.length,
+        1,
+        "handleDiscardMarker ran on the first load (own marker)",
+      );
 
-    // Second load: if reset fired, the id source is consulted again.
-    await adapter.loadWorkspace(UUID);
-    assert.equal(
-      sessionFetchCount,
-      2,
-      "user id re-fetched after 401 on discard marker read",
-    );
-
-    globalThis.fetch = realFetch;
+      // Second load: the cached id was reset, so it is re-fetched — and the
+      // second fetch returns user-2, making the marker foreign. Only a re-read
+      // to a different user explains handleDiscardMarker NOT running again.
+      await adapter.loadWorkspace(UUID);
+      assert.equal(
+        sessionFetchCount,
+        2,
+        "user id re-fetched after 401 on discard marker read",
+      );
+      assert.equal(
+        handleDiscardSpy.mock.calls.length,
+        1,
+        "second load skips handleDiscardMarker (re-read user user-2 is foreign)",
+      );
+      assert.equal(
+        (await cache.getLiftStamp(UUID))?.ownerId,
+        "user-1",
+        "discard marker preserved, not adopted by the re-read user",
+      );
+    } finally {
+      globalThis.fetch = realFetch;
+    }
   });
 });
 
@@ -3669,11 +3697,7 @@ describe("CachedEditorWorkspaceAdapter Item 3: chained write + discard", () => {
       ),
     );
     await vi.advanceTimersByTimeAsync(0);
-    assert.equal(
-      putCount,
-      2,
-      "second PUT is sent after first resolves",
-    );
+    assert.equal(putCount, 2, "second PUT is sent after first resolves");
 
     // Resolve #2. The deferred PUT validated Its If-Match against the server
     // rev (rev 2) when released; a stale rev would have answered 409.
