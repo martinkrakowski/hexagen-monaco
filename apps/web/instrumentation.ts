@@ -1,6 +1,6 @@
 let registered = false;
 
-export function register() {
+export async function register() {
   if (registered) return;
   if (process.env.NEXT_RUNTIME === "nodejs") {
     registered = true;
@@ -16,5 +16,9 @@ export function register() {
       }
       console.error("[unhandledRejection]", reason.message, reason.stack);
     });
+
+    const { startPlatformMigrations } =
+      await import("./lib/platform/pg-startup");
+    await startPlatformMigrations(process.env);
   }
 }
