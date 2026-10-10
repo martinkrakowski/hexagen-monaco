@@ -51,6 +51,10 @@ export type {
 // Application exports
 export type { MonacoPersistencePort } from "./application/ports/monaco-persistence.port.js";
 export type { EditorWorkspacePersistencePort } from "./application/ports/editor-workspace-persistence.port.js";
+export type {
+  PendingWorkspaceConflict,
+  EditorWorkspaceConflictPort,
+} from "./application/ports/editor-workspace-conflict.port.js";
 export type { CanvasLayoutPersistencePort } from "./application/ports/canvas-layout-persistence.port.js";
 export type {
   WizardPersistencePort,

@@ -4687,3 +4687,174 @@ describe("invalid server payload is not cached", () => {
     );
   });
 });
+
+describe("CachedEditorWorkspaceAdapter pending conflicts", () => {
+  it("a dirty-cache, server-moved load leaves a pending conflict with where 'load'; a clean load returns null", async () => {
+    const { adapter, cache, server, fetchImpl } = makeAdapters();
+    const oldWs = makeWorkspace(1000);
+    await cache.saveWorkspace(UUID, oldWs);
+    await cache.setLiftStamp(UUID, {
+      ownerId: "user-1",
+      rev: 5,
+      syncedUpdatedAt: 1000,
+      confirmed: true,
+    });
+    server.set(UUID, {
+      payload: { ...oldWs, updatedAt: 2000 },
+      rev: 9,
+      updatedAt: 2000,
+      projectId: UUID,
+    });
+    await cache.saveWorkspace(UUID, makeWorkspace(3000));
+
+    await adapter.loadWorkspace(UUID);
+
+    const pending = adapter.getPendingConflict(UUID);
+    assert.ok(pending, "pending conflict recorded");
+    assert.equal(pending!.where, "load");
+    assert.equal(pending!.sessionId, UUID);
+    assert.ok(pending!.at, "ISO time recorded");
+    assert.equal(putCallsOf(fetchImpl).length, 0, "no PUT on conflict");
+
+    // getPendingConflict returns a COPY, not the stored entry.
+    pending!.where = "save";
+    assert.equal(
+      adapter.getPendingConflict(UUID)!.where,
+      "load",
+      "returns a copy",
+    );
+
+    // Clean load: cache back at the synced value, server back at the stamp
+    // rev with the same payload → no conflict, pending emptied.
+    await cache.saveWorkspace(UUID, oldWs);
+    server.set(UUID, { payload: oldWs, rev: 5, updatedAt: 1000, projectId: UUID });
+    await adapter.loadWorkspace(UUID);
+    assert.equal(adapter.getPendingConflict(UUID), null, "clean load empties");
+    assert.equal(putCallsOf(fetchImpl).length, 0, "clean load sends no PUT");
+  });
+
+  it("a 412 on the timer PUT leaves a pending conflict with where 'save'", async () => {
+    const { adapter, cache, server, fetchImpl } = makeAdapters();
+    const ws = makeWorkspace(1000);
+    await cache.saveWorkspace(UUID, ws);
+    await cache.setLiftStamp(UUID, {
+      ownerId: "user-1",
+      rev: 5,
+      syncedUpdatedAt: 1000,
+      confirmed: true,
+    });
+    server.set(UUID, { payload: ws, rev: 5, updatedAt: 1000, projectId: UUID });
+    await adapter.loadWorkspace(UUID);
+    assert.equal(adapter.getPendingConflict(UUID), null, "clean start");
+
+    // Server moves; the debounced PUT answers 409 → conflict "save".
+    server.set(UUID, {
+      payload: makeWorkspace(2000),
+      rev: 9,
+      updatedAt: 2000,
+      projectId: UUID,
+    });
+    await adapter.saveWorkspace(UUID, makeWorkspace(3000));
+    await vi.advanceTimersByTimeAsync(REMOTE_DEBOUNCE_MS);
+
+    const pending = adapter.getPendingConflict(UUID);
+    assert.ok(pending, "save conflict pending");
+    assert.equal(pending!.where, "save");
+
+    // Paused: a further save sends no PUT.
+    await adapter.saveWorkspace(UUID, makeWorkspace(4000));
+    await vi.advanceTimersByTimeAsync(REMOTE_DEBOUNCE_MS);
+    assert.equal(putCallsOf(fetchImpl).length, 1, "no second PUT while paused");
+  });
+
+  it("subscribe fires once when the entry is added and once when removed by clearWorkspace; unsubscribe stops it", async () => {
+    const { adapter, cache, server } = makeAdapters();
+    let fires = 0;
+    const unsubscribe = adapter.subscribe(() => {
+      fires += 1;
+    });
+
+    const oldWs = makeWorkspace(1000);
+    await cache.saveWorkspace(UUID, oldWs);
+    await cache.setLiftStamp(UUID, {
+      ownerId: "user-1",
+      rev: 5,
+      syncedUpdatedAt: 1000,
+      confirmed: true,
+    });
+    server.set(UUID, {
+      payload: { ...oldWs, updatedAt: 2000 },
+      rev: 9,
+      updatedAt: 2000,
+      projectId: UUID,
+    });
+    await cache.saveWorkspace(UUID, makeWorkspace(3000));
+    await adapter.loadWorkspace(UUID);
+    assert.equal(fires, 1, "fired on add");
+
+    await adapter.clearWorkspace(UUID);
+    assert.equal(fires, 2, "fired on removal");
+    assert.equal(adapter.getPendingConflict(UUID), null, "cleared");
+
+    unsubscribe();
+
+    // A new conflict after unsubscribing does not fire the listener again.
+    await cache.saveWorkspace(UUID, makeWorkspace(1000));
+    await cache.setLiftStamp(UUID, {
+      ownerId: "user-1",
+      rev: 5,
+      syncedUpdatedAt: 1000,
+      confirmed: true,
+    });
+    server.set(UUID, {
+      payload: makeWorkspace(2000),
+      rev: 9,
+      updatedAt: 2000,
+      projectId: UUID,
+    });
+    await cache.saveWorkspace(UUID, makeWorkspace(3000));
+    await adapter.loadWorkspace(UUID);
+    assert.ok(adapter.getPendingConflict(UUID), "conflict re-added");
+    assert.equal(fires, 2, "no fire after unsubscribe");
+  });
+
+  it("a second loadWorkspace that no longer conflicts empties the pending entry and fires the listener", async () => {
+    const { adapter, cache, server, fetchImpl } = makeAdapters();
+    let fires = 0;
+    adapter.subscribe(() => {
+      fires += 1;
+    });
+
+    const oldWs = makeWorkspace(1000);
+    await cache.saveWorkspace(UUID, oldWs);
+    await cache.setLiftStamp(UUID, {
+      ownerId: "user-1",
+      rev: 5,
+      syncedUpdatedAt: 1000,
+      confirmed: true,
+    });
+    server.set(UUID, {
+      payload: { ...oldWs, updatedAt: 2000 },
+      rev: 9,
+      updatedAt: 2000,
+      projectId: UUID,
+    });
+    await cache.saveWorkspace(UUID, makeWorkspace(3000));
+    await adapter.loadWorkspace(UUID);
+    assert.ok(adapter.getPendingConflict(UUID), "conflict pending");
+    assert.equal(fires, 1);
+
+    // Fix the server up to the stamp rev; the dirty cache catch-up PUT then
+    // succeeds, so the load no longer conflicts.
+    server.set(UUID, {
+      payload: makeWorkspace(3000),
+      rev: 5,
+      updatedAt: 3000,
+      projectId: UUID,
+    });
+    await adapter.loadWorkspace(UUID);
+    assert.equal(adapter.getPendingConflict(UUID), null, "emptied");
+    assert.equal(fires, 2, "fired on removal");
+    assert.equal(putCallsOf(fetchImpl).length, 1, "catch-up PUT only");
+  });
+});

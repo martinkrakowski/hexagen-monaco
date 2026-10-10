@@ -2,6 +2,8 @@ import { fetchWithCsrf } from "../csrf-fetch";
 import { getActiveTenantId } from "../active-tenant";
 import type {
   EditorWorkspacePersistencePort,
+  EditorWorkspaceConflictPort,
+  PendingWorkspaceConflict,
   LoggerPort,
   PersistenceError,
   PersistedEditorWorkspace,
@@ -413,9 +415,18 @@ export class HttpEditorWorkspaceAdapter {
 /** Milliseconds of quiet the adapter waits after the last save before writing. */
 const REMOTE_DEBOUNCE_MS = 1500;
 
-export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistencePort {
+export class CachedEditorWorkspaceAdapter
+  implements EditorWorkspacePersistencePort, EditorWorkspaceConflictPort
+{
   /** ids for which a 409 conflict was seen; no remote writes until next load. */
   private readonly pausedIds = new Set<string>();
+  /**
+   * Pending conflicts per id, for the conflict port. In memory by design: a
+   * reload re-detects the same conflict on the next load, so nothing is lost.
+   */
+  private readonly pendingConflicts = new Map<string, PendingWorkspaceConflict>();
+  /** Listeners notified whenever a pending entry is added or removed. */
+  private readonly conflictListeners = new Set<() => void>();
   /** Per-sessionId debounce timer for the trailing server write. */
   private readonly writeTimers = new Map<
     string,
@@ -498,7 +509,9 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
     userId: string,
   ): Promise<Result<PersistedEditorWorkspace | null, PersistenceError>> {
     this.pausedIds.delete(sessionId);
-
+    if (this.pendingConflicts.delete(sessionId)) {
+      this.notifyConflictListeners();
+    }
     // Item 3: wait for any in-flight save PUT so the load's catch-up/maybeLift
     // PUT does not race it on the server.
     const inFlight = this.inFlight.get(sessionId);
@@ -722,6 +735,24 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
     stampRev: number | null,
     serverRev: number | null,
   ): Promise<void> {
+    // Only the kinds with a server copy to choose against are offered to the
+    // user; "discard" and "deleted-elsewhere" stay silent as today.
+    if (
+      where === "load" ||
+      where === "save" ||
+      where === "lift" ||
+      where === "first-save"
+    ) {
+      const previous = this.pendingConflicts.get(sessionId);
+      this.pendingConflicts.set(sessionId, {
+        sessionId,
+        where,
+        at: new Date().toISOString(),
+      });
+      if (previous === undefined || previous.where !== where) {
+        this.notifyConflictListeners();
+      }
+    }
     try {
       await this.cache.recordConflict({
         id: sessionId,
@@ -732,6 +763,24 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
       });
     } catch {
       // best-effort: never fail the editor
+    }
+  }
+
+  getPendingConflict(sessionId: string): PendingWorkspaceConflict | null {
+    const entry = this.pendingConflicts.get(sessionId);
+    return entry === undefined ? null : { ...entry };
+  }
+
+  subscribe(listener: () => void): () => void {
+    this.conflictListeners.add(listener);
+    return () => {
+      this.conflictListeners.delete(listener);
+    };
+  }
+
+  private notifyConflictListeners(): void {
+    for (const listener of this.conflictListeners) {
+      listener();
     }
   }
 
@@ -1203,6 +1252,9 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
       // Check paused BEFORE removing from pausedIds.
       const wasPaused = this.pausedIds.has(sessionId);
       this.pausedIds.delete(sessionId);
+      if (this.pendingConflicts.delete(sessionId)) {
+        this.notifyConflictListeners();
+      }
 
       const userId = await this.userIdSource();
       if (userId === null) {
