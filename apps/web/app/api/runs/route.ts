@@ -11,14 +11,16 @@ import {
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+const INT4_MAX = 2147483647;
+
 const telemetrySchema = z.object({
-  stage: z.number(),
+  stage: z.number().int().min(0).max(INT4_MAX),
   label: z.string(),
-  durationMs: z.number(),
+  durationMs: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
   usedLLM: z.boolean(),
-  retryCount: z.number(),
-  inputTokensEstimate: z.number(),
-  outputTokensActual: z.number(),
+  retryCount: z.number().int().min(0).max(INT4_MAX),
+  inputTokensEstimate: z.number().int().min(0).max(INT4_MAX),
+  outputTokensActual: z.number().int().min(0).max(INT4_MAX),
   servedFromCache: z.boolean(),
   summary: z.string(),
   modelName: z.string().optional(),
