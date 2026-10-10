@@ -72,11 +72,34 @@ jobs:
       - name: "Build All Packages"
         run: yarn turbo run build --output-logs=full --log-order=stream
 
+      # --- Measurement only (fleet plan 2026-10-10 "CI under five minutes", step 0) ---
+      # The three "Measure:" steps print what the hardened sync changes and can
+      # never fail the job: their bodies live in scripts/measure-sync.sh, which
+      # always exits 0; the step adds `|| true` and `continue-on-error` on top.
+      # They decide whether the checks below may later run in parallel on the
+      # committed tree (decision F48) or must keep waiting for the sync (F56).
+      # Remove them (and the script) when that decision is recorded.
+      # The sync's inner build is timed from the two `Pre-flight` lines the sync
+      # prints; a turbo dry run before and after it shows whether that build is
+      # served from cache (DEBUG is not used: it is in turbo.json's globalEnv
+      # and would change the hash).
+      - name: "Measure: snapshot after the first build (prints only)"
+        continue-on-error: true
+        run: bash scripts/measure-sync.sh after-build || true
+
       - name: "Execute Hardened Sync"
         run: yarn workspace @hexagen/sync run cli sync --force --allow-dirty
 
+      - name: "Measure: what the sync changed (prints only)"
+        continue-on-error: true
+        run: bash scripts/measure-sync.sh after-sync || true
+
       - name: "Verify Build After Sync"
         run: yarn turbo run build --output-logs=full --log-order=stream --force
+
+      - name: "Measure: is the build deterministic (prints only)"
+        continue-on-error: true
+        run: bash scripts/measure-sync.sh after-forced-build || true
 
       - name: "Verify TypeCheck After Sync"
         run: yarn turbo run typecheck --output-logs=full --log-order=stream
