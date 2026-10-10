@@ -138,13 +138,12 @@ deploy after the hold ends.
 is a separate kustomization: `yarn deploy:staging` never renders it, so an app
 deploy cannot change or delete the database.
 
-**The app does not use it yet.** Nothing in the web app reads `DATABASE_URL`
-today; the SQLite files under `/data` remain the only store until the Postgres
-implementation lands (packet B2 of
-`docs/planning/2026-10-07_indexeddb-to-postgres-migration-plan.md`) and the
-staging data has been carried over (packet B4). The Deployment is therefore
-not wired to the database in this change. When B4 is ready, add this to the
-`env:` list in `deployment.yaml`:
+**The app does not use it yet.** The web app selects Postgres for the platform
+store when `DATABASE_URL` is set and applies its migrations at start-up; the
+BYOK and quota stores stay on their SQLite files whatever the variable says;
+the staging Deployment is still not wired to the database. The Deployment is
+therefore not wired to the database in this change. When B4 is ready, add this
+to the `env:` list in `deployment.yaml`:
 
 ```yaml
 - name: DATABASE_URL
