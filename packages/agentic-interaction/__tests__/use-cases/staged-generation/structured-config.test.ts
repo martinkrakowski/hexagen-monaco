@@ -240,7 +240,7 @@ test("parseStructuredConfig: large input scales linearly below a generous ratio"
   // mutant lands ~48x over it, so a quadratic implementation fails fast here.
   const CAP_SMALL_MS = 500;
   const BOUND = 1.7;
-  const sample = (chars: number): number => {
+  const sample = (chars: number, stopAboveMs: number): number => {
     const input = makeYaml(chars); // built ONCE outside the timed region
     parseStructuredConfig(input); // warm-up, not measured
     let best = Infinity;
@@ -249,20 +249,22 @@ test("parseStructuredConfig: large input scales linearly below a generous ratio"
       parseStructuredConfig(input);
       const ms = performance.now() - t0;
       if (ms < best) best = ms;
-      if (ms > CAP_SMALL_MS) {
-        // STOP SAMPLING EARLY for this size as soon as one timed parse exceeds the cap
+      if (ms > stopAboveMs) {
+        // stop sampling as soon as one timed parse exceeds the given limit
         break;
       }
     }
     return best;
   };
   // Check SMALL FIRST and assert it before touching LARGE, so the mutant never runs LARGE.
-  const minSmall = sample(ABS_SMALL);
+  const minSmall = sample(ABS_SMALL, CAP_SMALL_MS);
   assert.ok(
     minSmall < CAP_SMALL_MS,
     `small=${minSmall}ms >= cap ${CAP_SMALL_MS}ms`,
   );
-  const minLarge = sample(ABS_LARGE);
+  // No early stop on LARGE: one slow sample on a loaded machine must not
+  // become the minimum. A quadratic implementation never gets here.
+  const minLarge = sample(ABS_LARGE, Number.POSITIVE_INFINITY);
   const exponent = Math.log(minLarge / minSmall) / Math.log(8);
   console.log(
     `[PSC] small=${minSmall.toFixed(2)}ms large=${minLarge.toFixed(2)}ms exponent=${exponent.toFixed(3)}`,

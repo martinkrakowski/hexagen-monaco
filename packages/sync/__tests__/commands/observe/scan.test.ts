@@ -142,7 +142,7 @@ describe("scanSpecifiers: hostile and JSX input", () => {
     const ABS_LARGE = 200_000; // 8x
     const CAP_SMALL_MS = 250;
     const BOUND = 1.7;
-    const sample = (len: number): number => {
+    const sample = (len: number, stopAboveMs: number): number => {
       const input = "/[".repeat(len / 2);
       scanSpecifiers(input); // warm-up, not measured
       let best = Infinity;
@@ -151,17 +151,19 @@ describe("scanSpecifiers: hostile and JSX input", () => {
         scanSpecifiers(input);
         const ms = performance.now() - t0;
         if (ms < best) best = ms;
-        if (ms > CAP_SMALL_MS) {
-          // STOP SAMPLING EARLY for this size as soon as one timed scan exceeds the cap
+        if (ms > stopAboveMs) {
+          // stop sampling as soon as one timed scan exceeds the given limit
           break;
         }
       }
       return best;
     };
     // Check SMALL FIRST and expect it before touching LARGE, so the mutant never runs LARGE.
-    const minSmall = sample(ABS_SMALL);
+    const minSmall = sample(ABS_SMALL, CAP_SMALL_MS);
     expect(minSmall).toBeLessThan(CAP_SMALL_MS);
-    const minLarge = sample(ABS_LARGE);
+    // No early stop on LARGE: one slow sample on a loaded machine must not
+    // become the minimum. A quadratic implementation never gets here.
+    const minLarge = sample(ABS_LARGE, Number.POSITIVE_INFINITY);
     const exponent = Math.log(minLarge / minSmall) / Math.log(8);
     console.log(
       `[F1] small=${minSmall.toFixed(2)}ms large=${minLarge.toFixed(2)}ms exponent=${exponent.toFixed(3)}`,
