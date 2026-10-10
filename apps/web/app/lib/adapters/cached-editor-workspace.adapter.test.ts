@@ -3337,6 +3337,92 @@ describe("CachedEditorWorkspaceAdapter Item 3: chained write + discard", () => {
     assert.equal(putCount, 2, "exactly two PUTs");
   });
 
+  it("a rejected first chained write does not block the second PUT", async () => {
+    const { adapter, cache, server, fetchImpl } = makeAdapters();
+    const ws = makeWorkspace(1000);
+    await cache.saveWorkspace(UUID, ws);
+    await cache.setLiftStamp(UUID, {
+      ownerId: "user-1",
+      rev: 1,
+      syncedUpdatedAt: 1000,
+      confirmed: true,
+    });
+    server.set(UUID, { payload: ws, rev: 1, updatedAt: 1000, projectId: UUID });
+    await adapter.loadWorkspace(UUID);
+
+    // A fake fetch whose PUT returns a promise the test resolves later, so a
+    // write is genuinely in flight while the second write chains on it.
+    const serverFetch = fetchImpl.getMockImplementation()!;
+    let putCount = 0;
+    const resolvers: Array<(v: Response) => void> = [];
+    fetchImpl.mockImplementation(
+      async (url: string | URL | Request, init?: RequestInit) => {
+        const href = String(url);
+        const method = (init?.method ?? "GET").toUpperCase();
+        if (method === "PUT") {
+          putCount++;
+          const idx = putCount - 1;
+          return new Promise<Response>((res) => {
+            resolvers[idx] = (resp) => {
+              const body = JSON.parse(init!.body as string);
+              const match =
+                /\/api\/tenants\/(.+)\/documents\/workspace\/(.+)/.exec(href)!;
+              const id = match[2]!;
+              const doc = server.get(id) ?? {
+                payload: body.payload,
+                rev: 0,
+                updatedAt: 0,
+                projectId: body.projectId ?? null,
+              };
+              doc.rev = putCount + 1;
+              doc.updatedAt = Date.now();
+              doc.projectId = body.projectId ?? null;
+              doc.payload = body.payload;
+              server.set(id, doc);
+              res(resp);
+            };
+          });
+        }
+        return serverFetch(url, init) as unknown as Response;
+      },
+    );
+
+    // Save #1: timer armed, write #1 in flight.
+    await adapter.saveWorkspace(UUID, makeWorkspace(2000));
+    await vi.advanceTimersByTimeAsync(REMOTE_DEBOUNCE_MS);
+    assert.equal(putCount, 1, "first PUT is in flight");
+
+    // Save #2 while #1 is still in flight; its timer fires and chains on #1.
+    await adapter.saveWorkspace(UUID, makeWorkspace(3000));
+    await vi.advanceTimersByTimeAsync(REMOTE_DEBOUNCE_MS);
+
+    // Make the stamp read inside _doRemoteWrite #1 throw once the PUT
+    // resolves — simulating the cache stamp read failing during the write.
+    vi.spyOn(cache, "getLiftStamp").mockImplementationOnce(async () => {
+      throw new Error("storage error");
+    });
+
+    // Resolve #1 → the post-PUT stamp read throws → write #1 rejects.
+    resolvers[0](
+      new Response(
+        JSON.stringify({
+          kind: "workspace",
+          id: UUID,
+          projectId: UUID,
+          payload: {},
+          updatedAt: 2000,
+        }),
+        { status: 200, headers: { ETag: '"rev:2"' } },
+      ),
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    assert.equal(
+      putCount,
+      2,
+      "second PUT is sent even though first write rejected",
+    );
+  });
+
   it("a discard during an in-flight write whose clean-up DELETE fails leaves a marker, and the next load deletes the server copy and returns nothing", async () => {
     const { adapter, cache, server, fetchImpl } = makeAdapters();
     const ws = makeWorkspace(1000);

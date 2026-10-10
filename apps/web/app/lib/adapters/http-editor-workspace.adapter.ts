@@ -951,7 +951,7 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
     // finally block only clears an entry it still owns. A later, chained
     // write replaces the map entry; we must not delete that one, else a
     // discard during the chained write would not wait for it.
-    const current: Promise<void> = prev.then(async () => {
+    const current: Promise<void> = prev.catch(() => {}).then(async () => {
       await this._doRemoteWrite(
         sessionId,
         workspace,
@@ -980,7 +980,7 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
 
       // Item 2: re-read the stamp right before stamping — the timer captured
       // the precondition by value, but a prior write in the same chain may
-      // have stamped a new rev. Rebaza the precondition on the fresh rev so
+      // have stamped a new rev. Rebase the precondition on the fresh rev so
       // the PUT goes out with the current If-Match.
       const freshStamp = await this.cache.getLiftStamp(sessionId);
       if (
