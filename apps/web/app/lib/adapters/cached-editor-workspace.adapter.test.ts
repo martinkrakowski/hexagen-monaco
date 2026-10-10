@@ -356,7 +356,7 @@ describe("CachedEditorWorkspaceAdapter lift", () => {
     assert.ok(stamp, "stamp written once PUT succeeds");
   });
 
-  it("a failed confirming GET leaves no stamp and the next load retries", async () => {
+  it("a failed confirming GET leaves an unconfirmed stamp and the next load retries", async () => {
     const { adapter, cache, fetchImpl, warns } = makeAdapters();
     await cache.saveWorkspace(UUID, makeWorkspace(1000));
 
@@ -395,7 +395,7 @@ describe("CachedEditorWorkspaceAdapter lift", () => {
     assert.ok(warns.some((w) => /confirm/.test(w)));
   });
 
-  it("a confirming GET that returns a different rev leaves no stamp", async () => {
+  it("a confirming GET that returns a different rev leaves an unconfirmed stamp", async () => {
     const { adapter, cache, fetchImpl, warns } = makeAdapters();
     await cache.saveWorkspace(UUID, makeWorkspace(1000));
 
@@ -445,7 +445,7 @@ describe("CachedEditorWorkspaceAdapter lift", () => {
     assert.ok(warns.some((w) => /rev mismatch/.test(w)));
   });
 
-  it("a confirming GET that returns a different payload leaves no stamp", async () => {
+  it("a confirming GET that returns a different payload leaves an unconfirmed stamp", async () => {
     const { adapter, cache, fetchImpl, warns } = makeAdapters();
     const ws = makeWorkspace(1000, UUID, {
       "a.ts": { content: "hello", isNew: true, dirty: false, updatedAt: 1000 },
@@ -3098,39 +3098,53 @@ describe("CachedEditorWorkspaceAdapter Item 15: identity reset", () => {
   it("after a 401 the user id is asked for again", async () => {
     const { defaultUserIdSource, resetCachedUserId } =
       await import("./http-editor-workspace.adapter");
-    const store = new Map<string, ServerDoc>();
-    let userFetchCount = 0;
-    const sessionFetch = vi.fn(async () => {
-      userFetchCount++;
-      return new Response(JSON.stringify({ user: { sub: "user-1" } }), {
-        status: 200,
-      });
-    }) as unknown as MockedFunction<typeof fetch>;
 
-    // Mock global fetch only for /api/auth/session.
+    let userFetchCount = 0;
     const realFetch = globalThis.fetch;
     globalThis.fetch = vi.fn(
       async (url: string | URL | Request, init?: RequestInit) => {
         const href = String(url);
-        if (href.includes("/api/auth/session"))
-          return sessionFetch(url as never, init);
-        return makeServerFetch(store)(url as never, init);
+        if (href.includes("/api/auth/session")) {
+          userFetchCount++;
+          return new Response(JSON.stringify({ user: { sub: "user-1" } }), {
+            status: 200,
+          });
+        }
+        if (href.includes("/documents/workspace/")) {
+          const method = (init?.method ?? "GET").toUpperCase();
+          if (method === "GET") return new Response(null, { status: 401 });
+          return new Response(null, { status: 500 });
+        }
+        return realFetch(url as never, init) as never;
       },
     ) as never;
 
-    resetCachedUserId();
+    try {
+      resetCachedUserId();
+      const fetched = await defaultUserIdSource();
+      assert.equal(fetched, "user-1");
+      assert.equal(userFetchCount, 1, "session fetched once");
 
-    const fetched = await defaultUserIdSource();
-    assert.equal(fetched, "user-1");
-    assert.equal(userFetchCount, 1);
+      const cache = new IDBEditorWorkspaceAdapter();
+      const remote = new HttpEditorWorkspaceAdapter();
+      const { logger } = warnCollector();
+      const adapter = new CachedEditorWorkspaceAdapter(
+        cache,
+        remote,
+        () => null,
+        defaultUserIdSource,
+        logger,
+      );
 
-    // Simulate 401 → reset cache → next call re-fetches.
-    resetCachedUserId();
-    const again = await defaultUserIdSource();
-    assert.equal(again, "user-1");
-    assert.equal(userFetchCount, 2, "user id re-fetched after reset");
+      // The documents GET answers 401 → resetCachedUserId fires during load.
+      await adapter.loadWorkspace(UUID);
 
-    globalThis.fetch = realFetch;
+      const again = await defaultUserIdSource();
+      assert.equal(again, "user-1");
+      assert.equal(userFetchCount, 2, "user id re-fetched after 401");
+    } finally {
+      globalThis.fetch = realFetch;
+    }
   });
 
   it("a 401 on the discard-marker read resets the cached user id", async () => {
