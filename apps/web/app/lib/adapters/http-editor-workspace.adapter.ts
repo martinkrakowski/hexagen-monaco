@@ -413,6 +413,13 @@ export class HttpEditorWorkspaceAdapter {
 /** Milliseconds of quiet the adapter waits after the last save before writing. */
 const REMOTE_DEBOUNCE_MS = 1500;
 
+/**
+ * Longest a discard waits for loads of the same id that are still running,
+ * and longest a load waits for discards of the same id. The requests behind
+ * them have no timeout of their own, so the wait is bounded here.
+ */
+const DISCARD_LOAD_WAIT_MS = 10_000;
+
 export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistencePort {
   /** ids for which a 409 conflict was seen; no remote writes until next load. */
   private readonly pausedIds = new Set<string>();
@@ -425,8 +432,19 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
   private readonly epochs = new Map<string, number>();
   /** Per-id in-flight remote write, so two PUTs can't self-conflict. */
   private readonly inFlight = new Map<string, Promise<void>>();
-  /** Per-id in-flight remote load, so clearWorkspace can wait it out. */
-  private readonly loadsInFlight = new Map<string, Promise<unknown>>();
+  /** Per-id in-flight loads (there can be several), so clearWorkspace can wait them out. */
+  private readonly loadsInFlight = new Map<string, Set<Promise<unknown>>>();
+  /** Per-id in-flight clearWorkspace calls, so a load of the same id can wait them out. */
+  private readonly discardsInFlight = new Map<string, Set<Promise<unknown>>>();
+  /**
+   * The server revision read by a load that a discard overtook, when that load
+   * was about to adopt the server copy and no stamp existed yet. The waiting
+   * discard has no stamp to delete with; it deletes with this revision.
+   */
+  private readonly revSeenByOvertakenLoad = new Map<
+    string,
+    { userId: string; rev: number }
+  >();
   /**
    * ids for which one or more clearWorkspace calls are in flight. A counter so
    * overlapping discards for the same id keep the document closed to saves
@@ -484,6 +502,40 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
         this.loadsInFlight.delete(sessionId);
       }
     }
+  }
+
+  /** Resolves true when every promise has settled, false when `ms` passed first. */
+  private async settledWithin(
+    promises: Iterable<Promise<unknown>>,
+    ms: number,
+  ): Promise<boolean> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timedOut = new Promise<boolean>((resolve) => {
+      timer = setTimeout(() => resolve(false), ms);
+    });
+    try {
+      return await Promise.race([
+        Promise.allSettled([...promises]).then(() => true),
+        timedOut,
+      ]);
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
+    }
+  }
+
+  /**
+   * The answer of a load that a discard overtook: nothing. `adopting` is given
+   * when the load had read a server copy it was about to adopt with no stamp
+   * yet; the revision is handed to the discard that is still running.
+   */
+  private overtakenLoad(
+    sessionId: string,
+    adopting?: { userId: string; rev: number },
+  ): Result<PersistedEditorWorkspace | null, PersistenceError> {
+    if (adopting !== undefined && this.discarding.has(sessionId)) {
+      this.revSeenByOvertakenLoad.set(sessionId, adopting);
+    }
+    return { success: true, value: null };
   }
 
   private cancelWriteTimer(sessionId: string): void {
