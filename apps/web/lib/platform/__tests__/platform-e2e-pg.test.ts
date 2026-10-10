@@ -295,23 +295,25 @@ describe("platform end-to-end on Postgres", () => {
 
   it("RUNS AND SCANS: record/list/trend on run_events and scan_records", async () => {
     const runs = store.runsFor(org.id);
-    const run = await runs.record({
-      runId: "run-1",
-      projectId: project.id,
-      telemetry: {
-        stage: 3,
-        label: "Port Mapping",
-        durationMs: 1200,
-        usedLLM: true,
-        retryCount: 1,
-        inputTokensEstimate: 1000,
-        outputTokensActual: 400,
-        servedFromCache: false,
-        summary: "mapped 4 ports",
-        modelName: "mercury-2",
-      },
-      now: Date.now(),
-    });
+    const run = must(
+      await runs.record({
+        runId: "run-1",
+        projectId: project.id,
+        telemetry: {
+          stage: 3,
+          label: "Port Mapping",
+          durationMs: 1200,
+          usedLLM: true,
+          retryCount: 1,
+          inputTokensEstimate: 1000,
+          outputTokensActual: 400,
+          servedFromCache: false,
+          summary: "mapped 4 ports",
+          modelName: "mercury-2",
+        },
+        now: Date.now(),
+      }),
+    );
     expect(typeof run.createdAt).toBe("number");
 
     const runList = await runs.list({ limit: 10 });
