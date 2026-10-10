@@ -144,18 +144,13 @@ describe("scanSpecifiers: hostile and JSX input", () => {
     const BOUND = 1.7;
     const sample = (len: number): number => {
       const input = "/[".repeat(len / 2);
-      const warmup = performance.now();
-      void scanSpecifiers(input);
-      void warmup;
+      scanSpecifiers(input); // warm-up, not measured
       let best = Infinity;
       for (let n = 1; n <= 7; ++n) {
         const t0 = performance.now();
         scanSpecifiers(input);
         const ms = performance.now() - t0;
         if (ms < best) best = ms;
-        if (best > CAP_SMALL_MS && len === ABS_SMALL) {
-          // a quadratic implementation must fail fast, not hang
-        }
         if (ms > CAP_SMALL_MS) {
           // STOP SAMPLING EARLY for this size as soon as one timed scan exceeds the cap
           break;
