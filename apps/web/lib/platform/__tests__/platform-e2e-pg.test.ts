@@ -173,5 +173,125 @@ describe("platform end-to-end on Postgres", () => {
     expect(Number(raw.rows[0].n)).toBe(1);
   });
 
+  it("PROJECTS: create/load/rev1; update ok, stale rev is Conflict", async () => {
+    project = {
+      id: "22222222-2222-4222-8222-222222222222",
+      name: "acme-app",
+      schemaVersion: 4,
+      createdAt: 1_700_000_000_000,
+      updatedAt: 1_700_000_001_000,
+      formState: {},
+      manifestYaml: "",
+    };
+    const projects = store.projectsFor(org.id);
+    must(await projects.createProjectRecord(project));
+
+    const loaded = must(await projects.loadProjects());
+    expect(loaded).toHaveLength(1);
+    expect(loaded[0].id).toBe(project.id);
+
+    const revResult = await projects.getProjectWithRev(project.id);
+    expect(revResult.success).toBe(true);
+    if (!revResult.success || !revResult.value) return;
+    expect(revResult.value.rev).toBe(1);
+    const currentRev = revResult.value.rev;
+
+    const updated = must(
+      await projects.putProject(
+        { ...project, name: "acme-app-v2", updatedAt: 1_700_000_002_000 },
+        { rev: currentRev },
+      ),
+    );
+    expect(updated.rev).toBe(2);
+
+    const stale = await projects.putProject(
+      { ...project, name: "acme-app-stale", updatedAt: 1_700_000_003_000 },
+      { rev: currentRev },
+    );
+    expect(stale.success).toBe(false);
+    if (!stale.success) expect(stale.error.kind).toBe("Conflict");
+
+    const raw = await pool.query<{ rev: number }>(
+      "SELECT rev FROM saved_projects WHERE owner_id = $1 AND id = $2",
+      [org.id, project.id],
+    );
+    expect(raw.rows[0].rev).toBe(2);
+  });
+
+  it("SHARES: grant team write; accessFor/selectSharedWith; missing project errors", async () => {
+    await store.shares.grant(
+      {
+        ownerId: org.id,
+        projectId: project.id,
+        granteeType: "team",
+        granteeId: team.id,
+        role: "write",
+        grantedBy: ada.id,
+      },
+      { actorId: ada.id },
+    );
+
+    const access = await store.shares.accessFor(org.id, project.id, {
+      userId: bob.id,
+      orgIds: [],
+      teamIds: [team.id],
+    });
+    expect(access).toBe("write");
+
+    const shared = await store.shares.selectSharedWith({
+      userId: bob.id,
+      orgIds: [],
+      teamIds: [team.id],
+    });
+    expect(shared.map((s) => s.projectId)).toContain(project.id);
+
+    await expect(
+      store.shares.grant(
+        {
+          ownerId: org.id,
+          projectId: "00000000-0000-0000-0000-000000000000",
+          granteeType: "team",
+          granteeId: team.id,
+          role: "read",
+          grantedBy: ada.id,
+        },
+        { actorId: ada.id },
+      ),
+    ).rejects.toBeInstanceOf(ShareProjectNotFoundError);
+
+    const raw = await pool.query<{ n: string }>(
+      "SELECT COUNT(*) AS n FROM project_shares WHERE owner_id = $1 AND project_id = $2 AND revoked_at IS NULL",
+      [org.id, project.id],
+    );
+    expect(Number(raw.rows[0].n)).toBe(1);
+  });
+
+  it("DOCUMENTS: put rev1/numeric updatedAt; list; documentsAuthoredBy", async () => {
+    const docs = store.documentsFor(org.id, bob.id);
+    const written = must(
+      await docs.put({
+        kind: "workspace",
+        id: "doc-1",
+        projectId: project.id,
+        payload: { text: "hello" },
+      }),
+    );
+    expect(written.rev).toBe(1);
+    expect(typeof written.updatedAt).toBe("number");
+
+    const listed = must(await docs.list());
+    expect(listed.map((d) => d.id)).toContain("doc-1");
+
+    const authored = await store.documentsAuthoredBy(bob.id, 10, 10_000);
+    expect(authored.items.map((d) => d.id)).toContain("doc-1");
+    expect(authored.truncatedBy).toBeNull();
+
+    const raw = await pool.query<{ rev: number }>(
+      "SELECT rev FROM owner_documents WHERE owner_id = $1 AND user_id = $2 AND id = 'doc-1'",
+      [org.id, bob.id],
+    );
+    expect(raw.rows[0].rev).toBe(1);
+  });
+
   /* __NEXT_STEP__ */
 });
