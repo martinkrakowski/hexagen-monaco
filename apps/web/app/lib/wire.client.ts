@@ -69,6 +69,10 @@ import {
   HttpSavedProjectsAdapter,
 } from "./adapters/http-saved-projects.adapter";
 import { IDBEditorWorkspaceAdapter } from "./adapters/idb-editor-workspace.adapter";
+import {
+  CachedEditorWorkspaceAdapter,
+  HttpEditorWorkspaceAdapter,
+} from "./adapters/http-editor-workspace.adapter";
 import type { StorageQuotaMonitor } from "@hexagen/web-driver";
 import { getStorageQuotaMonitor as createStorageQuotaMonitor } from "@hexagen/web-driver";
 import {
@@ -124,11 +128,17 @@ export const wireDependencies = (): {
     wizardPersistence satisfies WizardPersistencePort,
   );
 
-  // Editor workspace persistence port → IDB-backed adapter
-  const editorWorkspaceAdapter = new IDBEditorWorkspaceAdapter();
+  // Editor workspace persistence port → cached (remote server + IDB)
+  const localEditorWorkspace = new IDBEditorWorkspaceAdapter();
   registry.set(
     PORT_NAMES.EDITOR_WORKSPACE_PERSISTENCE,
-    editorWorkspaceAdapter satisfies EditorWorkspacePersistencePort,
+    new CachedEditorWorkspaceAdapter(
+      localEditorWorkspace,
+      new HttpEditorWorkspaceAdapter(),
+      undefined,
+      undefined,
+      createWebLogger(),
+    ) satisfies EditorWorkspacePersistencePort,
   );
 
   // Canvas layout persistence port → dedicated adapter
@@ -258,7 +268,7 @@ export const wireDependencies = (): {
     new SavedProjectsMigrationStep(savedProjectsAdapter, domainRegistry),
     new SavedProjectsV3MigrationStep(savedProjectsAdapter),
     new SavedProjectsV4MigrationStep(savedProjectsAdapter),
-    new EditorWorkspaceMigrationStep(editorWorkspaceAdapter, domainRegistry),
+    new EditorWorkspaceMigrationStep(localEditorWorkspace, domainRegistry),
     new RemoveUnusedSecretKeysStep(),
   ]);
   void migrationOrchestrator
