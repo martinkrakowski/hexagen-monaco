@@ -146,15 +146,15 @@ describe("scanSpecifiers: hostile and JSX input", () => {
       const input = "/[".repeat(len / 2);
       scanSpecifiers(input); // warm-up, not measured
       let best = Infinity;
+      let over = 0;
       for (let n = 1; n <= 7; ++n) {
         const t0 = performance.now();
         scanSpecifiers(input);
         const ms = performance.now() - t0;
         if (ms < best) best = ms;
-        if (ms > stopAboveMs) {
-          // stop sampling as soon as one timed scan exceeds the given limit
-          break;
-        }
+        // Stop only after TWO samples over the limit: one may be the scheduler or
+        // the collector; a quadratic implementation is over it every time.
+        if (ms > stopAboveMs && ++over >= 2) break;
       }
       return best;
     };
