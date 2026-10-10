@@ -192,7 +192,9 @@ describe("platform end-to-end on Postgres", () => {
 
     const revResult = await projects.getProjectWithRev(project.id);
     expect(revResult.success).toBe(true);
-    if (!revResult.success || !revResult.value) return;
+    if (!revResult.success || !revResult.value)
+      throw new Error("project not found");
+    expect(revResult.value).not.toBeNull();
     expect(revResult.value.rev).toBe(1);
     const currentRev = revResult.value.rev;
 
