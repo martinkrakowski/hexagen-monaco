@@ -11,6 +11,7 @@ import type {
   RevocationStorePort,
 } from "@hexagen/byok";
 import type { PlatformDb } from "./platform/db";
+import { createPgPlatformDb, createPgPool } from "./platform/pg-db";
 import { createSqlitePlatformDb } from "./platform/sqlite-db";
 
 /**
@@ -297,6 +298,14 @@ export function createByokStore(dbPath: string): ByokStore {
   return createByokStoreOn(createSqlitePlatformDb(openByokDb(dbPath)));
 }
 
+/** The BYOK store on Postgres. A pool opens no connection when created, so
+ * this stays synchronous; the pool is contacted on the first statement. */
+export function createPgByokStore(databaseUrl: string): ByokStore {
+  return createByokStoreOn(
+    createPgPlatformDb(createPgPool(databaseUrl, { max: 4 })),
+  );
+}
+
 /** Where the durable DB lives in prod; in-memory elsewhere so dev/test leave no
  * file behind. Overridable via `BYOK_DB_PATH` (the prod volume mount, shared
  * with the quota DB dir). */
@@ -309,7 +318,10 @@ let singleton: ByokStore | null = null;
  * the use cases; tests call `createByokStore(<path>)` directly for isolation. */
 export function getByokStore(): ByokStore {
   if (!singleton) {
-    singleton = createByokStore(process.env.BYOK_DB_PATH ?? DEFAULT_DB_PATH);
+    const url = process.env.DATABASE_URL?.trim();
+    singleton = url
+      ? createPgByokStore(url)
+      : createByokStore(process.env.BYOK_DB_PATH ?? DEFAULT_DB_PATH);
   }
   return singleton;
 }

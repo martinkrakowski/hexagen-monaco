@@ -245,6 +245,62 @@ describe.each(BACKENDS)("SavedProjectsPersistencePort (%s", (kind) => {
       await backend.close();
     }
   });
+
+  it("six creates of one id started together: exactly one lands, every loser is Conflict, one row remains", async () => {
+    const backend = await openBackend(kind, { pgMax: 6 });
+    try {
+      const store = createSavedProjectsStore(backend.db, "owner-a");
+      const id = "44444444-4444-4444-8444-444444444444";
+      const results = await Promise.all(
+        [1, 2, 3, 4, 5, 6].map(() => store.createProjectRecord(project(id))),
+      );
+      const wins = results.filter((r) => r.success);
+      const losses = results.filter((r) => !r.success);
+      assert.equal(wins.length, 1);
+      assert.equal(losses.length, 5);
+      for (const r of losses) {
+        if (!r.success) assert.equal(r.error.kind, "Conflict");
+      }
+      const rows = await backend.db.all(
+        "SELECT id FROM saved_projects WHERE owner_id = ? AND id = ?",
+        ["owner-a", id],
+      );
+      assert.equal(rows.length, 1);
+    } finally {
+      await backend.close();
+    }
+  });
+
+  it("a unique violation during create is reported as Conflict, never SerializationFailed", async () => {
+    const backend = await openBackend(kind, { pgMax: 6 });
+    try {
+      // Two racing creates on the pooled backend cannot both INSERT; the
+      // loser's unique violation must surface as Conflict, not as a generic
+      // serialization failure. Inject a driver-shaped unique violation on
+      // the INSERT because the SERIALIZABLE retry loop (pg) and the queued
+      // single connection (sqlite) otherwise settle the race before it.
+      const uniqueViolation = new Error(
+        "synthetic unique violation",
+      ) as Error & {
+        code?: string;
+      };
+      uniqueViolation.code =
+        kind === "postgres" ? "23505" : "SQLITE_CONSTRAINT_PRIMARYKEY";
+      const decoratedDb = failOnSql(
+        backend.db,
+        (sql) => sql.includes("INSERT INTO saved_projects"),
+        uniqueViolation,
+      );
+      const store = createSavedProjectsStore(decoratedDb, "owner-a");
+      const created = await store.createProjectRecord(
+        project("55555555-5555-4555-8555-555555555555"),
+      );
+      assert.equal(created.success, false);
+      if (!created.success) assert.equal(created.error.kind, "Conflict");
+    } finally {
+      await backend.close();
+    }
+  });
 });
 
 async function countDocs(
@@ -647,6 +703,51 @@ describe.each(BACKENDS)("saved projects stored timestamps (%s)", (kind) => {
       );
       assert.equal(current.rev, 3);
       assert.equal(current.project.name, "beta-v4");
+    } finally {
+      await backend.close();
+    }
+  });
+
+  it("two writers holding the same rev: exactly one write lands", async () => {
+    const backend = await openBackend(kind, { pgMax: 6 });
+    try {
+      const projects = backend.store.projectsFor("owner-a");
+      const proj: SavedProject = {
+        id: "66666666-6666-4666-8666-666666666666",
+        name: "gamma",
+        schemaVersion: 4,
+        createdAt: 1_700_000_000_000,
+        updatedAt: 1_700_000_001_000,
+        formState: {},
+        manifestYaml: "",
+      };
+      must(await projects.createProjectRecord(proj));
+
+      // Both writers hold rev 1. Either may win; exactly one write may land.
+      const names = ["gamma-w1", "gamma-w2"];
+      const results = await Promise.all([
+        projects.putProject(
+          { ...proj, name: names[0], updatedAt: 1_700_000_002_000 },
+          { rev: 1 },
+        ),
+        projects.putProject(
+          { ...proj, name: names[1], updatedAt: 1_700_000_002_001 },
+          { rev: 1 },
+        ),
+      ]);
+      const wins = results.filter((r) => r.success);
+      const losses = results.filter((r) => !r.success);
+      assert.equal(wins.length, 1);
+      assert.equal(losses.length, 1);
+      const loser = losses[0];
+      if (!loser.success) assert.equal(loser.error.kind, "Conflict");
+      const winnerIndex = results.indexOf(wins[0]);
+      const stored = defined(
+        must(await projects.getProjectWithRev(proj.id)),
+        "stored",
+      );
+      assert.equal(stored.rev, 2);
+      assert.equal(stored.project.name, names[winnerIndex]);
     } finally {
       await backend.close();
     }

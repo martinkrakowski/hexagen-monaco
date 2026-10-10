@@ -373,6 +373,19 @@ jobs:
         with:
           persist-credentials: false
 
+      # setup-node's cache probe runs `yarn cache dir`, and the repository pins
+      # yarn 4 through `packageManager`; without Corepack first the probe runs
+      # classic yarn and fails or caches the wrong folder.
+      - name: "Enable Corepack"
+        run: corepack enable
+
+      # No version literal, matching the lint job above: `corepack prepare
+      # --activate` with no spec reads `packageManager` from the root
+      # package.json, so CI cannot drift from the declared Yarn pin. Without
+      # this the job installs with whatever Yarn corepack defaults to.
+      - name: "Prepare Yarn"
+        run: corepack prepare --activate
+
       - name: "Setup Node"
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
@@ -384,16 +397,20 @@ jobs:
           # and fail in production -- the same blind spot the job comment above
           # describes, reintroduced by the job meant to close it.
           node-version: "20"
+          # Caches yarn's download cache only (keyed on yarn.lock);
+          # node_modules is still linked and better-sqlite3 is still compiled
+          # on Node 20 in every run, so what the job tests does not change.
+          cache: yarn
 
-      - name: "Enable Corepack"
-        run: corepack enable
-
-      # No version literal, matching the lint job above: `corepack prepare
-      # --activate` with no spec reads `packageManager` from the root
-      # package.json, so CI cannot drift from the declared Yarn pin. Without
-      # this the job installs with whatever Yarn corepack defaults to.
-      - name: "Prepare Yarn"
-        run: corepack prepare --activate
+      # Corepack was enabled with the runner's Node; setup-node has now put
+      # Node 20 first on PATH. Enable it again so `yarn` is Node 20's shim and
+      # still the pinned yarn 4, and print both versions as the proof.
+      - name: "Re-enable Corepack on Node 20"
+        run: |
+          corepack enable
+          corepack prepare --activate
+          node --version
+          yarn --version
 
       - name: "Install Dependencies"
         run: yarn install --immutable

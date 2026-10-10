@@ -45,6 +45,16 @@ describe("pg-startup migrations", () => {
     expect(applied).toEqual([]);
   });
 
+  it("a negative lockTimeoutMs is rejected with nothing applied", async () => {
+    await expect(
+      runPgMigrations(pool, PG_MIGRATIONS, { lockTimeoutMs: -1 }),
+    ).rejects.toThrow("lockTimeoutMs must be a non-negative integer");
+    const m = await pool.query<{ to_regclass: string | null }>(
+      "SELECT to_regclass('public.schema_migrations') AS to_regclass",
+    );
+    expect(m.rows[0].to_regclass).toBeNull();
+  });
+
   it("two start-ups at once apply once and both resolve", async () => {
     const results = await Promise.all([
       runStartupMigrations(url),
