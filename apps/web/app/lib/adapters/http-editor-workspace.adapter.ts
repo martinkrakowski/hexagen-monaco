@@ -42,7 +42,9 @@ function samePayload(a: unknown, b: unknown): boolean {
   if (aKeys.length !== bKeys.length) return false;
   const aObj = a as Record<string, unknown>;
   const bObj = b as Record<string, unknown>;
-  return aKeys.every((k) => Object.hasOwn(bObj, k) && samePayload(aObj[k], bObj[k]));
+  return aKeys.every(
+    (k) => Object.hasOwn(bObj, k) && samePayload(aObj[k], bObj[k]),
+  );
 }
 
 /**

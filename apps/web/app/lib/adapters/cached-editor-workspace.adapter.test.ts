@@ -4299,7 +4299,10 @@ describe("payload comparison is independent of key order", () => {
       files: {
         ...ws.files,
         "a.ts": {
-          ...((ws.files as Record<string, unknown>)["a.ts"] as Record<string, unknown>),
+          ...((ws.files as Record<string, unknown>)["a.ts"] as Record<
+            string,
+            unknown
+          >),
           ghost: undefined,
         },
       },
