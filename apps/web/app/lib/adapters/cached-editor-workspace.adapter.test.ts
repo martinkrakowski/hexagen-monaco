@@ -4281,6 +4281,65 @@ describe("payload comparison is independent of key order", () => {
     assert.equal(rec!.last[0]!.where, "load");
     assert.ok(warns.some((w) => /cache differs from server/.test(w)));
   });
+
+  it("an inherited key name on the server copy still records a conflict (toString)", async () => {
+    const { adapter, cache, server, warns } = makeReorderedAdapters();
+    const browserWs = makeWorkspace(1000, UUID, {
+      "a.ts": { content: "hello", isNew: true, dirty: false, updatedAt: 1000 },
+    });
+    await cache.saveWorkspace(UUID, browserWs);
+    // Server copy differs ONLY in that its `files` holds a key named
+    // `toString` with value `{}` — a name every plain object inherits.
+    const serverWs = { ...browserWs, files: { toString: {} } };
+    server.set(UUID, {
+      payload: serverWs,
+      rev: 1,
+      updatedAt: 1000,
+      projectId: UUID,
+    });
+
+    await adapter.loadWorkspace(UUID);
+    const stamp = await cache.getLiftStamp(UUID);
+    assert.equal(stamp, null, "no stamp: the payloads differ");
+
+    const rec = await cache.getConflicts();
+    assert.ok(rec && rec.count === 1, "conflict recorded");
+    assert.equal(rec!.last[0]!.where, "load");
+    assert.ok(warns.some((w) => /cache differs from server/.test(w)));
+  });
+
+  it("an own __proto__ key does not equal the inherited prototype", async () => {
+    const { adapter, cache, server, warns } = makeReorderedAdapters();
+    // Browser copy: `files` holds ONLY an own `__proto__` key with value `{}`
+    // (JSON.parse makes it an own property, unlike an object literal). Server
+    // copy: `files` holds `a.ts` with a real entry. They differ, so a
+    // conflict is recorded; `k in bObj` would read the inherited
+    // `Object.prototype` (no enumerable keys) and wrongly call them equal.
+    const browserWs = makeWorkspace(
+      1000,
+      UUID,
+      JSON.parse('{"__proto__": {}}') as Record<string, unknown>,
+    );
+    await cache.saveWorkspace(UUID, browserWs);
+    const serverWs = makeWorkspace(1000, UUID, {
+      "a.ts": { content: "hello", isNew: true, dirty: false, updatedAt: 1000 },
+    });
+    server.set(UUID, {
+      payload: serverWs,
+      rev: 1,
+      updatedAt: 1000,
+      projectId: UUID,
+    });
+
+    await adapter.loadWorkspace(UUID);
+    const stamp = await cache.getLiftStamp(UUID);
+    assert.equal(stamp, null, "no stamp: the payloads differ");
+
+    const rec = await cache.getConflicts();
+    assert.ok(rec && rec.count === 1, "conflict recorded");
+    assert.equal(rec!.last[0]!.where, "load");
+    assert.ok(warns.some((w) => /cache differs from server/.test(w)));
+  });
 });
 
 describe("invalid server payload is not cached", () => {
