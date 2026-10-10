@@ -103,7 +103,7 @@ describe("pg-startup migrations", () => {
     expect(exit).toHaveBeenCalledWith(1);
     const line = errors[0];
     expect(line).toContain("999");
-    expect(line).toContain("sqlstate=none");
+    expect(line).toContain("code=none");
     expect(line).toContain("1..3");
   });
 });
@@ -165,6 +165,87 @@ describe("pg-startup selection behaviour", () => {
     expect(exit).toHaveBeenCalledWith(1);
   });
 
+  it("a network error code is logged as code=, not sqlstate=", async () => {
+    const run = vi
+      .fn()
+      .mockRejectedValue({
+        code: "ECONNREFUSED",
+        message: "connect ECONNREFUSED 127.0.0.1:1",
+      });
+    const exit = vi.fn();
+    const errors: string[] = [];
+    const log = {
+      info: vi.fn(),
+      error: vi.fn((...args: unknown[]) => errors.push(args.join(" "))),
+    };
+    await startPlatformMigrations(
+      envWith({ DATABASE_URL: "postgres://dummy" }),
+      { run, exit, log },
+    );
+
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toContain("code=ECONNREFUSED");
+    expect(errors[0]).not.toContain("sqlstate");
+    expect(exit).toHaveBeenCalledWith(1);
+  });
+
+  it("an AggregateError logs both inner errors' codes and messages", async () => {
+    const inner1 = Object.assign(
+      new Error("connect ECONNREFUSED 127.0.0.1:1"),
+      { code: "ECONNREFUSED" },
+    );
+    const inner2 = Object.assign(
+      new Error("connect ECONNREFUSED 127.0.0.1:2"),
+      { code: "ECONNREFUSED" },
+    );
+    const run = vi
+      .fn()
+      .mockRejectedValue(new AggregateError([inner1, inner2], ""));
+    const exit = vi.fn();
+    const errors: string[] = [];
+    const log = {
+      info: vi.fn(),
+      error: vi.fn((...args: unknown[]) => errors.push(args.join(" "))),
+    };
+    await startPlatformMigrations(
+      envWith({ DATABASE_URL: "postgres://dummy" }),
+      { run, exit, log },
+    );
+
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toContain("connect ECONNREFUSED 127.0.0.1:1");
+    expect(errors[0]).toContain("connect ECONNREFUSED 127.0.0.1:2");
+    expect(exit).toHaveBeenCalledWith(1);
+  });
+
+  it("the URL is redacted in the outer and the inner error messages", async () => {
+    const url = "postgres://u:s3cret-dummy@127.0.0.1:1/x";
+    const inner = new Error(`could not connect to ${url}`);
+    const run = vi
+      .fn()
+      .mockRejectedValue(
+        new AggregateError([inner], `could not connect to ${url}`),
+      );
+    const exit = vi.fn();
+    const errors: string[] = [];
+    const log = {
+      info: vi.fn(),
+      error: vi.fn((...args: unknown[]) => errors.push(args.join(" "))),
+    };
+    await startPlatformMigrations(envWith({ DATABASE_URL: url }), {
+      run,
+      exit,
+      log,
+    });
+
+    expect(errors).toHaveLength(1);
+    const line = errors[0];
+    expect(line).toContain("[DATABASE_URL]");
+    expect(line).not.toContain(url);
+    expect(line).not.toContain("s3cret-dummy");
+    expect(exit).toHaveBeenCalledWith(1);
+  });
+
   it("a failing migration exits with its SQLSTATE", async () => {
     const run = vi.fn().mockRejectedValue({ code: "42P07", message: "boom" });
     const exit = vi.fn();
@@ -179,7 +260,7 @@ describe("pg-startup selection behaviour", () => {
     );
 
     expect(errors).toHaveLength(1);
-    expect(errors[0]).toContain("sqlstate=42P07");
+    expect(errors[0]).toContain("code=42P07");
     expect(exit).toHaveBeenCalledWith(1);
   });
 });

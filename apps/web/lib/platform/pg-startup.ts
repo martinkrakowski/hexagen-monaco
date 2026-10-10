@@ -48,12 +48,31 @@ export async function startPlatformMigrations(
       error != null && typeof error === "object" && "code" in error
         ? (error as { code?: unknown }).code
         : undefined;
-    const sqlstate = typeof code === "string" ? code : "none";
+    const codeText = typeof code === "string" ? code : "none";
+    const redact = (text: string) => text.split(url).join("[DATABASE_URL]");
     const rawMessage = error instanceof Error ? error.message : String(error);
-    const message = rawMessage.split(url).join("[DATABASE_URL]");
-    log.error(
-      `[platform-migrate] start-up migration failed; this build knows versions 1..${lastVersion}; sqlstate=${sqlstate}; ${message}`,
-    );
+    let line =
+      `[platform-migrate] start-up migration failed; this build knows versions 1..${lastVersion}; code=${codeText}; ${redact(rawMessage)}`;
+    const inner =
+      error instanceof AggregateError
+        ? error.errors
+        : error != null &&
+            typeof error === "object" &&
+            Array.isArray((error as { errors?: unknown }).errors)
+          ? (error as { errors: unknown[] }).errors
+          : [];
+    if (inner.length > 0) {
+      const parts = inner.slice(0, 4).map((e: unknown) => {
+        const innerCode =
+          e != null && typeof e === "object" && "code" in e
+            ? (e as { code?: unknown }).code
+            : undefined;
+        const innerMessage = e instanceof Error ? e.message : String(e);
+        return `code=${typeof innerCode === "string" ? innerCode : "none"}; ${redact(innerMessage)}`;
+      });
+      line = `${line} (${parts.join(" | ")})`;
+    }
+    log.error(line);
     exit(1);
   }
 }
