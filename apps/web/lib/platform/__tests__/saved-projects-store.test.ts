@@ -708,6 +708,51 @@ describe.each(BACKENDS)("saved projects stored timestamps (%s)", (kind) => {
     }
   });
 
+  it("two writers holding the same rev: exactly one write lands", async () => {
+    const backend = await openBackend(kind, { pgMax: 6 });
+    try {
+      const projects = backend.store.projectsFor("owner-a");
+      const proj: SavedProject = {
+        id: "66666666-6666-4666-8666-666666666666",
+        name: "gamma",
+        schemaVersion: 4,
+        createdAt: 1_700_000_000_000,
+        updatedAt: 1_700_000_001_000,
+        formState: {},
+        manifestYaml: "",
+      };
+      must(await projects.createProjectRecord(proj));
+
+      // Both writers hold rev 1. Either may win; exactly one write may land.
+      const names = ["gamma-w1", "gamma-w2"];
+      const results = await Promise.all([
+        projects.putProject(
+          { ...proj, name: names[0], updatedAt: 1_700_000_002_000 },
+          { rev: 1 },
+        ),
+        projects.putProject(
+          { ...proj, name: names[1], updatedAt: 1_700_000_002_001 },
+          { rev: 1 },
+        ),
+      ]);
+      const wins = results.filter((r) => r.success);
+      const losses = results.filter((r) => !r.success);
+      assert.equal(wins.length, 1);
+      assert.equal(losses.length, 1);
+      const loser = losses[0];
+      if (!loser.success) assert.equal(loser.error.kind, "Conflict");
+      const winnerIndex = results.indexOf(wins[0]);
+      const stored = defined(
+        must(await projects.getProjectWithRev(proj.id)),
+        "stored",
+      );
+      assert.equal(stored.rev, 2);
+      assert.equal(stored.project.name, names[winnerIndex]);
+    } finally {
+      await backend.close();
+    }
+  });
+
   it("replaceAll upserts survivors (rev rises), deletes only the dropped ids and lists in the given order", async () => {
     const backend = await openBackend(kind);
     try {
