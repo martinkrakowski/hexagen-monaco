@@ -94,6 +94,18 @@ jobs:
         continue-on-error: true
         run: bash scripts/measure-sync.sh after-sync || true
 
+      # The patch and the untracked files the step above wrote, so the sync's
+      # changes can be READ (temporary, like the "Measure:" steps; never fails).
+      - name: "Measure: upload what the sync changed"
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: sync-diff
+          path: ${{ runner.temp }}/sync-measure/publish/
+          if-no-files-found: ignore
+          retention-days: 7
+
       - name: "Verify Build After Sync"
         run: yarn turbo run build --output-logs=full --log-order=stream --force
 

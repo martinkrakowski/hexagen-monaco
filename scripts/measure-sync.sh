@@ -54,6 +54,14 @@ after-sync)
   echo "===== (a) lines: $(git status --porcelain | wc -l) ====="
   echo "===== (a) git diff --stat ====="
   git diff --stat
+  # The content, not only the stat: the workflow uploads this folder as an
+  # artifact so a person can read what the sync rewrote before deciding F48.
+  mkdir -p "$m/publish"
+  git status --porcelain > "$m/publish/status.txt"
+  git diff --binary > "$m/publish/tracked.patch"
+  git ls-files -o --exclude-standard > "$m/publish/untracked-files.txt"
+  git ls-files -o --exclude-standard -z | tar --null -czf "$m/publish/untracked.tar.gz" -T -
+  echo "===== (a) published for upload: $(wc -l < "$m/publish/tracked.patch") patch lines, $(wc -l < "$m/publish/untracked-files.txt") untracked files ====="
   echo "===== (b) gitignored files changed, added or removed by the sync ====="
   hash_ignored > "$m/ignored-after.txt"
   diff "$m/ignored-before.txt" "$m/ignored-after.txt" > "$m/ignored.diff"
