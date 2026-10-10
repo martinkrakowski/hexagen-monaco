@@ -108,12 +108,9 @@ describe("platform end-to-end on Postgres", () => {
       ),
     ).rejects.toBeInstanceOf(DuplicateOrgSlugError);
 
-    const invite = await store.orgs.invite(
-      org.id,
-      "BOB",
-      "member",
-      { actorId: ada.id },
-    );
+    const invite = await store.orgs.invite(org.id, "BOB", "member", {
+      actorId: ada.id,
+    });
     expect(invite.githubLogin).toBe("bob");
 
     const pending = await store.orgs.listPendingInvites(org.id);
@@ -166,7 +163,7 @@ describe("platform end-to-end on Postgres", () => {
 
     expect(await store.teams.isMember(team.id, bob.id)).toBe(true);
 
-    const raw = await pool.query<{ count: string }>(
+    const raw = await pool.query<{ n: string }>(
       "SELECT COUNT(*) AS n FROM team_members WHERE team_id = $1 AND user_id = $2",
       [team.id, bob.id],
     );

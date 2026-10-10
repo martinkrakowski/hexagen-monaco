@@ -2,8 +2,10 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import type { Pool } from "pg";
 import { GET } from "../route";
-import { getPlatformStore } from "../../../../../lib/platform";
-import { closePlatformStore } from "../../../../../lib/platform";
+import {
+  getPlatformStore,
+  closePlatformStore,
+} from "../../../../../lib/platform";
 import { createTestPgDb } from "../../../../../test-support/pg-test-db";
 import { runStartupMigrations } from "../../../../../lib/platform/pg-startup";
 
