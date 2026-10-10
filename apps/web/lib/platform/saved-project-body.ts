@@ -2,8 +2,8 @@ import { z } from "zod";
 import type { SavedProject } from "@hexagen/shared";
 
 /**
- * Upper bound for `createdAt` / `updatedAt`: 10_000 days of epoch
- * milliseconds. The legacy numeric `If-Match` (an `updatedAt` token) is
+ * Upper bound for `createdAt` / `updatedAt`: the largest time a JavaScript
+ * `Date` can hold, in epoch milliseconds. The legacy numeric `If-Match` (an `updatedAt` token) is
  * held to the same bound (project-route-handlers.ts).
  */
 export const MAX_PROJECT_TIMESTAMP = 8_640_000_000_000_000;
