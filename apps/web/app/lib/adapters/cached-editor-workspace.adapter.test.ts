@@ -2294,6 +2294,53 @@ describe("CachedEditorWorkspaceAdapter Item 14: clearWorkspace", () => {
       "load returns null (discarded content not revived)",
     );
   });
+
+  it("a save scheduled while clearWorkspace waits for the cache clear is cancelled", async () => {
+    const { adapter, cache, server, fetchImpl } = makeAdapters();
+    const ws = makeWorkspace(1000);
+    await cache.saveWorkspace(UUID, ws);
+    await cache.setLiftStamp(UUID, {
+      ownerId: "user-1",
+      rev: 1,
+      syncedUpdatedAt: 1000,
+      confirmed: true,
+    });
+    server.set(UUID, { payload: ws, rev: 1, updatedAt: 1000, projectId: UUID });
+    await adapter.loadWorkspace(UUID);
+
+    // Make cache.clearWorkspace slow so a save can be interleaved during the
+    // clear, racing ahead of the DELETE.
+    let resolveClear!: () => void;
+    vi.spyOn(cache, "clearWorkspace").mockImplementationOnce(async (sid) => {
+      await new Promise<void>((resolve) => {
+        resolveClear = resolve;
+      });
+      return cache.clearWorkspace(sid);
+    });
+
+    // Start clearWorkspace — it stalls on the slow cache clear.
+    const clearPromise = adapter.clearWorkspace(UUID);
+    await vi.advanceTimersByTimeAsync(0);
+
+    // While the cache clear is stuck, schedule a save (arms a timer).
+    await adapter.saveWorkspace(UUID, makeWorkspace(2000));
+    await vi.advanceTimersByTimeAsync(0);
+
+    // Let the cache clear finish — the fix's cancelWriteTimer runs after
+    // the clear and should cancel the timer armed above.
+    resolveClear();
+    await clearPromise;
+
+    // Let any pending timer fire.
+    await vi.advanceTimersByTimeAsync(REMOTE_DEBOUNCE_MS);
+
+    assert.equal(
+      putCallsOf(fetchImpl).length,
+      0,
+      "no PUT sent after the DELETE",
+    );
+    assert.equal(server.has(UUID), false, "server holds no copy");
+  });
 });
 
 describe("CachedEditorWorkspaceAdapter Item 4: discard marker", () => {

@@ -1143,6 +1143,7 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
 
     // Cache clear + stamp removal FIRST.
     const cacheResult = await this.cache.clearWorkspace(sessionId);
+    this.cancelWriteTimer(sessionId);
     if (!canDelete) {
       // Item 4: write a discard marker instead of the stamp.
       if (ownStampRev !== null) {
