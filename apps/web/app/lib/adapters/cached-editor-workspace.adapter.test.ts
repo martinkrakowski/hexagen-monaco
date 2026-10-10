@@ -5416,7 +5416,10 @@ describe("round 3: a load and a discard of the same id", () => {
         return realFetch(url, init);
       },
     );
-    return { count: () => releases.length, release: (i: number) => releases[i]!() };
+    return {
+      count: () => releases.length,
+      release: (i: number) => releases[i]!(),
+    };
   }
 
   async function flush() {
