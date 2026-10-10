@@ -241,4 +241,25 @@ describe("hexagen-lint — co-located test files", () => {
       },
     );
   });
+
+  it("a co-located .spec.ts file is scanned: its cross-layer import is a finding", async () => {
+    // The exemption is exactly the two layer-purity rules. This file is a
+    // co-located domain test AND it imports out of the domain layer, which
+    // `domain-layer-import` must still report.
+    await withFixture(
+      {
+        "packages/billing/src/domain/model/thing.ts": `export const thing = 1;\n`,
+        "packages/billing/src/domain/model/thing.spec.ts": `import { db } from "../../infrastructure/db.adapter.js";\nimport { thing } from "./thing.js";\nexport const seen = [db, thing];\n`,
+      },
+      async (root) => {
+        const r = await runLinter(root);
+        assert.equal(r.code, 1, describeResult(r));
+        assert.match(
+          r.stderr,
+          /Relative import '\.\.\/\.\.\/infrastructure\/db\.adapter\.js' crosses out of the 'domain' layer into 'infrastructure'/,
+          describeResult(r),
+        );
+      },
+    );
+  });
 });
