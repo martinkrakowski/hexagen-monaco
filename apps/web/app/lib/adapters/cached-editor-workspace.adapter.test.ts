@@ -2341,6 +2341,83 @@ describe("CachedEditorWorkspaceAdapter Item 14: clearWorkspace", () => {
     );
     assert.equal(server.has(UUID), false, "server holds no copy");
   });
+
+  it("a save made while a discard waits for a write does not survive the discard", async () => {
+    const { adapter, cache, server, fetchImpl } = makeAdapters();
+    const ws = makeWorkspace(1000);
+    await cache.saveWorkspace(UUID, ws);
+    await cache.setLiftStamp(UUID, {
+      ownerId: "user-1",
+      rev: 5,
+      syncedUpdatedAt: 1000,
+      confirmed: true,
+    });
+    server.set(UUID, { payload: ws, rev: 5, updatedAt: 1000, projectId: UUID });
+    await adapter.loadWorkspace(UUID);
+
+    // Fake fetch: the FIRST PUT is held open by a resolver the test releases
+    // later; all other verbs go through the real server mock, which refuses a
+    // PUT or DELETE whose If-Match is not the current rev.
+    const serverFetch = fetchImpl.getMockImplementation()!;
+    let putCount = 0;
+    const resolvers: Array<(v: Response) => void> = [];
+    fetchImpl.mockImplementation(
+      async (url: string | URL | Request, init?: RequestInit) => {
+        const method = (init?.method ?? "GET").toUpperCase();
+        if (method === "PUT") {
+          putCount++;
+          if (putCount === 1) {
+            return new Promise<Response>((res) => {
+              resolvers[0] = (resp) => res(resp);
+            });
+          }
+        }
+        return serverFetch(url, init) as unknown as Response;
+      },
+    );
+
+    // Save #1: timer armed, write #1 in flight (held open).
+    await adapter.saveWorkspace(UUID, makeWorkspace(2000));
+    await vi.advanceTimersByTimeAsync(REMOTE_DEBOUNCE_MS);
+    assert.equal(putCount, 1, "first PUT is in flight");
+
+    const putsBeforeDiscard = putCallsOf(fetchImpl).length;
+
+    // Discard starts and awaits the in-flight write.
+    const clearPromise = adapter.clearWorkspace(UUID);
+
+    // While the discard waits, the editor saves again (arms a timer).
+    await adapter.saveWorkspace(UUID, makeWorkspace(3000));
+    await vi.advanceTimersByTimeAsync(REMOTE_DEBOUNCE_MS);
+
+    // Release the held-open write so it fails (500): no compensating DELETE.
+    resolvers[0](new Response("server error", { status: 500 }));
+    await vi.advanceTimersByTimeAsync(0);
+
+    // Let everything settle and any remaining timers run.
+    await clearPromise;
+    await vi.advanceTimersByTimeAsync(REMOTE_DEBOUNCE_MS);
+
+    assert.equal(
+      putCallsOf(fetchImpl).length,
+      putsBeforeDiscard,
+      "no PUT sent after clearWorkspace was called",
+    );
+    assert.equal(server.has(UUID), false, "server holds no copy");
+
+    const stamp = await cache.getLiftStamp(UUID);
+    assert.ok(
+      stamp === null || stamp.discarded === true,
+      "no non-discarded stamp remains",
+    );
+
+    const loadResult = await adapter.loadWorkspace(UUID);
+    assert.equal(
+      loadResult.success && loadResult.value,
+      null,
+      "load returns null (discarded content not revived)",
+    );
+  });
 });
 
 describe("CachedEditorWorkspaceAdapter Item 4: discard marker", () => {

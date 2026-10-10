@@ -395,6 +395,8 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
   private readonly epochs = new Map<string, number>();
   /** Per-id in-flight remote write, so two PUTs can't self-conflict. */
   private readonly inFlight = new Map<string, Promise<void>>();
+  /** ids for which a clearWorkspace is waiting on an in-flight write. */
+  private readonly discarding = new Set<string>();
   /**
    * The precondition this tab armed for the pending or in-flight write. When a
    * write succeeds, a still-pending write that holds the SAME precondition is
@@ -916,6 +918,9 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
       effectiveStamp !== null
         ? { ifMatch: effectiveStamp.rev }
         : { createOnly: true };
+    // Item 1: a save made while a discard is waiting must not arm a timer or
+    // set a precondition, lest it survive the discard.
+    if (this.discarding.has(sessionId)) return cacheResult;
     this.pendingPreconditions.set(sessionId, precondition);
     const existing = this.writeTimers.get(sessionId);
     if (existing) clearTimeout(existing);
@@ -943,6 +948,8 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
     // Item 6: nothing if paused, org switched in, or epoch changed.
     if (this.pausedIds.has(sessionId)) return;
     if (this.tenantIdSource() !== null) return;
+    // Item 1: a write armed while a discard is waiting must not proceed.
+    if (this.discarding.has(sessionId)) return;
     const epochNow = this.epochs.get(sessionId) ?? 0;
     this.writeTimers.delete(sessionId);
     const epochAtStart = epochNow;
@@ -979,6 +986,8 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
       // Item 6: re-check paused, org, epoch after awaiting inFlight.
       if (this.pausedIds.has(sessionId)) return;
       if (this.tenantIdSource() !== null) return;
+      // Item 1: re-check the discard window after awaiting inFlight.
+      if (this.discarding.has(sessionId)) return;
       if (epochAtStart !== (this.epochs.get(sessionId) ?? 0)) return;
 
       // Item 2: re-read the stamp right before stamping — the timer captured
@@ -1114,83 +1123,100 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
   async clearWorkspace(
     sessionId: string,
   ): Promise<Result<void, PersistenceError>> {
-    // Item 12: increment epoch before anything else.
-    this.epochs.set(sessionId, (this.epochs.get(sessionId) ?? 0) + 1);
-    // Item 6: cancel the timer BEFORE awaiting the in-flight write so a
-    // deferred timer cannot fire during the wait and re-create the document.
-    this.cancelWriteTimer(sessionId);
-    this.firstWriteAfter404.delete(sessionId);
-    const inFlight = this.inFlight.get(sessionId);
-    if (inFlight) await inFlight.catch(() => {});
+    this.discarding.add(sessionId);
+    try {
+      // Item 12: increment epoch before anything else.
+      this.epochs.set(sessionId, (this.epochs.get(sessionId) ?? 0) + 1);
+      // Item 6: cancel the timer BEFORE awaiting the in-flight write so a
+      // deferred timer cannot fire during the wait and re-create the document.
+      this.cancelWriteTimer(sessionId);
+      this.firstWriteAfter404.delete(sessionId);
+      // Wait for every in-flight write, including any chained behind it, so a
+      // save armed during the wait cannot land before the DELETE. Re-check the
+      // map: a chained write replaces the entry, and _doRemoteWrite's finally
+      // clears it only if it still owns it, so this does not spin on a settled
+      // promise still lingering in the map.
+      for (
+        let p = this.inFlight.get(sessionId);
+        p;
+        p = this.inFlight.get(sessionId)
+      ) {
+        await p.catch(() => {});
+        if (this.inFlight.get(sessionId) === p) this.inFlight.delete(sessionId);
+      }
 
-    // AM1: org tenant → cache only.
-    if (this.tenantIdSource() !== null) {
-      return this.cache.clearWorkspace(sessionId);
-    }
+      // AM1: org tenant → cache only.
+      if (this.tenantIdSource() !== null) {
+        return this.cache.clearWorkspace(sessionId);
+      }
 
-    // Check paused BEFORE removing from pausedIds.
-    const wasPaused = this.pausedIds.has(sessionId);
-    this.pausedIds.delete(sessionId);
+      // Check paused BEFORE removing from pausedIds.
+      const wasPaused = this.pausedIds.has(sessionId);
+      this.pausedIds.delete(sessionId);
 
-    const userId = await this.userIdSource();
-    if (userId === null) {
-      return this.cache.clearWorkspace(sessionId);
-    }
+      const userId = await this.userIdSource();
+      if (userId === null) {
+        return this.cache.clearWorkspace(sessionId);
+      }
 
-    // Read stamp BEFORE cache clear (server DELETE needs it).
-    const stamp = await this.cache.getLiftStamp(sessionId);
-    const canDelete = stamp !== null && stamp.ownerId === userId && !wasPaused;
-    const ownStampRev =
-      stamp !== null && stamp.ownerId === userId ? stamp.rev : null;
+      // Read stamp BEFORE cache clear (server DELETE needs it).
+      const stamp = await this.cache.getLiftStamp(sessionId);
+      const canDelete =
+        stamp !== null && stamp.ownerId === userId && !wasPaused;
+      const ownStampRev =
+        stamp !== null && stamp.ownerId === userId ? stamp.rev : null;
 
-    // Cache clear + stamp removal FIRST.
-    const cacheResult = await this.cache.clearWorkspace(sessionId);
-    this.cancelWriteTimer(sessionId);
-    if (!canDelete) {
-      // Item 4: write a discard marker instead of the stamp.
-      if (ownStampRev !== null) {
-        await this.tryStamp(sessionId, {
-          ownerId: userId,
-          rev: ownStampRev,
-          syncedUpdatedAt: 0,
-          confirmed: false,
-          discarded: true,
-        });
+      // Cache clear + stamp removal FIRST.
+      const cacheResult = await this.cache.clearWorkspace(sessionId);
+      this.cancelWriteTimer(sessionId);
+      if (!canDelete) {
+        // Item 4: write a discard marker instead of the stamp.
+        if (ownStampRev !== null) {
+          await this.tryStamp(sessionId, {
+            ownerId: userId,
+            rev: ownStampRev,
+            syncedUpdatedAt: 0,
+            confirmed: false,
+            discarded: true,
+          });
+        }
+        return cacheResult;
+      }
+
+      // ONE conditional DELETE with the stamp's revision.
+      const deleteResult = await this.remote.delete(
+        userId,
+        sessionId,
+        stamp!.rev,
+      );
+      if (!deleteResult.ok) {
+        if (deleteResult.reason === "conflict") {
+          this.logger.warn(
+            `workspace ${sessionId}: server copy changed on another device, not deleted`,
+          );
+          await this.recordConflictEntry(
+            sessionId,
+            "discard",
+            stamp!.rev,
+            deleteResult.serverRev ?? null,
+          );
+        } else {
+          // Item 4: skipped/failed DELETE (not 412) → keep a marker.
+          this.logger.warn(
+            `workspace ${sessionId}: server delete failed: ${deleteResult.message}; keeping marker`,
+          );
+          await this.tryStamp(sessionId, {
+            ownerId: userId,
+            rev: stamp!.rev,
+            syncedUpdatedAt: 0,
+            confirmed: false,
+            discarded: true,
+          });
+        }
       }
       return cacheResult;
+    } finally {
+      this.discarding.delete(sessionId);
     }
-
-    // ONE conditional DELETE with the stamp's revision.
-    const deleteResult = await this.remote.delete(
-      userId,
-      sessionId,
-      stamp!.rev,
-    );
-    if (!deleteResult.ok) {
-      if (deleteResult.reason === "conflict") {
-        this.logger.warn(
-          `workspace ${sessionId}: server copy changed on another device, not deleted`,
-        );
-        await this.recordConflictEntry(
-          sessionId,
-          "discard",
-          stamp!.rev,
-          deleteResult.serverRev ?? null,
-        );
-      } else {
-        // Item 4: skipped/failed DELETE (not 412) → keep a marker.
-        this.logger.warn(
-          `workspace ${sessionId}: server delete failed: ${deleteResult.message}; keeping marker`,
-        );
-        await this.tryStamp(sessionId, {
-          ownerId: userId,
-          rev: stamp!.rev,
-          syncedUpdatedAt: 0,
-          confirmed: false,
-          discarded: true,
-        });
-      }
-    }
-    return cacheResult;
   }
 }
