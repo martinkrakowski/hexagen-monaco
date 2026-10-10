@@ -46,9 +46,9 @@ export async function runPgMigrations(
 ): Promise<{ applied: number[] }> {
   if (
     opts.lockTimeoutMs !== undefined &&
-    !Number.isInteger(opts.lockTimeoutMs)
+    (!Number.isInteger(opts.lockTimeoutMs) || opts.lockTimeoutMs < 0)
   ) {
-    throw new Error("lockTimeoutMs must be an integer");
+    throw new Error("lockTimeoutMs must be a non-negative integer");
   }
 
   // 1. Validate migration versions are sequential: 1, 2, 3, ...
