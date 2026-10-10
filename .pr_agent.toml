@@ -6,18 +6,17 @@
 [config]
 restricted_mode = true
 model = "openrouter/inception/mercury-2"
-# WAS openrouter/anthropic/claude-3.5-sonnet, which does NOT exist in the
-# OpenRouter catalogue — so the fallback path could not have resolved. A
-# fallback that 404s is worse than none: it only fails when the primary is
-# already failing. Verified against /api/v1/models; claude-haiku-4.5 is
-# present with a 200000 window, which comfortably serves the budget below.
-# Kept. With custom_model_max_tokens now 128000 the fallback is UNDER-declared
-# (haiku-4.5 holds 200000), which is the safe direction -- PR-Agent will simply
-# use less of it than it could. The reverse, which the previous config had, is
-# the dangerous one: 262144 declared against haiku's real 200000 would have had
-# it build a prompt the model could not accept, and the fallback has never
-# fired, so nobody would have found out until it mattered.
-fallback_models = ["openrouter/anthropic/claude-haiku-4.5"]
+# The fallback is GPT-6 Luna, the same as in the two review workflows. Owner's
+# rule of 2026-10-10: no Claude, Gemini or Grok model through OpenRouter in
+# any pipeline seat. History: an earlier fallback id did not exist in
+# OpenRouter's catalogue, so the fallback could not have resolved; a fallback
+# that 404s is worse than none, because it only fails when the primary is
+# already failing. NOT verified here: Luna's context window against
+# custom_model_max_tokens (128000) below. Declaring less than the model holds is
+# the safe direction; declaring more would build a prompt the model cannot
+# accept, and the fallback has never fired, so nobody would find out until it
+# mattered.
+fallback_models = ["openrouter/openai/gpt-6-luna"]
 # The ACTIVE model's real window, from OpenRouter's own catalogue:
 #   inception/mercury-2  context_length = 128000, max_completion_tokens = 50000
 #
