@@ -4196,11 +4196,11 @@ describe("payload comparison is independent of key order", () => {
       files: {
         ...ws.files,
         "a.ts": {
-          ...(ws.files as Record<string, unknown>)["a.ts"],
+          ...((ws.files as Record<string, unknown>)["a.ts"] as Record<string, unknown>),
           ghost: undefined,
         },
       },
-    } as PersistedEditorWorkspace;
+    } as unknown as PersistedEditorWorkspace;
     await cache.saveWorkspace(UUID, withUndefined);
     // Server holds the JSON round-trip: `undefined` properties dropped.
     server.set(UUID, {
@@ -4254,13 +4254,15 @@ describe("payload comparison is independent of key order", () => {
       "a.ts": { content: "hello", isNew: true, dirty: false, updatedAt: 1000 },
     });
     await cache.saveWorkspace(UUID, ws);
-    const serverWs = withDescendingKeys(ws);
-    (serverWs as PersistedEditorWorkspace).files = {
-      "a.ts": {
-        content: "DIFFERENT",
-        isNew: true,
-        dirty: false,
-        updatedAt: 1000,
+    const serverWs = {
+      ...(withDescendingKeys(ws) as Record<string, unknown>),
+      files: {
+        "a.ts": {
+          content: "DIFFERENT",
+          isNew: true,
+          dirty: false,
+          updatedAt: 1000,
+        },
       },
     };
     server.set(UUID, {
@@ -4303,7 +4305,9 @@ describe("invalid server payload is not cached", () => {
     assert.ok(result.success);
     assert.equal(result.value, null, "cache result (null)");
 
-    assert.equal(await cache.loadWorkspace(UUID).then((r) => r.value), null);
+    const cached = await cache.loadWorkspace(UUID);
+    assert.ok(cached.success);
+    assert.equal(cached.value, null);
     assert.equal(await cache.getLiftStamp(UUID), null, "no stamp");
     assert.equal(await cache.getConflicts(), null, "no conflict");
   });
@@ -4327,7 +4331,9 @@ describe("invalid server payload is not cached", () => {
     const result = await adapter.loadWorkspace(UUID);
     assert.ok(result.success);
     assert.equal(result.value, null, "cache result (null)");
-    assert.equal(await cache.loadWorkspace(UUID).then((r) => r.value), null);
+    const cached = await cache.loadWorkspace(UUID);
+    assert.ok(cached.success);
+    assert.equal(cached.value, null);
     assert.equal(await cache.getLiftStamp(UUID), null, "no stamp");
   });
 });
