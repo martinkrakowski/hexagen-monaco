@@ -55,7 +55,6 @@ import {
   IDBGenerationResultAdapter,
   MigrationOrchestrator,
   PersistenceDomainRegistry,
-  WizardDraftMigrationStep,
   SavedProjectsMigrationStep,
   SavedProjectsV3MigrationStep,
   SavedProjectsV4MigrationStep,
@@ -250,11 +249,7 @@ export const wireDependencies = (): {
   );
 
   // Migration orchestrator → runs pending LS→IDB migrations on boot
-  const wizardPersistenceAdapter = registry.get(
-    PORT_NAMES.WIZARD_PERSISTENCE,
-  ) as WizardPersistencePort;
   const migrationOrchestrator = new MigrationOrchestrator([
-    new WizardDraftMigrationStep(wizardPersistenceAdapter),
     new SavedProjectsMigrationStep(savedProjectsAdapter, domainRegistry),
     new SavedProjectsV3MigrationStep(savedProjectsAdapter),
     new SavedProjectsV4MigrationStep(savedProjectsAdapter),
