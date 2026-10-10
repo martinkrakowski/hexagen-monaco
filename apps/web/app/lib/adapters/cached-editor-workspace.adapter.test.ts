@@ -4996,3 +4996,146 @@ describe("invalid server payload is not cached", () => {
     );
   });
 });
+
+describe("a load running during a discard does not bring the workspace back", () => {
+  it("T1: a load parked on its GET when the discard runs uploads nothing and answers null", async () => {
+    const { adapter, cache, server, fetchImpl } = makeAdapters();
+    // Browser copy W, no stamp, server empty.
+    await cache.saveWorkspace(UUID, makeWorkspace(1000));
+    assert.equal(await cache.getLiftStamp(UUID), null, "no stamp at start");
+
+    // Park the load's server GET; later GETs see the (empty) server as 404.
+    let getInFlight = false;
+    let resolveGet!: (v: Response) => void;
+    fetchImpl.mockImplementation(
+      async (url: string | URL | Request, init?: RequestInit) => {
+        const method = (init?.method ?? "GET").toUpperCase();
+        if (method === "GET" && !getInFlight) {
+          getInFlight = true;
+          return new Promise((resolve) => {
+            resolveGet = resolve as (v: Response) => void;
+          }) as unknown as Response;
+        }
+        if (method === "GET") return new Response(null, { status: 404 });
+        return new Response("nope", { status: 500 });
+      },
+    );
+
+    const loadP = adapter.loadWorkspace(UUID);
+    await vi.advanceTimersByTimeAsync(0);
+    assert.equal(getInFlight, true, "the load is parked on its GET");
+
+    // The discard starts while the load waits on the server.
+    const clearP = adapter.clearWorkspace(UUID);
+    await vi.advanceTimersByTimeAsync(0);
+
+    // The GET answers 404 (the discarded server copy is gone).
+    resolveGet(new Response(null, { status: 404 }));
+    const [loadResult, clearResult] = await Promise.all([loadP, clearP]);
+    assert.ok(clearResult.success, "the discard succeeded");
+
+    assert.equal(putCallsOf(fetchImpl).length, 0, "no PUT was sent");
+    assert.equal(server.has(UUID), false, "the server holds no copy");
+    assert.equal(await cache.getLiftStamp(UUID), null, "no stamp");
+    const cached = await cache.loadWorkspace(UUID);
+    assert.ok(
+      cached.success && cached.value === null,
+      "the browser cache is empty",
+    );
+    assert.ok(
+      loadResult.success && loadResult.value === null,
+      "the load's result value is null",
+    );
+  });
+
+  it("T2: a load parked on its catch-up PUT when the discard runs is undone and never confirmed", async () => {
+    const { adapter, cache, server, fetchImpl } = makeAdapters();
+    // Stamp rev 5 confirmed, browser copy dirty, server at rev 5.
+    await cache.saveWorkspace(UUID, makeWorkspace(2000));
+    await cache.setLiftStamp(UUID, {
+      ownerId: "user-1",
+      rev: 5,
+      syncedUpdatedAt: 1000,
+      confirmed: true,
+    });
+    server.set(UUID, {
+      payload: makeWorkspace(1000),
+      rev: 5,
+      updatedAt: 1000,
+      projectId: UUID,
+    });
+
+    // Park the first PUT; everything else uses the real server fetch.
+    const realFetch = fetchImpl.getMockImplementation()!;
+    let putInFlight = false;
+    let releasePut!: () => void;
+    fetchImpl.mockImplementation(
+      async (url: string | URL | Request, init?: RequestInit) => {
+        const method = (init?.method ?? "GET").toUpperCase();
+        if (method === "PUT" && !putInFlight) {
+          putInFlight = true;
+          await new Promise<void>((resolve) => {
+            releasePut = resolve;
+          });
+        }
+        return realFetch(url, init);
+      },
+    );
+
+    const loadP = adapter.loadWorkspace(UUID);
+    await vi.advanceTimersByTimeAsync(0);
+    assert.equal(putInFlight, true, "the load is parked on its catch-up PUT");
+
+    // The discard starts while the PUT is in flight.
+    const clearP = adapter.clearWorkspace(UUID);
+    await vi.advanceTimersByTimeAsync(0);
+
+    // The PUT lands first (rev + 1); then the discard runs to its end.
+    releasePut();
+    const [loadResult, clearResult] = await Promise.all([loadP, clearP]);
+    assert.ok(clearResult.success, "the discard succeeded");
+    assert.ok(
+      loadResult.success && loadResult.value === null,
+      "the load's result value is null",
+    );
+
+    // However the two interleaved, the discarded workspace must not survive
+    // as a confirmed copy: either it is gone from the server, or the undo
+    // could not be confirmed and a discard marker was left instead.
+    const stamp = await cache.getLiftStamp(UUID);
+    if (server.has(UUID)) {
+      assert.ok(
+        stamp !== null && stamp.discarded === true,
+        "a surviving server copy is only allowed with a discard marker",
+      );
+    }
+    assert.ok(
+      !(stamp !== null && stamp.confirmed === true),
+      "no stamp with confirmed: true",
+    );
+
+    const cached = await cache.loadWorkspace(UUID);
+    assert.ok(
+      cached.success && cached.value === null,
+      "the browser cache is empty",
+    );
+
+    // A following load must not bring anything back.
+    const putsBefore = putCallsOf(fetchImpl).length;
+    const next = await adapter.loadWorkspace(UUID);
+    assert.ok(
+      next.success && next.value === null,
+      "the next load returns null",
+    );
+    const recached = await cache.loadWorkspace(UUID);
+    assert.ok(
+      recached.success && recached.value === null,
+      "the next load re-caches nothing",
+    );
+    assert.equal(
+      putCallsOf(fetchImpl).length,
+      putsBefore,
+      "the next load sends no PUT",
+    );
+  });
+});
