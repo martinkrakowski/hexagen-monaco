@@ -1001,15 +1001,32 @@ describe("CachedEditorWorkspaceAdapter AM2 conflict resolution", () => {
       "warning logged",
     );
 
-    // A later save still sends a PUT with If-Match of the stamp's rev (not paused).
+    // A later save still sends a PUT with If-Match of the stamp's rev (not
+    // paused): exactly one MORE PUT than before the save, and that PUT's body
+    // carries the newly saved workspace.
+    const putsBeforeSave = putCallsOf(fetchImpl).length;
     await adapter.saveWorkspace(UUID, makeWorkspace(3000));
     await vi.advanceTimersByTimeAsync(REMOTE_DEBOUNCE_MS);
     const puts = putCallsOf(fetchImpl);
-    const headers = new Headers(puts[puts.length - 1]![1]!.headers);
+    assert.equal(
+      puts.length,
+      putsBeforeSave + 1,
+      "exactly one more PUT after the save",
+    );
+    const lastPut = puts[puts.length - 1]!;
+    const headers = new Headers(lastPut[1]!.headers);
     assert.equal(
       headers.get("If-Match"),
       '"rev:5"',
       "If-Match carries stamp rev",
+    );
+    const putBody = JSON.parse(String(lastPut[1]!.body)) as {
+      payload: { updatedAt: number };
+    };
+    assert.equal(
+      putBody.payload.updatedAt,
+      3000,
+      "the last PUT carries the newly saved workspace",
     );
 
     // The stamp is not changed by the failed PUT.
