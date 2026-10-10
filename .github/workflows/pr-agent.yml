@@ -180,7 +180,7 @@ jobs:
           config.model: "openrouter/inception/mercury-2"
           # claude-3.5-sonnet is NOT in the OpenRouter catalogue — the old
           # fallback could not have resolved. Verified against /api/v1/models.
-          config.fallback_models: '["openrouter/anthropic/claude-haiku-4.5"]'
+          config.fallback_models: '["openrouter/openai/gpt-6-luna"]'
           # mercury-2's real window per OpenRouter: 128000 (completion cap
           # 50000). Historical, so nobody applies the wrong model's numbers:
           # this was 64000 (which silently capped max_model_tokens below it),
