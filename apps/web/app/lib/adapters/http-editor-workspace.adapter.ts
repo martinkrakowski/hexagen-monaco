@@ -952,16 +952,18 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
     // finally block only clears an entry it still owns. A later, chained
     // write replaces the map entry; we must not delete that one, else a
     // discard during the chained write would not wait for it.
-    const current: Promise<void> = prev.catch(() => {}).then(async () => {
-      await this._doRemoteWrite(
-        sessionId,
-        workspace,
-        userId,
-        precondition,
-        epochAtStart,
-        current,
-      );
-    });
+    const current: Promise<void> = prev
+      .catch(() => {})
+      .then(async () => {
+        await this._doRemoteWrite(
+          sessionId,
+          workspace,
+          userId,
+          precondition,
+          epochAtStart,
+          current,
+        );
+      });
     this.inFlight.set(sessionId, current);
   }
 

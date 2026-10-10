@@ -2927,10 +2927,9 @@ describe("CachedEditorWorkspaceAdapter Item 15: identity reset", () => {
         const href = String(url);
         if (href.includes("/api/auth/session")) {
           sessionFetchCount++;
-          return new Response(
-            JSON.stringify({ user: { sub: "user-1" } }),
-            { status: 200 },
-          );
+          return new Response(JSON.stringify({ user: { sub: "user-1" } }), {
+            status: 200,
+          });
         }
         if (href.includes("/documents/workspace/")) {
           const method = (init?.method ?? "GET").toUpperCase();
