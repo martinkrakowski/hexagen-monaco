@@ -484,8 +484,14 @@ jobs:
           file: apps/web/Dockerfile
           load: true
           tags: hexagen-monaco-web:smoke
+          # Pull requests READ the layer cache that pushes to main and develop
+          # WRITE and export nothing: the `mode=max` export costs about 144 s
+          # per run, and a pull request's export is scoped to its own ref, where
+          # almost no later run reads it. An empty `cache-to` means "no export"
+          # to docker/build-push-action. The price: a pull request's second run
+          # does not reuse its own first run's layers, only main's.
           cache-from: type=gha,scope=container-smoke
-          cache-to: type=gha,scope=container-smoke,mode=max
+          cache-to: ${{ github.event_name == 'push' && 'type=gha,scope=container-smoke,mode=max' || '' }}
 
       - name: "Boot the container the way compose does"
         run: docker run -d --name hexagen-smoke -p 127.0.0.1:3123:3000 -e HOSTNAME=0.0.0.0 -e NEXTAUTH_URL=http://127.0.0.1:3123 -e NEXTAUTH_SECRET=ci-smoke-placeholder -e AUTH_SECRET=ci-smoke-placeholder -e QUOTA_DB_PATH=/data/quota.db -e BYOK_DB_PATH=/data/byok.db -e PLATFORM_DB_PATH=/data/platform.db hexagen-monaco-web:smoke
