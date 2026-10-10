@@ -7,6 +7,7 @@ import { PORT_NAMES } from "@hexagen/web-driver";
 import type {
   CanvasLayoutPersistencePort,
   EditorWorkspacePersistencePort,
+  EditorWorkspaceConflictPort,
   MonacoPersistencePort,
   SavedProjectsPersistencePort,
   WizardPersistencePort,
@@ -130,15 +131,22 @@ export const wireDependencies = (): {
 
   // Editor workspace persistence port → cached (remote server + IDB)
   const localEditorWorkspace = new IDBEditorWorkspaceAdapter();
+  const cachedEditorWorkspace = new CachedEditorWorkspaceAdapter(
+    localEditorWorkspace,
+    new HttpEditorWorkspaceAdapter(),
+    undefined,
+    undefined,
+    createWebLogger(),
+  );
   registry.set(
     PORT_NAMES.EDITOR_WORKSPACE_PERSISTENCE,
-    new CachedEditorWorkspaceAdapter(
-      localEditorWorkspace,
-      new HttpEditorWorkspaceAdapter(),
-      undefined,
-      undefined,
-      createWebLogger(),
-    ) satisfies EditorWorkspacePersistencePort,
+    cachedEditorWorkspace satisfies EditorWorkspacePersistencePort,
+  );
+  // The SAME adapter instance also serves the conflict port: the pending
+  // conflict set and its resolutions live beside the paused-sync state.
+  registry.set(
+    PORT_NAMES.EDITOR_WORKSPACE_CONFLICT,
+    cachedEditorWorkspace satisfies EditorWorkspaceConflictPort,
   );
 
   // Canvas layout persistence port → dedicated adapter
@@ -398,6 +406,11 @@ export const getWizardPersistence = () =>
 export const getEditorWorkspacePersistence = () =>
   dependencies.get<EditorWorkspacePersistencePort>(
     PORT_NAMES.EDITOR_WORKSPACE_PERSISTENCE,
+  );
+
+export const getEditorWorkspaceConflicts = () =>
+  dependencies.get<EditorWorkspaceConflictPort>(
+    PORT_NAMES.EDITOR_WORKSPACE_CONFLICT,
   );
 
 export const getCanvasLayoutPersistence = () =>

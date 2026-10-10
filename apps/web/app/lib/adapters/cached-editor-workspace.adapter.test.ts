@@ -28,7 +28,10 @@ import {
   HttpEditorWorkspaceAdapter,
 } from "./http-editor-workspace.adapter";
 import type { LiftStamp } from "./idb-editor-workspace.adapter";
-import type { PersistedEditorWorkspace } from "@hexagen/shared";
+import type {
+  PersistedEditorWorkspace,
+  EditorWorkspaceConflictPort,
+} from "@hexagen/shared";
 import type { MockedFunction } from "vitest";
 
 const WORKSPACE_KEY_PREFIX = "hexagen:workspace:";
@@ -5255,5 +5258,16 @@ describe("CachedEditorWorkspaceAdapter useOtherDeviceCopy", () => {
 
     const browser = await cache.loadWorkspace(UUID);
     assert.deepEqual(browser.value, localWs, "browser copy untouched");
+  });
+});
+
+describe("CachedEditorWorkspaceAdapter satisfies EditorWorkspaceConflictPort", () => {
+  it("an adapter typed as the port exposes exactly the four conflict methods", () => {
+    const { adapter } = makeAdapters();
+    const asPort = adapter satisfies EditorWorkspaceConflictPort;
+    assert.equal(typeof asPort.getPendingConflict, "function");
+    assert.equal(typeof asPort.subscribe, "function");
+    assert.equal(typeof asPort.keepThisDeviceCopy, "function");
+    assert.equal(typeof asPort.useOtherDeviceCopy, "function");
   });
 });
