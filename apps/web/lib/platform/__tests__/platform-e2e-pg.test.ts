@@ -293,5 +293,114 @@ describe("platform end-to-end on Postgres", () => {
     expect(raw.rows[0].rev).toBe(1);
   });
 
-  /* __NEXT_STEP__ */
+  it("RUNS AND SCANS: record/list/trend on run_events and scan_records", async () => {
+    const runs = store.runsFor(org.id);
+    const run = await runs.record({
+      runId: "run-1",
+      projectId: project.id,
+      telemetry: {
+        stage: 3,
+        label: "Port Mapping",
+        durationMs: 1200,
+        usedLLM: true,
+        retryCount: 1,
+        inputTokensEstimate: 1000,
+        outputTokensActual: 400,
+        servedFromCache: false,
+        summary: "mapped 4 ports",
+        modelName: "mercury-2",
+      },
+      now: Date.now(),
+    });
+    expect(typeof run.createdAt).toBe("number");
+
+    const runList = await runs.list({ limit: 10 });
+    expect(runList).toHaveLength(1);
+    expect(typeof runList[0].createdAt).toBe("number");
+
+    const trend = await runs.trend(7);
+    expect(trend.length).toBeGreaterThanOrEqual(1);
+
+    const scanOutcome = must(
+      await store.scansFor(ada.id).record({
+        projectName: "shop",
+        tier: "A",
+        verdict: "pass",
+      }),
+    );
+    expect(typeof scanOutcome.record.createdAt).toBe("number");
+
+    const scanList = must(await store.scansFor(ada.id).list());
+    expect(scanList).toHaveLength(1);
+    expect(typeof scanList[0].createdAt).toBe("number");
+
+    const raw = await pool.query<{ n: string }>(
+      "SELECT COUNT(*) AS n FROM run_events WHERE owner_id = $1",
+      [org.id],
+    );
+    expect(Number(raw.rows[0].n)).toBe(1);
+  });
+
+  it("BILLING AND FLAGS: upsert/resolve numeric currentPeriodEnd; marks initialized", async () => {
+    const upserted = await store.billing.upsert({
+      userId: bob.id,
+      plan: "repo",
+      repoLimit: 3,
+      status: "active",
+      stripeCustomerId: null,
+      stripeSubscriptionId: null,
+      currentPeriodEnd: 1759900000000,
+    });
+    expect(upserted.plan).toBe("repo");
+    expect(typeof upserted.currentPeriodEnd).toBe("number");
+
+    const resolved = await store.billing.resolve(bob.id);
+    expect(resolved.plan).toBe("repo");
+    expect(typeof resolved.currentPeriodEnd).toBe("number");
+
+    await store.markProjectsInitialized(org.id);
+    expect(await store.isProjectsInitialized(org.id)).toBe(true);
+
+    const raw = await pool.query<{ n: string }>(
+      "SELECT COUNT(*) AS n FROM entitlements WHERE user_id = $1",
+      [bob.id],
+    );
+    expect(Number(raw.rows[0].n)).toBe(1);
+  });
+
+  it("TEARDOWN: deleteTeam revokes grant; removeMember clears docs; deleteOrg guarded then resolves; audit", async () => {
+    await store.teams.deleteTeam(team.id, { actorId: ada.id });
+
+    expect(
+      await store.shares.accessFor(org.id, project.id, {
+        userId: bob.id,
+        orgIds: [],
+        teamIds: [team.id],
+      }),
+    ).toBeNull();
+    expect(await store.shares.listForProject(org.id, project.id)).toEqual([]);
+
+    await store.orgs.removeMember(org.id, bob.id, { actorId: ada.id });
+    const docsAfter = await pool.query<{ n: string }>(
+      "SELECT COUNT(*) AS n FROM owner_documents WHERE owner_id = $1 AND user_id = $2",
+      [org.id, bob.id],
+    );
+    expect(Number(docsAfter.rows[0].n)).toBe(0);
+
+    await expect(
+      store.orgs.deleteOrg(org.id, { actorId: ada.id }),
+    ).rejects.toBeInstanceOf(OrgOwnsProjectsError);
+
+    must(await store.projectsFor(org.id).deleteProjectRecord(project.id));
+
+    await store.orgs.deleteOrg(org.id, { actorId: ada.id });
+
+    expect(await store.audit.countFor("org.delete", org.id)).toBe(1);
+
+    const raw = await pool.query<{ n: string }>(
+      "SELECT COUNT(*) AS n FROM orgs WHERE id = $1",
+      [org.id],
+    );
+    expect(Number(raw.rows[0].n)).toBe(0);
+  });
 });
