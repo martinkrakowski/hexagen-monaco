@@ -76,24 +76,27 @@ describe("/api/runs", () => {
     ["inputTokensEstimate", 2147483648],
     ["outputTokensActual", 2147483648],
     ["durationMs", Number.MAX_SAFE_INTEGER + 2],
-  ])("rejects fractional, negative and out-of-range whole numbers (400, nothing recorded)", async (field, value) => {
-    const res = await POST(
-      new NextRequest("http://localhost/api/runs", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          runId: "run-a",
-          telemetry: { ...telemetry, [field]: value } as typeof telemetry,
+  ])(
+    "rejects fractional, negative and out-of-range whole numbers (400, nothing recorded)",
+    async (field, value) => {
+      const res = await POST(
+        new NextRequest("http://localhost/api/runs", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            runId: "run-a",
+            telemetry: { ...telemetry, [field]: value } as typeof telemetry,
+          }),
         }),
-      }),
-    );
-    assert.equal(res.status, 400);
+      );
+      assert.equal(res.status, 400);
 
-    const listed = await GET(new NextRequest("http://localhost/api/runs"));
-    assert.equal(listed.status, 200);
-    const body = (await listed.json()) as { events: unknown[] };
-    assert.equal(body.events.length, 0);
-  });
+      const listed = await GET(new NextRequest("http://localhost/api/runs"));
+      assert.equal(listed.status, 200);
+      const body = (await listed.json()) as { events: unknown[] };
+      assert.equal(body.events.length, 0);
+    },
+  );
 
   it("accepts boundary whole-number values (201)", async () => {
     const res = await POST(
