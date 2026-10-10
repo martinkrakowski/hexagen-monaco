@@ -245,6 +245,62 @@ describe.each(BACKENDS)("SavedProjectsPersistencePort (%s", (kind) => {
       await backend.close();
     }
   });
+
+  it("six creates of one id started together: exactly one lands, every loser is Conflict, one row remains", async () => {
+    const backend = await openBackend(kind, { pgMax: 6 });
+    try {
+      const store = createSavedProjectsStore(backend.db, "owner-a");
+      const id = "44444444-4444-4444-8444-444444444444";
+      const results = await Promise.all(
+        [1, 2, 3, 4, 5, 6].map(() =>
+          store.createProjectRecord(project(id)),
+        ),
+      );
+      const wins = results.filter((r) => r.success);
+      const losses = results.filter((r) => !r.success);
+      assert.equal(wins.length, 1);
+      assert.equal(losses.length, 5);
+      for (const r of losses) {
+        if (!r.success) assert.equal(r.error.kind, "Conflict");
+      }
+      const rows = await backend.db.all(
+        "SELECT id FROM saved_projects WHERE owner_id = ? AND id = ?",
+        ["owner-a", id],
+      );
+      assert.equal(rows.length, 1);
+    } finally {
+      await backend.close();
+    }
+  });
+
+  it("a unique violation during create is reported as Conflict, never SerializationFailed", async () => {
+    const backend = await openBackend(kind, { pgMax: 6 });
+    try {
+      // Two racing creates on the pooled backend cannot both INSERT; the
+      // loser's unique violation must surface as Conflict, not as a generic
+      // serialization failure. Inject a driver-shaped unique violation on
+      // the INSERT because the SERIALIZABLE retry loop (pg) and the queued
+      // single connection (sqlite) otherwise settle the race before it.
+      const uniqueViolation = new Error("synthetic unique violation") as Error & {
+        code?: string;
+      };
+      uniqueViolation.code =
+        kind === "postgres" ? "23505" : "SQLITE_CONSTRAINT_PRIMARYKEY";
+      const decoratedDb = failOnSql(
+        backend.db,
+        (sql) => sql.includes("INSERT INTO saved_projects"),
+        uniqueViolation,
+      );
+      const store = createSavedProjectsStore(decoratedDb, "owner-a");
+      const created = await store.createProjectRecord(
+        project("55555555-5555-4555-8555-555555555555"),
+      );
+      assert.equal(created.success, false);
+      if (!created.success) assert.equal(created.error.kind, "Conflict");
+    } finally {
+      await backend.close();
+    }
+  });
 });
 
 async function countDocs(
