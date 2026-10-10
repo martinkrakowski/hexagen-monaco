@@ -139,9 +139,9 @@ is a separate kustomization: `yarn deploy:staging` never renders it, so an app
 deploy cannot change or delete the database.
 
 **The app does not use it yet.** The web app selects Postgres for the platform
-store when `DATABASE_URL` is set and applies its migrations at start-up; the
-BYOK and quota stores stay on their SQLite files whatever the variable says;
-the staging Deployment is still not wired to the database. The Deployment is
+store AND the BYOK store when `DATABASE_URL` is set and applies its migrations
+at start-up; the quota store stays on its SQLite file whatever the variable
+says; the staging Deployment is still not wired to the database. The Deployment is
 therefore not wired to the database in this change. When B4 is ready, add this
 to the `env:` list in `deployment.yaml`:
 
