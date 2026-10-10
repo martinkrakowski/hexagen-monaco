@@ -65,7 +65,10 @@ describe("pg-startup migrations", () => {
       info: vi.fn(),
       error: vi.fn((...args: unknown[]) => errors.push(args.join(" "))),
     };
-    await startPlatformMigrations({ DATABASE_URL: url }, { exit, log });
+    await startPlatformMigrations(
+      { NODE_ENV: "test", DATABASE_URL: url },
+      { exit, log },
+    );
 
     expect(exit).toHaveBeenCalledTimes(1);
     expect(exit).toHaveBeenCalledWith(1);
@@ -77,37 +80,55 @@ describe("pg-startup migrations", () => {
 });
 
 describe("pg-startup selection behaviour", () => {
-  it.each([{}, { DATABASE_URL: "   " }])(
-    "no DATABASE_URL: nothing runs for %p",
-    async (env) => {
-      const run = vi.fn();
-      const exit = vi.fn();
-      const log = { info: vi.fn(), error: vi.fn() };
-      await startPlatformMigrations(
-        env as NodeJS.ProcessEnv,
-        { run, exit, log },
-      );
-      expect(run).not.toHaveBeenCalled();
-      expect(exit).not.toHaveBeenCalled();
-      expect(log.info).not.toHaveBeenCalled();
-      expect(log.error).not.toHaveBeenCalled();
-    },
-  );
+  const envWith = (extra: Record<string, string> = {}): NodeJS.ProcessEnv => ({
+    NODE_ENV: "test",
+    ...extra,
+  });
+
+  it("no DATABASE_URL: nothing runs when the variable is absent", async () => {
+    const run = vi.fn();
+    const exit = vi.fn();
+    const log = { info: vi.fn(), error: vi.fn() };
+    await startPlatformMigrations(envWith(), { run, exit, log });
+    expect(run).not.toHaveBeenCalled();
+    expect(exit).not.toHaveBeenCalled();
+    expect(log.info).not.toHaveBeenCalled();
+    expect(log.error).not.toHaveBeenCalled();
+  });
+
+  it("no DATABASE_URL: nothing runs when the variable is blank", async () => {
+    const run = vi.fn();
+    const exit = vi.fn();
+    const log = { info: vi.fn(), error: vi.fn() };
+    await startPlatformMigrations(envWith({ DATABASE_URL: "   " }), {
+      run,
+      exit,
+      log,
+    });
+    expect(run).not.toHaveBeenCalled();
+    expect(exit).not.toHaveBeenCalled();
+    expect(log.info).not.toHaveBeenCalled();
+    expect(log.error).not.toHaveBeenCalled();
+  });
 
   it("the URL never reaches the log", async () => {
     const url = "postgres://user:secret@db.example/hx";
-    const run = vi.fn().mockRejectedValue(
-      new Error(`could not connect to ${url}`),
-    );
+    const run = vi.fn().mockRejectedValue(new Error(`could not connect to ${url}`));
     const exit = vi.fn();
     const errors: string[] = [];
     const log = {
       info: vi.fn(),
       error: vi.fn((...args: unknown[]) => errors.push(args.join(" "))),
     };
-    await startPlatformMigrations({ DATABASE_URL: url }, { run, exit, log });
+    await startPlatformMigrations(envWith({ DATABASE_URL: url }), {
+      run,
+      exit,
+      log,
+    });
 
+    expect(errors).toHaveLength(1);
     const line = errors[0];
+    expect(line.length).toBeGreaterThan(0);
     expect(line).toContain("[DATABASE_URL]");
     expect(line).not.toContain("secret");
     expect(exit).toHaveBeenCalledWith(1);
@@ -122,10 +143,11 @@ describe("pg-startup selection behaviour", () => {
       error: vi.fn((...args: unknown[]) => errors.push(args.join(" "))),
     };
     await startPlatformMigrations(
-      { DATABASE_URL: "postgres://dummy" },
+      envWith({ DATABASE_URL: "postgres://dummy" }),
       { run, exit, log },
     );
 
+    expect(errors).toHaveLength(1);
     expect(errors[0]).toContain("sqlstate=42P07");
     expect(exit).toHaveBeenCalledWith(1);
   });
