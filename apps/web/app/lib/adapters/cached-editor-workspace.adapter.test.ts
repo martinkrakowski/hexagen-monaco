@@ -5395,4 +5395,130 @@ describe("round 3: a load and a discard of the same id", () => {
       "no DELETE was sent",
     );
   });
+
+  const WAIT_MS = 10_000;
+
+  /** Parks EVERY request with this method; release(i) lets the i-th parked one go on to the real mock server. */
+  function parkAll(
+    fetchImpl: ReturnType<typeof makeAdapters>["fetchImpl"],
+    parkedMethod: string,
+  ) {
+    const realFetch = fetchImpl.getMockImplementation()!;
+    const releases: Array<() => void> = [];
+    fetchImpl.mockImplementation(
+      async (url: string | URL | Request, init?: RequestInit) => {
+        const method = (init?.method ?? "GET").toUpperCase();
+        if (method === parkedMethod) {
+          await new Promise<void>((resolve) => {
+            releases.push(resolve);
+          });
+        }
+        return realFetch(url, init);
+      },
+    );
+    return { count: () => releases.length, release: (i: number) => releases[i]!() };
+  }
+
+  async function flush() {
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(0);
+  }
+
+  async function assertCacheEmpty(cache: IDBEditorWorkspaceAdapter) {
+    const c = await cache.loadWorkspace(UUID);
+    assert.ok(c.success && c.value === null);
+  }
+
+  it("a discard does not wait for ever for a load whose request never answers", async () => {
+    const { adapter, cache, server, fetchImpl, warns } = makeAdapters();
+    await cache.saveWorkspace(UUID, makeWorkspace(1000));
+    await cache.setLiftStamp(UUID, {
+      ownerId: "user-1",
+      rev: 5,
+      syncedUpdatedAt: 1000,
+      confirmed: true,
+    });
+    server.set(UUID, {
+      payload: makeWorkspace(1000),
+      rev: 5,
+      updatedAt: 1000,
+      projectId: UUID,
+    });
+    const gets = parkAll(fetchImpl, "GET");
+
+    const loadP = adapter.loadWorkspace(UUID);
+    await flush();
+    assert.equal(gets.count(), 1, "the load is parked on its GET");
+
+    let clearDone = false;
+    const clearP = adapter.clearWorkspace(UUID);
+    void clearP.then(() => {
+      clearDone = true;
+    });
+    await flush();
+    assert.equal(clearDone, false, "the discard waits for the load");
+
+    await vi.advanceTimersByTimeAsync(WAIT_MS);
+    await flush();
+    assert.equal(clearDone, true, "the discard gave up on the load");
+    const clearResult = await clearP;
+    assert.ok(clearResult.success, "the discard succeeded");
+    await assertCacheEmpty(cache);
+    assert.equal(server.has(UUID), false, "the server copy is deleted");
+    assert.ok(
+      warns.some((w) => w.includes("without the end of a load")),
+      "a warning was logged",
+    );
+
+    gets.release(0);
+    await flush();
+    const loadResult = await loadP;
+    assert.ok(
+      loadResult.success && loadResult.value === null,
+      "the late load answers null",
+    );
+    await assertCacheEmpty(cache);
+    assert.equal(await cache.getLiftStamp(UUID), null, "no stamp");
+    assert.equal(putCallsOf(fetchImpl).length, 0, "no PUT was sent");
+  });
+
+  it("a discard waits for EVERY load of the id, not only the latest", async () => {
+    const { adapter, cache, server, fetchImpl } = makeAdapters();
+    // Cache EMPTY, no stamp, the server holds a copy at rev 3.
+    server.set(UUID, {
+      payload: makeWorkspace(1000),
+      rev: 3,
+      updatedAt: 1000,
+      projectId: UUID,
+    });
+    const gets = parkAll(fetchImpl, "GET");
+
+    const load1 = adapter.loadWorkspace(UUID);
+    await flush();
+    const load2 = adapter.loadWorkspace(UUID);
+    await flush();
+    assert.equal(gets.count(), 2, "two GETs are parked");
+
+    let clearDone = false;
+    const clearP = adapter.clearWorkspace(UUID);
+    void clearP.then(() => {
+      clearDone = true;
+    });
+    await flush();
+
+    gets.release(1); // the LATER load
+    await flush();
+    assert.equal(clearDone, false, "the first load is still running");
+
+    gets.release(0);
+    const [r1, r2, rc] = await Promise.all([load1, load2, clearP]);
+    assert.ok(r1.success, "load1 succeeded");
+    assert.ok(r2.success, "load2 succeeded");
+    assert.ok(rc.success, "the discard succeeded");
+    assert.ok(r1.value === null, "load1's value is null");
+    assert.ok(r2.value === null, "load2's value is null");
+    await assertCacheEmpty(cache);
+    assert.equal(server.has(UUID), false, "the server copy is deleted");
+  });
 });
