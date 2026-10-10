@@ -625,6 +625,7 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
         return { success: true, value: null };
       }
       // GET failed (offline/error) → keep marker; honor any cache entry.
+      if (readResult.reason === "unauthenticated") resetCachedUserId();
       return cacheResult.success && cacheResult.value !== null
         ? cacheResult
         : { success: true, value: null };

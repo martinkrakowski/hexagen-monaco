@@ -2847,6 +2847,73 @@ describe("CachedEditorWorkspaceAdapter Item 15: identity reset", () => {
 
     globalThis.fetch = realFetch;
   });
+
+  it("a 401 on the discard-marker read resets the cached user id", async () => {
+    const { defaultUserIdSource, resetCachedUserId } =
+      await import("./http-editor-workspace.adapter");
+
+    const cache = new IDBEditorWorkspaceAdapter();
+    const remote = new HttpEditorWorkspaceAdapter();
+    const { logger } = warnCollector();
+    resetCachedUserId();
+    const adapter = new CachedEditorWorkspaceAdapter(
+      cache,
+      remote,
+      () => null,
+      defaultUserIdSource,
+      logger,
+    );
+
+    await cache.setLiftStamp(UUID, {
+      ownerId: "user-1",
+      rev: 1,
+      syncedUpdatedAt: 0,
+      confirmed: false,
+      discarded: true,
+    });
+
+    // GET answers 401 → handleDiscardMarker's "keep marker" branch.
+    let sessionFetchCount = 0;
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn(
+      async (url: string | URL | Request, init?: RequestInit) => {
+        const href = String(url);
+        if (href.includes("/api/auth/session")) {
+          sessionFetchCount++;
+          return new Response(
+            JSON.stringify({ user: { sub: "user-1" } }),
+            { status: 200 },
+          );
+        }
+        if (href.includes("/documents/workspace/")) {
+          const method = (init?.method ?? "GET").toUpperCase();
+          if (method === "GET") {
+            return new Response(null, { status: 401 });
+          }
+          return new Response(null, { status: 500 });
+        }
+        return realFetch(url as never, init) as never;
+      },
+    ) as never;
+
+    // First load: GET 401 → marker kept; resetCachedUserId should fire.
+    await adapter.loadWorkspace(UUID);
+    assert.ok(
+      (await cache.getLiftStamp(UUID))?.discarded,
+      "discard marker kept on 401",
+    );
+    assert.equal(sessionFetchCount, 1, "session fetched on first load");
+
+    // Second load: if reset fired, the id source is consulted again.
+    await adapter.loadWorkspace(UUID);
+    assert.equal(
+      sessionFetchCount,
+      2,
+      "user id re-fetched after 401 on discard marker read",
+    );
+
+    globalThis.fetch = realFetch;
+  });
 });
 
 describe("CachedEditorWorkspaceAdapter Item 18: foreign stamp + save", () => {
