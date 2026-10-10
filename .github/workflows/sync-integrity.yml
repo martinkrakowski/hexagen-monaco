@@ -72,11 +72,104 @@ jobs:
       - name: "Build All Packages"
         run: yarn turbo run build --output-logs=full --log-order=stream
 
+      # --- Measurement only (fleet plan 2026-10-10 "CI under five minutes", step 0) ---
+      # The three "Measure:" steps print what the hardened sync changes and can
+      # never fail the job: each body runs with `set +e` inside a function
+      # called as `measure || true`, and the step is continue-on-error as well.
+      # They decide whether the checks below may later run in parallel on the
+      # committed tree (decision F48) or must keep waiting for the sync (F56).
+      # Remove them when that decision is recorded.
+      - name: "Measure: snapshot after the first build (prints only)"
+        continue-on-error: true
+        run: |
+          measure() {
+            set +e
+            m="$RUNNER_TEMP/sync-measure"
+            mkdir -p "$m"
+            date -u +"measure-start %Y-%m-%dT%H:%M:%SZ"
+            # (b) gitignored files outside node_modules, dist, .next and turbo's folders
+            git ls-files -o -i --exclude-standard -z \
+              | grep -zvE '(^|/)(node_modules|dist|\.next|\.turbo)/' \
+              | sort -z | xargs -0 -r sha256sum > "$m/ignored-before.txt"
+            # turbo's own log folders, listed apart so they do not hide anything else
+            git ls-files -o -i --exclude-standard -z \
+              | grep -zE '(^|/)\.turbo/' | grep -zvE '(^|/)node_modules/' \
+              | sort -z | xargs -0 -r sha256sum > "$m/turbo-before.txt"
+            # (c) every built file
+            git ls-files -o -i --exclude-standard -z \
+              | grep -zE '(^|/)dist/' | grep -zvE '(^|/)(node_modules|\.next)/' \
+              | sort -z | xargs -0 -r sha256sum > "$m/dist-after-first-build.txt"
+            echo "ignored files (b) before the sync: $(wc -l < "$m/ignored-before.txt")"
+            echo "dist files (c) after the first build: $(wc -l < "$m/dist-after-first-build.txt")"
+            date -u +"measure-end %Y-%m-%dT%H:%M:%SZ"
+          }
+          measure || true
+
       - name: "Execute Hardened Sync"
+        # DEBUG is the sync CLI's own verbosity switch (packages/sync/src/cli.ts,
+        # createLogger): it prints the output of the preflight's inner
+        # `turbo run build`, which is otherwise silent. Measurement only.
+        env:
+          DEBUG: "1"
         run: yarn workspace @hexagen/sync run cli sync --force --allow-dirty
+
+      - name: "Measure: what the sync changed (prints only)"
+        continue-on-error: true
+        run: |
+          measure() {
+            set +e
+            m="$RUNNER_TEMP/sync-measure"
+            mkdir -p "$m"
+            date -u +"measure-start %Y-%m-%dT%H:%M:%SZ"
+            echo "===== (a) git status --porcelain after the sync (empty means no source changed) ====="
+            git status --porcelain
+            echo "===== (a) lines: $(git status --porcelain | wc -l) ====="
+            echo "===== (a) git diff --stat ====="
+            git diff --stat
+            echo "===== (b) gitignored files changed, added or removed by the sync ====="
+            git ls-files -o -i --exclude-standard -z \
+              | grep -zvE '(^|/)(node_modules|dist|\.next|\.turbo)/' \
+              | sort -z | xargs -0 -r sha256sum > "$m/ignored-after.txt"
+            diff "$m/ignored-before.txt" "$m/ignored-after.txt" > "$m/ignored.diff"
+            cat "$m/ignored.diff" | head -200
+            echo "===== (b) differing lines: $(grep -cE '^[<>]' "$m/ignored.diff") ====="
+            git ls-files -o -i --exclude-standard -z \
+              | grep -zE '(^|/)\.turbo/' | grep -zvE '(^|/)node_modules/' \
+              | sort -z | xargs -0 -r sha256sum > "$m/turbo-after.txt"
+            echo "===== (b) turbo log files differing: $(diff "$m/turbo-before.txt" "$m/turbo-after.txt" | grep -cE '^[<>]') ====="
+            echo "===== (c) dist after the first build against dist after the sync's inner build ====="
+            git ls-files -o -i --exclude-standard -z \
+              | grep -zE '(^|/)dist/' | grep -zvE '(^|/)(node_modules|\.next)/' \
+              | sort -z | xargs -0 -r sha256sum > "$m/dist-after-sync.txt"
+            diff "$m/dist-after-first-build.txt" "$m/dist-after-sync.txt" > "$m/dist-sync.diff"
+            cat "$m/dist-sync.diff" | head -100
+            echo "===== (c) dist differing lines after the sync: $(grep -cE '^[<>]' "$m/dist-sync.diff") of $(wc -l < "$m/dist-after-sync.txt") files ====="
+            date -u +"measure-end %Y-%m-%dT%H:%M:%SZ"
+          }
+          measure || true
 
       - name: "Verify Build After Sync"
         run: yarn turbo run build --output-logs=full --log-order=stream --force
+
+      - name: "Measure: is the build deterministic (prints only)"
+        continue-on-error: true
+        run: |
+          measure() {
+            set +e
+            m="$RUNNER_TEMP/sync-measure"
+            mkdir -p "$m"
+            date -u +"measure-start %Y-%m-%dT%H:%M:%SZ"
+            echo "===== (c) dist after the first build against dist after the FORCED rebuild ====="
+            git ls-files -o -i --exclude-standard -z \
+              | grep -zE '(^|/)dist/' | grep -zvE '(^|/)(node_modules|\.next)/' \
+              | sort -z | xargs -0 -r sha256sum > "$m/dist-after-forced-build.txt"
+            diff "$m/dist-after-first-build.txt" "$m/dist-after-forced-build.txt" > "$m/dist-forced.diff"
+            cat "$m/dist-forced.diff" | head -100
+            echo "===== (c) dist differing lines after the forced rebuild: $(grep -cE '^[<>]' "$m/dist-forced.diff") of $(wc -l < "$m/dist-after-forced-build.txt") files ====="
+            echo "===== (a) git status --porcelain after the forced rebuild, lines: $(git status --porcelain | wc -l) ====="
+            date -u +"measure-end %Y-%m-%dT%H:%M:%SZ"
+          }
+          measure || true
 
       - name: "Verify TypeCheck After Sync"
         run: yarn turbo run typecheck --output-logs=full --log-order=stream
