@@ -1052,6 +1052,21 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
         precondition = { ifMatch: freshStamp.rev };
       }
 
+      // Item 3 follow-up: a precondition captured as If-Match at schedule
+      // time is only valid while that stamp still exists. If the stamp has
+      // since gone (cleared) or become this user's discard marker, sending the
+      // If-Match would revive discarded content on a stale revision — do not
+      // send, and forget the pending precondition for this id. A create-only
+      // precondition (first upload, no stamp) is unchanged.
+      if (
+        "ifMatch" in precondition &&
+        (freshStamp === null ||
+          (freshStamp.ownerId === userId && freshStamp.discarded))
+      ) {
+        this.pendingPreconditions.delete(sessionId);
+        return;
+      }
+
       // Item 3: a discard may have landed during the stamp read above; do not
       // send content that has already been discarded.
       if (epochAtStart !== (this.epochs.get(sessionId) ?? 0)) return;

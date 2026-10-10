@@ -2674,6 +2674,54 @@ describe("CachedEditorWorkspaceAdapter Item 14: clearWorkspace", () => {
     );
   });
 
+  it("a save whose stamp is gone before the timer fires sends no PUT", async () => {
+    const { adapter, cache, server, fetchImpl } = makeAdapters();
+    const ws = makeWorkspace(2000);
+    server.set(UUID, { payload: ws, rev: 5, updatedAt: 2000, projectId: UUID });
+    await adapter.loadWorkspace(UUID);
+    assert.equal((await cache.getLiftStamp(UUID))?.rev, 5);
+
+    // Schedule a save — the timer captures If-Match 5.
+    await adapter.saveWorkspace(UUID, makeWorkspace(3000));
+    // Drop the stamp before the timer fires.
+    await cache.setLiftStamp(UUID, null);
+
+    const putsBefore = putCallsOf(fetchImpl).length;
+    await vi.advanceTimersByTimeAsync(REMOTE_DEBOUNCE_MS);
+
+    assert.equal(
+      putCallsOf(fetchImpl).length - putsBefore,
+      0,
+      "no PUT sent when the captured stamp is gone before the timer fired",
+    );
+  });
+
+  it("a save whose stamp became a discard marker before the timer fires sends no PUT", async () => {
+    const { adapter, cache, server, fetchImpl } = makeAdapters();
+    const ws = makeWorkspace(2000);
+    server.set(UUID, { payload: ws, rev: 5, updatedAt: 2000, projectId: UUID });
+    await adapter.loadWorkspace(UUID);
+
+    await adapter.saveWorkspace(UUID, makeWorkspace(3000));
+    // Replace the stamp by this user's discard marker before the timer fires.
+    await cache.setLiftStamp(UUID, {
+      ownerId: "user-1",
+      rev: 5,
+      syncedUpdatedAt: 0,
+      confirmed: false,
+      discarded: true,
+    });
+
+    const putsBefore = putCallsOf(fetchImpl).length;
+    await vi.advanceTimersByTimeAsync(REMOTE_DEBOUNCE_MS);
+
+    assert.equal(
+      putCallsOf(fetchImpl).length - putsBefore,
+      0,
+      "no PUT sent when the captured stamp became a discard marker",
+    );
+  });
+
   it("a discard landing during the stamp read before a write sends no PUT", async () => {
     const { adapter, cache, server, fetchImpl } = makeAdapters();
     const ws = makeWorkspace(1000);
