@@ -49,7 +49,8 @@ custom_model_max_tokens = 128000
 # truncated and pr-agent spends only what the diff actually needs -- but the
 # ceiling is now mercury-2's 128000 window, not hy3's 262144, so the budget is
 # set by the arithmetic below rather than by how much headroom we would like.
-# The fallback (haiku-4.5, 200000) self-limits, since pr-agent takes the min.
+# The fallback self-limits, since pr-agent takes the min (its own window is not
+# verified: see the note at fallback_models).
 # Was 200000, chosen deliberately to stop diffs being pruned. mercury-2 cannot
 # hold that, so this is a forced reduction rather than a preference.
 #
@@ -273,7 +274,7 @@ glob = ['**/dist/**', '**/*.tsbuildinfo', 'yarn.lock']
 # and measure again. `provider_only` is deliberately NOT the first reach: it is
 # a hard allowlist with no escape, so a provider outage becomes a failed request
 # that falls through to `fallback_models` — which carries its own open defect
-# (see the note on custom_model_max_tokens vs claude-haiku-4.5's 200k window).
+# (see the note at fallback_models on its window against custom_model_max_tokens).
 # EXACTLY ONE of these, never both. OpenRouter's reasoning API documents them
 # as mutually exclusive -- "one of the following (not both)" -- and sending
 # both makes the request invalid, so the provider rejects it outright.
