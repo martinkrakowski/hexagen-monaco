@@ -183,6 +183,16 @@ Same-layer relative imports are always legal, and a relative import whose target
 sits in no layer at all is not this rule's business. Application-layer npm
 packages are deliberately unrestricted — application is the composition seam.
 
+Test files are outside `node-builtin-in-layer` and `npm-package-in-domain`
+only: files named `*.test.ts` / `*.test.tsx` / `*.spec.ts` / `*.spec.tsx` are
+never checked by these two rules, whatever the configuration; files under
+`__tests__/` are skipped (by every import check) only when
+`test_double_rules.allowed_cross_package_imports` is `true`. The reason: a unit
+test's own `vitest` and `node:assert/strict` imports are the harness, not a
+layer dependency. Every other rule — `cross-layer-relative-import`, the
+cross-package ladder, subpath and server-marker conventions — still applies to
+a co-located test file exactly as it does to production code.
+
 Declare an exception for the third rule in `linter-config.yaml`:
 
 ```yaml

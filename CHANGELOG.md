@@ -9,6 +9,22 @@ Release notes for the co-published `@hexagen-monaco/sync` and
 (F1 preflight, #432): a merged bump blocks deploys until it is published. That
 is the guard working, not a fault to bypass.
 
+## Unreleased
+
+### `hexagen-lint`
+
+- **Co-located test files are outside `node-builtin-in-layer` and
+  `npm-package-in-domain`.** From 0.11.0 to 0.14.0 those two rules flagged
+  every co-located test file: its `import { it } from "vitest"` and
+  `import assert from "node:assert/strict"` are the test harness, not a
+  dependency of the domain layer or of the code beside it. Only files under
+  `__tests__/` were skipped (and only with
+  `test_double_rules.allowed_cross_package_imports: true`), so a project that keeps its tests next to the
+  source collected a finding per test file. A file named `*.test.ts`,
+  `*.test.tsx`, `*.spec.ts` or `*.spec.tsx` is now exempt from those two
+  rules and from no other: cross-package, layer-import and subpath findings
+  still apply to it exactly as they do to production code.
+
 ## 0.14.0
 
 **Six brownfield plans land as one release, and the piece that was missing is
