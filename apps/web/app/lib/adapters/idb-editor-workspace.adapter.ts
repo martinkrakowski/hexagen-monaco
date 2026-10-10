@@ -1,4 +1,4 @@
-import { get, set, del } from "idb-keyval";
+import { get, set, del, update } from "idb-keyval";
 import type {
   EditorWorkspacePersistencePort,
   PersistenceError,
@@ -7,8 +7,60 @@ import type {
 } from "@hexagen/shared";
 
 const WORKSPACE_KEY_PREFIX = "hexagen:workspace:";
+const LIFT_STAMP_KEY = "hexagen:workspace-lift";
+const CONFLICTS_KEY = "hexagen:workspace-conflicts";
+
+export type ConflictWhere =
+  | "load"
+  | "save"
+  | "lift"
+  | "first-save"
+  | "discard"
+  | "deleted-elsewhere";
+
+export interface ConflictEntry {
+  id: string;
+  at: string;
+  where: ConflictWhere;
+  stampRev: number | null;
+  serverRev: number | null;
+}
+
+export interface ConflictRecord {
+  count: number;
+  last: ConflictEntry[];
+}
+
+const MAX_CONFLICT_HISTORY = 20;
+
+/**
+ * Per-id stamp that records the last workspace value confirmed on the server.
+ * `syncedUpdatedAt` is the `updatedAt` of that confirmed value; `rev` is the
+ * server ETag rev at the time; `ownerId` is the personal-tenant user that owns
+ * the stamp so a foreign stamp is detectable and ignored.
+ */
+export interface LiftStamp {
+  ownerId: string;
+  rev: number;
+  syncedUpdatedAt: number;
+  confirmed: boolean;
+  discarded?: boolean;
+}
 
 export class IDBEditorWorkspaceAdapter implements EditorWorkspacePersistencePort {
+  /**
+   * In-tab write serialization for the single lift-stamp key (read-modify-
+   * write on ONE IDB key): two interleaved writes would both read the same
+   * pre-state and the later set() would silently drop the earlier one.
+   */
+  private writeQueue: Promise<unknown> = Promise.resolve();
+
+  private enqueueWrite<T>(op: () => Promise<T>): Promise<T> {
+    const run = this.writeQueue.then(op, op);
+    this.writeQueue = run.catch(() => undefined);
+    return run;
+  }
+
   async saveWorkspace(
     sessionId: string,
     workspace: PersistedEditorWorkspace,
@@ -62,18 +114,104 @@ export class IDBEditorWorkspaceAdapter implements EditorWorkspacePersistencePort
   async clearWorkspace(
     sessionId: string,
   ): Promise<Result<void, PersistenceError>> {
+    return this.enqueueWrite(async () => {
+      try {
+        await del(`${WORKSPACE_KEY_PREFIX}${sessionId}`);
+        await this.mutateStamps(sessionId, null);
+        return { success: true, value: undefined };
+      } catch (e) {
+        return {
+          success: false,
+          error: {
+            kind: "Unknown",
+            message: "Failed to clear workspace from IDB",
+            cause: e,
+          },
+        };
+      }
+    });
+  }
+
+  async getLiftStamp(sessionId: string): Promise<LiftStamp | null> {
     try {
-      await del(`${WORKSPACE_KEY_PREFIX}${sessionId}`);
-      return { success: true, value: undefined };
-    } catch (e) {
+      const stamps =
+        await get<Record<string, Partial<LiftStamp>>>(LIFT_STAMP_KEY);
+      const entry = stamps?.[sessionId];
+      if (!entry) return null;
+      // Old stamps written before `confirmed` was added read as `false`.
       return {
-        success: false,
-        error: {
-          kind: "Unknown",
-          message: "Failed to clear workspace from IDB",
-          cause: e,
-        },
+        ownerId: entry.ownerId ?? "",
+        rev: entry.rev ?? 0,
+        syncedUpdatedAt: entry.syncedUpdatedAt ?? 0,
+        confirmed: entry.confirmed ?? false,
+        discarded: entry.discarded ?? false,
       };
+    } catch {
+      return null;
     }
+  }
+
+  /** Best-effort read-modify-write of the shared stamp map. */
+  async setLiftStamp(
+    sessionId: string,
+    stamp: LiftStamp | null,
+  ): Promise<void> {
+    await this.enqueueWrite(() => this.mutateStamps(sessionId, stamp));
+  }
+
+  private async mutateStamps(
+    sessionId: string,
+    stamp: LiftStamp | null,
+  ): Promise<void> {
+    try {
+      // Item 4: read-modify-write the single LIFT_STAMP_KEY in ONE
+      // transaction (via idb-keyval's update), so two tabs saving different
+      // documents cannot both read the same pre-state and have the later
+      // set() silently drop the earlier one's stamp.
+      await update<Record<string, LiftStamp> | undefined>(
+        LIFT_STAMP_KEY,
+        (existing) => {
+          const next: Record<string, LiftStamp> = existing ?? {};
+          if (stamp === null) {
+            delete next[sessionId];
+          } else {
+            next[sessionId] = stamp;
+          }
+          return Object.keys(next).length === 0 ? undefined : next;
+        },
+      );
+    } catch {
+      // Stamp operations are best-effort: a failed lift-stamp write must
+      // never surface to the editor.
+    }
+  }
+
+  /** Diagnostics only: the number of conflicts seen, and the newest 20. */
+  async getConflicts(): Promise<ConflictRecord | null> {
+    try {
+      const record = await get<ConflictRecord>(CONFLICTS_KEY);
+      return record ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Records a conflict (count + 1; last keeps the newest 20). Best-effort. */
+  async recordConflict(entry: ConflictEntry): Promise<void> {
+    await this.enqueueWrite(async () => {
+      try {
+        await update<ConflictRecord | undefined>(CONFLICTS_KEY, (existing) => {
+          const record: ConflictRecord = existing ?? { count: 0, last: [] };
+          record.count += 1;
+          record.last.push(entry);
+          if (record.last.length > MAX_CONFLICT_HISTORY) {
+            record.last = record.last.slice(-MAX_CONFLICT_HISTORY);
+          }
+          return record;
+        });
+      } catch {
+        // Conflict recording must never fail the editor.
+      }
+    });
   }
 }
