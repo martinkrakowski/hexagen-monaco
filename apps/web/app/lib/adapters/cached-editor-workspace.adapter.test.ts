@@ -2558,6 +2558,86 @@ describe("CachedEditorWorkspaceAdapter Item 14: clearWorkspace", () => {
     );
   });
 
+  it("a save that began before a discard arms no timer while the discard is in flight", async () => {
+    const { adapter, cache, server, fetchImpl } = makeAdapters();
+    const ws = makeWorkspace(1000);
+    await cache.saveWorkspace(UUID, ws);
+    await cache.setLiftStamp(UUID, {
+      ownerId: "user-1",
+      rev: 5,
+      syncedUpdatedAt: 1000,
+      confirmed: true,
+    });
+    server.set(UUID, { payload: ws, rev: 5, updatedAt: 1000, projectId: UUID });
+    await adapter.loadWorkspace(UUID);
+
+    // Hold the save's stamp read open so a discard can begin underneath it.
+    const realStamp: LiftStamp = {
+      ownerId: "user-1",
+      rev: 5,
+      syncedUpdatedAt: 1000,
+      confirmed: true,
+    };
+    let resolveSaveStamp!: () => void;
+    vi.spyOn(cache, "getLiftStamp").mockImplementationOnce(async () => {
+      await new Promise<void>((resolve) => {
+        resolveSaveStamp = resolve;
+      });
+      return realStamp;
+    });
+
+    // Start the save WITHOUT awaiting it; it parks in its stamp read.
+    const savePromise = adapter.saveWorkspace(UUID, makeWorkspace(2000));
+    // Let it reach its stamp read first so this once-mock is consumed by the
+    // save, not by the discard's own stamp read.
+    await vi.advanceTimersByTimeAsync(0);
+
+    // Hold the discard's cache clear open so the discard stalls mid-flight,
+    // leaving the discarding marker set while the save is still parked.
+    let resolveClear!: () => void;
+    vi.spyOn(cache, "clearWorkspace").mockImplementationOnce(async (sid) => {
+      await new Promise<void>((resolve) => {
+        resolveClear = resolve;
+      });
+      return cache.clearWorkspace(sid);
+    });
+
+    // Start the discard WITHOUT awaiting it; it stalls on the slow cache clear.
+    const clearPromise = adapter.clearWorkspace(UUID);
+    await vi.advanceTimersByTimeAsync(0);
+
+    const putsBeforeDiscard = putCallsOf(fetchImpl).length;
+
+    // Release the save's stamp read and let it settle. With the guard in place
+    // it returns at the second discarding.has check; without it, it arms a
+    // timer that the discard's cancelWriteTimer should still cancel.
+    resolveSaveStamp();
+    await savePromise;
+
+    // Only now release the discard and let it drain (cache clear, DELETE,
+    // finally).
+    resolveClear();
+    await clearPromise;
+
+    // Let any armed timer fire — twice, to be sure nothing sneaks through.
+    await vi.advanceTimersByTimeAsync(REMOTE_DEBOUNCE_MS);
+    await vi.advanceTimersByTimeAsync(REMOTE_DEBOUNCE_MS);
+
+    assert.equal(
+      putCallsOf(fetchImpl).length,
+      putsBeforeDiscard,
+      "no PUT sent after clearWorkspace was called",
+    );
+    assert.equal(server.has(UUID), false, "server holds no copy");
+
+    const loadResult = await adapter.loadWorkspace(UUID);
+    assert.equal(
+      loadResult.success && loadResult.value,
+      null,
+      "load returns null (discarded content not revived)",
+    );
+  });
+
   it("a save made during a discard writes nothing to the browser cache", async () => {
     const { adapter, cache, server, fetchImpl } = makeAdapters();
     const ws = makeWorkspace(1000);
