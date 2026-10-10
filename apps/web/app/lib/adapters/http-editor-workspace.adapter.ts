@@ -475,6 +475,53 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
   async loadWorkspace(
     sessionId: string,
   ): Promise<Result<PersistedEditorWorkspace | null, PersistenceError>> {
+    // A discard of this id is still running: wait for it instead of reading
+    // what it is about to delete. The wait is bounded; when the discard has
+    // not ended by then the answer is "none", which is what a discarded
+    // workspace is. A load that waits here is NOT registered in
+    // loadsInFlight, so the discard never waits for it in turn.
+    while (this.discarding.has(sessionId)) {
+      const discards = this.discardsInFlight.get(sessionId);
+      if (discards === undefined || discards.size === 0) break;
+      const ended = await this.settledWithin(discards, DISCARD_LOAD_WAIT_MS);
+      if (!ended) return { success: true, value: null };
+    }
+    // From here to the registration below there is NO await: a discard that
+    // starts later finds this load registered and its epoch already captured.
+    const epochAtStart = this.epochs.get(sessionId) ?? 0;
+    const load = this.loadGuarded(sessionId, epochAtStart);
+    let loads = this.loadsInFlight.get(sessionId);
+    if (loads === undefined) {
+      loads = new Set();
+      this.loadsInFlight.set(sessionId, loads);
+    }
+    loads.add(load);
+    try {
+      return await load;
+    } finally {
+      loads.delete(load);
+      if (loads.size === 0 && this.loadsInFlight.get(sessionId) === loads) {
+        this.loadsInFlight.delete(sessionId);
+      }
+    }
+  }
+
+  /** A load that a discard overtook answers "none", whatever it had read. */
+  private async loadGuarded(
+    sessionId: string,
+    epochAtStart: number,
+  ): Promise<Result<PersistedEditorWorkspace | null, PersistenceError>> {
+    const result = await this.loadUnguarded(sessionId, epochAtStart);
+    if (this.discardedSince(sessionId, epochAtStart)) {
+      return { success: true, value: null };
+    }
+    return result;
+  }
+
+  private async loadUnguarded(
+    sessionId: string,
+    epochAtStart: number,
+  ): Promise<Result<PersistedEditorWorkspace | null, PersistenceError>> {
     if (this.tenantIdSource() !== null) {
       return this.cache.loadWorkspace(sessionId);
     }
@@ -490,18 +537,7 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
       this.logger.warn(`workspace ${sessionId} skipped: id is not a UUID`);
       return this.cache.loadWorkspace(sessionId);
     }
-    const remoteLoad = this.loadFromRemote(sessionId, userId);
-    // Register the load so a discard of the same id can wait for it: the
-    // discard bumps the epoch first, so the load stops at its next check and
-    // writes nothing more.
-    this.loadsInFlight.set(sessionId, remoteLoad);
-    try {
-      return await remoteLoad;
-    } finally {
-      if (this.loadsInFlight.get(sessionId) === remoteLoad) {
-        this.loadsInFlight.delete(sessionId);
-      }
-    }
+    return this.loadFromRemote(sessionId, userId, epochAtStart);
   }
 
   /** Resolves true when every promise has settled, false when `ms` passed first. */
@@ -610,9 +646,13 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
   private async loadFromRemote(
     sessionId: string,
     userId: string,
+    epochAtStart: number,
   ): Promise<Result<PersistedEditorWorkspace | null, PersistenceError>> {
+    // The discard may have started while the caller awaited the user id.
+    if (this.discardedSince(sessionId, epochAtStart)) {
+      return this.overtakenLoad(sessionId);
+    }
     this.pausedIds.delete(sessionId);
-    const epochAtStart = this.epochs.get(sessionId) ?? 0;
 
     // Item 3: wait for any in-flight save PUT so the load's catch-up/maybeLift
     // PUT does not race it on the server.
@@ -840,7 +880,7 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
     );
     await this.cache.setLiftStamp(sessionId, null); // drop marker
     // Hand over to the existing normal load logic with the marker gone.
-    return this.loadFromRemote(sessionId, userId);
+    return this.loadFromRemote(sessionId, userId, epochAtStart);
   }
 
   private async tryStamp(sessionId: string, stamp: LiftStamp): Promise<void> {
