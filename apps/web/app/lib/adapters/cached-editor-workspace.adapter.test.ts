@@ -986,7 +986,8 @@ describe("CachedEditorWorkspaceAdapter AM2 conflict resolution", () => {
             { status: 200, headers: { ETag: `"rev:${doc.rev}"` } },
           );
         }
-        if (method === "PUT") return new Response("server error", { status: 503 });
+        if (method === "PUT")
+          return new Response("server error", { status: 503 });
         return new Response("nope", { status: 500 });
       },
     );
@@ -995,14 +996,21 @@ describe("CachedEditorWorkspaceAdapter AM2 conflict resolution", () => {
 
     const rec = await cache.getConflicts();
     assert.equal(rec, null, "no conflict recorded for a 503");
-    assert.ok(warns.some((w) => /catch-up PUT failed/.test(w)), "warning logged");
+    assert.ok(
+      warns.some((w) => /catch-up PUT failed/.test(w)),
+      "warning logged",
+    );
 
     // A later save still sends a PUT with If-Match of the stamp's rev (not paused).
     await adapter.saveWorkspace(UUID, makeWorkspace(3000));
     await vi.advanceTimersByTimeAsync(REMOTE_DEBOUNCE_MS);
     const puts = putCallsOf(fetchImpl);
     const headers = new Headers(puts[puts.length - 1]![1]!.headers);
-    assert.equal(headers.get("If-Match"), '"rev:5"', "If-Match carries stamp rev");
+    assert.equal(
+      headers.get("If-Match"),
+      '"rev:5"',
+      "If-Match carries stamp rev",
+    );
 
     // The stamp is not changed by the failed PUT.
     const stamp = await cache.getLiftStamp(UUID);
@@ -4071,10 +4079,9 @@ describe("CachedEditorWorkspaceAdapter Item 10c: 412 browser copy + pause", () =
 function withDescendingKeys(value: unknown): unknown {
   if (value === null || typeof value !== "object") return value;
   if (Array.isArray(value)) return value.map(withDescendingKeys);
-  const entries = Object.entries(value).map(([k, v]) => [
-    k,
-    withDescendingKeys(v),
-  ] as const);
+  const entries = Object.entries(value).map(
+    ([k, v]) => [k, withDescendingKeys(v)] as const,
+  );
   entries.sort((a, b) => (a[0] > b[0] ? -1 : a[0] < b[0] ? 1 : 0));
   return Object.fromEntries(entries);
 }
@@ -4186,7 +4193,12 @@ describe("payload comparison is independent of key order", () => {
     await cache.saveWorkspace(UUID, ws);
     const serverWs = withDescendingKeys(ws);
     (serverWs as PersistedEditorWorkspace).files = {
-      "a.ts": { content: "DIFFERENT", isNew: true, dirty: false, updatedAt: 1000 },
+      "a.ts": {
+        content: "DIFFERENT",
+        isNew: true,
+        dirty: false,
+        updatedAt: 1000,
+      },
     };
     server.set(UUID, {
       payload: serverWs,
@@ -4256,5 +4268,3 @@ describe("invalid server payload is not cached", () => {
     assert.equal(await cache.getLiftStamp(UUID), null, "no stamp");
   });
 });
-
-

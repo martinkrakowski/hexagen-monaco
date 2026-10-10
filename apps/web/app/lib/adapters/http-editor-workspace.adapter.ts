@@ -40,7 +40,9 @@ function samePayload(a: unknown, b: unknown): boolean {
   const aObj = a as Record<string, unknown>;
   const bObj = b as Record<string, unknown>;
   return (
-    aKeys.every((k) => bObj[k] !== undefined && samePayload(aObj[k], bObj[k])) &&
+    aKeys.every(
+      (k) => bObj[k] !== undefined && samePayload(aObj[k], bObj[k]),
+    ) &&
     bKeys.every((k) => aObj[k] !== undefined && samePayload(aObj[k], bObj[k]))
   );
 }
@@ -540,7 +542,9 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
       serverWs === null ||
       (serverWs as { schemaVersion?: unknown }).schemaVersion !== 1
     ) {
-      this.logger.warn(`workspace ${sessionId} skipped: invalid server payload`);
+      this.logger.warn(
+        `workspace ${sessionId} skipped: invalid server payload`,
+      );
       return cacheResult;
     }
 
@@ -590,10 +594,7 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
     const moved = readResult.rev !== stamp.rev;
 
     if (!dirty && !moved) {
-      if (
-        readResult.rev === stamp.rev &&
-        samePayload(serverWs, cacheEntry)
-      ) {
+      if (readResult.rev === stamp.rev && samePayload(serverWs, cacheEntry)) {
         await this.tryStamp(sessionId, { ...stamp, confirmed: true });
       }
       return cacheResult;
@@ -822,9 +823,7 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
       );
       return cacheResult;
     }
-    if (
-      !samePayload(confirmResult.workspace, cacheEntry)
-    ) {
+    if (!samePayload(confirmResult.workspace, cacheEntry)) {
       this.logger.warn(`workspace ${sessionId} lift payload mismatch`);
       return cacheResult;
     }
@@ -894,9 +893,7 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
       this.logger.warn(`workspace ${sessionId} catch-up rev mismatch`);
       return { success: true, value: cacheEntry };
     }
-    if (
-      !samePayload(confirmResult.workspace, cacheEntry)
-    ) {
+    if (!samePayload(confirmResult.workspace, cacheEntry)) {
       this.logger.warn(`workspace ${sessionId} catch-up payload mismatch`);
       return { success: true, value: cacheEntry };
     }
