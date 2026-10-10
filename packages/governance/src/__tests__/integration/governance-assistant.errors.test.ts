@@ -10,7 +10,7 @@
  * 5. Large manifest performance check (<2.5s)
  */
 
-import { describe, it, beforeEach } from "vitest";
+import { describe, it, beforeEach, vi } from "vitest";
 import assert from "node:assert/strict";
 import {
   createMockRegistry,
@@ -75,13 +75,26 @@ describe("Governance Assistant — Error Handling", () => {
 
     const manifest = createGovernanceFixtureManifest();
 
-    const startTime = Date.now();
-    const result = await delayedGraphProvider.buildGraph(manifest);
-    const duration = Date.now() - startTime;
+    vi.useFakeTimers();
+    try {
+      const pending = delayedGraphProvider.buildGraph(manifest);
+      let settled = false;
+      void pending.then(() => {
+        settled = true;
+      });
 
-    assert.ok(duration >= 2500);
-    assert.ok(result !== undefined);
-    assert.ok(result.nodes !== undefined);
+      await vi.advanceTimersByTimeAsync(2499);
+      assert.equal(settled, false);
+
+      await vi.advanceTimersByTimeAsync(1);
+      const result = await pending;
+      assert.equal(settled, true);
+
+      assert.ok(result !== undefined);
+      assert.ok(result.nodes !== undefined);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("error: malformed YAML structure detected", async () => {
