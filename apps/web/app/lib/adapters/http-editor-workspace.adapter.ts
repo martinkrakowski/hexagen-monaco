@@ -574,98 +574,35 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
     sessionId: string,
     adopting?: { userId: string; rev: number },
   ): Promise<Result<PersistedEditorWorkspace | null, PersistenceError>> {
-    if (adopting !== undefined) {
-      if (this.discarding.has(sessionId)) {
-        this.revSeenByOvertakenLoad.set(sessionId, adopting);
-      } else {
-        let stamp: LiftStamp | null;
-        try {
-          stamp = await this.cache.getLiftStamp(sessionId);
-        } catch {
-          return { success: true, value: null };
-        }
-        // A discard that started during the stamp read takes the revision.
-        if (this.discarding.has(sessionId)) {
-          this.revSeenByOvertakenLoad.set(sessionId, adopting);
-        } else if (stamp === null) {
-          await this.undoWriteAfterDiscard(
-            sessionId,
-            adopting.userId,
-            adopting.rev,
-          );
-        }
-      }
+    const none = { success: true as const, value: null };
+    if (adopting === undefined) return none;
+    if (this.discarding.has(sessionId)) {
+      this.revSeenByOvertakenLoad.set(sessionId, adopting);
+      return none;
     }
-    return { success: true, value: null };
-  }
-
-  private cancelWriteTimer(sessionId: string): void {
-    const existing = this.writeTimers.get(sessionId);
-    if (existing) {
-      clearTimeout(existing);
-      this.writeTimers.delete(sessionId);
+    // No discard is running any more. Finish it only where the discard itself
+    // would have deleted: in personal mode, for the user who read the copy.
+    // (A discard made under an org tenant or signed out clears the cache only.)
+    if (this.tenantIdSource() !== null) return none;
+    let stamp: LiftStamp | null;
+    try {
+      if ((await this.userIdSource()) !== adopting.userId) return none;
+      stamp = await this.cache.getLiftStamp(sessionId);
+    } catch {
+      return none;
     }
-    this.pendingPreconditions.delete(sessionId);
-  }
-
-  private async cacheStaleSince(
-    sessionId: string,
-    firstRead: Result<PersistedEditorWorkspace | null, PersistenceError>,
-  ): Promise<boolean> {
-    const recheck = await this.cache.loadWorkspace(sessionId);
-    if (!recheck.success) return true;
-    if (!firstRead.success || firstRead.value === null) {
-      return recheck.value !== null;
+    if (this.tenantIdSource() !== null) return none;
+    // A discard that started during the reads above takes the revision.
+    if (this.discarding.has(sessionId)) {
+      this.revSeenByOvertakenLoad.set(sessionId, adopting);
+      return none;
     }
-    return (
-      recheck.value === null ||
-      recheck.value.updatedAt !== firstRead.value!.updatedAt
-    );
-  }
-
-  /** True when a discard bumped the id's epoch since the caller captured it. */
-  private discardedSince(sessionId: string, epoch: number): boolean {
-    return epoch !== (this.epochs.get(sessionId) ?? 0);
-  }
-
-  /**
-   * Undo a write that landed after a discard bumped the epoch: delete the
-   * copy with the rev the write returned; if the delete cannot be confirmed,
-   * leave a discard marker so the next load retries the deletion.
-   */
-  private async undoWriteAfterDiscard(
-    sessionId: string,
-    userId: string,
-    rev: number,
-  ): Promise<void> {
-    const deleteResult = await this.remote.delete(userId, sessionId, rev);
-    if (!deleteResult.ok) {
-      if (deleteResult.reason === "conflict") {
-        this.logger.warn(
-          `workspace ${sessionId}: server copy changed on another device, not deleted`,
-        );
-        await this.recordConflictEntry(
-          sessionId,
-          "discard",
-          rev,
-          deleteResult.serverRev ?? null,
-        );
-      } else {
-        // clean-up DELETE lost (network/429/5xx) → keep a marker so the next
-        // load retries the deletion and the discarded workspace does not
-        // come back.
-        this.logger.warn(
-          `workspace ${sessionId}: discard clean-up delete failed: ${deleteResult.message}; keeping marker`,
-        );
-        await this.tryStamp(sessionId, {
-          ownerId: userId,
-          rev,
-          syncedUpdatedAt: 0,
-          confirmed: false,
-          discarded: true,
-        });
-      }
-    }
+    // A stamp means a later load adopted the copy. Another load still in
+    // flight (this one is itself in the set) may be about to: leave the copy.
+    if (stamp !== null) return none;
+    if ((this.loadsInFlight.get(sessionId)?.size ?? 0) > 1) return none;
+    await this.undoWriteAfterDiscard(sessionId, adopting.userId, adopting.rev);
+    return none;
   }
 
   private async loadFromRemote(
@@ -922,6 +859,11 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
     if (this.discardedSince(sessionId, epochAtStart))
       return this.overtakenLoad(sessionId);
     await this.cache.setLiftStamp(sessionId, null); // drop marker
+    // Overtaken while the marker was dropped: stop here. The second pass
+    // would read the other device's copy with no stamp and hand its revision
+    // to the discard, which must not delete what another device wrote.
+    if (this.discardedSince(sessionId, epochAtStart))
+      return { success: true, value: null };
     // Hand over to the existing normal load logic with the marker gone.
     return this.loadFromRemote(sessionId, userId, epochAtStart);
   }
