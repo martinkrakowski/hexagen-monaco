@@ -6,6 +6,8 @@ import { runPgMigrations } from "../pg-migrate";
 import { PG_MIGRATIONS } from "../pg-migrations";
 import { createTestPgDb } from "../../../test-support/pg-test-db";
 
+const ALL = PG_MIGRATIONS.map((m) => m.version);
+
 describe("pg-startup migrations", () => {
   let pool: Pool;
   let drop: () => Promise<void>;
@@ -24,12 +26,12 @@ describe("pg-startup migrations", () => {
 
   it("an empty database is migrated: version 1 is recorded and the schema exists", async () => {
     const { applied } = await runStartupMigrations(url);
-    expect(applied).toEqual([1, 2, 3]);
+    expect(applied).toEqual(ALL);
 
     const m = await pool.query<{ version: number }>(
       "SELECT version FROM schema_migrations ORDER BY version",
     );
-    expect(m.rows.map((r) => r.version)).toEqual([1, 2, 3]);
+    expect(m.rows.map((r) => r.version)).toEqual(ALL);
 
     const r = await pool.query<{ to_regclass: string | null }>(
       "SELECT to_regclass('public.users') AS to_regclass",
@@ -50,7 +52,7 @@ describe("pg-startup migrations", () => {
     ]);
     const allApplied = results.flatMap((r) => r.applied);
     expect(results).toHaveLength(2);
-    expect(allApplied.sort()).toEqual([1, 2, 3]);
+    expect(allApplied.sort()).toEqual(ALL);
   });
 
   it("a held advisory lock fails with 55P03 instead of waiting for ever", { timeout: 8_000 }, async () => {
@@ -104,7 +106,7 @@ describe("pg-startup migrations", () => {
     const line = errors[0];
     expect(line).toContain("999");
     expect(line).toContain("code=none");
-    expect(line).toContain("1..3");
+    expect(line).toContain(`1..${PG_MIGRATIONS.length}`);
   });
 });
 

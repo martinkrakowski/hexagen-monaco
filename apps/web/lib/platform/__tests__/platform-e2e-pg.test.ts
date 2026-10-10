@@ -5,6 +5,7 @@ import type { SavedProject } from "@hexagen/shared";
 import type { Pool } from "pg";
 import { createTestPgDb } from "../../../test-support/pg-test-db";
 import { runStartupMigrations } from "../pg-startup";
+import { PG_MIGRATIONS } from "../pg-migrations";
 import { getPlatformStore, closePlatformStore } from "../store";
 import type { PlatformStore } from "../store";
 import {
@@ -14,6 +15,8 @@ import {
 } from "../orgs-store";
 import { DuplicateTeamSlugError, type Team } from "../teams-store";
 import { ShareProjectNotFoundError } from "../project-shares-store";
+
+const ALL = PG_MIGRATIONS.map((m) => m.version);
 
 function must<T>(
   r: { success: true; value: T } | { success: false; error: unknown },
@@ -44,7 +47,7 @@ describe("platform end-to-end on Postgres", () => {
     drop = result.drop;
     savedDbUrl = process.env.DATABASE_URL;
     savedDbPath = process.env.PLATFORM_DB_PATH;
-    expect((await runStartupMigrations(url)).applied).toEqual([1, 2, 3]);
+    expect((await runStartupMigrations(url)).applied).toEqual(ALL);
     process.env.DATABASE_URL = url;
     delete process.env.PLATFORM_DB_PATH;
     store = getPlatformStore();
