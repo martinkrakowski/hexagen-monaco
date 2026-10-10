@@ -18,7 +18,8 @@ is the guard working, not a fault to bypass.
   every co-located test file: its `import { it } from "vitest"` and
   `import assert from "node:assert/strict"` are the test harness, not a
   dependency of the domain layer or of the code beside it. Only files under
-  `__tests__/` were skipped, so a project that keeps its tests next to the
+  `__tests__/` were skipped (and only with
+  `test_double_rules.allowed_cross_package_imports: true`), so a project that keeps its tests next to the
   source collected a finding per test file. A file named `*.test.ts`,
   `*.test.tsx`, `*.spec.ts` or `*.spec.tsx` is now exempt from those two
   rules and from no other: cross-package, layer-import and subpath findings
