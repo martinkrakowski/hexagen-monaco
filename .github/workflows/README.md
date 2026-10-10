@@ -24,7 +24,7 @@ Not a merge gate. A second PR-Agent reviewer beside the UI one, for the whole re
 
 **Tool:** PR-Agent's `/review`, each finding a line comment, at most twelve. Not `/improve`: its second model call scores every suggestion and drops one that scores 0, and was seen to drop a real defect. A guard step fails the check unless `/review` left its own comment ("PR Reviewer Guide") in the run.
 
-**Models:** even-numbered pull requests are reviewed by `openrouter/openai/gpt-6.1-sol`, odd-numbered by `openrouter/anthropic/claude-sonnet-5.5`, with the same prompt and caps; fallback `openrouter/anthropic/claude-haiku-4.5`. The step summary names the arm. A record per pull request (arm, findings, which were valid) decides between the two.
+**Models:** every pull request is reviewed by `openrouter/openai/gpt-6.1-sol`; fallback `openrouter/openai/gpt-6-luna`. The step summary names the model. Until 2026-10-10 odd-numbered pull requests went to a Claude model as a comparison; that ended with the owner's rule that no Claude, Gemini or Grok model runs through OpenRouter in a pipeline seat.
 
 **Config:** everything lives in the workflow's `env` block. `.pr_agent.toml` is the UI reviewer's and is still read (from the default branch) for anything the env block does not set; in particular the env block clears the toml's `[ignore].regex`, which would otherwise hide every file outside `apps/web`.
 
