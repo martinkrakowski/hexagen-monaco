@@ -3938,3 +3938,143 @@ describe("CachedEditorWorkspaceAdapter Item 10c: 412 browser copy + pause", () =
     assert.equal(putCallsOf(fetchImpl).length, 1, "no second PUT while paused");
   });
 });
+
+/** Re-serialize an object with keys sorted descendant, recursively. */
+function withDescendingKeys(value: unknown): unknown {
+  if (value === null || typeof value !== "object") return value;
+  if (Array.isArray(value)) return value.map(withDescendingKeys);
+  const entries = Object.entries(value).map(([k, v]) => [
+    k,
+    withDescendingKeys(v),
+  ] as const);
+  entries.sort((a, b) => (a[0] > b[0] ? -1 : a[0] < b[0] ? 1 : 0));
+  return Object.fromEntries(entries);
+}
+
+/**
+ * Wrap a server fetch so that every GET response body is re-serialised with
+ * object keys ordered descending at every level — as `jsonb` would on Postgres.
+ */
+function makeReorderedKeyServerFetch(
+  store: Map<string, ServerDoc>,
+  validProjects: Set<string> = new Set(),
+): MockedFunction<typeof fetch> {
+  const inner = makeServerFetch(store, validProjects);
+  return vi.fn(async (url, init?) => {
+    const resp = await inner(url, init);
+    if (resp.status === 200) {
+      const text = await resp.text();
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(text);
+      } catch {
+        return resp;
+      }
+      const reordered = withDescendingKeys(parsed);
+      return new Response(JSON.stringify(reordered), {
+        status: resp.status,
+        headers: resp.headers,
+      });
+    }
+    return resp;
+  }) as MockedFunction<typeof fetch>;
+}
+
+function makeReorderedAdapters(options?: {
+  tenantId?: string | null;
+  userId?: string | null;
+}): TestAdapters {
+  const server = new Map<string, ServerDoc>();
+  const fetchImpl = makeReorderedKeyServerFetch(server, new Set([UUID]));
+  const cache = new IDBEditorWorkspaceAdapter();
+  const remote = new HttpEditorWorkspaceAdapter(fetchImpl);
+  const { warns, logger } = warnCollector();
+  const tenantId = options?.tenantId !== undefined ? options.tenantId : null;
+  const userId = options?.userId !== undefined ? options.userId : "user-1";
+  const adapter = new CachedEditorWorkspaceAdapter(
+    cache,
+    remote,
+    () => tenantId,
+    () => Promise.resolve(userId),
+    logger,
+  );
+  return { adapter, cache, remote, fetchImpl, warns, logger, server };
+}
+
+describe("payload comparison is independent of key order", () => {
+  it("a first lift (browser copy, no stamp, server 404) ends confirmed and records no conflict", async () => {
+    const { adapter, cache, fetchImpl } = makeReorderedAdapters();
+    const ws = makeWorkspace(1000, UUID, {
+      "a.ts": { content: "hello", isNew: true, dirty: false, updatedAt: 1000 },
+      "z.ts": { content: "zzz", isNew: false, dirty: true, updatedAt: 1000 },
+    });
+    await cache.saveWorkspace(UUID, ws);
+
+    // Server starts empty: initial GET is 404 (lift path), the PUT stores the
+    // doc, and the confirming GET returns it with reordered keys.
+    await adapter.loadWorkspace(UUID);
+
+    const stamp = await cache.getLiftStamp(UUID);
+    assert.ok(stamp, "stamp written after lift");
+    assert.equal(stamp!.confirmed, true);
+
+    const rec = await cache.getConflicts();
+    assert.equal(rec, null, "no conflict recorded");
+
+    const methods = allMethodsOf(fetchImpl);
+    assert.deepEqual(methods, ["GET", "PUT", "GET"]);
+  });
+
+  it("no stamp with server holding the same workspace reordered keys confirms and records no conflict", async () => {
+    const { adapter, cache, server, warns } = makeReorderedAdapters();
+    const ws = makeWorkspace(1000, UUID, {
+      "a.ts": { content: "hello", isNew: true, dirty: false, updatedAt: 1000 },
+      nested: { b: 1, a: 2, c: { z: 9, y: 8 } },
+    });
+    await cache.saveWorkspace(UUID, ws);
+    // Server holds the SAME workspace, with keys reordered at every level.
+    server.set(UUID, {
+      payload: withDescendingKeys(ws),
+      rev: 1,
+      updatedAt: 1000,
+      projectId: UUID,
+    });
+
+    await adapter.loadWorkspace(UUID);
+    const stamp = await cache.getLiftStamp(UUID);
+    assert.ok(stamp, "stamp written");
+    assert.equal(stamp!.confirmed, true);
+
+    const rec = await cache.getConflicts();
+    assert.equal(rec, null, "no conflict recorded");
+    assert.equal(warns.length, 0, "no warnings");
+  });
+
+  it("a single truly different value records a conflict", async () => {
+    const { adapter, cache, server, warns } = makeReorderedAdapters();
+    const ws = makeWorkspace(1000, UUID, {
+      "a.ts": { content: "hello", isNew: true, dirty: false, updatedAt: 1000 },
+    });
+    await cache.saveWorkspace(UUID, ws);
+    const serverWs = withDescendingKeys(ws);
+    (serverWs as PersistedEditorWorkspace).files = {
+      "a.ts": { content: "DIFFERENT", isNew: true, dirty: false, updatedAt: 1000 },
+    };
+    server.set(UUID, {
+      payload: serverWs,
+      rev: 1,
+      updatedAt: 1000,
+      projectId: UUID,
+    });
+
+    await adapter.loadWorkspace(UUID);
+    const stamp = await cache.getLiftStamp(UUID);
+    assert.equal(stamp, null, "no stamp on conflict");
+
+    const rec = await cache.getConflicts();
+    assert.ok(rec && rec.count === 1, "conflict recorded");
+    assert.equal(rec!.last[0]!.where, "load");
+    assert.ok(warns.some((w) => /cache differs from server/.test(w)));
+  });
+});
+

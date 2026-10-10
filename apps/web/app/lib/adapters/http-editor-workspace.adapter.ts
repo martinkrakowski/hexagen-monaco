@@ -18,6 +18,34 @@ const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
+ * Deep, key-order-independent comparison of two JSON values.
+ * Arrays keep their order; an `undefined` value (dropped by JSON.stringify)
+ * is treated as absent. Used so a `jsonb` payload reordered by Postgres
+ * still matches the browser copy it was serialised from.
+ */
+function samePayload(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (typeof a !== typeof b) return false;
+  if (a === null || b === null || typeof a !== "object") {
+    return a === b;
+  }
+  if (Array.isArray(a) || Array.isArray(b)) {
+    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length)
+      return false;
+    return a.every((av, i) => samePayload(av, b[i]));
+  }
+  const aKeys = Object.keys(a as Record<string, unknown>);
+  const bKeys = Object.keys(b as Record<string, unknown>);
+  if (aKeys.length !== bKeys.length) return false;
+  const aObj = a as Record<string, unknown>;
+  const bObj = b as Record<string, unknown>;
+  return (
+    aKeys.every((k) => bObj[k] !== undefined && samePayload(aObj[k], bObj[k])) &&
+    bKeys.every((k) => aObj[k] !== undefined && samePayload(aObj[k], bObj[k]))
+  );
+}
+
+/**
  * The IDB adapter implements the port plus the stamp primitives; this
  * structural type lets the cached adapter depend on the interface, not the
  * concrete class.
@@ -531,7 +559,7 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
     const hasStamp = stamp !== null;
 
     if (!hasStamp) {
-      if (JSON.stringify(cacheEntry) === JSON.stringify(serverWs)) {
+      if (samePayload(cacheEntry, serverWs)) {
         await this.tryStamp(sessionId, {
           ownerId: userId,
           rev: readResult.rev,
@@ -555,7 +583,7 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
     if (!dirty && !moved) {
       if (
         readResult.rev === stamp.rev &&
-        JSON.stringify(serverWs) === JSON.stringify(cacheEntry)
+        samePayload(serverWs, cacheEntry)
       ) {
         await this.tryStamp(sessionId, { ...stamp, confirmed: true });
       }
@@ -786,7 +814,7 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
       return cacheResult;
     }
     if (
-      JSON.stringify(confirmResult.workspace) !== JSON.stringify(cacheEntry)
+      !samePayload(confirmResult.workspace, cacheEntry)
     ) {
       this.logger.warn(`workspace ${sessionId} lift payload mismatch`);
       return cacheResult;
@@ -855,7 +883,7 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
       return { success: true, value: cacheEntry };
     }
     if (
-      JSON.stringify(confirmResult.workspace) !== JSON.stringify(cacheEntry)
+      !samePayload(confirmResult.workspace, cacheEntry)
     ) {
       this.logger.warn(`workspace ${sessionId} catch-up payload mismatch`);
       return { success: true, value: cacheEntry };
