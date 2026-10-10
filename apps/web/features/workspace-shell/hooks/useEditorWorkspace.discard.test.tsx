@@ -97,4 +97,52 @@ describe("useEditorWorkspace discard follow-up (h7 Item 1c)", () => {
       "an edit made during a discard does not save after the discard",
     );
   });
+
+  it("a discard that finishes after a newer session took over leaves that session alone", async () => {
+    const { result } = renderHook(() => useEditorWorkspace());
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    await act(async () => {
+      await result.current.setSessionId("sess-1");
+    });
+
+    // Hold the discard open so a newer session can take over in the meantime.
+    harness.state.holdClear = true;
+
+    harness.state.saveCalls = 0;
+    let clearP: Promise<unknown>;
+    await act(async () => {
+      clearP = result.current.clearSession();
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    // While the clear is in flight the user opens another project: the new
+    // session takes over and loads (the double's load resolves null).
+    await act(async () => {
+      await result.current.setSessionId("sess-2");
+    });
+
+    // The new session's edit arms its own pending write.
+    await act(async () => {
+      result.current.updateFile("a.ts", "hello");
+    });
+
+    // Release the discard and run the debounce window.
+    await act(async () => {
+      harness.state.resolveClear!();
+      await clearP;
+      await vi.advanceTimersByTimeAsync(500);
+    });
+
+    assert.equal(
+      harness.state.saveCalls,
+      1,
+      "the newer session's edit is saved despite the late discard",
+    );
+    const file = result.current.state.files.get("a.ts");
+    assert.ok(file, "the newer session's state still holds the file");
+    assert.equal(file.content, "hello");
+  });
 });

@@ -193,6 +193,9 @@ export function useEditorWorkspace() {
 
     const persistence = getEditorWorkspacePersistence();
     await persistence.clearWorkspace(sessionId);
+    // If another session took over while the clear was in flight, this late
+    // discard must not cancel the new session's pending write or wipe its state.
+    if (sessionIdRef.current !== null) return;
     // Item 1: cancel any pending write again right after the clear, in case a
     // timer was armed between the clear above and now, so nothing fires after
     // the discard and resurrects the discarded workspace.
