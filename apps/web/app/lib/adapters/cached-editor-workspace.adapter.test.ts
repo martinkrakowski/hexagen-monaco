@@ -2620,6 +2620,60 @@ describe("CachedEditorWorkspaceAdapter Item 14: clearWorkspace", () => {
     );
   });
 
+  it("a save during a tenant discard's slow cache clear is refused until the clear finishes", async () => {
+    const { adapter, cache, fetchImpl } = makeAdapters({ tenantId: "tenant-1" });
+    const ws = makeWorkspace(1000);
+    await cache.saveWorkspace(UUID, ws);
+    await cache.setLiftStamp(UUID, {
+      ownerId: "user-1",
+      rev: 5,
+      syncedUpdatedAt: 1000,
+      confirmed: true,
+    });
+    await adapter.loadWorkspace(UUID);
+
+    // Hold the tenant-path cache clear open. Today (no `await` on the return)
+    // the finally deletes the id from `discarding` before the clear resolves,
+    // so the discard window closes while the cache clear is still pending.
+    let resolveClear!: () => void;
+    vi.spyOn(cache, "clearWorkspace").mockImplementationOnce(async (sid) => {
+      await new Promise<void>((resolve) => {
+        resolveClear = resolve;
+      });
+      return cache.clearWorkspace(sid);
+    });
+
+    const clearPromise = adapter.clearWorkspace(UUID);
+    await vi.advanceTimersByTimeAsync(0);
+
+    // While the cache clear is still pending, the editor saves.
+    const saveSpy = vi.spyOn(cache, "saveWorkspace");
+    await adapter.saveWorkspace(UUID, makeWorkspace(2000));
+    await vi.advanceTimersByTimeAsync(0);
+
+    assert.equal(
+      saveSpy.mock.calls.length,
+      0,
+      "a save during a discard's cache clear writes nothing to the browser cache",
+    );
+
+    // Let the discard finish.
+    resolveClear();
+    await clearPromise;
+    await vi.advanceTimersByTimeAsync(REMOTE_DEBOUNCE_MS);
+
+    assert.equal(
+      (await cache.loadWorkspace(UUID))?.value,
+      null,
+      "browser cache holds nothing after the discard",
+    );
+    assert.equal(
+      putCallsOf(fetchImpl).length,
+      0,
+      "no PUT sent for a tenant discard",
+    );
+  });
+
   it("a discard landing during the stamp read before a write sends no PUT", async () => {
     const { adapter, cache, server, fetchImpl } = makeAdapters();
     const ws = makeWorkspace(1000);

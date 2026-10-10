@@ -1201,7 +1201,7 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
 
       // AM1: org tenant → cache only.
       if (this.tenantIdSource() !== null) {
-        return this.cache.clearWorkspace(sessionId);
+        return await this.cache.clearWorkspace(sessionId);
       }
 
       // Check paused BEFORE removing from pausedIds.
@@ -1210,7 +1210,7 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
 
       const userId = await this.userIdSource();
       if (userId === null) {
-        return this.cache.clearWorkspace(sessionId);
+        return await this.cache.clearWorkspace(sessionId);
       }
 
       // Read stamp BEFORE cache clear (server DELETE needs it).
