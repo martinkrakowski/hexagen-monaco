@@ -29,7 +29,7 @@ function isSerializationError(error: unknown): boolean {
 
 export function createPgPool(
   connectionString: string,
-  opts: { max?: number } = {},
+  opts: { max?: number; connectionTimeoutMillis?: number } = {},
 ): Pool {
   const types = new TypeOverrides();
   const defaultTsParser = pgTypes.getTypeParser(1184) as (text: string) => Date;
@@ -55,6 +55,9 @@ export function createPgPool(
     options:
       "-c TimeZone=UTC -c idle_in_transaction_session_timeout=30000 -c DateStyle=ISO",
     max: opts.max ?? 10,
+    ...(opts.connectionTimeoutMillis !== undefined
+      ? { connectionTimeoutMillis: opts.connectionTimeoutMillis }
+      : {}),
   });
 
   pool.on("error", (error: Error) => {

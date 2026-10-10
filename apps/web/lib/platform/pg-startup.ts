@@ -5,9 +5,14 @@ import { PG_MIGRATIONS } from "./pg-migrations";
 export async function runStartupMigrations(
   databaseUrl: string,
 ): Promise<{ applied: number[] }> {
-  const pool = createPgPool(databaseUrl, { max: 1 });
+  const pool = createPgPool(databaseUrl, {
+    max: 1,
+    connectionTimeoutMillis: 10_000,
+  });
   try {
-    return await runPgMigrations(pool);
+    return await runPgMigrations(pool, PG_MIGRATIONS, {
+      lockTimeoutMs: 60_000,
+    });
   } finally {
     await pool.end();
   }

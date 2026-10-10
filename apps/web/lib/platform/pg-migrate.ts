@@ -42,7 +42,15 @@ export function transactionControlIn(sql: string): string | null {
 export async function runPgMigrations(
   pool: Pool,
   migrations: readonly PgMigration[] = PG_MIGRATIONS,
+  opts: { lockTimeoutMs?: number } = {},
 ): Promise<{ applied: number[] }> {
+  if (
+    opts.lockTimeoutMs !== undefined &&
+    !Number.isInteger(opts.lockTimeoutMs)
+  ) {
+    throw new Error("lockTimeoutMs must be an integer");
+  }
+
   // 1. Validate migration versions are sequential: 1, 2, 3, ...
   for (let i = 0; i < migrations.length; i++) {
     const expected = i + 1;
@@ -84,8 +92,17 @@ export async function runPgMigrations(
   const applied: number[] = [];
 
   try {
-    // 3. Acquire advisory lock (blocks until acquired)
+    // 3. Acquire advisory lock (blocks until acquired). With lockTimeoutMs the
+    // wait is bounded: a holder elsewhere turns an eternal hang into a 55P03
+    // failure. The timeout is reset right after so the migrations themselves
+    // run without one.
+    if (opts.lockTimeoutMs !== undefined) {
+      await client.query(`SET lock_timeout = ${opts.lockTimeoutMs}`);
+    }
     await client.query(`SELECT pg_advisory_lock(${ADVISORY_LOCK_KEY})`);
+    if (opts.lockTimeoutMs !== undefined) {
+      await client.query("SET lock_timeout = 0");
+    }
 
     // 4. Ensure schema_migrations table exists
     await client.query(SCHEMA_MIGRATIONS_TABLE);

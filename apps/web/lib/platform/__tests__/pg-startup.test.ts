@@ -2,6 +2,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import type { Pool } from "pg";
 import { runStartupMigrations, startPlatformMigrations } from "../pg-startup";
+import { runPgMigrations } from "../pg-migrate";
+import { PG_MIGRATIONS } from "../pg-migrations";
 import { createTestPgDb } from "../../../test-support/pg-test-db";
 
 describe("pg-startup migrations", () => {
@@ -49,6 +51,36 @@ describe("pg-startup migrations", () => {
     const allApplied = results.flatMap((r) => r.applied);
     expect(results).toHaveLength(2);
     expect(allApplied.sort()).toEqual([1, 2, 3]);
+  });
+
+  it("a held advisory lock fails with 55P03 instead of waiting for ever", { timeout: 8_000 }, async () => {
+    const holder = await pool.connect();
+    try {
+      // Same key as pg-migrate.ts ADVISORY_LOCK_KEY (not exported).
+      await holder.query("SELECT pg_advisory_lock(7302026100801)");
+      const start = Date.now();
+      await expect(
+        runPgMigrations(pool, PG_MIGRATIONS, { lockTimeoutMs: 300 }),
+      ).rejects.toMatchObject({ code: "55P03" });
+      expect(Date.now() - start).toBeLessThan(5_000);
+    } finally {
+      await holder.query("SELECT pg_advisory_unlock(7302026100801)");
+      holder.release();
+    }
+    await expect(runPgMigrations(pool)).resolves.toBeDefined();
+  });
+
+  it("a successful run with lockTimeoutMs leaves lock_timeout reset", async () => {
+    await runPgMigrations(pool, PG_MIGRATIONS, { lockTimeoutMs: 300 });
+    const client = await pool.connect();
+    try {
+      const r = await client.query<{ lock_timeout: string }>(
+        "SHOW lock_timeout",
+      );
+      expect(["0", "0ms"]).toContain(r.rows[0].lock_timeout);
+    } finally {
+      client.release();
+    }
   });
 
   it("a database newer than this build is refused and the process would exit", async () => {
