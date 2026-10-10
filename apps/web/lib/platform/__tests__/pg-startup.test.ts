@@ -55,22 +55,26 @@ describe("pg-startup migrations", () => {
     expect(allApplied.sort()).toEqual(ALL);
   });
 
-  it("a held advisory lock fails with 55P03 instead of waiting for ever", { timeout: 8_000 }, async () => {
-    const holder = await pool.connect();
-    try {
-      // Same key as pg-migrate.ts ADVISORY_LOCK_KEY (not exported).
-      await holder.query("SELECT pg_advisory_lock(7302026100801)");
-      const start = Date.now();
-      await expect(
-        runPgMigrations(pool, PG_MIGRATIONS, { lockTimeoutMs: 300 }),
-      ).rejects.toMatchObject({ code: "55P03" });
-      expect(Date.now() - start).toBeLessThan(5_000);
-    } finally {
-      await holder.query("SELECT pg_advisory_unlock(7302026100801)");
-      holder.release();
-    }
-    await expect(runPgMigrations(pool)).resolves.toBeDefined();
-  });
+  it(
+    "a held advisory lock fails with 55P03 instead of waiting for ever",
+    { timeout: 8_000 },
+    async () => {
+      const holder = await pool.connect();
+      try {
+        // Same key as pg-migrate.ts ADVISORY_LOCK_KEY (not exported).
+        await holder.query("SELECT pg_advisory_lock(7302026100801)");
+        const start = Date.now();
+        await expect(
+          runPgMigrations(pool, PG_MIGRATIONS, { lockTimeoutMs: 300 }),
+        ).rejects.toMatchObject({ code: "55P03" });
+        expect(Date.now() - start).toBeLessThan(5_000);
+      } finally {
+        await holder.query("SELECT pg_advisory_unlock(7302026100801)");
+        holder.release();
+      }
+      await expect(runPgMigrations(pool)).resolves.toBeDefined();
+    },
+  );
 
   it("a successful run with lockTimeoutMs leaves lock_timeout reset", async () => {
     await runPgMigrations(pool, PG_MIGRATIONS, { lockTimeoutMs: 300 });
@@ -168,12 +172,10 @@ describe("pg-startup selection behaviour", () => {
   });
 
   it("a network error code is logged as code=, not sqlstate=", async () => {
-    const run = vi
-      .fn()
-      .mockRejectedValue({
-        code: "ECONNREFUSED",
-        message: "connect ECONNREFUSED 127.0.0.1:1",
-      });
+    const run = vi.fn().mockRejectedValue({
+      code: "ECONNREFUSED",
+      message: "connect ECONNREFUSED 127.0.0.1:1",
+    });
     const exit = vi.fn();
     const errors: string[] = [];
     const log = {

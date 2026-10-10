@@ -51,8 +51,7 @@ export async function startPlatformMigrations(
     const codeText = typeof code === "string" ? code : "none";
     const redact = (text: string) => text.split(url).join("[DATABASE_URL]");
     const rawMessage = error instanceof Error ? error.message : String(error);
-    let line =
-      `[platform-migrate] start-up migration failed; this build knows versions 1..${lastVersion}; code=${codeText}; ${redact(rawMessage)}`;
+    let line = `[platform-migrate] start-up migration failed; this build knows versions 1..${lastVersion}; code=${codeText}; ${redact(rawMessage)}`;
     const inner =
       error instanceof AggregateError
         ? error.errors
