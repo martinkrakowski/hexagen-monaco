@@ -4727,7 +4727,12 @@ describe("CachedEditorWorkspaceAdapter pending conflicts", () => {
     // Clean load: cache back at the synced value, server back at the stamp
     // rev with the same payload → no conflict, pending emptied.
     await cache.saveWorkspace(UUID, oldWs);
-    server.set(UUID, { payload: oldWs, rev: 5, updatedAt: 1000, projectId: UUID });
+    server.set(UUID, {
+      payload: oldWs,
+      rev: 5,
+      updatedAt: 1000,
+      projectId: UUID,
+    });
     await adapter.loadWorkspace(UUID);
     assert.equal(adapter.getPendingConflict(UUID), null, "clean load empties");
     assert.equal(putCallsOf(fetchImpl).length, 0, "clean load sends no PUT");
@@ -4903,11 +4908,19 @@ describe("CachedEditorWorkspaceAdapter keepThisDeviceCopy", () => {
     assert.deepEqual(body.payload, localWs, "PUT carries the browser payload");
     assert.equal(body.projectId, UUID);
 
-    assert.deepEqual(server.get(UUID)!.payload, localWs, "server copy replaced");
+    assert.deepEqual(
+      server.get(UUID)!.payload,
+      localWs,
+      "server copy replaced",
+    );
     const stamp = await cache.getLiftStamp(UUID);
     assert.ok(stamp, "stamp written");
     assert.equal(stamp!.rev, 10, "stamp rev is the PUT's new rev");
-    assert.equal(stamp!.syncedUpdatedAt, localWs.updatedAt, "browser updatedAt");
+    assert.equal(
+      stamp!.syncedUpdatedAt,
+      localWs.updatedAt,
+      "browser updatedAt",
+    );
     assert.equal(stamp!.confirmed, false, "unconfirmed until the next load");
 
     assert.equal(adapter.getPendingConflict(UUID), null, "pending cleared");

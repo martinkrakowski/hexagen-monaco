@@ -424,7 +424,10 @@ export class CachedEditorWorkspaceAdapter
    * Pending conflicts per id, for the conflict port. In memory by design: a
    * reload re-detects the same conflict on the next load, so nothing is lost.
    */
-  private readonly pendingConflicts = new Map<string, PendingWorkspaceConflict>();
+  private readonly pendingConflicts = new Map<
+    string,
+    PendingWorkspaceConflict
+  >();
   /** Listeners notified whenever a pending entry is added or removed. */
   private readonly conflictListeners = new Set<() => void>();
   /** Per-sessionId debounce timer for the trailing server write. */
