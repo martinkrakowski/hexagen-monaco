@@ -2601,8 +2601,9 @@ describe("CachedEditorWorkspaceAdapter Item 14: clearWorkspace", () => {
     await clearPromise;
     await vi.advanceTimersByTimeAsync(REMOTE_DEBOUNCE_MS);
 
+    const cachedAfter = await cache.loadWorkspace(UUID);
     assert.equal(
-      (await cache.loadWorkspace(UUID))?.value,
+      cachedAfter.success && cachedAfter.value,
       null,
       "browser cache holds no workspace after the discard",
     );
@@ -2621,7 +2622,9 @@ describe("CachedEditorWorkspaceAdapter Item 14: clearWorkspace", () => {
   });
 
   it("a save during a tenant discard's slow cache clear is refused until the clear finishes", async () => {
-    const { adapter, cache, fetchImpl } = makeAdapters({ tenantId: "tenant-1" });
+    const { adapter, cache, fetchImpl } = makeAdapters({
+      tenantId: "tenant-1",
+    });
     const ws = makeWorkspace(1000);
     await cache.saveWorkspace(UUID, ws);
     await cache.setLiftStamp(UUID, {
@@ -2662,8 +2665,9 @@ describe("CachedEditorWorkspaceAdapter Item 14: clearWorkspace", () => {
     await clearPromise;
     await vi.advanceTimersByTimeAsync(REMOTE_DEBOUNCE_MS);
 
+    const cachedAfter = await cache.loadWorkspace(UUID);
     assert.equal(
-      (await cache.loadWorkspace(UUID))?.value,
+      cachedAfter.success && cachedAfter.value,
       null,
       "browser cache holds nothing after the discard",
     );
@@ -2723,7 +2727,9 @@ describe("CachedEditorWorkspaceAdapter Item 14: clearWorkspace", () => {
   });
 
   it("an overlapping discard keeps the workspace closed to saves until the last one ends", async () => {
-    const { adapter, cache, fetchImpl } = makeAdapters({ tenantId: "tenant-1" });
+    const { adapter, cache, fetchImpl } = makeAdapters({
+      tenantId: "tenant-1",
+    });
     const ws = makeWorkspace(1000);
     await cache.saveWorkspace(UUID, ws);
     await cache.setLiftStamp(UUID, {
@@ -2737,13 +2743,15 @@ describe("CachedEditorWorkspaceAdapter Item 14: clearWorkspace", () => {
     // Hold every clearWorkspace on its own resolver. The mock resolves without
     // clearing the cache — this test targets the discarding counter only.
     const resolvers: Array<() => void> = [];
-    vi.spyOn(cache, "clearWorkspace").mockImplementation(async (_sid: string) => {
-      const i = resolvers.length;
-      await new Promise<void>((resolve) => {
-        resolvers[i] = () => resolve();
-      });
-      return { success: true, value: undefined };
-    });
+    vi.spyOn(cache, "clearWorkspace").mockImplementation(
+      async (_sid: string) => {
+        const i = resolvers.length;
+        await new Promise<void>((resolve) => {
+          resolvers[i] = () => resolve();
+        });
+        return { success: true, value: undefined };
+      },
+    );
 
     const saveSpy = vi.spyOn(cache, "saveWorkspace");
 

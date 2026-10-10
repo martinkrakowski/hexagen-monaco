@@ -917,7 +917,8 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
     // Item 1: a save made while a discard is in flight must not write to the
     // browser cache, lest a discarded workspace be cached without a stamp and
     // revived by a later loadWorkspace.
-    if (this.discarding.has(sessionId)) return { success: true, value: undefined };
+    if (this.discarding.has(sessionId))
+      return { success: true, value: undefined };
     const cacheResult = await this.cache.saveWorkspace(sessionId, workspace);
     if (!cacheResult.success) return cacheResult;
 
@@ -1196,10 +1197,7 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
   async clearWorkspace(
     sessionId: string,
   ): Promise<Result<void, PersistenceError>> {
-    this.discarding.set(
-      sessionId,
-      (this.discarding.get(sessionId) ?? 0) + 1,
-    );
+    this.discarding.set(sessionId, (this.discarding.get(sessionId) ?? 0) + 1);
     try {
       // Item 12: increment epoch before anything else.
       this.epochs.set(sessionId, (this.epochs.get(sessionId) ?? 0) + 1);
