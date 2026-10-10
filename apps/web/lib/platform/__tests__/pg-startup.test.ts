@@ -1,10 +1,7 @@
 // @vitest-environment node
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import type { Pool } from "pg";
-import {
-  runStartupMigrations,
-  startPlatformMigrations,
-} from "../pg-startup";
+import { runStartupMigrations, startPlatformMigrations } from "../pg-startup";
 import { createTestPgDb } from "../../../test-support/pg-test-db";
 
 describe("pg-startup migrations", () => {
@@ -113,7 +110,9 @@ describe("pg-startup selection behaviour", () => {
 
   it("the URL never reaches the log", async () => {
     const url = "postgres://user:secret@db.example/hx";
-    const run = vi.fn().mockRejectedValue(new Error(`could not connect to ${url}`));
+    const run = vi
+      .fn()
+      .mockRejectedValue(new Error(`could not connect to ${url}`));
     const exit = vi.fn();
     const errors: string[] = [];
     const log = {
