@@ -252,9 +252,7 @@ describe.each(BACKENDS)("SavedProjectsPersistencePort (%s", (kind) => {
       const store = createSavedProjectsStore(backend.db, "owner-a");
       const id = "44444444-4444-4444-8444-444444444444";
       const results = await Promise.all(
-        [1, 2, 3, 4, 5, 6].map(() =>
-          store.createProjectRecord(project(id)),
-        ),
+        [1, 2, 3, 4, 5, 6].map(() => store.createProjectRecord(project(id))),
       );
       const wins = results.filter((r) => r.success);
       const losses = results.filter((r) => !r.success);
@@ -281,7 +279,9 @@ describe.each(BACKENDS)("SavedProjectsPersistencePort (%s", (kind) => {
       // serialization failure. Inject a driver-shaped unique violation on
       // the INSERT because the SERIALIZABLE retry loop (pg) and the queued
       // single connection (sqlite) otherwise settle the race before it.
-      const uniqueViolation = new Error("synthetic unique violation") as Error & {
+      const uniqueViolation = new Error(
+        "synthetic unique violation",
+      ) as Error & {
         code?: string;
       };
       uniqueViolation.code =
