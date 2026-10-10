@@ -5191,12 +5191,13 @@ describe("round 3: a load and a discard of the same id", () => {
     get.release();
     const [loadResult, clearResult] = await Promise.all([loadP, clearP]);
     assert.ok(clearResult.success, "the discard succeeded");
+    // First, because it is the assertion only the kept epoch satisfies: with a
+    // fresh epoch the second pass stamps rev 6 and the discard deletes it.
+    assert.equal(server.get(UUID)?.rev, 6, "the other device's copy survives");
     assert.ok(
       loadResult.success && loadResult.value === null,
       "the load's result value is null",
     );
-
-    assert.equal(server.get(UUID)?.rev, 6, "the other device's copy survives");
     const c = await cache.loadWorkspace(UUID);
     assert.ok(c.success && c.value === null, "the cache is empty");
     const stamp = await cache.getLiftStamp(UUID);
@@ -5616,5 +5617,146 @@ describe("round 3: a load and a discard of the same id", () => {
 
     dels.release(0);
     await clearP;
+  });
+
+  it("a load with no stamp that outlives the discard's wait finishes the discard itself: the server copy it read is deleted", async () => {
+    const { adapter, cache, server, fetchImpl } = makeAdapters();
+    // Nothing in the browser, no stamp, the server holds rev 3.
+    server.set(UUID, {
+      payload: makeWorkspace(1000),
+      rev: 3,
+      updatedAt: 1000,
+      projectId: UUID,
+    });
+    const gets = parkAll(fetchImpl, "GET");
+
+    const loadP = adapter.loadWorkspace(UUID);
+    await flush();
+    assert.equal(gets.count(), 1, "the load is parked on its GET");
+
+    let clearDone = false;
+    const clearP = adapter.clearWorkspace(UUID);
+    void clearP.then(() => {
+      clearDone = true;
+    });
+    await flush();
+    await vi.advanceTimersByTimeAsync(WAIT_MS);
+    await flush();
+    assert.equal(clearDone, true, "the discard gave up on the load");
+    assert.equal(
+      server.has(UUID),
+      true,
+      "with no stamp the discard had no revision to delete with",
+    );
+
+    // The late answer: the load is overtaken, and no discard is running any
+    // more to take the revision.
+    gets.release(0);
+    const loadResult = await loadP;
+    await flush();
+    assert.ok(
+      loadResult.success && loadResult.value === null,
+      "the load answers null",
+    );
+    assert.equal(server.has(UUID), false, "the server copy is deleted");
+    await assertCacheEmpty(cache);
+    assert.equal(await cache.getLiftStamp(UUID), null, "no stamp");
+
+    const next = await adapter.loadWorkspace(UUID);
+    assert.ok(next.success && next.value === null, "the next load is empty");
+    await assertCacheEmpty(cache);
+  });
+
+  it("a load overtaken while it waits for the user id still reads the server, and the discard deletes the copy that has no stamp", async () => {
+    const { cache, remote, fetchImpl, server, logger } = makeAdapters();
+    let releaseUserId!: (id: string) => void;
+    let userIdCalls = 0;
+    const adapter = new CachedEditorWorkspaceAdapter(
+      cache,
+      remote,
+      () => null,
+      () => {
+        userIdCalls += 1;
+        if (userIdCalls === 1) {
+          return new Promise<string>((resolve) => {
+            releaseUserId = resolve;
+          });
+        }
+        return Promise.resolve("user-1");
+      },
+      logger,
+    );
+    // Nothing in the browser, no stamp, the server holds rev 3.
+    server.set(UUID, {
+      payload: makeWorkspace(1000),
+      rev: 3,
+      updatedAt: 1000,
+      projectId: UUID,
+    });
+
+    const loadP = adapter.loadWorkspace(UUID);
+    await flush();
+    assert.equal(userIdCalls, 1, "the load is parked on the user id");
+    assert.equal(fetchImpl.mock.calls.length, 0, "no request yet");
+
+    const clearP = adapter.clearWorkspace(UUID);
+    await flush();
+    releaseUserId("user-1");
+    const [loadResult, clearResult] = await Promise.all([loadP, clearP]);
+
+    assert.ok(clearResult.success, "the discard succeeded");
+    assert.ok(
+      loadResult.success && loadResult.value === null,
+      "the load answers null",
+    );
+    assert.equal(server.has(UUID), false, "the server copy is deleted");
+    await assertCacheEmpty(cache);
+    assert.equal(await cache.getLiftStamp(UUID), null, "no stamp");
+    assert.equal(putCallsOf(fetchImpl).length, 0, "no PUT was sent");
+  });
+
+  it("a load overtaken while it drops a discard marker does not open the id to a first upload", async () => {
+    const { adapter, cache, server, fetchImpl } = makeAdapters();
+    // Nothing in the browser, an own discard marker at rev 5, the server empty.
+    await cache.setLiftStamp(UUID, {
+      ownerId: "user-1",
+      rev: 5,
+      syncedUpdatedAt: 0,
+      confirmed: false,
+      discarded: true,
+    });
+    // Park the load where it drops the marker (its first stamp removal).
+    const realSet = cache.setLiftStamp.bind(cache);
+    const gate = { release: null as null | (() => void) };
+    vi.spyOn(cache, "setLiftStamp").mockImplementation(async (id, stamp) => {
+      if (stamp === null && gate.release === null) {
+        await new Promise<void>((resolve) => {
+          gate.release = resolve;
+        });
+      }
+      return realSet(id, stamp);
+    });
+
+    const loadP = adapter.loadWorkspace(UUID);
+    await flush();
+    assert.ok(gate.release !== null, "the load is parked on the marker drop");
+
+    const clearP = adapter.clearWorkspace(UUID);
+    await flush();
+    gate.release!();
+    const [loadResult, clearResult] = await Promise.all([loadP, clearP]);
+    assert.ok(clearResult.success, "the discard succeeded");
+    assert.ok(
+      loadResult.success && loadResult.value === null,
+      "the load answers null",
+    );
+
+    // A save from the editor that is still mounted, with no load in between:
+    // it may be cached, but it must not be uploaded as a first copy.
+    await adapter.saveWorkspace(UUID, makeWorkspace(5000));
+    await vi.advanceTimersByTimeAsync(REMOTE_DEBOUNCE_MS);
+    await flush();
+    assert.equal(putCallsOf(fetchImpl).length, 0, "no PUT was sent");
+    assert.equal(server.has(UUID), false, "the server holds no copy");
   });
 });

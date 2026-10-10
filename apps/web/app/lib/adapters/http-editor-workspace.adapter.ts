@@ -562,14 +562,39 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
   /**
    * The answer of a load that a discard overtook: nothing. `adopting` is given
    * when the load had read a server copy it was about to adopt with no stamp
-   * yet; the revision is handed to the discard that is still running.
+   * yet. While the discard is still running, the revision is handed to it.
+   * When the discard has already ended (its bounded wait for this load ran
+   * out, and with no stamp it deleted nothing on the server), this load
+   * finishes the discard itself: one conditional DELETE of the revision it
+   * read, or a discard marker when that DELETE cannot be confirmed. It does
+   * so only while there is still no stamp, so a copy that a later load has
+   * adopted in the meantime is left alone.
    */
-  private overtakenLoad(
+  private async overtakenLoad(
     sessionId: string,
     adopting?: { userId: string; rev: number },
-  ): Result<PersistedEditorWorkspace | null, PersistenceError> {
-    if (adopting !== undefined && this.discarding.has(sessionId)) {
-      this.revSeenByOvertakenLoad.set(sessionId, adopting);
+  ): Promise<Result<PersistedEditorWorkspace | null, PersistenceError>> {
+    if (adopting !== undefined) {
+      if (this.discarding.has(sessionId)) {
+        this.revSeenByOvertakenLoad.set(sessionId, adopting);
+      } else {
+        let stamp: LiftStamp | null;
+        try {
+          stamp = await this.cache.getLiftStamp(sessionId);
+        } catch {
+          return { success: true, value: null };
+        }
+        // A discard that started during the stamp read takes the revision.
+        if (this.discarding.has(sessionId)) {
+          this.revSeenByOvertakenLoad.set(sessionId, adopting);
+        } else if (stamp === null) {
+          await this.undoWriteAfterDiscard(
+            sessionId,
+            adopting.userId,
+            adopting.rev,
+          );
+        }
+      }
     }
     return { success: true, value: null };
   }
@@ -649,10 +674,14 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
     epochAtStart: number,
   ): Promise<Result<PersistedEditorWorkspace | null, PersistenceError>> {
     // The discard may have started while the caller awaited the user id.
-    if (this.discardedSince(sessionId, epochAtStart)) {
-      return this.overtakenLoad(sessionId);
+    // The load still goes on to its reads (they write nothing, and every
+    // write below has its own check), so that it can hand the discard the
+    // server revision when there is no stamp to delete with. Only the
+    // un-pausing is skipped: the discard reads `pausedIds` to decide whether
+    // the server copy is its to delete.
+    if (!this.discardedSince(sessionId, epochAtStart)) {
+      this.pausedIds.delete(sessionId);
     }
-    this.pausedIds.delete(sessionId);
 
     // Item 3: wait for any in-flight save PUT so the load's catch-up/maybeLift
     // PUT does not race it on the server.
@@ -850,6 +879,8 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
         }
         // No server copy and nothing local: as after any empty load, the
         // first save creates the server copy.
+        if (this.discardedSince(sessionId, epochAtStart))
+          return this.overtakenLoad(sessionId);
         this.firstWriteAfter404.add(sessionId);
         return { success: true, value: null };
       }
