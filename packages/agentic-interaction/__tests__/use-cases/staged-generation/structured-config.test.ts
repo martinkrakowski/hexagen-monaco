@@ -228,36 +228,55 @@ test("parseStructuredConfig: large input scales linearly below a generous ratio"
     "project: large-test\nbounded_contexts:\n  - name: TestContext\n    type: core\n";
   const makeYaml = (chars: number): string =>
     baseYaml + " ".repeat(Math.max(0, chars - baseYaml.length));
-  const timeParse = (chars: number): number => {
-    const yaml = makeYaml(chars);
-    const t0 = performance.now();
-    parseStructuredConfig(yaml);
-    return performance.now() - t0;
-  };
-  const best = (chars: number, n: number): number =>
-    Math.min(...Array.from({ length: n }, () => timeParse(chars)));
   // Both sizes are large enough to take milliseconds. With a 50 000-character
   // baseline the small parse took under half a millisecond on a shared CI
   // runner (0.44 ms), so timer resolution and warm-up decided the ratio, not
   // the parser: a linear parser measured 434x for a 64x input and failed.
-  const SMALL = 400_000;
-  const LARGE = 3_200_000;
-  const sizeRatio = LARGE / SMALL; // 8
-  timeParse(SMALL); // warm-up, not measured
-  const small = best(SMALL, 5);
-  const large = best(LARGE, 5);
+  const ABS_SMALL = 400_000;
+  const ABS_LARGE = 3_200_000; // 8x
+  // Measured on this machine: linear small → 7.61 ms (large 66.56 ms,
+  // exponent 1.04); quadratic mutant (re-walk of the remaining input per step)
+  // small → 24,101 ms. The cap sits ~66x above the linear minimum and the
+  // mutant lands ~48x over it, so a quadratic implementation fails fast here.
+  const CAP_SMALL_MS = 500;
+  const BOUND = 1.7;
+  const sample = (chars: number): number => {
+    const input = makeYaml(chars); // built ONCE outside the timed region
+    parseStructuredConfig(input); // warm-up, not measured
+    let best = Infinity;
+    for (let n = 1; n <= 7; ++n) {
+      const t0 = performance.now();
+      parseStructuredConfig(input);
+      const ms = performance.now() - t0;
+      if (ms < best) best = ms;
+      if (ms > CAP_SMALL_MS) {
+        // STOP SAMPLING EARLY for this size as soon as one timed parse exceeds the cap
+        break;
+      }
+    }
+    return best;
+  };
+  // Check SMALL FIRST and assert it before touching LARGE, so the mutant never runs LARGE.
+  const minSmall = sample(ABS_SMALL);
+  assert.ok(
+    minSmall < CAP_SMALL_MS,
+    `small=${minSmall}ms >= cap ${CAP_SMALL_MS}ms`,
+  );
+  const minLarge = sample(ABS_LARGE);
+  const exponent = Math.log(minLarge / minSmall) / Math.log(8);
+  console.log(
+    `[PSC] small=${minSmall.toFixed(2)}ms large=${minLarge.toFixed(2)}ms exponent=${exponent.toFixed(3)}`,
+  );
+  assert.ok(
+    exponent < BOUND,
+    `exponent ${exponent.toFixed(3)} >= ${BOUND} (small=${minSmall}ms, large=${minLarge}ms)`,
+  );
   // Correctness on the large input is preserved from the original assertion.
   assert.strictEqual(
-    parseStructuredConfig(makeYaml(LARGE)).bounded_contexts.length,
+    parseStructuredConfig(makeYaml(ABS_LARGE)).bounded_contexts.length,
     1,
   );
-  // 8x input: linear ~8x, quadratic ~64x. The bound sits between them, at 4x
-  // the linear expectation (32), so a quadratic parser still fails.
-  assert.ok(
-    large / small < 4 * sizeRatio,
-    `parse ratio ${large / small} >= ${4 * sizeRatio} (small=${small}ms, large=${large}ms)`,
-  );
-});
+}, 30_000);
 
 // P18.3: buildDomainAnalysisFromConfig tests
 describe("buildDomainAnalysisFromConfig with krakowski fixture", () => {
