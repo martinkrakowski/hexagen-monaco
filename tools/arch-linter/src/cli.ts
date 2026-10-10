@@ -554,6 +554,27 @@ function countsAsContextExportSource(filePath: string): boolean {
   return !/\.(test|spec)\.tsx?$/.test(posix);
 }
 
+/**
+ * A co-located test file — `thing.test.ts` / `thing.spec.ts` (or `.tsx`) —
+ * sitting NEXT TO the code it tests, rather than under `__tests__/`.
+ *
+ * `node-builtin-in-layer` and `npm-package-in-domain` do not apply to such a
+ * file: a unit test's `import { it } from "vitest"` and `import assert from
+ * "node:assert/strict"` are the harness, not a domain dependency on I/O or a
+ * third-party package. Since 0.11.0 the two rules flagged every one of them,
+ * so a project that keeps tests beside the code collected a finding per test
+ * file — a verdict no changelog line, ADR or test ever asked for.
+ *
+ * The exemption is deliberately EXACTLY those two rules, and it is NOT the
+ * `isTestDoubleOrTest` skip: that one silences every import check in the
+ * file, which would also drop cross-package, layer-import and subpath
+ * findings from co-located tests. A test file is still held to those.
+ */
+function isColocatedTestFile(filePath: string): boolean {
+  const posix = filePath.split(path.sep).join("/");
+  return /\.(test|spec)\.tsx?$/.test(posix);
+}
+
 function isTestDoubleOrTest(filePath: string): boolean {
   const testDoubleRules = linterConfig.test_double_rules;
   if (!testDoubleRules?.allowed_cross_package_imports) return false;
@@ -883,11 +904,15 @@ function checkArchitecturalIntegrity(): {
 
             // AUD-011 holes 2 and 3. Neither resolves to an in-project source
             // file, so the check above can never see them: a builtin resolves to
-            // nothing, an npm package into the excluded node_modules.
-            const builtin = checkNodeBuiltinInLayer("domain", moduleSpecifier);
+            // nothing, an npm package into the excluded node_modules. A
+            // co-located test file is exempt from these two rules alone.
+            const isColocatedTest = isColocatedTestFile(filePath);
+            const builtin = isColocatedTest
+              ? undefined
+              : checkNodeBuiltinInLayer("domain", moduleSpecifier);
             if (builtin) {
               errors.push(domainFinding(builtin.detail, builtin.rule));
-            } else if (!scopedImport && !unscopedImport) {
+            } else if (!isColocatedTest && !scopedImport && !unscopedImport) {
               const npmPackage = checkNpmPackageInDomain({
                 moduleSpecifier,
                 contextName: moduleName,
@@ -954,10 +979,9 @@ function checkArchitecturalIntegrity(): {
 
           // AUD-011 hole 2, application half. (Hole 3 — npm packages — is
           // domain-only by ADR-0054 §2c: application is the composition seam.)
-          const builtin = checkNodeBuiltinInLayer(
-            "application",
-            moduleSpecifier,
-          );
+          const builtin = isColocatedTestFile(filePath)
+            ? undefined
+            : checkNodeBuiltinInLayer("application", moduleSpecifier);
           if (builtin) {
             errors.push(applicationFinding(builtin.detail, builtin.rule));
           }
