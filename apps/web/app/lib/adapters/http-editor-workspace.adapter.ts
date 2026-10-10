@@ -535,6 +535,15 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
 
     const serverWs = readResult.workspace as PersistedEditorWorkspace;
 
+    if (
+      typeof serverWs !== "object" ||
+      serverWs === null ||
+      (serverWs as { schemaVersion?: unknown }).schemaVersion !== 1
+    ) {
+      this.logger.warn(`workspace ${sessionId} skipped: invalid server payload`);
+      return cacheResult;
+    }
+
     if (stamp !== null && stamp.ownerId !== userId) {
       return cacheResult;
     }

@@ -4192,3 +4192,55 @@ describe("payload comparison is independent of key order", () => {
   });
 });
 
+describe("invalid server payload is not cached", () => {
+  it("server returns null payload with an empty browser: load returns cache result, nothing saved, no stamp", async () => {
+    const { adapter, cache, fetchImpl } = makeAdapters();
+    // empty browser cache
+    fetchImpl.mockImplementation(
+      async (url: string | URL | Request, init?: RequestInit) =>
+        new Response(
+          JSON.stringify({
+            kind: "workspace",
+            id: UUID,
+            projectId: UUID,
+            payload: null,
+            updatedAt: 1000,
+          }),
+          { status: 200, headers: { ETag: '"rev:1"' } },
+        ),
+    );
+
+    const result = await adapter.loadWorkspace(UUID);
+    assert.ok(result.success);
+    assert.equal(result.value, null, "cache result (null)");
+
+    assert.equal(await cache.loadWorkspace(UUID).then((r) => r.value), null);
+    assert.equal(await cache.getLiftStamp(UUID), null, "no stamp");
+    assert.equal(await cache.getConflicts(), null, "no conflict");
+  });
+
+  it("server returns { schemaVersion: 2 }: the same", async () => {
+    const { adapter, cache, fetchImpl } = makeAdapters();
+    fetchImpl.mockImplementation(
+      async (url: string | URL | Request, init?: RequestInit) =>
+        new Response(
+          JSON.stringify({
+            kind: "workspace",
+            id: UUID,
+            projectId: UUID,
+            payload: { schemaVersion: 2, sessionId: UUID },
+            updatedAt: 1000,
+          }),
+          { status: 200, headers: { ETag: '"rev:1"' } },
+        ),
+    );
+
+    const result = await adapter.loadWorkspace(UUID);
+    assert.ok(result.success);
+    assert.equal(result.value, null, "cache result (null)");
+    assert.equal(await cache.loadWorkspace(UUID).then((r) => r.value), null);
+    assert.equal(await cache.getLiftStamp(UUID), null, "no stamp");
+  });
+});
+
+
