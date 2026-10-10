@@ -5,6 +5,7 @@ import {
 } from "./platform-db";
 import type { PlatformDb } from "./db";
 import { createSqlitePlatformDb } from "./sqlite-db";
+import { createPgPool, createPgPlatformDb } from "./pg-db";
 import { createAuthRepository, type AuthRepository } from "./auth-store";
 import {
   createSavedProjectsStore,
@@ -130,11 +131,26 @@ export function createPlatformStore(
   );
 }
 
+export function createPgPlatformStore(
+  databaseUrl: string,
+  artifactsDir?: string,
+): PlatformStore {
+  // Creating a pool opens no connection, so this stays synchronous; the pool
+  // is only contacted when the store runs its first statement.
+  return createPlatformStoreOn(
+    createPgPlatformDb(createPgPool(databaseUrl)),
+    artifactsDir,
+  );
+}
+
 let singleton: PlatformStore | null = null;
 
 export function getPlatformStore(): PlatformStore {
   if (!singleton) {
-    singleton = createPlatformStore(resolvePlatformDbPath());
+    const url = process.env.DATABASE_URL?.trim();
+    singleton = url
+      ? createPgPlatformStore(url)
+      : createPlatformStore(resolvePlatformDbPath());
   }
   return singleton;
 }
