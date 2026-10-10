@@ -916,6 +916,113 @@ export class CachedEditorWorkspaceAdapter
     return { success: true, value: undefined };
   }
 
+  /**
+   * Resolve a pending conflict toward the browser: replace this browser's
+   * copy with the server copy and stamp it confirmed. A failed resolve
+   * changes nothing (the browser copy is restored if the stamp fails).
+   */
+  async useOtherDeviceCopy(
+    sessionId: string,
+  ): Promise<Result<void, PersistenceError>> {
+    const pending = this.pendingConflicts.get(sessionId);
+    if (pending === undefined) {
+      return {
+        success: false,
+        error: {
+          kind: "NotFound",
+          message: `workspace ${sessionId} has no pending conflict`,
+        },
+      };
+    }
+    if (this.tenantIdSource() !== null) {
+      return {
+        success: false,
+        error: {
+          kind: "Unknown",
+          message: "workspace conflicts cannot be resolved for a tenant user",
+        },
+      };
+    }
+    const userId = await this.userIdSource();
+    if (userId === null) {
+      return {
+        success: false,
+        error: {
+          kind: "Unknown",
+          message: "workspace conflicts cannot be resolved without a user id",
+        },
+      };
+    }
+
+    // No timer PUT may race the resolve.
+    this.cancelWriteTimer(sessionId);
+    const inFlight = this.inFlight.get(sessionId);
+    if (inFlight) await inFlight.catch(() => {});
+
+    const readResult = await this.remote.read(userId, sessionId);
+    if (!readResult.ok) {
+      const message =
+        readResult.reason === "not_found"
+          ? "the other copy no longer exists"
+          : `the server copy could not be read: ${readResult.message}`;
+      return { success: false, error: { kind: "Unknown", message } };
+    }
+    const serverWs = readResult.workspace as PersistedEditorWorkspace;
+    if (
+      typeof serverWs !== "object" ||
+      serverWs === null ||
+      (serverWs as { schemaVersion?: unknown }).schemaVersion !== 1
+    ) {
+      this.logger.warn(
+        `workspace ${sessionId} skipped: invalid server payload`,
+      );
+      return {
+        success: false,
+        error: { kind: "Unknown", message: "the server copy is invalid" },
+      };
+    }
+    const previous = await this.cache.loadWorkspace(sessionId);
+    const saved = await this.cache.saveWorkspace(sessionId, serverWs);
+    if (!saved.success) {
+      return {
+        success: false,
+        error: {
+          kind: "Unknown",
+          message: `workspace ${sessionId}: the browser copy could not be replaced`,
+        },
+      };
+    }
+
+    try {
+      await this.cache.setLiftStamp(sessionId, {
+        ownerId: userId,
+        rev: readResult.rev,
+        syncedUpdatedAt: serverWs.updatedAt,
+        confirmed: true,
+      });
+    } catch {
+      // Both copies survive: restore the browser copy, stay paused and pending.
+      if (previous.success && previous.value !== null) {
+        await this.cache
+          .saveWorkspace(sessionId, previous.value)
+          .catch(() => {});
+      }
+      return {
+        success: false,
+        error: {
+          kind: "Unknown",
+          message: `workspace ${sessionId}: the lift stamp could not be written`,
+        },
+      };
+    }
+
+    this.pausedIds.delete(sessionId);
+    if (this.pendingConflicts.delete(sessionId)) {
+      this.notifyConflictListeners();
+    }
+    return { success: true, value: undefined };
+  }
+
   /** 404 path: lift the cache onto the server via an unconditional PUT. */
   private async maybeLift(
     sessionId: string,

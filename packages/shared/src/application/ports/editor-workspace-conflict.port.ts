@@ -27,4 +27,8 @@ export interface EditorWorkspaceConflictPort {
   keepThisDeviceCopy(
     sessionId: string,
   ): Promise<Result<void, PersistenceError>>;
+  /** Resolve by using the other device's copy: the browser gets the server copy. */
+  useOtherDeviceCopy(
+    sessionId: string,
+  ): Promise<Result<void, PersistenceError>>;
 }
