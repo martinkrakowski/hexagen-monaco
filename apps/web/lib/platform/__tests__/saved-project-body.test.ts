@@ -45,3 +45,31 @@ describe("app-level SavedProject narrowing", () => {
     expect(mode).toBe("brownfield");
   });
 });
+
+describe("savedProjectBodySchema timestamps", () => {
+  for (const field of ["createdAt", "updatedAt"] as const) {
+    it(`rejects fractional ${field}`, () => {
+      expect(parseSavedProjectBody({ ...row, [field]: 1.5 }).ok).toBe(false);
+    });
+    it(`rejects negative ${field}`, () => {
+      expect(parseSavedProjectBody({ ...row, [field]: -1 }).ok).toBe(false);
+    });
+    it(`rejects out-of-range ${field}`, () => {
+      expect(
+        parseSavedProjectBody({ ...row, [field]: 8_640_000_000_000_001 }).ok,
+      ).toBe(false);
+    });
+  }
+  it("accepts boundary timestamps 0 and max", () => {
+    expect(
+      parseSavedProjectBody({ ...row, createdAt: 0, updatedAt: 0 }).ok,
+    ).toBe(true);
+    expect(
+      parseSavedProjectBody({
+        ...row,
+        createdAt: 8_640_000_000_000_000,
+        updatedAt: 8_640_000_000_000_000,
+      }).ok,
+    ).toBe(true);
+  });
+});

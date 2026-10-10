@@ -11,10 +11,10 @@ name: "PR-Agent Correctness Review"
 # all the ignore rule: the toml drops every file outside apps/web, and this
 # reviewer must see them.
 #
-# Two models take turns, by pull-request number (even: GPT-6.1 Sol, odd: Claude
-# Sonnet 5.5), with the same prompt, caps and fallback, so the model is the only
-# difference between the two arms. A small record per pull request (arm,
-# findings, which were valid) decides between them.
+# One model reviews every pull request: GPT-6.1 Sol. The two-arm comparison by
+# pull-request number (odd numbers went to a Claude model) ended on 2026-10-10:
+# the owner's rule is that no Claude, Gemini or Grok model runs through
+# OpenRouter in any pipeline seat.
 #
 # It runs PR-Agent's /review tool, not /improve. /improve makes a second model
 # call that scores every suggestion and drops one that scores 0; that step was
@@ -74,7 +74,7 @@ jobs:
           case "$PR" in
             ''|*[!0-9]*) echo "not a PR number: '$PR'" >&2; exit 1 ;;
           esac
-          if [ $((PR % 2)) -eq 0 ]; then model="openrouter/openai/gpt-6.1-sol"; else model="openrouter/anthropic/claude-sonnet-5.5"; fi
+          model="openrouter/openai/gpt-6.1-sol"
           echo "model=$model" >> "$GITHUB_OUTPUT"
           echo "PR #$PR -> $model" >> "$GITHUB_STEP_SUMMARY"
 
@@ -85,10 +85,9 @@ jobs:
           OPENROUTER__KEY: ${{ secrets.OPENROUTER_KEY }}
           config.restricted_mode: "true"
           config.model: ${{ steps.arm.outputs.model }}
-          # Haiku only. A fallback to the other arm's model would quietly turn a
-          # failed call into a review by the wrong model; a Haiku review is
-          # visibly a third thing and is left out of the comparison.
-          config.fallback_models: '["openrouter/anthropic/claude-haiku-4.5"]'
+          # One fallback, GPT-6 Luna: a review by it is visibly not the main
+          # model's (the comment names the model that answered).
+          config.fallback_models: '["openrouter/openai/gpt-6-luna"]'
           config.custom_model_max_tokens: "128000"
           config.max_model_tokens: "70000"
           openrouter.max_tokens: "8000"
