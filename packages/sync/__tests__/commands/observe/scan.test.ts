@@ -132,24 +132,49 @@ describe("scanSpecifiers", () => {
 
 describe("scanSpecifiers: hostile and JSX input", () => {
   it("stays linear on a failed-regex pattern (F1)", () => {
-    // Scale-relative, so a loaded CI machine does not fail it: 64x the input costs
-    // about 64x when linear and about 4096x when quadratic. Best-of-N samples for
-    // both arms flatten the load spikes a shared runner imposes.
-    const time = (kib: number): number => {
-      const input = "/[".repeat((kib * 1024) / 2);
-      const t0 = performance.now();
-      scanSpecifiers(input);
-      return performance.now() - t0;
+    // F1: guards the cost of `tokenize` in packages/sync/src/commands/observe/imports/scan.ts.
+    // Assertion A is the absolute fail-fast guard; Assertion B is the growth shape. The absolute
+    // cap lets a quadratic mutant fail within seconds instead of hanging CI. Measured on this
+    // machine (8 cores, load ~10): linear len 12k/20k/200k → 0.9/1.9/38 ms; mutant len 20k → 1.388 s.
+    // The old 16 KiB sample took under a millisecond, so a raw ms ceiling made the ratio noisy on
+    // a loaded machine — best-of-7 at an 8x size ratio flattens load spikes.
+    const ABS_SMALL = 25_000;
+    const ABS_LARGE = 200_000; // 8x
+    const CAP_SMALL_MS = 250;
+    const BOUND = 1.7;
+    const sample = (len: number): number => {
+      const input = "/[".repeat(len / 2);
+      const warmup = performance.now();
+      void scanSpecifiers(input);
+      void warmup;
+      let best = Infinity;
+      for (let n = 1; n <= 7; ++n) {
+        const t0 = performance.now();
+        scanSpecifiers(input);
+        const ms = performance.now() - t0;
+        if (ms < best) best = ms;
+        if (best > CAP_SMALL_MS && len === ABS_SMALL) {
+          // a quadratic implementation must fail fast, not hang
+        }
+        if (ms > CAP_SMALL_MS) {
+          // STOP SAMPLING EARLY for this size as soon as one timed scan exceeds the cap
+          break;
+        }
+      }
+      return best;
     };
-    const best = (kib: number, n: number): number =>
-      Math.min(...Array.from({ length: n }, () => time(kib)));
-    const small = best(16, 5);
-    const large = best(1024, 5); // 16 KiB vs 1 MiB = 64x size ratio
-    // 64x input: linear ~64x, quadratic ~4096x — bound is 4 * 64 = 256.
-    expect(large / small).toBeLessThan(4 * 64);
-    // Correctness for the full 1 MiB, not an ms ceiling: that flakes on load.
+    // Check SMALL FIRST and expect it before touching LARGE, so the mutant never runs LARGE.
+    const minSmall = sample(ABS_SMALL);
+    expect(minSmall).toBeLessThan(CAP_SMALL_MS);
+    const minLarge = sample(ABS_LARGE);
+    const exponent = Math.log(minLarge / minSmall) / Math.log(8);
+    console.log(
+      `[F1] small=${minSmall.toFixed(2)}ms large=${minLarge.toFixed(2)}ms exponent=${exponent.toFixed(3)}`,
+    );
+    expect(exponent).toBeLessThan(BOUND);
+    // Correctness for the full 512 KiB input.
     expect(scanSpecifiers("/[".repeat(512 * 1024))).toEqual([]);
-  });
+  }, 30_000);
 
   it("recognizes require?.() and (require)() calls (bot 5)", () => {
     expect(
