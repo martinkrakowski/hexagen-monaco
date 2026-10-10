@@ -845,18 +845,21 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
       { ifMatch: stamp.rev },
     );
     if (!putResult.ok) {
-      // Item 7(a): a 409/412 from catchUp's PUT is a conflict like the others.
       this.logger.warn(
         `workspace ${sessionId} catch-up PUT failed: ${putResult.message}`,
       );
-      await this.recordConflictEntry(
-        sessionId,
-        "load",
-        stamp.rev,
-        putResult.reason === "conflict" ? (putResult.serverRev ?? null) : null,
-      );
-      this.pausedIds.add(sessionId);
-      this.cancelWriteTimer(sessionId);
+      if (putResult.reason === "conflict") {
+        await this.recordConflictEntry(
+          sessionId,
+          "load",
+          stamp.rev,
+          putResult.serverRev ?? null,
+        );
+        this.pausedIds.add(sessionId);
+        this.cancelWriteTimer(sessionId);
+      } else if (putResult.reason === "unauthenticated") {
+        resetCachedUserId();
+      }
       return { success: true, value: cacheEntry };
     }
     // Item 7(b): stamp unconfirmed after PUT, before confirming GET.

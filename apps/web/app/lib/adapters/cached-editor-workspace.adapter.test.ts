@@ -948,6 +948,120 @@ describe("CachedEditorWorkspaceAdapter AM2 conflict resolution", () => {
     );
   });
 
+  it("a 503 on the catch-up PUT records no conflict, does not pause, and the next save still sends If-Match of the stamp's rev", async () => {
+    const { adapter, cache, server, fetchImpl, warns } = makeAdapters();
+    const dirtyWs = makeWorkspace(2000);
+    await cache.saveWorkspace(UUID, dirtyWs);
+    await cache.setLiftStamp(UUID, {
+      ownerId: "user-1",
+      rev: 5,
+      syncedUpdatedAt: 1000,
+      confirmed: true,
+    });
+    server.set(UUID, {
+      payload: makeWorkspace(1000),
+      rev: 5,
+      updatedAt: 1000,
+      projectId: UUID,
+    });
+
+    fetchImpl.mockImplementation(
+      async (url: string | URL | Request, init?: RequestInit) => {
+        const method = (init?.method ?? "GET").toUpperCase();
+        const match = /\/api\/tenants\/(.+)\/documents\/workspace\/(.+)/.exec(
+          String(url),
+        );
+        const id = match![2]!;
+        if (method === "GET") {
+          const doc = server.get(id);
+          if (!doc) return new Response(null, { status: 404 });
+          return new Response(
+            JSON.stringify({
+              kind: "workspace",
+              id,
+              projectId: doc.projectId,
+              payload: doc.payload,
+              updatedAt: doc.updatedAt,
+            }),
+            { status: 200, headers: { ETag: `"rev:${doc.rev}"` } },
+          );
+        }
+        if (method === "PUT") return new Response("server error", { status: 503 });
+        return new Response("nope", { status: 500 });
+      },
+    );
+
+    await adapter.loadWorkspace(UUID);
+
+    const rec = await cache.getConflicts();
+    assert.equal(rec, null, "no conflict recorded for a 503");
+    assert.ok(warns.some((w) => /catch-up PUT failed/.test(w)), "warning logged");
+
+    // A later save still sends a PUT with If-Match of the stamp's rev (not paused).
+    await adapter.saveWorkspace(UUID, makeWorkspace(3000));
+    await vi.advanceTimersByTimeAsync(REMOTE_DEBOUNCE_MS);
+    const puts = putCallsOf(fetchImpl);
+    const headers = new Headers(puts[puts.length - 1]![1]!.headers);
+    assert.equal(headers.get("If-Match"), '"rev:5"', "If-Match carries stamp rev");
+
+    // The stamp is not changed by the failed PUT.
+    const stamp = await cache.getLiftStamp(UUID);
+    assert.ok(stamp, "stamp preserved across the failed PUT");
+    assert.equal(stamp!.rev, 5);
+    assert.equal(stamp!.confirmed, true);
+  });
+
+  it("a 412 on the catch-up PUT is recorded as a conflict today", async () => {
+    const { adapter, cache, server, fetchImpl } = makeAdapters();
+    const dirtyWs = makeWorkspace(2000);
+    await cache.saveWorkspace(UUID, dirtyWs);
+    await cache.setLiftStamp(UUID, {
+      ownerId: "user-1",
+      rev: 5,
+      syncedUpdatedAt: 1000,
+      confirmed: true,
+    });
+    server.set(UUID, {
+      payload: makeWorkspace(1000),
+      rev: 5,
+      updatedAt: 1000,
+      projectId: UUID,
+    });
+
+    fetchImpl.mockImplementation(
+      async (url: string | URL | Request, init?: RequestInit) => {
+        const method = (init?.method ?? "GET").toUpperCase();
+        if (method === "GET") {
+          return new Response(
+            JSON.stringify({
+              kind: "workspace",
+              id: UUID,
+              projectId: UUID,
+              payload: makeWorkspace(1000),
+              updatedAt: 1000,
+            }),
+            { status: 200, headers: { ETag: '"rev:5"' } },
+          );
+        }
+        if (method === "PUT") {
+          return new Response("conflict", {
+            status: 412,
+            headers: { ETag: '"rev:9"' },
+          });
+        }
+        return new Response("nope", { status: 500 });
+      },
+    );
+
+    await adapter.loadWorkspace(UUID);
+
+    const rec = await cache.getConflicts();
+    assert.ok(rec && rec.count === 1, "conflict recorded for a 412");
+    assert.equal(rec!.last[0]!.where, "load");
+    assert.equal(rec!.last[0]!.stampRev, 5);
+    assert.equal(rec!.last[0]!.serverRev, 9);
+  });
+
   it("dirty cache, server moved: no PUT, no cache write, warning, next save sends nothing", async () => {
     const { adapter, cache, server, fetchImpl, warns } = makeAdapters();
     const oldWs = makeWorkspace(1000);
