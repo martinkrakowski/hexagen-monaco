@@ -1011,6 +1011,9 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
         precondition = { ifMatch: freshStamp.rev };
       }
 
+      // Item 3: a discard may have landed during the stamp read above; do not
+      // send content that has already been discarded.
+      if (epochAtStart !== (this.epochs.get(sessionId) ?? 0)) return;
       const result = await this.remote.write(
         userId,
         sessionId,

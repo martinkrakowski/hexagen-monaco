@@ -2418,6 +2418,53 @@ describe("CachedEditorWorkspaceAdapter Item 14: clearWorkspace", () => {
       "load returns null (discarded content not revived)",
     );
   });
+
+  it("a discard landing during the stamp read before a write sends no PUT", async () => {
+    const { adapter, cache, server, fetchImpl } = makeAdapters();
+    const ws = makeWorkspace(1000);
+    await cache.saveWorkspace(UUID, ws);
+    await cache.setLiftStamp(UUID, {
+      ownerId: "user-1",
+      rev: 5,
+      syncedUpdatedAt: 1000,
+      confirmed: true,
+    });
+    server.set(UUID, { payload: ws, rev: 5, updatedAt: 1000, projectId: UUID });
+    await adapter.loadWorkspace(UUID);
+
+    // Arm save #1's timer first (so saveWorkspace's own stamp read uses the
+    // real cache), then hold open the post-PUT stamp read in _doRemoteWrite.
+    await adapter.saveWorkspace(UUID, makeWorkspace(2000));
+    let resolveStamp!: () => void;
+    vi.spyOn(cache, "getLiftStamp").mockImplementationOnce(async () => {
+      await new Promise<void>((resolve) => {
+        resolveStamp = resolve;
+      });
+      return {
+        ownerId: "user-1",
+        rev: 5,
+        syncedUpdatedAt: 1000,
+        confirmed: true,
+      };
+    });
+
+    // Fire the timer; _doRemoteWrite blocks at the stamp read.
+    await vi.advanceTimersByTimeAsync(REMOTE_DEBOUNCE_MS);
+    assert.equal(putCallsOf(fetchImpl).length, 0, "PUT not sent yet");
+
+    // Discard lands while the stamp read is suspended; its epoch bumps.
+    const clearPromise = adapter.clearWorkspace(UUID);
+    resolveStamp();
+    await vi.advanceTimersByTimeAsync(0);
+    await clearPromise;
+    await vi.advanceTimersByTimeAsync(REMOTE_DEBOUNCE_MS);
+
+    assert.equal(
+      putCallsOf(fetchImpl).length,
+      0,
+      "no PUT sent when a discard lands during the stamp read",
+    );
+  });
 });
 
 describe("CachedEditorWorkspaceAdapter Item 4: discard marker", () => {
