@@ -30,7 +30,8 @@ function samePayload(a: unknown, b: unknown): boolean {
   if (Array.isArray(a) || Array.isArray(b)) {
     if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length)
       return false;
-    return a.every((av, i) => samePayload(av === undefined ? null : av, b[i]));
+    const orNull = (v: unknown) => (v === undefined ? null : v);
+    return a.every((av, i) => samePayload(orNull(av), orNull(b[i])));
   }
   const aKeys = Object.keys(a as Record<string, unknown>).filter(
     (k) => (a as Record<string, unknown>)[k] !== undefined,
