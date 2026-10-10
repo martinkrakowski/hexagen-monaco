@@ -5662,7 +5662,10 @@ describe("round 3: a load and a discard of the same id", () => {
     await assertCacheEmpty(cache);
     assert.equal(await cache.getLiftStamp(UUID), null, "no stamp");
 
-    const next = await adapter.loadWorkspace(UUID);
+    const nextP = adapter.loadWorkspace(UUID);
+    await flush();
+    gets.release(1);
+    const next = await nextP;
     assert.ok(next.success && next.value === null, "the next load is empty");
     await assertCacheEmpty(cache);
   });
