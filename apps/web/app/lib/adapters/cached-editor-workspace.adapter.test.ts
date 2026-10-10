@@ -2558,6 +2558,68 @@ describe("CachedEditorWorkspaceAdapter Item 14: clearWorkspace", () => {
     );
   });
 
+  it("a save made during a discard writes nothing to the browser cache", async () => {
+    const { adapter, cache, server, fetchImpl } = makeAdapters();
+    const ws = makeWorkspace(1000);
+    await cache.saveWorkspace(UUID, ws);
+    await cache.setLiftStamp(UUID, {
+      ownerId: "user-1",
+      rev: 5,
+      syncedUpdatedAt: 1000,
+      confirmed: true,
+    });
+    server.set(UUID, { payload: ws, rev: 5, updatedAt: 1000, projectId: UUID });
+    await adapter.loadWorkspace(UUID);
+
+    // Hold the discard open on its cache clear so discarding stays set while a
+    // save re-enters saveWorkspace during the discard window.
+    let resolveClear!: () => void;
+    vi.spyOn(cache, "clearWorkspace").mockImplementationOnce(async (sid) => {
+      await new Promise<void>((resolve) => {
+        resolveClear = resolve;
+      });
+      return cache.clearWorkspace(sid);
+    });
+
+    const saveSpy = vi.spyOn(cache, "saveWorkspace");
+
+    const clearPromise = adapter.clearWorkspace(UUID);
+    await vi.advanceTimersByTimeAsync(0);
+
+    // While the discard is in flight, the editor saves.
+    await adapter.saveWorkspace(UUID, makeWorkspace(2000));
+    await vi.advanceTimersByTimeAsync(0);
+
+    assert.equal(
+      saveSpy.mock.calls.length,
+      0,
+      "a save made during a discard writes nothing to the browser cache",
+    );
+
+    // Let the discard finish.
+    resolveClear();
+    await clearPromise;
+    await vi.advanceTimersByTimeAsync(REMOTE_DEBOUNCE_MS);
+
+    assert.equal(
+      (await cache.loadWorkspace(UUID))?.value,
+      null,
+      "browser cache holds no workspace after the discard",
+    );
+    const putsBefore = putCallsOf(fetchImpl).length;
+    const loadResult = await adapter.loadWorkspace(UUID);
+    assert.equal(
+      putCallsOf(fetchImpl).length - putsBefore,
+      0,
+      "loadWorkspace after the discard sends no PUT",
+    );
+    assert.equal(
+      loadResult.success && loadResult.value,
+      null,
+      "loadWorkspace after the discard returns null",
+    );
+  });
+
   it("a discard landing during the stamp read before a write sends no PUT", async () => {
     const { adapter, cache, server, fetchImpl } = makeAdapters();
     const ws = makeWorkspace(1000);
