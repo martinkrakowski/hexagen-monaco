@@ -62,8 +62,9 @@ describe.each(BACKENDS)("run history store (%s)", (kind) => {
         telemetry,
         now: day,
       });
-      assert.equal(first.model, "mercury-2");
-      assert.equal(first.costCents, 75);
+      assert.ok(first.success);
+      assert.equal(first.value.model, "mercury-2");
+      assert.equal(first.value.costCents, 75);
       await runs.record({
         runId: "run-1",
         telemetry: { ...telemetry, stage: 4, label: "Adapter Assignment" },
@@ -133,10 +134,11 @@ describe.each(BACKENDS)("run history store (%s)", (kind) => {
         },
         now,
       });
-      assert.equal(typeof first.createdAt, "number");
-      assert.equal(first.createdAt, now);
-      assert.equal(first.servedFromCache, true);
-      assert.equal(first.usedLlm, false);
+      assert.ok(first.success);
+      assert.equal(typeof first.value.createdAt, "number");
+      assert.equal(first.value.createdAt, now);
+      assert.equal(first.value.servedFromCache, true);
+      assert.equal(first.value.usedLlm, false);
       const second = await runs.record({
         runId: "run-2",
         telemetry: {
@@ -147,10 +149,11 @@ describe.each(BACKENDS)("run history store (%s)", (kind) => {
         },
         now,
       });
-      assert.equal(typeof second.createdAt, "number");
-      assert.equal(second.createdAt, now);
-      assert.equal(second.servedFromCache, false);
-      assert.equal(second.usedLlm, true);
+      assert.ok(second.success);
+      assert.equal(typeof second.value.createdAt, "number");
+      assert.equal(second.value.createdAt, now);
+      assert.equal(second.value.servedFromCache, false);
+      assert.equal(second.value.usedLlm, true);
     } finally {
       await backend.close();
     }
@@ -302,19 +305,22 @@ describe.each(BACKENDS)("run history store (%s)", (kind) => {
         telemetry: { ...telemetry, modelName: "gpt-4o" },
         now,
       });
-      assert.notEqual(withPrice.costCents, null);
+      assert.ok(withPrice.success);
+      assert.notEqual(withPrice.value.costCents, null);
       const withAlias = await runs.record({
         runId: "run-2",
         telemetry: { ...telemetry, modelName: "openai/gpt-4o" },
         now,
       });
-      assert.notEqual(withAlias.costCents, null);
+      assert.ok(withAlias.success);
+      assert.notEqual(withAlias.value.costCents, null);
       const withNone = await runs.record({
         runId: "run-3",
         telemetry: { ...telemetry, modelName: "nonexistent-model" },
         now,
       });
-      assert.equal(withNone.costCents, null);
+      assert.ok(withNone.success);
+      assert.equal(withNone.value.costCents, null);
     } finally {
       await backend.close();
     }
@@ -330,7 +336,33 @@ describe.each(BACKENDS)("run history store (%s)", (kind) => {
         telemetry: { ...telemetry, durationMs: 12.5 },
         now: noonUtcDaysAgo(1),
       });
-      assert.equal(recorded.durationMs, 13);
+      assert.ok(recorded.success);
+      assert.equal(recorded.value.durationMs, 13);
+    } finally {
+      await backend.close();
+    }
+  });
+
+  it("refuses a run whose computed cost overflows cost_cents and stores nothing", async () => {
+    const backend = await openBackend(kind);
+    try {
+      const store = backend.store;
+      const runs = store.runsFor("owner-a");
+      const result = await runs.record({
+        runId: "run-1",
+        telemetry: {
+          ...telemetry,
+          modelName: "gpt-4o",
+          inputTokensEstimate: 2147483647,
+          outputTokensActual: 2147483647,
+        },
+        now: noonUtcDaysAgo(1),
+      });
+      assert.equal(result.success, false);
+      if (!result.success) {
+        assert.equal(result.error.kind, "InvalidInput");
+      }
+      assert.equal((await runs.list({ limit: 10 })).length, 0);
     } finally {
       await backend.close();
     }

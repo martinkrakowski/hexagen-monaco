@@ -107,6 +107,10 @@ describe("/api/runs", () => {
           runId: "run-a",
           telemetry: {
             ...telemetry,
+            // Unpriced on purpose: a priced model at these token counts
+            // derives a cost that no longer fits cost_cents (see the 400
+            // test below). Here the cost is null and the 201 stands.
+            modelName: "boundary-unpriced-model",
             stage: 2147483647,
             durationMs: 0,
             retryCount: 2147483647,
@@ -117,5 +121,30 @@ describe("/api/runs", () => {
       }),
     );
     assert.equal(res.status, 201);
+  });
+
+  it("answers 400 when the computed cost exceeds the integer column", async () => {
+    const res = await POST(
+      new NextRequest("http://localhost/api/runs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          runId: "run-a",
+          telemetry: {
+            ...telemetry,
+            inputTokensEstimate: 2147483647,
+            outputTokensActual: 2147483647,
+          },
+        }),
+      }),
+    );
+    assert.equal(res.status, 400);
+    const body = (await res.json()) as { error: string; message: string };
+    assert.equal(body.error, "validation");
+
+    const listed = await GET(new NextRequest("http://localhost/api/runs"));
+    assert.equal(listed.status, 200);
+    const listBody = (await listed.json()) as { events: unknown[] };
+    assert.equal(listBody.events.length, 0);
   });
 });

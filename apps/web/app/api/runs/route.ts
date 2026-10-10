@@ -125,5 +125,11 @@ export async function POST(request: NextRequest) {
     projectId: parsed.data.projectId,
     telemetry: parsed.data.telemetry,
   });
-  return NextResponse.json(recorded, { status: 201 });
+  if (!recorded.success) {
+    return NextResponse.json(
+      { error: "validation", message: recorded.error.message },
+      { status: 400 },
+    );
+  }
+  return NextResponse.json(recorded.value, { status: 201 });
 }
