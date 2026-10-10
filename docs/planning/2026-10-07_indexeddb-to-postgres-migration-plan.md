@@ -8,6 +8,50 @@
 **Input:** the owner's instruction, "write a migration plan for IndexedDB to Postgres".
 **Supersedes in part:** `2026-08-23-client-storage-to-server-plan.md` (packets P1.0 to P1.7) and the database tier of `2026-08-23-gcp-migration-plan.md` (packets G2.1, G2.2, G2.4). §3 says which of their packets landed, which this plan carries forward, and which it drops.
 
+## Decision of 2026-10-10: the remaining plan is cut to about a third
+
+The owner decided on 2026-10-10, answering the inbox item `hx-shrink-remaining-plan` with "accept the recommended defaults", that the remaining work is cut to about a third. The old steps below stay in this document as the record; each one that the decision drops or changes is marked directly under its heading. Where a step and this section disagree, this section wins.
+
+Merged at the time of the decision: B0, B1 (all parts), B2a, B2b-1 to B2b-4 (#808, #809, #812, #814); A0, A1 and A2; the document store with preconditions and never-restarting revisions (#807, #810); BYOK on Postgres with a sequence (#803, #811); the two B3 race fixes (#787, #804, #811), with two-writer tests in `saved-projects-store.test.ts` and `byok-store.test.ts`. Open: #813 (A3-1, the editor workspace on the server), ready for its pre-merge review. Not started: B2b-5.
+
+Decided the same day, and part of the order below: `hx-runs-api-numbers` is REJECT, so the API answers bad-request to fractional and out-of-range numbers in whole-number fields (`/api/runs`, and a saved project's `createdAt` and `updatedAt`), which releases B2b-5; `hx-conflict-message` is MESSAGE. `hx-production-postgres` is still open.
+
+### What remains, in order
+
+1. **Finish the editor workspace (#813).** _Done when:_ #813 has passed its pre-merge review and is merged.
+2. **B2b-5, Postgres selectable by `DATABASE_URL`, with the integer validation first.** _Done when:_ the API rejects fractional and out-of-range numbers in whole-number fields with bad-request, and the application runs on Postgres when `DATABASE_URL` is set.
+3. **The conflict message with a choice.** _Done when:_ when two devices have changed the same project's unsaved workspace, the user sees a message with a choice. It is built after #813 merges.
+4. **Governance threads, as a thin reuse of the editor workspace's adapter.** _Done when:_ governance threads are stored on the server through that adapter.
+5. **A small two-writer test packet.** The two-writer tests for the saved-projects and BYOK paths already exist (`saved-projects-store.test.ts`, `byok-store.test.ts`). _Done when:_ the remainder is shown: each guard, removed on a branch, turns its test red ("fails when the guard is removed").
+6. **Staging starts on an empty Postgres.** The three SQLite files and their backups are kept untouched on the volume. _Done when:_ staging runs with `DATABASE_URL` set on an empty database, and the three files and their backups are unchanged.
+7. **Delete the legacy localStorage steps.** _Done when:_ the legacy migration steps and the keys they write are removed from the code, and the pull request says that a visitor's old pre-account wizard draft is lost.
+8. **Production waits for `hx-production-postgres`.** Production stays frozen until the owner supplies a production Postgres. _Done when:_ the owner has decided that item; nothing in this plan acts on production before then.
+
+### What is dropped
+
+| Step in the old plan                                                            | What it was                                                                                                                                                             | Why dropped                                                                                                                                                                                                |
+| ------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A2 and A3, the `brownfield-draft` and `canvas-layout` kinds; A4 for those kinds | A server copy of the brownfield draft and of the canvas layout, a lift for each, and their export                                                                       | The owner accepted that a draft and a canvas layout do not follow the account to another browser. They stay in the browser.                                                                                |
+| B4, the ETL and cutover on staging                                              | A script that copies the three SQLite files into Postgres through the store interfaces, idempotent, inside a write freeze, with a per-table key and row-hash comparison | Staging starts on an empty Postgres instead. The owner accepted that staging loses its run history, audit log and quota counters, and that its orgs, teams, shares and key metadata are recreated by hand. |
+| B4, the rehearsal and its review                                                | The staging rehearsal of the ETL, the pull request's per-table counts, and the model review of the migration build                                                      | There is no migration to rehearse or review.                                                                                                                                                               |
+| B4, the 30-day read-only retention of the SQLite files                          | Keep the files read-only for 30 days after the cutover                                                                                                                  | Replaced by a stronger rule: the three SQLite files and their backups stay untouched on the volume, with no end date.                                                                                      |
+| §10, the part of the NextAuth risk about what the ETL carries                   | A check of what the ETL must carry for `sessions` and `verification_tokens`                                                                                             | It existed only to serve the ETL.                                                                                                                                                                          |
+
+### What the owner accepted losing
+
+- A draft and a canvas layout do not follow the account to another browser.
+- Staging loses its run history, audit log and quota counters. Its orgs, teams, shares and key metadata are recreated by hand.
+- No proven data-migration tool exists.
+- Staging's dropped history can only come back through a migration written later against the kept SQLite files.
+- A visitor's old pre-account wizard draft is lost when the legacy steps are deleted.
+
+### What stays true
+
+- Staging starts on an empty Postgres; the three SQLite files and their backups stay untouched on the volume.
+- The rule that a browser copy is never deleted before the server copy is confirmed stays.
+- B2b-5 (selecting Postgres) and a small two-writer test packet are still done.
+- Nothing is deleted from any database by this decision alone; a change that drops or abandons data says so in its pull request and gets a review before it merges.
+
 ## 1. What the ask means in this codebase
 
 The browser does not talk to a database, and most of what users think of as "their projects in IndexedDB" already left it. So the instruction resolves into two moves that share one destination.
@@ -155,6 +199,7 @@ _Why B1c is one lane:_ **no production code may open a seam transaction while an
 _What the seam's contract already fixes for B2:_ statements use `?` with an array or `@name` with a record, and an implementation accepts both; `isUniqueViolation(error)` replaces matching the SQLite error code; a store method that must join another store's transaction takes an optional `session` argument; and `transaction` promises all-or-nothing, but NOT isolation from other transactions on a pooled implementation, so a read-then-write inside it has to say how it is protected.
 
 **B2. Postgres implementation, a migration runner, and one contract suite for both backends** · L
+_Changed by the decision of 2026-10-10 (see the top of this document): B2b-5 (selecting Postgres) remains, with the integer validation first._
 A `pg` implementation of the B1 seam, selected when `DATABASE_URL` is set. A migration runner with a `schema_migrations` table and numbered SQL files replaces the probe-on-open code for Postgres (D-4). One contract suite runs every store against both backends.
 The dialect work is a known list, each item a test in the suite:
 
@@ -170,10 +215,12 @@ The dialect work is a known list, each item a test in the suite:
 _Done when:_ the contract suite is green on both backends; breaking one column name in a Postgres statement turns it red on Postgres only.
 
 **B3. Close the two single-process races** · M
+_Done: #787, #804, #811._
 With more than one connection, the two unguarded paths of §2.2 become real races. Put the check-then-insert in `createProjectRecord` inside a transaction (or lean on the primary key and handle the conflict), and replace the BYOK `write_seq` subquery with a sequence.
 _Done when:_ a two-writer test against a real Postgres server shows exactly one winner for each path, and fails when the guard is removed.
 
 **B4. ETL and cutover** · M
+_Dropped by the decision of 2026-10-10 (see the top of this document), except the production step: staging starts on an empty Postgres with no ETL, and production waits for `hx-production-postgres`._
 A script reads the SQLite files read-only and writes through the store interfaces into Postgres, so it is exercised by the B2 suite. It is idempotent. On staging it runs inside a write freeze. _Freeze:_ production has no rows to carry (§2.3), so its step is to run the migrations against the empty production database on the first deploy after the thaw. The row counts are read again at that moment; if any table is no longer empty, production gets the same ETL as staging.
 _Done when:_ for every table, the set of primary keys matches and a hash of each row's canonical content matches (types normalised per D-5 before hashing), with the per-table counts and mismatch counts printed in the pull request; as a smoke test on top, one signed-in user's project list is byte-identical before and after; the SQLite files are kept read-only for 30 days.
 _The way back:_ those files hold nothing written after the cutover. Returning to SQLite after users have written to Postgres needs a reverse export, written and rehearsed as part of this packet, or the cutover is accepted as one-way. That is decision D-13. It applies to staging; for production it falls away while the files are empty.
@@ -192,22 +239,28 @@ Fix what §2.1 found, in the browser, first: governance threads keyed by project
 _Done when:_ deleting a project in a test leaves no key of that project in the store.
 
 **A2. `owner_documents` store and routes** · M
+_Done: #807, #810. The `brownfield-draft` and `canvas-layout` kinds are dropped by the decision of 2026-10-10 (see the top of this document)._
 The table of §4, a store with `list`, `get`, `put(expectedRev)` and `delete`, and routes with the same guards as the project routes (the owner guard in `apps/web/lib/platform/require-owner.ts`, same-origin, rate limit, `If-Match`). D-14 decided that access is owner-only at first: under §8.1's recommended key that means the author only, and someone a project is shared with reads none of its documents.
 _Done when:_ a stale `If-Match` returns 409; a second tenant reads nothing; within one org, a second member reads nothing of the first member's documents; removing a member deletes that member's documents under the org and nobody else's.
 
 **A3. Cached adapters and the one-time lift, per kind** · L
+_Changed by the decision of 2026-10-10 (see the top of this document): the editor workspace (#813) and governance threads only; the brownfield draft and the canvas layout stay in the browser._
 For each durable kind, an HTTP adapter and a cached adapter of the shape `CachedSavedProjectsAdapter` already has, with the owner stamp extracted into one shared helper. The brownfield draft has no port today (React code reads localStorage directly), so it gets one first. The lift flag generalises from `project_owner_state(owner_id)` to `(owner_id, kind)`.
 Order, by what is lost if the browser's copy disappears: editor workspace, brownfield draft, governance threads, canvas layout. Chat history is not lifted (D-8).
 _Done when, per kind:_ an empty server and a non-empty browser lift exactly once; a browser stamped for another owner is wiped and lifts nothing.
 
 **A4. Account export covers documents** · S
+_Changed by the decision of 2026-10-10 (see the top of this document): the brownfield draft and canvas layout kinds are not stored on the server, so they are not exported._
 `GET /api/account/export` gains every `owner_documents` kind.
 _Done when:_ a test owner with one row of each kind gets all of them; the assertion is on the set of kinds.
 
 **A5. Remove what is dead** · S
+_Changed by the decision of 2026-10-10 (see the top of this document): the legacy localStorage steps are deleted now, not after the thaw._
 Delete the two unwired secret adapters, the write-only generation-result store (D-8), and the legacy localStorage migration steps once D-8 allows. Retire `hexagen-active-workspace` as a second copy of project data: its readers take the project from the saved-projects port. The Monaco session adapter is wired but appears to have no caller; confirm, then delete it too. _Freeze:_ nothing that a production browser may still need is removed before the thaw; see D-8.
 
 ## 7. Order
+
+_Superseded by the decision section at the top of this document (2026-10-10): the order there replaces this one._
 
 ```
 B0 ─► B1 ─► B2 ─► B3 ─► B4 (staging) ─► B4 (production)
@@ -243,6 +296,7 @@ Each row names who chooses. "Hard to undo" marks a one-way door.
 | **D-14** | Can someone a project is shared with read or write its documents (editor buffers, governance threads, drafts)                                                                                                                                    | **Decided 2026-10-08.** Owner-only at first. Shared editing of buffers is a product feature with its own conflict rules, not a side effect of a storage move. The August plan also left document tenancy to the tenancy plan                                                                                                | No: access can be widened later; narrowing it after people rely on it is the hard direction                                                                                                                           | owner                 |
 
 **D-8, per kind.**
+_Changed by the decision of 2026-10-10 (see the top of this document): the brownfield draft and canvas layout rows now read "stay in the browser", and the wizard draft and legacy localStorage rows are deleted now, not after the thaw._
 
 | Browser data                                   | Recommendation                                                                                                                                                                                                                                                                                                           | If abandoned, the user loses                                                                                                                                                      |
 | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -312,6 +366,8 @@ Tests run against in-memory or temp-file SQLite today, with no service container
 - Whether the canvas layout has a session id for users without a migrated wizard draft; if not, that store is inert today and its lift is a no-op.
 
 ## 12. Ready when
+
+_Read with the decision of 2026-10-10 (see the top of this document); the bullets on all kinds, on the ETL and on the thaw are cut or changed there._
 
 - On staging, a signed-in user sees the same projects, editor buffers, drafts and threads on a second browser.
 - On staging, the application runs with `DATABASE_URL` set and no `platform.db` or `byok.db` open. After the thaw, production starts the same way on an empty database, and a returning user's browser projects are lifted on first sign-in.
