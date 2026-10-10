@@ -994,7 +994,15 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
       // the precondition by value, but a prior write in the same chain may
       // have stamped a new rev. Rebase the precondition on the fresh rev so
       // the PUT goes out with the current If-Match.
-      const freshStamp = await this.cache.getLiftStamp(sessionId);
+      let freshStamp: LiftStamp | null;
+      try {
+        freshStamp = await this.cache.getLiftStamp(sessionId);
+      } catch {
+        this.logger.warn(
+          `workspace ${sessionId} save skipped: the stamp could not be read`,
+        );
+        return;
+      }
       if (
         freshStamp !== null &&
         freshStamp.ownerId === userId &&
@@ -1095,7 +1103,9 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
         return;
       }
 
-      const prevStamp = await this.cache.getLiftStamp(sessionId);
+      const prevStamp = await this.cache
+        .getLiftStamp(sessionId)
+        .catch(() => null);
       await this.tryStamp(sessionId, {
         ownerId: userId,
         rev: result.rev,

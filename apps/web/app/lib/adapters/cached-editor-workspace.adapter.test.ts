@@ -3527,7 +3527,7 @@ describe("CachedEditorWorkspaceAdapter Item 3: chained write + discard", () => {
     assert.equal(putCount, 2, "exactly two PUTs");
   });
 
-  it("a rejected first chained write does not block the second PUT", async () => {
+  it("a stamp read that fails after the first PUT does not make the second PUT conflict", async () => {
     const { adapter, cache, server, fetchImpl } = makeAdapters();
     const ws = makeWorkspace(1000);
     await cache.saveWorkspace(UUID, ws);
@@ -3541,10 +3541,18 @@ describe("CachedEditorWorkspaceAdapter Item 3: chained write + discard", () => {
     await adapter.loadWorkspace(UUID);
 
     // A fake fetch whose PUT returns a promise the test resolves later, so a
-    // write is genuinely in flight while the second write chains on it.
+    // write is genuinely in flight while the second write chains on it. The
+    // deferred PUT validates If-Match against the server rev (a stale rev is
+    // a 409 conflict), just like the real server mock does.
     const serverFetch = fetchImpl.getMockImplementation()!;
     let putCount = 0;
     const resolvers: Array<(v: Response) => void> = [];
+    const putIfMatches: (string | null)[] = [];
+    const parseRev = (header: string | null): number | null => {
+      if (!header) return null;
+      const match = /^rev:(\d+)$/.exec(header.trim().replaceAll('"', ""));
+      return match ? Number(match[1]) : null;
+    };
     fetchImpl.mockImplementation(
       async (url: string | URL | Request, init?: RequestInit) => {
         const href = String(url);
@@ -3552,6 +3560,7 @@ describe("CachedEditorWorkspaceAdapter Item 3: chained write + discard", () => {
         if (method === "PUT") {
           putCount++;
           const idx = putCount - 1;
+          putIfMatches[idx] = new Headers(init?.headers).get("If-Match");
           return new Promise<Response>((res) => {
             resolvers[idx] = (resp) => {
               const body = JSON.parse(init!.body as string);
@@ -3564,6 +3573,11 @@ describe("CachedEditorWorkspaceAdapter Item 3: chained write + discard", () => {
                 updatedAt: 0,
                 projectId: body.projectId ?? null,
               };
+              const ifMatch = parseRev(putIfMatches[idx]);
+              if (ifMatch !== null && ifMatch !== doc.rev) {
+                res(new Response("conflict", { status: 409 }));
+                return;
+              }
               doc.rev = putCount + 1;
               doc.updatedAt = Date.now();
               doc.projectId = body.projectId ?? null;
@@ -3592,7 +3606,9 @@ describe("CachedEditorWorkspaceAdapter Item 3: chained write + discard", () => {
       throw new Error("storage error");
     });
 
-    // Resolve #1 → the post-PUT stamp read throws → write #1 rejects.
+    // Resolve #1 (it confirmed rev 2). The chained write #2 then sends PUT #2;
+    // with the fix write #1 no longer rejects, so its stamp of rev 2 is
+    // visible to write #2.
     resolvers[0](
       new Response(
         JSON.stringify({
@@ -3609,8 +3625,33 @@ describe("CachedEditorWorkspaceAdapter Item 3: chained write + discard", () => {
     assert.equal(
       putCount,
       2,
-      "second PUT is sent even though first write rejected",
+      "second PUT is sent after first resolves",
     );
+
+    // Resolve #2. The deferred PUT validated Its If-Match against the server
+    // rev (rev 2) when released; a stale rev would have answered 409.
+    resolvers[1](
+      new Response(
+        JSON.stringify({
+          kind: "workspace",
+          id: UUID,
+          projectId: UUID,
+          payload: {},
+          updatedAt: 3000,
+        }),
+        { status: 200, headers: { ETag: '"rev:3"' } },
+      ),
+    );
+    await vi.advanceTimersByTimeAsync(0);
+
+    assert.equal(
+      putIfMatches[1],
+      '"rev:2"',
+      "PUT #2 carries the rev PUT #1 produced",
+    );
+    assert.equal(adapter["pausedIds"].has(UUID), false, "id not paused");
+    const rec = await cache.getConflicts();
+    assert.equal(rec?.count ?? 0, 0, "no conflict recorded");
   });
 
   it("a discard during an in-flight write whose clean-up DELETE fails leaves a marker, and the next load deletes the server copy and returns nothing", async () => {
