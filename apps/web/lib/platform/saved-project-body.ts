@@ -1,13 +1,28 @@
 import { z } from "zod";
 import type { SavedProject } from "@hexagen/shared";
 
+/**
+ * Upper bound for `createdAt` / `updatedAt`: 10_000 days of epoch
+ * milliseconds. The legacy numeric `If-Match` (an `updatedAt` token) is
+ * held to the same bound (project-route-handlers.ts).
+ */
+export const MAX_PROJECT_TIMESTAMP = 8_640_000_000_000_000;
+
 export const savedProjectBodySchema = z
   .object({
     id: z.string().uuid(),
     name: z.string().min(1),
     schemaVersion: z.number().int().positive(),
-    createdAt: z.number().int().min(0).max(8_640_000_000_000_000),
-    updatedAt: z.number().int().min(0).max(8_640_000_000_000_000),
+    createdAt: z
+      .number()
+      .int()
+      .min(0)
+      .max(MAX_PROJECT_TIMESTAMP),
+    updatedAt: z
+      .number()
+      .int()
+      .min(0)
+      .max(MAX_PROJECT_TIMESTAMP),
     formState: z.record(z.unknown()),
     manifestYaml: z.string(),
     githubLink: z.unknown().optional(),

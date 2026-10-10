@@ -265,4 +265,35 @@ describe("GET/PUT /api/projects/[projectId]", () => {
     });
     assert.equal(((await stored.json()) as SavedProject).name, "shop");
   });
+
+  it.each(["1.5", "-1", "1e300"])(
+    "a non-whole or out-of-range legacy If-Match (%s) is 400 and the project is unchanged",
+    async (header) => {
+      await PUT(put(ID, { ...sample(), name: "original" }), {
+        params: Promise.resolve({ projectId: ID }),
+      });
+
+      const res = await PUT(
+        new NextRequest(`http://localhost/api/projects/${ID}`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            "If-Match": header,
+          },
+          body: JSON.stringify({ ...sample(), name: "smuggled" }),
+        }),
+        { params: Promise.resolve({ projectId: ID }) },
+      );
+      assert.equal(res.status, 400);
+      assert.equal(
+        ((await res.json()) as { error: string }).error,
+        "validation",
+      );
+
+      const stored = await GET(get(ID), {
+        params: Promise.resolve({ projectId: ID }),
+      });
+      assert.equal(((await stored.json()) as SavedProject).name, "original");
+    },
+  );
 });
