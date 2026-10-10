@@ -4185,6 +4185,69 @@ describe("payload comparison is independent of key order", () => {
     assert.equal(warns.length, 0, "no warnings");
   });
 
+  it("a browser copy with an undefined property equals the server copy without it", async () => {
+    const { adapter, cache, server, warns } = makeReorderedAdapters();
+    const ws = makeWorkspace(1000, UUID, {
+      "a.ts": { content: "hello", isNew: true, dirty: false, updatedAt: 1000 },
+    });
+    const withUndefined = {
+      ...ws,
+      extra: undefined,
+      files: {
+        ...ws.files,
+        "a.ts": {
+          ...(ws.files as Record<string, unknown>)["a.ts"],
+          ghost: undefined,
+        },
+      },
+    } as PersistedEditorWorkspace;
+    await cache.saveWorkspace(UUID, withUndefined);
+    // Server holds the JSON round-trip: `undefined` properties dropped.
+    server.set(UUID, {
+      payload: JSON.parse(JSON.stringify(withUndefined)),
+      rev: 1,
+      updatedAt: 1000,
+      projectId: UUID,
+    });
+
+    await adapter.loadWorkspace(UUID);
+    const stamp = await cache.getLiftStamp(UUID);
+    assert.ok(stamp, "stamp written");
+    assert.equal(stamp!.confirmed, true);
+
+    const rec = await cache.getConflicts();
+    assert.equal(rec, null, "no conflict recorded");
+    assert.equal(warns.length, 0, "no warnings");
+  });
+
+  it("an undefined array element equals the null the server returns", async () => {
+    const { adapter, cache, server, warns } = makeReorderedAdapters();
+    const ws = makeWorkspace(1000, UUID, {
+      "a.ts": { content: "hello", isNew: true, dirty: false, updatedAt: 1000 },
+    });
+    const withUndefinedElement = {
+      ...ws,
+      list: [1, undefined],
+    } as PersistedEditorWorkspace;
+    await cache.saveWorkspace(UUID, withUndefinedElement);
+    // Server holds the JSON round-trip: `[1, undefined]` becomes `[1, null]`.
+    server.set(UUID, {
+      payload: JSON.parse(JSON.stringify(withUndefinedElement)),
+      rev: 1,
+      updatedAt: 1000,
+      projectId: UUID,
+    });
+
+    await adapter.loadWorkspace(UUID);
+    const stamp = await cache.getLiftStamp(UUID);
+    assert.ok(stamp, "stamp written");
+    assert.equal(stamp!.confirmed, true);
+
+    const rec = await cache.getConflicts();
+    assert.equal(rec, null, "no conflict recorded");
+    assert.equal(warns.length, 0, "no warnings");
+  });
+
   it("a single truly different value records a conflict", async () => {
     const { adapter, cache, server, warns } = makeReorderedAdapters();
     const ws = makeWorkspace(1000, UUID, {

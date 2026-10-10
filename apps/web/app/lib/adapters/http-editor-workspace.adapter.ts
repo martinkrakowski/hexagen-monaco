@@ -18,10 +18,8 @@ const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
- * Deep, key-order-independent comparison of two JSON values.
- * Arrays keep their order; an `undefined` value (dropped by JSON.stringify)
- * is treated as absent. Used so a `jsonb` payload reordered by Postgres
- * still matches the browser copy it was serialised from.
+ * Deep, key-order-independent comparison of two JSON values, treating
+ * `undefined` as JSON does: absent in objects, `null` in arrays.
  */
 function samePayload(a: unknown, b: unknown): boolean {
   if (a === b) return true;
@@ -32,19 +30,18 @@ function samePayload(a: unknown, b: unknown): boolean {
   if (Array.isArray(a) || Array.isArray(b)) {
     if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length)
       return false;
-    return a.every((av, i) => samePayload(av, b[i]));
+    return a.every((av, i) => samePayload(av === undefined ? null : av, b[i]));
   }
-  const aKeys = Object.keys(a as Record<string, unknown>);
-  const bKeys = Object.keys(b as Record<string, unknown>);
+  const aKeys = Object.keys(a as Record<string, unknown>).filter(
+    (k) => (a as Record<string, unknown>)[k] !== undefined,
+  );
+  const bKeys = Object.keys(b as Record<string, unknown>).filter(
+    (k) => (b as Record<string, unknown>)[k] !== undefined,
+  );
   if (aKeys.length !== bKeys.length) return false;
   const aObj = a as Record<string, unknown>;
   const bObj = b as Record<string, unknown>;
-  return (
-    aKeys.every(
-      (k) => bObj[k] !== undefined && samePayload(aObj[k], bObj[k]),
-    ) &&
-    bKeys.every((k) => aObj[k] !== undefined && samePayload(aObj[k], bObj[k]))
-  );
+  return aKeys.every((k) => k in bObj && samePayload(aObj[k], bObj[k]));
 }
 
 /**
