@@ -3172,6 +3172,92 @@ describe("CachedEditorWorkspaceAdapter Item 15: identity reset", () => {
     }
   });
 
+  it("a 401 on the catch-up PUT records no conflict, does not pause, and resets the cached user id", async () => {
+    const { defaultUserIdSource, resetCachedUserId } =
+      await import("./http-editor-workspace.adapter");
+
+    let userFetchCount = 0;
+    let putCount = 0;
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn(
+      async (url: string | URL | Request, init?: RequestInit) => {
+        const href = String(url);
+        if (href.includes("/api/auth/session")) {
+          userFetchCount++;
+          return new Response(JSON.stringify({ user: { sub: "user-1" } }), {
+            status: 200,
+          });
+        }
+        if (href.includes("/documents/workspace/")) {
+          const method = (init?.method ?? "GET").toUpperCase();
+          if (method === "GET") {
+            return new Response(
+              JSON.stringify({
+                kind: "workspace",
+                id: UUID,
+                projectId: UUID,
+                payload: makeWorkspace(1000),
+                updatedAt: 1000,
+              }),
+              { status: 200, headers: { ETag: '"rev:5"' } },
+            );
+          }
+          putCount++;
+          return new Response(null, { status: 401 });
+        }
+        return realFetch(url as never, init) as never;
+      },
+    ) as never;
+
+    try {
+      resetCachedUserId();
+      const fetched = await defaultUserIdSource();
+      assert.equal(fetched, "user-1");
+      assert.equal(userFetchCount, 1, "session fetched once");
+
+      const cache = new IDBEditorWorkspaceAdapter();
+      const remote = new HttpEditorWorkspaceAdapter();
+      const { logger, warns } = warnCollector();
+      const adapter = new CachedEditorWorkspaceAdapter(
+        cache,
+        remote,
+        () => null,
+        defaultUserIdSource,
+        logger,
+      );
+
+      // Confirmed stamp at the server's rev + dirty cache → the catch-up PUT.
+      await cache.saveWorkspace(UUID, makeWorkspace(2000));
+      await cache.setLiftStamp(UUID, {
+        ownerId: "user-1",
+        rev: 5,
+        syncedUpdatedAt: 1000,
+        confirmed: true,
+      });
+
+      await adapter.loadWorkspace(UUID);
+      assert.equal(putCount, 1, "the catch-up PUT was sent");
+
+      const rec = await cache.getConflicts();
+      assert.equal(rec, null, "no conflict recorded for a 401");
+      assert.ok(
+        warns.some((w) => /catch-up PUT failed/.test(w)),
+        "warning logged",
+      );
+
+      const again = await defaultUserIdSource();
+      assert.equal(again, "user-1");
+      assert.equal(userFetchCount, 2, "user id re-fetched after the 401 PUT");
+
+      // Not paused: the next save still sends its PUT.
+      await adapter.saveWorkspace(UUID, makeWorkspace(3000));
+      await vi.advanceTimersByTimeAsync(REMOTE_DEBOUNCE_MS);
+      assert.equal(putCount, 2, "not paused: the next save still PUTs");
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  });
+
   it("a 401 on the discard-marker read resets the cached user id", async () => {
     const { defaultUserIdSource, resetCachedUserId } =
       await import("./http-editor-workspace.adapter");
@@ -4357,11 +4443,78 @@ describe("payload comparison is independent of key order", () => {
     assert.equal(rec!.last[0]!.where, "load");
     assert.ok(warns.some((w) => /cache differs from server/.test(w)));
   });
+
+  it("an unconfirmed stamp with a clean cache is confirmed when the server payload arrives reordered", async () => {
+    const { adapter, cache, server, warns } = makeReorderedAdapters();
+    const ws = makeWorkspace(1000, UUID, {
+      "a.ts": { content: "hello", isNew: true, dirty: false, updatedAt: 1000 },
+      nested: { b: 1, a: 2, c: { z: 9, y: 8 } },
+    });
+    await cache.saveWorkspace(UUID, ws);
+    await cache.setLiftStamp(UUID, {
+      ownerId: "user-1",
+      rev: 1,
+      syncedUpdatedAt: 1000,
+      confirmed: false,
+    });
+    // Server holds the SAME payload at the stamp's rev, keys reordered.
+    server.set(UUID, {
+      payload: withDescendingKeys(ws),
+      rev: 1,
+      updatedAt: 1000,
+      projectId: UUID,
+    });
+
+    await adapter.loadWorkspace(UUID);
+    const stamp = await cache.getLiftStamp(UUID);
+    assert.ok(stamp, "stamp preserved");
+    assert.equal(stamp!.confirmed, true, "stamp confirmed");
+    assert.equal(stamp!.rev, 1, "stamp rev unchanged");
+    assert.equal(warns.length, 0, "no warnings");
+  });
+
+  it("a dirty cache catch-up whose confirming GET returns the payload reordered ends confirmed without a mismatch warning", async () => {
+    const { adapter, cache, server, warns } = makeReorderedAdapters();
+    const ws = makeWorkspace(1000, UUID, {
+      "a.ts": { content: "hello", isNew: true, dirty: false, updatedAt: 1000 },
+      nested: { b: 1, a: 2, c: { z: 9, y: 8 } },
+    });
+    await cache.saveWorkspace(UUID, ws);
+    await cache.setLiftStamp(UUID, {
+      ownerId: "user-1",
+      rev: 1,
+      syncedUpdatedAt: 1000,
+      confirmed: true,
+    });
+    server.set(UUID, {
+      payload: withDescendingKeys(ws),
+      rev: 1,
+      updatedAt: 1000,
+      projectId: UUID,
+    });
+    // The cache goes dirty after the stamp.
+    const dirtyWs = makeWorkspace(2000, UUID, {
+      "a.ts": { content: "hello2", isNew: true, dirty: true, updatedAt: 2000 },
+      nested: { b: 1, a: 2, c: { z: 9, y: 8 } },
+    });
+    await cache.saveWorkspace(UUID, dirtyWs);
+
+    await adapter.loadWorkspace(UUID);
+    const stamp = await cache.getLiftStamp(UUID);
+    assert.ok(stamp, "stamp preserved");
+    assert.equal(stamp!.confirmed, true, "stamp confirmed");
+    assert.equal(
+      warns.some((w) => /catch-up payload mismatch/.test(w)),
+      false,
+      "no catch-up payload mismatch warning",
+    );
+  });
 });
 
 describe("invalid server payload is not cached", () => {
   it("server returns null payload with an empty browser: load returns cache result, nothing saved, no stamp", async () => {
     const { adapter, cache, fetchImpl } = makeAdapters();
+    const saveSpy = vi.spyOn(cache, "saveWorkspace");
     // empty browser cache
     fetchImpl.mockImplementation(
       async (url: string | URL | Request, init?: RequestInit) =>
@@ -4386,10 +4539,12 @@ describe("invalid server payload is not cached", () => {
     assert.equal(cached.value, null);
     assert.equal(await cache.getLiftStamp(UUID), null, "no stamp");
     assert.equal(await cache.getConflicts(), null, "no conflict");
+    assert.equal(saveSpy.mock.calls.length, 0, "nothing saved");
   });
 
   it("server returns { schemaVersion: 2 }: the same", async () => {
     const { adapter, cache, fetchImpl } = makeAdapters();
+    const saveSpy = vi.spyOn(cache, "saveWorkspace");
     fetchImpl.mockImplementation(
       async (url: string | URL | Request, init?: RequestInit) =>
         new Response(
@@ -4411,5 +4566,121 @@ describe("invalid server payload is not cached", () => {
     assert.ok(cached.success);
     assert.equal(cached.value, null);
     assert.equal(await cache.getLiftStamp(UUID), null, "no stamp");
+    assert.equal(saveSpy.mock.calls.length, 0, "nothing saved");
+  });
+
+  it("browser copy present, no stamp, server { schemaVersion: 2 }: no conflict, no stamp, browser copy unchanged", async () => {
+    const { adapter, cache, fetchImpl, warns } = makeAdapters();
+    const browserWs = makeWorkspace(1000);
+    await cache.saveWorkspace(UUID, browserWs);
+    const saveSpy = vi.spyOn(cache, "saveWorkspace");
+    fetchImpl.mockImplementation(
+      async (url: string | URL | Request, init?: RequestInit) =>
+        new Response(
+          JSON.stringify({
+            kind: "workspace",
+            id: UUID,
+            projectId: UUID,
+            payload: { schemaVersion: 2, sessionId: UUID },
+            updatedAt: 1000,
+          }),
+          { status: 200, headers: { ETag: '"rev:1"' } },
+        ),
+    );
+
+    const result = await adapter.loadWorkspace(UUID);
+    assert.ok(result.success);
+    assert.deepEqual(result.value, browserWs, "load returns the browser copy");
+
+    const cached = await cache.loadWorkspace(UUID);
+    assert.ok(cached.success);
+    assert.equal(
+      JSON.stringify(cached.value),
+      JSON.stringify(browserWs),
+      "browser copy unchanged",
+    );
+    assert.equal(await cache.getLiftStamp(UUID), null, "no stamp");
+    assert.equal(await cache.getConflicts(), null, "no conflict");
+    assert.equal(saveSpy.mock.calls.length, 0, "nothing saved");
+    assert.ok(
+      warns.some((w) => /skipped: invalid server payload/.test(w)),
+      "warning logged",
+    );
+  });
+
+  it("browser copy present, stamp confirmed at rev 5, server at rev 6 with { schemaVersion: 2 }: browser copy not overwritten, stamp unchanged", async () => {
+    const { adapter, cache, fetchImpl, warns } = makeAdapters();
+    const browserWs = makeWorkspace(1000);
+    await cache.saveWorkspace(UUID, browserWs);
+    await cache.setLiftStamp(UUID, {
+      ownerId: "user-1",
+      rev: 5,
+      syncedUpdatedAt: 1000,
+      confirmed: true,
+    });
+    const saveSpy = vi.spyOn(cache, "saveWorkspace");
+    fetchImpl.mockImplementation(
+      async (url: string | URL | Request, init?: RequestInit) =>
+        new Response(
+          JSON.stringify({
+            kind: "workspace",
+            id: UUID,
+            projectId: UUID,
+            payload: { schemaVersion: 2, sessionId: UUID },
+            updatedAt: 1000,
+          }),
+          { status: 200, headers: { ETag: '"rev:6"' } },
+        ),
+    );
+
+    const result = await adapter.loadWorkspace(UUID);
+    assert.ok(result.success);
+    assert.deepEqual(result.value, browserWs, "load returns the browser copy");
+
+    const cached = await cache.loadWorkspace(UUID);
+    assert.ok(cached.success);
+    assert.equal(
+      JSON.stringify(cached.value),
+      JSON.stringify(browserWs),
+      "browser copy byte-identical to before",
+    );
+    const stamp = await cache.getLiftStamp(UUID);
+    assert.ok(stamp, "stamp preserved");
+    assert.equal(stamp!.rev, 5, "stamp rev unchanged");
+    assert.equal(stamp!.confirmed, true, "stamp confirmation unchanged");
+    assert.equal(saveSpy.mock.calls.length, 0, "nothing saved");
+    assert.ok(
+      warns.some((w) => /skipped: invalid server payload/.test(w)),
+      "warning logged",
+    );
+  });
+
+  it("server returns a string payload with an empty browser: load returns null, nothing saved, no stamp", async () => {
+    const { adapter, cache, fetchImpl, warns } = makeAdapters();
+    const saveSpy = vi.spyOn(cache, "saveWorkspace");
+    fetchImpl.mockImplementation(
+      async (url: string | URL | Request, init?: RequestInit) =>
+        new Response(
+          JSON.stringify({
+            kind: "workspace",
+            id: UUID,
+            projectId: UUID,
+            payload: "oops",
+            updatedAt: 1000,
+          }),
+          { status: 200, headers: { ETag: '"rev:1"' } },
+        ),
+    );
+
+    const result = await adapter.loadWorkspace(UUID);
+    assert.ok(result.success);
+    assert.equal(result.value, null, "cache result (null)");
+    assert.equal(saveSpy.mock.calls.length, 0, "nothing saved");
+    assert.equal(await cache.getLiftStamp(UUID), null, "no stamp");
+    assert.equal(await cache.getConflicts(), null, "no conflict");
+    assert.ok(
+      warns.some((w) => /skipped: invalid server payload/.test(w)),
+      "warning logged",
+    );
   });
 });
