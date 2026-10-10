@@ -2558,6 +2558,315 @@ describe("CachedEditorWorkspaceAdapter Item 14: clearWorkspace", () => {
     );
   });
 
+  it("a save that began before a discard arms no timer while the discard is in flight", async () => {
+    const { adapter, cache, server, fetchImpl } = makeAdapters();
+    const ws = makeWorkspace(1000);
+    await cache.saveWorkspace(UUID, ws);
+    await cache.setLiftStamp(UUID, {
+      ownerId: "user-1",
+      rev: 5,
+      syncedUpdatedAt: 1000,
+      confirmed: true,
+    });
+    server.set(UUID, { payload: ws, rev: 5, updatedAt: 1000, projectId: UUID });
+    await adapter.loadWorkspace(UUID);
+
+    // Hold the save's stamp read open so a discard can begin underneath it.
+    const realStamp: LiftStamp = {
+      ownerId: "user-1",
+      rev: 5,
+      syncedUpdatedAt: 1000,
+      confirmed: true,
+    };
+    let resolveSaveStamp!: () => void;
+    vi.spyOn(cache, "getLiftStamp").mockImplementationOnce(async () => {
+      await new Promise<void>((resolve) => {
+        resolveSaveStamp = resolve;
+      });
+      return realStamp;
+    });
+
+    // Start the save WITHOUT awaiting it; it parks in its stamp read.
+    const savePromise = adapter.saveWorkspace(UUID, makeWorkspace(2000));
+    // Let it reach its stamp read first so this once-mock is consumed by the
+    // save, not by the discard's own stamp read.
+    await vi.advanceTimersByTimeAsync(0);
+
+    // Hold the discard's cache clear open so the discard stalls mid-flight,
+    // leaving the discarding marker set while the save is still parked.
+    let resolveClear!: () => void;
+    vi.spyOn(cache, "clearWorkspace").mockImplementationOnce(async (sid) => {
+      await new Promise<void>((resolve) => {
+        resolveClear = resolve;
+      });
+      return cache.clearWorkspace(sid);
+    });
+
+    // Start the discard WITHOUT awaiting it; it stalls on the slow cache clear.
+    const clearPromise = adapter.clearWorkspace(UUID);
+    await vi.advanceTimersByTimeAsync(0);
+
+    const putsBeforeDiscard = putCallsOf(fetchImpl).length;
+
+    // Release the save's stamp read and let it settle. With the guard in place
+    // it returns at the second discarding.has check; without it, it arms a
+    // timer that the discard's cancelWriteTimer should still cancel.
+    resolveSaveStamp();
+    await savePromise;
+
+    // Only now release the discard and let it drain (cache clear, DELETE,
+    // finally).
+    resolveClear();
+    await clearPromise;
+
+    // Let any armed timer fire — twice, to be sure nothing sneaks through.
+    await vi.advanceTimersByTimeAsync(REMOTE_DEBOUNCE_MS);
+    await vi.advanceTimersByTimeAsync(REMOTE_DEBOUNCE_MS);
+
+    assert.equal(
+      putCallsOf(fetchImpl).length,
+      putsBeforeDiscard,
+      "no PUT sent after clearWorkspace was called",
+    );
+    assert.equal(server.has(UUID), false, "server holds no copy");
+
+    const loadResult = await adapter.loadWorkspace(UUID);
+    assert.equal(
+      loadResult.success && loadResult.value,
+      null,
+      "load returns null (discarded content not revived)",
+    );
+  });
+
+  it("a save made during a discard writes nothing to the browser cache", async () => {
+    const { adapter, cache, server, fetchImpl } = makeAdapters();
+    const ws = makeWorkspace(1000);
+    await cache.saveWorkspace(UUID, ws);
+    await cache.setLiftStamp(UUID, {
+      ownerId: "user-1",
+      rev: 5,
+      syncedUpdatedAt: 1000,
+      confirmed: true,
+    });
+    server.set(UUID, { payload: ws, rev: 5, updatedAt: 1000, projectId: UUID });
+    await adapter.loadWorkspace(UUID);
+
+    // Hold the discard open on its cache clear so discarding stays set while a
+    // save re-enters saveWorkspace during the discard window.
+    let resolveClear!: () => void;
+    vi.spyOn(cache, "clearWorkspace").mockImplementationOnce(async (sid) => {
+      await new Promise<void>((resolve) => {
+        resolveClear = resolve;
+      });
+      return cache.clearWorkspace(sid);
+    });
+
+    const saveSpy = vi.spyOn(cache, "saveWorkspace");
+
+    const clearPromise = adapter.clearWorkspace(UUID);
+    await vi.advanceTimersByTimeAsync(0);
+
+    // While the discard is in flight, the editor saves.
+    await adapter.saveWorkspace(UUID, makeWorkspace(2000));
+    await vi.advanceTimersByTimeAsync(0);
+
+    assert.equal(
+      saveSpy.mock.calls.length,
+      0,
+      "a save made during a discard writes nothing to the browser cache",
+    );
+
+    // Let the discard finish.
+    resolveClear();
+    await clearPromise;
+    await vi.advanceTimersByTimeAsync(REMOTE_DEBOUNCE_MS);
+
+    const cachedAfter = await cache.loadWorkspace(UUID);
+    assert.equal(
+      cachedAfter.success && cachedAfter.value,
+      null,
+      "browser cache holds no workspace after the discard",
+    );
+    const putsBefore = putCallsOf(fetchImpl).length;
+    const loadResult = await adapter.loadWorkspace(UUID);
+    assert.equal(
+      putCallsOf(fetchImpl).length - putsBefore,
+      0,
+      "loadWorkspace after the discard sends no PUT",
+    );
+    assert.equal(
+      loadResult.success && loadResult.value,
+      null,
+      "loadWorkspace after the discard returns null",
+    );
+  });
+
+  it("a save during a tenant discard's slow cache clear is refused until the clear finishes", async () => {
+    const { adapter, cache, fetchImpl } = makeAdapters({
+      tenantId: "tenant-1",
+    });
+    const ws = makeWorkspace(1000);
+    await cache.saveWorkspace(UUID, ws);
+    await cache.setLiftStamp(UUID, {
+      ownerId: "user-1",
+      rev: 5,
+      syncedUpdatedAt: 1000,
+      confirmed: true,
+    });
+    await adapter.loadWorkspace(UUID);
+
+    // Hold the tenant-path cache clear open. Today (no `await` on the return)
+    // the finally deletes the id from `discarding` before the clear resolves,
+    // so the discard window closes while the cache clear is still pending.
+    let resolveClear!: () => void;
+    vi.spyOn(cache, "clearWorkspace").mockImplementationOnce(async (sid) => {
+      await new Promise<void>((resolve) => {
+        resolveClear = resolve;
+      });
+      return cache.clearWorkspace(sid);
+    });
+
+    const clearPromise = adapter.clearWorkspace(UUID);
+    await vi.advanceTimersByTimeAsync(0);
+
+    // While the cache clear is still pending, the editor saves.
+    const saveSpy = vi.spyOn(cache, "saveWorkspace");
+    await adapter.saveWorkspace(UUID, makeWorkspace(2000));
+    await vi.advanceTimersByTimeAsync(0);
+
+    assert.equal(
+      saveSpy.mock.calls.length,
+      0,
+      "a save during a discard's cache clear writes nothing to the browser cache",
+    );
+
+    // Let the discard finish.
+    resolveClear();
+    await clearPromise;
+    await vi.advanceTimersByTimeAsync(REMOTE_DEBOUNCE_MS);
+
+    const cachedAfter = await cache.loadWorkspace(UUID);
+    assert.equal(
+      cachedAfter.success && cachedAfter.value,
+      null,
+      "browser cache holds nothing after the discard",
+    );
+    assert.equal(
+      putCallsOf(fetchImpl).length,
+      0,
+      "no PUT sent for a tenant discard",
+    );
+  });
+
+  it("a save whose stamp is gone before the timer fires sends no PUT", async () => {
+    const { adapter, cache, server, fetchImpl } = makeAdapters();
+    const ws = makeWorkspace(2000);
+    server.set(UUID, { payload: ws, rev: 5, updatedAt: 2000, projectId: UUID });
+    await adapter.loadWorkspace(UUID);
+    assert.equal((await cache.getLiftStamp(UUID))?.rev, 5);
+
+    // Schedule a save — the timer captures If-Match 5.
+    await adapter.saveWorkspace(UUID, makeWorkspace(3000));
+    // Drop the stamp before the timer fires.
+    await cache.setLiftStamp(UUID, null);
+
+    const putsBefore = putCallsOf(fetchImpl).length;
+    await vi.advanceTimersByTimeAsync(REMOTE_DEBOUNCE_MS);
+
+    assert.equal(
+      putCallsOf(fetchImpl).length - putsBefore,
+      0,
+      "no PUT sent when the captured stamp is gone before the timer fired",
+    );
+  });
+
+  it("a save whose stamp became a discard marker before the timer fires sends no PUT", async () => {
+    const { adapter, cache, server, fetchImpl } = makeAdapters();
+    const ws = makeWorkspace(2000);
+    server.set(UUID, { payload: ws, rev: 5, updatedAt: 2000, projectId: UUID });
+    await adapter.loadWorkspace(UUID);
+
+    await adapter.saveWorkspace(UUID, makeWorkspace(3000));
+    // Replace the stamp by this user's discard marker before the timer fires.
+    await cache.setLiftStamp(UUID, {
+      ownerId: "user-1",
+      rev: 5,
+      syncedUpdatedAt: 0,
+      confirmed: false,
+      discarded: true,
+    });
+
+    const putsBefore = putCallsOf(fetchImpl).length;
+    await vi.advanceTimersByTimeAsync(REMOTE_DEBOUNCE_MS);
+
+    assert.equal(
+      putCallsOf(fetchImpl).length - putsBefore,
+      0,
+      "no PUT sent when the captured stamp became a discard marker",
+    );
+  });
+
+  it("an overlapping discard keeps the workspace closed to saves until the last one ends", async () => {
+    const { adapter, cache, fetchImpl } = makeAdapters({
+      tenantId: "tenant-1",
+    });
+    const ws = makeWorkspace(1000);
+    await cache.saveWorkspace(UUID, ws);
+    await cache.setLiftStamp(UUID, {
+      ownerId: "user-1",
+      rev: 5,
+      syncedUpdatedAt: 1000,
+      confirmed: true,
+    });
+    await adapter.loadWorkspace(UUID);
+
+    // Hold every clearWorkspace on its own resolver. The mock resolves without
+    // clearing the cache — this test targets the discarding counter only.
+    const resolvers: Array<() => void> = [];
+    vi.spyOn(cache, "clearWorkspace").mockImplementation(
+      async (_sid: string) => {
+        const i = resolvers.length;
+        await new Promise<void>((resolve) => {
+          resolvers[i] = () => resolve();
+        });
+        return { success: true, value: undefined };
+      },
+    );
+
+    const saveSpy = vi.spyOn(cache, "saveWorkspace");
+
+    // Two overlapping clearWorkspace calls for the same id.
+    const clearP1 = adapter.clearWorkspace(UUID);
+    await vi.advanceTimersByTimeAsync(0);
+    const clearP2 = adapter.clearWorkspace(UUID);
+    await vi.advanceTimersByTimeAsync(0);
+
+    // The first ends while the second still waits.
+    resolvers[0]();
+    await clearP1;
+    await vi.advanceTimersByTimeAsync(0);
+
+    // A save during this window must still be refused: cache untouched.
+    saveSpy.mockClear();
+    const putsBefore = putCallsOf(fetchImpl).length;
+    await adapter.saveWorkspace(UUID, makeWorkspace(2000));
+    await vi.advanceTimersByTimeAsync(REMOTE_DEBOUNCE_MS);
+
+    assert.equal(
+      saveSpy.mock.calls.length,
+      0,
+      "save during overlapping discard writes nothing to the browser cache",
+    );
+    assert.equal(
+      putCallsOf(fetchImpl).length - putsBefore,
+      0,
+      "no PUT from a save during an overlapping discard",
+    );
+
+    resolvers[1]();
+    await clearP2;
+  });
+
   it("a discard landing during the stamp read before a write sends no PUT", async () => {
     const { adapter, cache, server, fetchImpl } = makeAdapters();
     const ws = makeWorkspace(1000);
@@ -4685,5 +4994,910 @@ describe("invalid server payload is not cached", () => {
       warns.some((w) => /skipped: invalid server payload/.test(w)),
       "warning logged",
     );
+  });
+});
+
+describe("a load running during a discard does not bring the workspace back", () => {
+  it("T1: a load parked on its GET when the discard runs uploads nothing and answers null", async () => {
+    const { adapter, cache, server, fetchImpl } = makeAdapters();
+    // Browser copy W, no stamp, server empty.
+    await cache.saveWorkspace(UUID, makeWorkspace(1000));
+    assert.equal(await cache.getLiftStamp(UUID), null, "no stamp at start");
+
+    // Park the load's server GET; later GETs see the (empty) server as 404.
+    let getInFlight = false;
+    let resolveGet!: (v: Response) => void;
+    fetchImpl.mockImplementation(
+      async (url: string | URL | Request, init?: RequestInit) => {
+        const method = (init?.method ?? "GET").toUpperCase();
+        if (method === "GET" && !getInFlight) {
+          getInFlight = true;
+          return new Promise((resolve) => {
+            resolveGet = resolve as (v: Response) => void;
+          }) as unknown as Response;
+        }
+        if (method === "GET") return new Response(null, { status: 404 });
+        return new Response("nope", { status: 500 });
+      },
+    );
+
+    const loadP = adapter.loadWorkspace(UUID);
+    await vi.advanceTimersByTimeAsync(0);
+    assert.equal(getInFlight, true, "the load is parked on its GET");
+
+    // The discard starts while the load waits on the server.
+    const clearP = adapter.clearWorkspace(UUID);
+    await vi.advanceTimersByTimeAsync(0);
+
+    // The GET answers 404 (the discarded server copy is gone).
+    resolveGet(new Response(null, { status: 404 }));
+    const [loadResult, clearResult] = await Promise.all([loadP, clearP]);
+    assert.ok(clearResult.success, "the discard succeeded");
+
+    assert.equal(putCallsOf(fetchImpl).length, 0, "no PUT was sent");
+    assert.equal(server.has(UUID), false, "the server holds no copy");
+    assert.equal(await cache.getLiftStamp(UUID), null, "no stamp");
+    const cached = await cache.loadWorkspace(UUID);
+    assert.ok(
+      cached.success && cached.value === null,
+      "the browser cache is empty",
+    );
+    assert.ok(
+      loadResult.success && loadResult.value === null,
+      "the load's result value is null",
+    );
+  });
+
+  it("T2: a load parked on its catch-up PUT when the discard runs is undone and never confirmed", async () => {
+    const { adapter, cache, server, fetchImpl } = makeAdapters();
+    // Stamp rev 5 confirmed, browser copy dirty, server at rev 5.
+    await cache.saveWorkspace(UUID, makeWorkspace(2000));
+    await cache.setLiftStamp(UUID, {
+      ownerId: "user-1",
+      rev: 5,
+      syncedUpdatedAt: 1000,
+      confirmed: true,
+    });
+    server.set(UUID, {
+      payload: makeWorkspace(1000),
+      rev: 5,
+      updatedAt: 1000,
+      projectId: UUID,
+    });
+
+    // Park the first PUT; everything else uses the real server fetch.
+    const realFetch = fetchImpl.getMockImplementation()!;
+    let putInFlight = false;
+    let releasePut!: () => void;
+    fetchImpl.mockImplementation(
+      async (url: string | URL | Request, init?: RequestInit) => {
+        const method = (init?.method ?? "GET").toUpperCase();
+        if (method === "PUT" && !putInFlight) {
+          putInFlight = true;
+          await new Promise<void>((resolve) => {
+            releasePut = resolve;
+          });
+        }
+        return realFetch(url, init);
+      },
+    );
+
+    const loadP = adapter.loadWorkspace(UUID);
+    await vi.advanceTimersByTimeAsync(0);
+    assert.equal(putInFlight, true, "the load is parked on its catch-up PUT");
+
+    // The discard starts while the PUT is in flight.
+    const clearP = adapter.clearWorkspace(UUID);
+    await vi.advanceTimersByTimeAsync(0);
+
+    // The PUT lands first (rev + 1); then the discard runs to its end.
+    releasePut();
+    const [loadResult, clearResult] = await Promise.all([loadP, clearP]);
+    assert.ok(clearResult.success, "the discard succeeded");
+    assert.ok(
+      loadResult.success && loadResult.value === null,
+      "the load's result value is null",
+    );
+
+    // However the two interleaved, the discarded workspace must not survive
+    // as a confirmed copy: either it is gone from the server, or the undo
+    // could not be confirmed and a discard marker was left instead.
+    const stamp = await cache.getLiftStamp(UUID);
+    if (server.has(UUID)) {
+      assert.ok(
+        stamp !== null && stamp.discarded === true,
+        "a surviving server copy is only allowed with a discard marker",
+      );
+    }
+    assert.ok(
+      !(stamp !== null && stamp.confirmed === true),
+      "no stamp with confirmed: true",
+    );
+
+    const cached = await cache.loadWorkspace(UUID);
+    assert.ok(
+      cached.success && cached.value === null,
+      "the browser cache is empty",
+    );
+
+    // A following load must not bring anything back.
+    const putsBefore = putCallsOf(fetchImpl).length;
+    const next = await adapter.loadWorkspace(UUID);
+    assert.ok(
+      next.success && next.value === null,
+      "the next load returns null",
+    );
+    const recached = await cache.loadWorkspace(UUID);
+    assert.ok(
+      recached.success && recached.value === null,
+      "the next load re-caches nothing",
+    );
+    assert.equal(
+      putCallsOf(fetchImpl).length,
+      putsBefore,
+      "the next load sends no PUT",
+    );
+  });
+});
+
+describe("round 3: a load and a discard of the same id", () => {
+  /** Parks the FIRST request with this method until release() is called; everything else goes to the real mock server. */
+  function parkFirst(
+    fetchImpl: ReturnType<typeof makeAdapters>["fetchImpl"],
+    parkedMethod: string,
+  ) {
+    const realFetch = fetchImpl.getMockImplementation()!;
+    const state = { parked: false, release: () => {} };
+    fetchImpl.mockImplementation(
+      async (url: string | URL | Request, init?: RequestInit) => {
+        const method = (init?.method ?? "GET").toUpperCase();
+        if (method === parkedMethod && !state.parked) {
+          state.parked = true;
+          await new Promise<void>((resolve) => {
+            state.release = resolve;
+          });
+        }
+        return realFetch(url, init);
+      },
+    );
+    return state;
+  }
+
+  it("a discard marker and a moved server copy: a load overtaken by a discard leaves the other device's copy alone", async () => {
+    const { adapter, cache, server, fetchImpl } = makeAdapters();
+    // Cache EMPTY, a discard marker at rev 5, the server copy moved to rev 6.
+    await cache.setLiftStamp(UUID, {
+      ownerId: "user-1",
+      rev: 5,
+      syncedUpdatedAt: 0,
+      confirmed: false,
+      discarded: true,
+    });
+    server.set(UUID, {
+      payload: makeWorkspace(3000),
+      rev: 6,
+      updatedAt: 3000,
+      projectId: UUID,
+    });
+    const get = parkFirst(fetchImpl, "GET");
+
+    const loadP = adapter.loadWorkspace(UUID);
+    await vi.advanceTimersByTimeAsync(0);
+    assert.equal(get.parked, true, "the load is parked on its GET");
+
+    const clearP = adapter.clearWorkspace(UUID);
+    await vi.advanceTimersByTimeAsync(0);
+
+    get.release();
+    const [loadResult, clearResult] = await Promise.all([loadP, clearP]);
+    assert.ok(clearResult.success, "the discard succeeded");
+    // The load stops before it drops the marker, so the discard deletes with
+    // the marker's rev 5 and gets 412. (The second pass is pinned by the test
+    // "a load overtaken while it drops a marker for a moved copy" below.)
+    assert.equal(server.get(UUID)?.rev, 6, "the other device's copy survives");
+    assert.ok(
+      loadResult.success && loadResult.value === null,
+      "the load's result value is null",
+    );
+    const c = await cache.loadWorkspace(UUID);
+    assert.ok(c.success && c.value === null, "the cache is empty");
+    const stamp = await cache.getLiftStamp(UUID);
+    assert.ok(stamp?.rev !== 6, "no stamp at the moved revision");
+  });
+
+  it("a discard that starts while a load still waits for the user id waits for that load, and nothing is cached again", async () => {
+    const { cache, remote, fetchImpl, server, logger } = makeAdapters();
+    let releaseUserId!: (id: string) => void;
+    let userIdCalls = 0;
+    const adapter = new CachedEditorWorkspaceAdapter(
+      cache,
+      remote,
+      () => null,
+      () => {
+        userIdCalls += 1;
+        if (userIdCalls === 1) {
+          return new Promise<string>((resolve) => {
+            releaseUserId = resolve;
+          });
+        }
+        return Promise.resolve("user-1");
+      },
+      logger,
+    );
+    // Browser copy W, stamp confirmed at rev 5, server at rev 5.
+    await cache.saveWorkspace(UUID, makeWorkspace(1000));
+    await cache.setLiftStamp(UUID, {
+      ownerId: "user-1",
+      rev: 5,
+      syncedUpdatedAt: 1000,
+      confirmed: true,
+    });
+    server.set(UUID, {
+      payload: makeWorkspace(1000),
+      rev: 5,
+      updatedAt: 1000,
+      projectId: UUID,
+    });
+    const del = parkFirst(fetchImpl, "DELETE");
+
+    const loadP = adapter.loadWorkspace(UUID);
+    await vi.advanceTimersByTimeAsync(0);
+    assert.equal(userIdCalls === 1, true, "the load waits for the user id");
+    assert.equal(
+      fetchImpl.mock.calls.length,
+      0,
+      "no server request while the user id is pending",
+    );
+
+    const clearP = adapter.clearWorkspace(UUID);
+    await vi.advanceTimersByTimeAsync(0);
+
+    releaseUserId("user-1");
+    for (let i = 0; i < 5; i++) {
+      await vi.advanceTimersByTimeAsync(0);
+      del.release();
+    }
+    const [loadResult, clearResult] = await Promise.all([loadP, clearP]);
+    assert.ok(clearResult.success, "the discard succeeded");
+    assert.ok(
+      loadResult.success && loadResult.value === null,
+      "the load's result value is null",
+    );
+
+    const c = await cache.loadWorkspace(UUID);
+    assert.ok(c.success && c.value === null, "the cache is empty");
+    assert.equal(await cache.getLiftStamp(UUID), null, "no stamp");
+    assert.equal(server.has(UUID), false, "the server copy is deleted");
+    assert.equal(putCallsOf(fetchImpl).length, 0, "no PUT was sent");
+  });
+
+  it("a load overtaken before its catch-up sends no PUT", async () => {
+    const { adapter, cache, server, fetchImpl } = makeAdapters();
+    // As in T2: stamp rev 5 confirmed, browser copy dirty, server at rev 5.
+    await cache.saveWorkspace(UUID, makeWorkspace(2000));
+    await cache.setLiftStamp(UUID, {
+      ownerId: "user-1",
+      rev: 5,
+      syncedUpdatedAt: 1000,
+      confirmed: true,
+    });
+    server.set(UUID, {
+      payload: makeWorkspace(1000),
+      rev: 5,
+      updatedAt: 1000,
+      projectId: UUID,
+    });
+    const get = parkFirst(fetchImpl, "GET");
+
+    const loadP = adapter.loadWorkspace(UUID);
+    await vi.advanceTimersByTimeAsync(0);
+    assert.equal(get.parked, true, "the load is parked on its GET");
+
+    const clearP = adapter.clearWorkspace(UUID);
+    await vi.advanceTimersByTimeAsync(0);
+
+    get.release();
+    const [loadResult, clearResult] = await Promise.all([loadP, clearP]);
+    assert.ok(clearResult.success, "the discard succeeded");
+    assert.ok(
+      loadResult.success && loadResult.value === null,
+      "the load's result value is null",
+    );
+
+    assert.equal(putCallsOf(fetchImpl).length, 0, "no PUT was sent");
+    const c = await cache.loadWorkspace(UUID);
+    assert.ok(c.success && c.value === null, "the cache is empty");
+    assert.equal(server.has(UUID), false, "the discard deleted rev 5");
+  });
+
+  it("a load overtaken with no stamp hands the server revision to the discard, which deletes that copy", async () => {
+    const { adapter, cache, server, fetchImpl } = makeAdapters();
+    // Cache EMPTY, no stamp, the server holds a copy at rev 3.
+    server.set(UUID, {
+      payload: makeWorkspace(1000),
+      rev: 3,
+      updatedAt: 1000,
+      projectId: UUID,
+    });
+    const get = parkFirst(fetchImpl, "GET");
+
+    const loadP = adapter.loadWorkspace(UUID);
+    await vi.advanceTimersByTimeAsync(0);
+    assert.equal(get.parked, true, "the load is parked on its GET");
+
+    const clearP = adapter.clearWorkspace(UUID);
+    await vi.advanceTimersByTimeAsync(0);
+
+    get.release();
+    const [loadResult, clearResult] = await Promise.all([loadP, clearP]);
+    assert.ok(clearResult.success, "the discard succeeded");
+    assert.ok(
+      loadResult.success && loadResult.value === null,
+      "the load's result value is null",
+    );
+
+    assert.equal(server.has(UUID), false, "the server copy is deleted");
+    const c = await cache.loadWorkspace(UUID);
+    assert.ok(c.success && c.value === null, "the cache is empty");
+    assert.equal(await cache.getLiftStamp(UUID), null, "no stamp");
+
+    const next = await adapter.loadWorkspace(UUID);
+    assert.ok(
+      next.success && next.value === null,
+      "the next load returns null",
+    );
+    const recached = await cache.loadWorkspace(UUID);
+    assert.ok(recached.success && recached.value === null, "still no cache");
+  });
+
+  // Pin: this test also passes on the old adapter (before the fix in this round).
+  it("a load overtaken in a conflict (browser copy differs, no stamp) leaves the server copy: it is not this browser's to delete", async () => {
+    const { adapter, cache, server, fetchImpl } = makeAdapters();
+    // A dirty browser copy that differs from the server, no stamp.
+    await cache.saveWorkspace(
+      UUID,
+      makeWorkspace(2000, UUID, {
+        "a.ts": {
+          content: "local",
+          isNew: false,
+          dirty: true,
+          updatedAt: 2000,
+        },
+      }),
+    );
+    server.set(UUID, {
+      payload: makeWorkspace(1000),
+      rev: 3,
+      updatedAt: 1000,
+      projectId: UUID,
+    });
+    const get = parkFirst(fetchImpl, "GET");
+
+    const loadP = adapter.loadWorkspace(UUID);
+    await vi.advanceTimersByTimeAsync(0);
+    assert.equal(get.parked, true, "the load is parked on its GET");
+
+    const clearP = adapter.clearWorkspace(UUID);
+    await vi.advanceTimersByTimeAsync(0);
+
+    get.release();
+    const [loadResult, clearResult] = await Promise.all([loadP, clearP]);
+    assert.ok(clearResult.success, "the discard succeeded");
+    assert.ok(
+      loadResult.success && loadResult.value === null,
+      "the load's result value is null",
+    );
+
+    assert.equal(server.get(UUID)?.rev, 3, "the server copy survives");
+    const c = await cache.loadWorkspace(UUID);
+    assert.ok(c.success && c.value === null, "the cache is empty");
+    assert.equal(
+      allMethodsOf(fetchImpl).includes("DELETE"),
+      false,
+      "no DELETE was sent",
+    );
+  });
+
+  const WAIT_MS = 10_000;
+
+  /** Parks EVERY request with this method; release(i) lets the i-th parked one go on to the real mock server. */
+  function parkAll(
+    fetchImpl: ReturnType<typeof makeAdapters>["fetchImpl"],
+    parkedMethod: string,
+  ) {
+    const realFetch = fetchImpl.getMockImplementation()!;
+    const releases: Array<() => void> = [];
+    fetchImpl.mockImplementation(
+      async (url: string | URL | Request, init?: RequestInit) => {
+        const method = (init?.method ?? "GET").toUpperCase();
+        if (method === parkedMethod) {
+          await new Promise<void>((resolve) => {
+            releases.push(resolve);
+          });
+        }
+        return realFetch(url, init);
+      },
+    );
+    return {
+      count: () => releases.length,
+      release: (i: number) => releases[i]!(),
+    };
+  }
+
+  async function flush() {
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(0);
+  }
+
+  async function assertCacheEmpty(cache: IDBEditorWorkspaceAdapter) {
+    const c = await cache.loadWorkspace(UUID);
+    assert.ok(c.success && c.value === null);
+  }
+
+  it("a discard does not wait for ever for a load whose request never answers", async () => {
+    const { adapter, cache, server, fetchImpl, warns } = makeAdapters();
+    await cache.saveWorkspace(UUID, makeWorkspace(1000));
+    await cache.setLiftStamp(UUID, {
+      ownerId: "user-1",
+      rev: 5,
+      syncedUpdatedAt: 1000,
+      confirmed: true,
+    });
+    server.set(UUID, {
+      payload: makeWorkspace(1000),
+      rev: 5,
+      updatedAt: 1000,
+      projectId: UUID,
+    });
+    const gets = parkAll(fetchImpl, "GET");
+
+    const loadP = adapter.loadWorkspace(UUID);
+    await flush();
+    assert.equal(gets.count(), 1, "the load is parked on its GET");
+
+    let clearDone = false;
+    const clearP = adapter.clearWorkspace(UUID);
+    void clearP.then(() => {
+      clearDone = true;
+    });
+    await flush();
+    assert.equal(clearDone, false, "the discard waits for the load");
+
+    await vi.advanceTimersByTimeAsync(WAIT_MS);
+    await flush();
+    assert.equal(clearDone, true, "the discard gave up on the load");
+    const clearResult = await clearP;
+    assert.ok(clearResult.success, "the discard succeeded");
+    await assertCacheEmpty(cache);
+    assert.equal(server.has(UUID), false, "the server copy is deleted");
+    assert.ok(
+      warns.some((w) => w.includes("without the end of a load")),
+      "a warning was logged",
+    );
+
+    gets.release(0);
+    await flush();
+    const loadResult = await loadP;
+    assert.ok(
+      loadResult.success && loadResult.value === null,
+      "the late load answers null",
+    );
+    await assertCacheEmpty(cache);
+    assert.equal(await cache.getLiftStamp(UUID), null, "no stamp");
+    assert.equal(putCallsOf(fetchImpl).length, 0, "no PUT was sent");
+  });
+
+  it("a discard waits for EVERY load of the id, not only the latest", async () => {
+    const { adapter, cache, server, fetchImpl } = makeAdapters();
+    // Cache EMPTY, no stamp, the server holds a copy at rev 3.
+    server.set(UUID, {
+      payload: makeWorkspace(1000),
+      rev: 3,
+      updatedAt: 1000,
+      projectId: UUID,
+    });
+    const gets = parkAll(fetchImpl, "GET");
+
+    const load1 = adapter.loadWorkspace(UUID);
+    await flush();
+    const load2 = adapter.loadWorkspace(UUID);
+    await flush();
+    assert.equal(gets.count(), 2, "two GETs are parked");
+
+    let clearDone = false;
+    const clearP = adapter.clearWorkspace(UUID);
+    void clearP.then(() => {
+      clearDone = true;
+    });
+    await flush();
+
+    gets.release(1); // the LATER load
+    await flush();
+    assert.equal(clearDone, false, "the first load is still running");
+
+    gets.release(0);
+    const [r1, r2, rc] = await Promise.all([load1, load2, clearP]);
+    assert.ok(r1.success, "load1 succeeded");
+    assert.ok(r2.success, "load2 succeeded");
+    assert.ok(rc.success, "the discard succeeded");
+    assert.ok(r1.value === null, "load1's value is null");
+    assert.ok(r2.value === null, "load2's value is null");
+    await assertCacheEmpty(cache);
+    assert.equal(server.has(UUID), false, "the server copy is deleted");
+  });
+
+  it("a load started while a discard is still deleting waits for it and does not bring the copy back", async () => {
+    const { adapter, cache, server, fetchImpl } = makeAdapters();
+    await cache.saveWorkspace(UUID, makeWorkspace(1000));
+    await cache.setLiftStamp(UUID, {
+      ownerId: "user-1",
+      rev: 5,
+      syncedUpdatedAt: 1000,
+      confirmed: true,
+    });
+    server.set(UUID, {
+      payload: makeWorkspace(1000),
+      rev: 5,
+      updatedAt: 1000,
+      projectId: UUID,
+    });
+    const dels = parkAll(fetchImpl, "DELETE");
+
+    const clearP = adapter.clearWorkspace(UUID);
+    await flush();
+    assert.equal(dels.count(), 1, "the discard is parked on its DELETE");
+
+    let loadDone = false;
+    const loadP = adapter.loadWorkspace(UUID);
+    void loadP.then(() => {
+      loadDone = true;
+    });
+    await flush();
+
+    assert.equal(loadDone, false, "the load waits for the discard");
+    assert.equal(
+      allMethodsOf(fetchImpl).includes("GET"),
+      false,
+      "no GET was sent",
+    );
+
+    dels.release(0);
+    const [loadResult, clearResult] = await Promise.all([loadP, clearP]);
+    assert.ok(loadResult.success, "the load succeeded");
+    assert.ok(clearResult.success, "the discard succeeded");
+    assert.ok(loadResult.value === null, "the load's value is null");
+    await assertCacheEmpty(cache);
+    assert.equal(server.has(UUID), false, "the server copy is deleted");
+    assert.equal(await cache.getLiftStamp(UUID), null, "no stamp");
+  });
+
+  it("a load does not wait for ever for a discard whose request never answers: it answers none and reads nothing", async () => {
+    const { adapter, cache, server, fetchImpl } = makeAdapters();
+    await cache.saveWorkspace(UUID, makeWorkspace(1000));
+    await cache.setLiftStamp(UUID, {
+      ownerId: "user-1",
+      rev: 5,
+      syncedUpdatedAt: 1000,
+      confirmed: true,
+    });
+    server.set(UUID, {
+      payload: makeWorkspace(1000),
+      rev: 5,
+      updatedAt: 1000,
+      projectId: UUID,
+    });
+    const dels = parkAll(fetchImpl, "DELETE");
+
+    const clearP = adapter.clearWorkspace(UUID);
+    await flush();
+    assert.equal(dels.count(), 1, "the discard is parked on its DELETE");
+
+    let loadDone = false;
+    const loadP = adapter.loadWorkspace(UUID);
+    void loadP.then(() => {
+      loadDone = true;
+    });
+    await flush();
+    assert.equal(loadDone, false, "the load waits for the discard");
+
+    await vi.advanceTimersByTimeAsync(WAIT_MS);
+    await flush();
+    assert.equal(loadDone, true, "the load gave up on the discard");
+    const loadResult = await loadP;
+    assert.ok(
+      loadResult.success && loadResult.value === null,
+      "the load answers null",
+    );
+    assert.equal(
+      allMethodsOf(fetchImpl).includes("GET"),
+      false,
+      "no GET was sent",
+    );
+    await assertCacheEmpty(cache);
+
+    dels.release(0);
+    await clearP;
+  });
+
+  it("a load with no stamp that outlives the discard's wait finishes the discard itself: the server copy it read is deleted", async () => {
+    const { adapter, cache, server, fetchImpl } = makeAdapters();
+    // Nothing in the browser, no stamp, the server holds rev 3.
+    server.set(UUID, {
+      payload: makeWorkspace(1000),
+      rev: 3,
+      updatedAt: 1000,
+      projectId: UUID,
+    });
+    const gets = parkAll(fetchImpl, "GET");
+
+    const loadP = adapter.loadWorkspace(UUID);
+    await flush();
+    assert.equal(gets.count(), 1, "the load is parked on its GET");
+
+    let clearDone = false;
+    const clearP = adapter.clearWorkspace(UUID);
+    void clearP.then(() => {
+      clearDone = true;
+    });
+    await flush();
+    await vi.advanceTimersByTimeAsync(WAIT_MS);
+    await flush();
+    assert.equal(clearDone, true, "the discard gave up on the load");
+    assert.equal(
+      server.has(UUID),
+      true,
+      "with no stamp the discard had no revision to delete with",
+    );
+
+    // The late answer: the load is overtaken, and no discard is running any
+    // more to take the revision.
+    gets.release(0);
+    const loadResult = await loadP;
+    await flush();
+    assert.ok(
+      loadResult.success && loadResult.value === null,
+      "the load answers null",
+    );
+    assert.equal(server.has(UUID), false, "the server copy is deleted");
+    await assertCacheEmpty(cache);
+    assert.equal(await cache.getLiftStamp(UUID), null, "no stamp");
+
+    const nextP = adapter.loadWorkspace(UUID);
+    await flush();
+    gets.release(1);
+    const next = await nextP;
+    assert.ok(next.success && next.value === null, "the next load is empty");
+    await assertCacheEmpty(cache);
+  });
+
+  it("a load overtaken while it waits for the user id still reads the server, and the discard deletes the copy that has no stamp", async () => {
+    const { cache, remote, fetchImpl, server, logger } = makeAdapters();
+    let releaseUserId!: (id: string) => void;
+    let userIdCalls = 0;
+    const adapter = new CachedEditorWorkspaceAdapter(
+      cache,
+      remote,
+      () => null,
+      () => {
+        userIdCalls += 1;
+        if (userIdCalls === 1) {
+          return new Promise<string>((resolve) => {
+            releaseUserId = resolve;
+          });
+        }
+        return Promise.resolve("user-1");
+      },
+      logger,
+    );
+    // Nothing in the browser, no stamp, the server holds rev 3.
+    server.set(UUID, {
+      payload: makeWorkspace(1000),
+      rev: 3,
+      updatedAt: 1000,
+      projectId: UUID,
+    });
+
+    const loadP = adapter.loadWorkspace(UUID);
+    await flush();
+    assert.equal(userIdCalls, 1, "the load is parked on the user id");
+    assert.equal(fetchImpl.mock.calls.length, 0, "no request yet");
+
+    const clearP = adapter.clearWorkspace(UUID);
+    await flush();
+    releaseUserId("user-1");
+    const [loadResult, clearResult] = await Promise.all([loadP, clearP]);
+
+    assert.ok(clearResult.success, "the discard succeeded");
+    assert.ok(
+      loadResult.success && loadResult.value === null,
+      "the load answers null",
+    );
+    assert.equal(server.has(UUID), false, "the server copy is deleted");
+    await assertCacheEmpty(cache);
+    assert.equal(await cache.getLiftStamp(UUID), null, "no stamp");
+    assert.equal(putCallsOf(fetchImpl).length, 0, "no PUT was sent");
+  });
+
+  it("a load overtaken while it drops a discard marker does not open the id to a first upload", async () => {
+    const { adapter, cache, server, fetchImpl } = makeAdapters();
+    // Nothing in the browser, an own discard marker at rev 5, the server empty.
+    await cache.setLiftStamp(UUID, {
+      ownerId: "user-1",
+      rev: 5,
+      syncedUpdatedAt: 0,
+      confirmed: false,
+      discarded: true,
+    });
+    // Park the load where it drops the marker (its first stamp removal).
+    const realSet = cache.setLiftStamp.bind(cache);
+    const gate = { release: null as null | (() => void) };
+    vi.spyOn(cache, "setLiftStamp").mockImplementation(async (id, stamp) => {
+      if (stamp === null && gate.release === null) {
+        await new Promise<void>((resolve) => {
+          gate.release = resolve;
+        });
+      }
+      return realSet(id, stamp);
+    });
+
+    const loadP = adapter.loadWorkspace(UUID);
+    await flush();
+    assert.ok(gate.release !== null, "the load is parked on the marker drop");
+
+    const clearP = adapter.clearWorkspace(UUID);
+    await flush();
+    gate.release!();
+    const [loadResult, clearResult] = await Promise.all([loadP, clearP]);
+    assert.ok(clearResult.success, "the discard succeeded");
+    assert.ok(
+      loadResult.success && loadResult.value === null,
+      "the load answers null",
+    );
+
+    // A save from the editor that is still mounted, with no load in between:
+    // it may be cached, but it must not be uploaded as a first copy.
+    await adapter.saveWorkspace(UUID, makeWorkspace(5000));
+    await vi.advanceTimersByTimeAsync(REMOTE_DEBOUNCE_MS);
+    await flush();
+    assert.equal(putCallsOf(fetchImpl).length, 0, "no PUT was sent");
+    assert.equal(server.has(UUID), false, "the server holds no copy");
+  });
+
+  it("a load overtaken while it drops a marker for a moved copy does not read that copy again: the other device's copy survives", async () => {
+    const { adapter, cache, server } = makeAdapters();
+    // Nothing in the browser, an own discard marker at rev 5, the server
+    // copy moved to rev 6 on another device.
+    await cache.setLiftStamp(UUID, {
+      ownerId: "user-1",
+      rev: 5,
+      syncedUpdatedAt: 0,
+      confirmed: false,
+      discarded: true,
+    });
+    server.set(UUID, {
+      payload: makeWorkspace(3000),
+      rev: 6,
+      updatedAt: 3000,
+      projectId: UUID,
+    });
+    const realSet = cache.setLiftStamp.bind(cache);
+    const saveSpy = vi.spyOn(cache, "saveWorkspace");
+    const gate = { release: null as null | (() => void) };
+    vi.spyOn(cache, "setLiftStamp").mockImplementation(async (id, stamp) => {
+      if (stamp === null && gate.release === null) {
+        await new Promise<void>((resolve) => {
+          gate.release = resolve;
+        });
+      }
+      return realSet(id, stamp);
+    });
+
+    const loadP = adapter.loadWorkspace(UUID);
+    await flush();
+    assert.ok(gate.release !== null, "the load is parked on the marker drop");
+
+    const clearP = adapter.clearWorkspace(UUID);
+    await flush();
+    gate.release!();
+    const [loadResult, clearResult] = await Promise.all([loadP, clearP]);
+    assert.ok(clearResult.success, "the discard succeeded");
+    assert.equal(server.get(UUID)?.rev, 6, "the other device's copy survives");
+    assert.ok(
+      loadResult.success && loadResult.value === null,
+      "the load answers null",
+    );
+    assert.equal(saveSpy.mock.calls.length, 0, "nothing was cached");
+    await assertCacheEmpty(cache);
+  });
+
+  it("a load that outlives a discard made under an org tenant deletes nothing on the server", async () => {
+    const { cache, remote, fetchImpl, server, logger } = makeAdapters();
+    let tenant: string | null = null;
+    const adapter = new CachedEditorWorkspaceAdapter(
+      cache,
+      remote,
+      () => tenant,
+      () => Promise.resolve("user-1"),
+      logger,
+    );
+    // Personal mode: nothing in the browser, no stamp, the server holds rev 3.
+    server.set(UUID, {
+      payload: makeWorkspace(1000),
+      rev: 3,
+      updatedAt: 1000,
+      projectId: UUID,
+    });
+    const gets = parkAll(fetchImpl, "GET");
+
+    const loadP = adapter.loadWorkspace(UUID);
+    await flush();
+    assert.equal(gets.count(), 1, "the load is parked on its GET");
+
+    // The user switches to an organisation and discards there: cache only.
+    tenant = "org-1";
+    let clearDone = false;
+    const clearP = adapter.clearWorkspace(UUID);
+    void clearP.then(() => {
+      clearDone = true;
+    });
+    await flush();
+    await vi.advanceTimersByTimeAsync(WAIT_MS);
+    await flush();
+    assert.equal(clearDone, true, "the discard gave up on the load");
+
+    gets.release(0);
+    const loadResult = await loadP;
+    await flush();
+    assert.ok(
+      loadResult.success && loadResult.value === null,
+      "the load answers null",
+    );
+    assert.equal(server.get(UUID)?.rev, 3, "the personal copy survives");
+    assert.equal(
+      allMethodsOf(fetchImpl).includes("DELETE"),
+      false,
+      "no DELETE was sent",
+    );
+  });
+
+  it("a load that outlives the discard's wait leaves the copy alone while another load of the id is in flight", async () => {
+    const { adapter, cache, server, fetchImpl } = makeAdapters();
+    server.set(UUID, {
+      payload: makeWorkspace(1000),
+      rev: 3,
+      updatedAt: 1000,
+      projectId: UUID,
+    });
+    const gets = parkAll(fetchImpl, "GET");
+
+    const load1 = adapter.loadWorkspace(UUID);
+    await flush();
+    const clearP = adapter.clearWorkspace(UUID);
+    await flush();
+    await vi.advanceTimersByTimeAsync(WAIT_MS);
+    await flush();
+    await clearP;
+
+    // The user re-opens the id: a second load, parked on its own GET.
+    const load2 = adapter.loadWorkspace(UUID);
+    await flush();
+    assert.equal(gets.count(), 2, "the second load is parked on its GET");
+
+    gets.release(0);
+    const r1 = await load1;
+    await flush();
+    assert.ok(r1.success && r1.value === null, "the first load answers null");
+    assert.equal(
+      allMethodsOf(fetchImpl).includes("DELETE"),
+      false,
+      "no DELETE was sent",
+    );
+
+    gets.release(1);
+    const r2 = await load2;
+    assert.ok(r2.success && r2.value !== null, "the second load adopts it");
+    assert.equal(server.get(UUID)?.rev, 3, "the copy is still on the server");
+    assert.equal((await cache.getLiftStamp(UUID))?.rev, 3, "stamped at rev 3");
   });
 });
