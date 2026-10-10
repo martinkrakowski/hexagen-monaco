@@ -5521,4 +5521,97 @@ describe("round 3: a load and a discard of the same id", () => {
     await assertCacheEmpty(cache);
     assert.equal(server.has(UUID), false, "the server copy is deleted");
   });
+
+  it("a load started while a discard is still deleting waits for it and does not bring the copy back", async () => {
+    const { adapter, cache, server, fetchImpl } = makeAdapters();
+    await cache.saveWorkspace(UUID, makeWorkspace(1000));
+    await cache.setLiftStamp(UUID, {
+      ownerId: "user-1",
+      rev: 5,
+      syncedUpdatedAt: 1000,
+      confirmed: true,
+    });
+    server.set(UUID, {
+      payload: makeWorkspace(1000),
+      rev: 5,
+      updatedAt: 1000,
+      projectId: UUID,
+    });
+    const dels = parkAll(fetchImpl, "DELETE");
+
+    const clearP = adapter.clearWorkspace(UUID);
+    await flush();
+    assert.equal(dels.count(), 1, "the discard is parked on its DELETE");
+
+    let loadDone = false;
+    const loadP = adapter.loadWorkspace(UUID);
+    void loadP.then(() => {
+      loadDone = true;
+    });
+    await flush();
+
+    assert.equal(loadDone, false, "the load waits for the discard");
+    assert.equal(
+      allMethodsOf(fetchImpl).includes("GET"),
+      false,
+      "no GET was sent",
+    );
+
+    dels.release(0);
+    const [loadResult, clearResult] = await Promise.all([loadP, clearP]);
+    assert.ok(loadResult.success, "the load succeeded");
+    assert.ok(clearResult.success, "the discard succeeded");
+    assert.ok(loadResult.value === null, "the load's value is null");
+    await assertCacheEmpty(cache);
+    assert.equal(server.has(UUID), false, "the server copy is deleted");
+    assert.equal(await cache.getLiftStamp(UUID), null, "no stamp");
+  });
+
+  it("a load does not wait for ever for a discard whose request never answers: it answers none and reads nothing", async () => {
+    const { adapter, cache, server, fetchImpl } = makeAdapters();
+    await cache.saveWorkspace(UUID, makeWorkspace(1000));
+    await cache.setLiftStamp(UUID, {
+      ownerId: "user-1",
+      rev: 5,
+      syncedUpdatedAt: 1000,
+      confirmed: true,
+    });
+    server.set(UUID, {
+      payload: makeWorkspace(1000),
+      rev: 5,
+      updatedAt: 1000,
+      projectId: UUID,
+    });
+    const dels = parkAll(fetchImpl, "DELETE");
+
+    const clearP = adapter.clearWorkspace(UUID);
+    await flush();
+    assert.equal(dels.count(), 1, "the discard is parked on its DELETE");
+
+    let loadDone = false;
+    const loadP = adapter.loadWorkspace(UUID);
+    void loadP.then(() => {
+      loadDone = true;
+    });
+    await flush();
+    assert.equal(loadDone, false, "the load waits for the discard");
+
+    await vi.advanceTimersByTimeAsync(WAIT_MS);
+    await flush();
+    assert.equal(loadDone, true, "the load gave up on the discard");
+    const loadResult = await loadP;
+    assert.ok(
+      loadResult.success && loadResult.value === null,
+      "the load answers null",
+    );
+    assert.equal(
+      allMethodsOf(fetchImpl).includes("GET"),
+      false,
+      "no GET was sent",
+    );
+    await assertCacheEmpty(cache);
+
+    dels.release(0);
+    await clearP;
+  });
 });
