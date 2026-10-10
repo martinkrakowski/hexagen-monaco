@@ -2,7 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { projectIdSchema } from "./schemas/project-id-schema";
 import { guardMutation, readJsonBody } from "./request-guards";
 import { getPlatformStore } from "../../lib/platform";
-import { parseSavedProjectBody } from "../../lib/platform/saved-project-body";
+import {
+  MAX_PROJECT_TIMESTAMP,
+  parseSavedProjectBody,
+} from "../../lib/platform/saved-project-body";
 import {
   PROJECT_MUTATION_GUARD,
   requirePersistenceOwner,
@@ -121,8 +124,17 @@ function parseIfMatch(
     return { ok: true, expected: { rev } };
   }
 
+  // The bare number is the LEGACY `updatedAt` clock, so it must be a whole
+  // number inside the same bound the body enforces: `1.5`, `1e300` or `-1`
+  // would otherwise reach the `CAST(... AS BIGINT)` bind and 500 on Postgres.
   const legacy = Number(trimmed);
-  if (!Number.isFinite(legacy)) return malformedIfMatch();
+  if (
+    !Number.isSafeInteger(legacy) ||
+    legacy < 0 ||
+    legacy > MAX_PROJECT_TIMESTAMP
+  ) {
+    return malformedIfMatch();
+  }
   return { ok: true, expected: { updatedAt: legacy } };
 }
 
