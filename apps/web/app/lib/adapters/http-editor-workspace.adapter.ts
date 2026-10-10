@@ -605,6 +605,75 @@ export class CachedEditorWorkspaceAdapter implements EditorWorkspacePersistenceP
     return none;
   }
 
+  private cancelWriteTimer(sessionId: string): void {
+    const existing = this.writeTimers.get(sessionId);
+    if (existing) {
+      clearTimeout(existing);
+      this.writeTimers.delete(sessionId);
+    }
+    this.pendingPreconditions.delete(sessionId);
+  }
+
+  private async cacheStaleSince(
+    sessionId: string,
+    firstRead: Result<PersistedEditorWorkspace | null, PersistenceError>,
+  ): Promise<boolean> {
+    const recheck = await this.cache.loadWorkspace(sessionId);
+    if (!recheck.success) return true;
+    if (!firstRead.success || firstRead.value === null) {
+      return recheck.value !== null;
+    }
+    return (
+      recheck.value === null ||
+      recheck.value.updatedAt !== firstRead.value!.updatedAt
+    );
+  }
+
+  /** True when a discard bumped the id's epoch since the caller captured it. */
+  private discardedSince(sessionId: string, epoch: number): boolean {
+    return epoch !== (this.epochs.get(sessionId) ?? 0);
+  }
+
+  /**
+   * Undo a write that landed after a discard bumped the epoch: delete the
+   * copy with the rev the write returned; if the delete cannot be confirmed,
+   * leave a discard marker so the next load retries the deletion.
+   */
+  private async undoWriteAfterDiscard(
+    sessionId: string,
+    userId: string,
+    rev: number,
+  ): Promise<void> {
+    const deleteResult = await this.remote.delete(userId, sessionId, rev);
+    if (!deleteResult.ok) {
+      if (deleteResult.reason === "conflict") {
+        this.logger.warn(
+          `workspace ${sessionId}: server copy changed on another device, not deleted`,
+        );
+        await this.recordConflictEntry(
+          sessionId,
+          "discard",
+          rev,
+          deleteResult.serverRev ?? null,
+        );
+      } else {
+        // clean-up DELETE lost (network/429/5xx) → keep a marker so the next
+        // load retries the deletion and the discarded workspace does not
+        // come back.
+        this.logger.warn(
+          `workspace ${sessionId}: discard clean-up delete failed: ${deleteResult.message}; keeping marker`,
+        );
+        await this.tryStamp(sessionId, {
+          ownerId: userId,
+          rev,
+          syncedUpdatedAt: 0,
+          confirmed: false,
+          discarded: true,
+        });
+      }
+    }
+  }
+
   private async loadFromRemote(
     sessionId: string,
     userId: string,
