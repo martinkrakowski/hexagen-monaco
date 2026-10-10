@@ -132,29 +132,30 @@ describe("scanSpecifiers", () => {
 
 describe("scanSpecifiers: hostile and JSX input", () => {
   it("stays linear on a failed-regex pattern (F1)", () => {
-    // F1: guards the cost of `tokenize` in packages/sync/src/commands/observe/imports/scan.ts.
-    // Assertion A is the absolute fail-fast guard; Assertion B is the growth shape. The absolute
-    // cap lets a quadratic mutant fail within seconds instead of hanging CI. Measured on this
-    // machine (8 cores, load ~10): linear len 12k/20k/200k → 0.9/1.9/38 ms; mutant len 20k → 1.388 s.
-    // The old 16 KiB sample took under a millisecond, so a raw ms ceiling made the ratio noisy on
-    // a loaded machine — best-of-7 at an 8x size ratio flattens load spikes.
+    // F1: guards the cost of `tokenize` (src/commands/observe/imports/scan.ts).
+    // (A) an absolute cap on the small input, checked first: a quadratic scan
+    // fails here within seconds and never reaches the large input.
+    // (B) the growth exponent between the two sizes, on the minimum of 7 samples.
+    // Measured on an 8-core host under load: linear about 5 ms at 25,000
+    // characters and 48 ms at 200,000; with the `noRegexBefore` guard removed
+    // (quadratic) about 2,400 ms at 25,000. The old small sample (16 KiB) took
+    // under a millisecond, so its ratio was timer noise on a loaded machine.
     const ABS_SMALL = 25_000;
     const ABS_LARGE = 200_000; // 8x
     const CAP_SMALL_MS = 250;
-    const BOUND = 1.7;
+    const BOUND = 1.5; // linear is about 1, quadratic 2; the worst loaded run measured 1.17
     const sample = (len: number, stopAboveMs: number): number => {
       const input = "/[".repeat(len / 2);
       scanSpecifiers(input); // warm-up, not measured
       let best = Infinity;
-      let over = 0;
       for (let n = 1; n <= 7; ++n) {
         const t0 = performance.now();
         scanSpecifiers(input);
         const ms = performance.now() - t0;
         if (ms < best) best = ms;
-        // Stop only after TWO samples over the limit: one may be the scheduler or
-        // the collector; a quadratic implementation is over it every time.
-        if (ms > stopAboveMs && ++over >= 2) break;
+        // Stop early only when the MINIMUM so far is over the limit after at
+        // least two samples: one slow sample may be the scheduler or the collector.
+        if (n >= 2 && best > stopAboveMs) break;
       }
       return best;
     };
@@ -169,7 +170,7 @@ describe("scanSpecifiers: hostile and JSX input", () => {
       `[F1] small=${minSmall.toFixed(2)}ms large=${minLarge.toFixed(2)}ms exponent=${exponent.toFixed(3)}`,
     );
     expect(exponent).toBeLessThan(BOUND);
-    // Correctness for the full 512 KiB input.
+    // Correctness on a 1 MiB input (1,048,576 characters).
     expect(scanSpecifiers("/[".repeat(512 * 1024))).toEqual([]);
   }, 30_000);
 

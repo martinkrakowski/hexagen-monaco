@@ -223,15 +223,18 @@ bounded_contexts:
   });
 });
 
-test("parseStructuredConfig: large input scales linearly below a generous ratio", () => {
+test("parseStructuredConfig: large input scales linearly", () => {
   const baseYaml =
     "project: large-test\nbounded_contexts:\n  - name: TestContext\n    type: core\n";
   const makeYaml = (chars: number): string =>
     baseYaml + " ".repeat(Math.max(0, chars - baseYaml.length));
-  // Both sizes are large enough to take milliseconds. With a 50 000-character
-  // baseline the small parse took under half a millisecond on a shared CI
-  // runner (0.44 ms), so timer resolution and warm-up decided the ratio, not
-  // the parser: a linear parser measured 434x for a 64x input and failed.
+  // (A) an absolute cap on the small input, checked first: a quadratic parse
+  // fails here and never reaches the large input. (B) the growth exponent
+  // between the two sizes. Both use the minimum of 7 samples after a warm-up,
+  // on ONE input string per size built outside the timed region (the earlier
+  // test built a fresh 3.2 MB string inside it). Both sizes take milliseconds:
+  // with a 50,000-character baseline the small parse took 0.44 ms on a shared
+  // CI runner and timer resolution decided the ratio.
   const ABS_SMALL = 400_000;
   const ABS_LARGE = 3_200_000; // 8x
   // Measured on this machine: linear small → 7.61 ms (large 66.56 ms,
@@ -244,15 +247,14 @@ test("parseStructuredConfig: large input scales linearly below a generous ratio"
     const input = makeYaml(chars); // built ONCE outside the timed region
     parseStructuredConfig(input); // warm-up, not measured
     let best = Infinity;
-    let over = 0;
     for (let n = 1; n <= 7; ++n) {
       const t0 = performance.now();
       parseStructuredConfig(input);
       const ms = performance.now() - t0;
       if (ms < best) best = ms;
-      // Stop only after TWO samples over the limit: one may be the scheduler or
-      // the collector; a quadratic implementation is over it every time.
-      if (ms > stopAboveMs && ++over >= 2) break;
+      // Stop early only when the MINIMUM so far is over the limit after at
+      // least two samples: one slow sample may be the scheduler or the collector.
+      if (n >= 2 && best > stopAboveMs) break;
     }
     return best;
   };
