@@ -264,7 +264,7 @@ export const PREFERENCE_KEYS = [
   "hexagen:persistence-domain:migrated:", // localStorage: migration flag prefix (persistence-domain-registry.ts)
   "monaco-session-", // localStorage: Monaco editor session state (local-storage-monaco.adapter.ts)
   "hexagen-saved-projects", // localStorage: legacy saved-projects migration source (saved-projects-migration-step.ts)
-  "hexagen-wizard-draft", // localStorage: legacy wizard-draft migration source (wizard-draft-migration-step.ts)
+  "hexagen-wizard-draft", // localStorage: key named by the deprecated local-storage-wizard-draft.adapter.ts; its migration step is deleted
   "hexagen-editor-workspace-", // localStorage: legacy editor-workspace migration source (editor-workspace-migration-step.ts)
   "byok:keys", // localStorage: removed keys deleted at start by remove-unused-secret-keys-step.ts
   "hexagen:vault:encrypted-payload", // localStorage: removed keys deleted at start by remove-unused-secret-keys-step.ts
