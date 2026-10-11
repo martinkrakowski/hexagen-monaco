@@ -4,6 +4,7 @@ export { FileSystemFileEmitter } from "./file-emitter.adapter.js";
 export { FileSystemTemplateConfigStore } from "./template-config-store.adapter.js";
 export { FileSystemProjectFilePresence } from "./project-file-presence.adapter.js";
 export { ProcessEnvironmentReader } from "./environment-reader.adapter.js";
+export { FileSystemProjectRemovalFiles } from "./project-removal-files.adapter.js";
 
 // The findings read path (plan §3 G4). The caller resolves the templates
 // directory; this only reads beneath it.

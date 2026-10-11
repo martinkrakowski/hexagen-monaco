@@ -20,3 +20,9 @@ export type { FileEmitterPort, EmitResult } from "./ports/file-emitter.port.js";
 export type { TemplateConfigStorePort } from "./ports/template-config-store.port.js";
 export type { ProjectFilePresencePort } from "./ports/project-file-presence.port.js";
 export type { EnvironmentReaderPort } from "./ports/environment-reader.port.js";
+export type {
+  ProjectRemovalFilesPort,
+  RemovalDeleteRequest,
+  RemovalSkipReason,
+  RemovalDeleteOutcome,
+} from "./ports/project-removal-files.port.js";
