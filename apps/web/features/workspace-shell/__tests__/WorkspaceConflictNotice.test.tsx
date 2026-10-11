@@ -26,6 +26,7 @@ const state = vi.hoisted(() => {
     success: true,
     value: undefined,
   });
+  let keepSideEffect: (() => void) | null = null;
   const port: EditorWorkspaceConflictPort = {
     getPendingConflict(sessionId) {
       const entry = conflicts.get(sessionId) ?? null;
@@ -42,6 +43,7 @@ const state = vi.hoisted(() => {
     },
     async keepThisDeviceCopy(sessionId) {
       calls.push(`keep:${sessionId}`);
+      keepSideEffect?.();
       return keepResult;
     },
     async useOtherDeviceCopy(sessionId) {
@@ -57,11 +59,22 @@ const state = vi.hoisted(() => {
     listeners,
     calls,
     port,
-    setKeepResult(result: Result<void, PersistenceError>) {
+    setKeepResult(
+      result:
+        | Result<void, PersistenceError>
+        | Promise<Result<void, PersistenceError>>,
+    ) {
       keepResult = Promise.resolve(result);
     },
-    setUseResult(result: Result<void, PersistenceError>) {
+    setUseResult(
+      result:
+        | Result<void, PersistenceError>
+        | Promise<Result<void, PersistenceError>>,
+    ) {
       useResult = Promise.resolve(result);
+    },
+    setKeepSideEffect(effect: (() => void) | null) {
+      keepSideEffect = effect;
     },
   };
 });
@@ -95,6 +108,7 @@ beforeEach(() => {
   state.listeners.clear();
   state.setKeepResult({ success: true, value: undefined });
   state.setUseResult({ success: true, value: undefined });
+  state.setKeepSideEffect(null);
 });
 
 afterEach(() => {
@@ -104,8 +118,8 @@ afterEach(() => {
 describe("WorkspaceConflictNotice", () => {
   it("(a) renders nothing when there is no conflict", () => {
     const { container } = renderNotice("p1");
-    assert.equal(container.textContent, "");
     assert.throws(() => screen.getByText(TITLE));
+    assert.equal(container.querySelector("p"), null);
   });
 
   it("(b) shows the title and both buttons for the open project only", () => {
@@ -196,6 +210,158 @@ describe("WorkspaceConflictNotice", () => {
     await act(async () => {});
     assert.equal(onReload.mock.calls.length, 1);
     assert.ok(screen.getByText("Your choice could not be applied"));
+    assert.ok(screen.getByRole("button", { name: KEEP_LABEL }));
+    assert.ok(screen.getByRole("button", { name: USE_LABEL }));
+  });
+
+  it("(h2) keep fails: both choice buttons remain, and choosing again clears the failure", async () => {
+    state.conflicts.set("p1", conflictFor("p1"));
+    state.setKeepResult({
+      success: false,
+      error: { kind: "Conflict", message: "gone" },
+    });
+    renderNotice("p1");
+    fireEvent.click(screen.getByRole("button", { name: KEEP_LABEL }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Replace account copy" }),
+    );
+    await act(async () => {});
+    assert.ok(screen.getByText("Your choice could not be applied"));
+    assert.ok(screen.getByRole("button", { name: KEEP_LABEL }));
+    assert.ok(screen.getByRole("button", { name: USE_LABEL }));
+    assert.equal(document.activeElement?.textContent, KEEP_LABEL);
+    fireEvent.click(screen.getByRole("button", { name: KEEP_LABEL }));
+    assert.throws(() => screen.getByText("Your choice could not be applied"));
+    assert.ok(screen.getByText("Replace the copy in your account?"));
+  });
+
+  it("(h3) use fails and the conflict is gone: the completed-failure text and Dismiss show; Dismiss removes the notice", async () => {
+    state.conflicts.set("p1", conflictFor("p1"));
+    state.setUseResult({
+      success: false,
+      error: { kind: "Conflict", message: "gone" },
+    });
+    renderNotice("p1");
+    fireEvent.click(screen.getByRole("button", { name: USE_LABEL }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Replace this device's copy" }),
+    );
+    await act(async () => {});
+    act(() => {
+      state.conflicts.delete("p1");
+      state.listeners.forEach((listener) => listener());
+    });
+    assert.ok(screen.getByText("Your choice could not be completed"));
+    assert.ok(
+      screen.getByText(
+        "The editor now shows the copy that is on this device. Check your files before you go on.",
+      ),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+    assert.throws(() => screen.getByText("Your choice could not be completed"));
+    assert.throws(() => screen.getByRole("button", { name: "Dismiss" }));
+  });
+
+  it("(h4) a new conflict while a failure is shown: the choices show and the failure is gone", async () => {
+    state.conflicts.set("p1", conflictFor("p1"));
+    state.setKeepResult({
+      success: false,
+      error: { kind: "Conflict", message: "gone" },
+    });
+    renderNotice("p1");
+    fireEvent.click(screen.getByRole("button", { name: KEEP_LABEL }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Replace account copy" }),
+    );
+    await act(async () => {});
+    assert.ok(screen.getByText("Your choice could not be applied"));
+    act(() => {
+      state.conflicts.set("p1", {
+        ...conflictFor("p1"),
+        at: "2026-02-02T00:00:00Z",
+      });
+      state.listeners.forEach((listener) => listener());
+    });
+    assert.throws(() => screen.getByText("Your choice could not be applied"));
+    assert.ok(screen.getByRole("button", { name: KEEP_LABEL }));
+    assert.ok(screen.getByRole("button", { name: USE_LABEL }));
+  });
+
+  it("(l) keep succeeds while the conflict is removed inside the call: the live region announces success, then a new conflict clears it", async () => {
+    state.conflicts.set("p1", conflictFor("p1"));
+    state.setKeepSideEffect(() => {
+      state.conflicts.delete("p1");
+      state.listeners.forEach((listener) => listener());
+    });
+    renderNotice("p1");
+    fireEvent.click(screen.getByRole("button", { name: KEEP_LABEL }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Replace account copy" }),
+    );
+    await act(async () => {});
+    assert.throws(() => screen.getByText(TITLE));
+    assert.equal(
+      document.querySelector(".sr-only")?.textContent,
+      "Your choice was applied.",
+    );
+    act(() => {
+      state.conflicts.set("p1", {
+        ...conflictFor("p1"),
+        at: "2026-03-03T00:00:00Z",
+      });
+      state.listeners.forEach((listener) => listener());
+    });
+    assert.equal(document.querySelector(".sr-only")?.textContent, "");
+  });
+
+  it("(m) a rejected onReload leaves busy and shows the reload-failed alert with an enabled Reload project button", async () => {
+    state.conflicts.set("p1", conflictFor("p1"));
+    const onReload = vi.fn(async () => {
+      throw new Error("reload blew up");
+    });
+    renderNotice("p1", onReload);
+    fireEvent.click(screen.getByRole("button", { name: USE_LABEL }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Replace this device's copy" }),
+    );
+    await act(async () => {});
+    assert.ok(screen.getByText("The project could not be reloaded"));
+    const reloadButton = screen.getByRole("button", { name: "Reload project" });
+    assert.equal((reloadButton as HTMLButtonElement).disabled, false);
+  });
+
+  it("(n) Reload project double click: disabled Working... while a retry is out, no second onReload, and a rejected retry leaves the alert", async () => {
+    state.conflicts.set("p1", conflictFor("p1"));
+    let resolveFirst: ((value: boolean) => void) | null = null;
+    const onReload = vi.fn(
+      () =>
+        new Promise<boolean>((resolve) => {
+          resolveFirst = resolve;
+        }),
+    );
+    renderNotice("p1", onReload);
+    fireEvent.click(screen.getByRole("button", { name: USE_LABEL }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Replace this device's copy" }),
+    );
+    await act(async () => {});
+    await act(async () => {
+      resolveFirst?.(false);
+    });
+    assert.equal(onReload.mock.calls.length, 1);
+    fireEvent.click(screen.getByRole("button", { name: "Reload project" }));
+    await act(async () => {});
+    assert.equal(onReload.mock.calls.length, 2);
+    const busyButton = screen.getByRole("button", { name: "Working..." });
+    assert.equal((busyButton as HTMLButtonElement).disabled, true);
+    fireEvent.click(busyButton);
+    assert.equal(onReload.mock.calls.length, 2);
+    await act(async () => {
+      resolveFirst?.(false);
+    });
+    assert.ok(screen.getByText("The project could not be reloaded"));
+    const retryButton = screen.getByRole("button", { name: "Reload project" });
+    assert.equal((retryButton as HTMLButtonElement).disabled, false);
   });
 
   it("(i) a failed reload keeps the alert until a later reload succeeds", async () => {
@@ -229,21 +395,20 @@ describe("WorkspaceConflictNotice", () => {
     assert.throws(() => screen.getByText("The project could not be reloaded"));
   });
 
-  it("(j) while a call is held open all buttons are disabled and a second click starts no second call", async () => {
+  it("(j) while a call is held open the confirm step stays with disabled buttons and a second click starts no second call", async () => {
     state.conflicts.set("p1", conflictFor("p1"));
     state.setUseResult(new Promise<Result<void, PersistenceError>>(() => {}));
     renderNotice("p1");
     fireEvent.click(screen.getByRole("button", { name: USE_LABEL }));
-    const confirmButton = screen.getByRole("button", {
-      name: "Replace this device's copy",
-    });
-    fireEvent.click(confirmButton);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Replace this device's copy" }),
+    );
     await act(async () => {});
-    const buttons = screen.getAllByRole("button");
-    assert.ok(buttons.length >= 2);
-    for (const button of buttons) {
-      assert.equal((button as HTMLButtonElement).disabled, true);
-    }
+    assert.ok(screen.getByText("Replace the copy on this device?"));
+    const confirmButton = screen.getByRole("button", { name: "Working..." });
+    assert.equal((confirmButton as HTMLButtonElement).disabled, true);
+    const goBackButton = screen.getByRole("button", { name: "Go back" });
+    assert.equal((goBackButton as HTMLButtonElement).disabled, true);
     fireEvent.click(confirmButton);
     assert.equal(
       state.calls.filter((call) => call.startsWith("useOther:")).length,
