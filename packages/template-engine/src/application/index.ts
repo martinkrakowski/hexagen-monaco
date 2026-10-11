@@ -5,11 +5,16 @@ export {
   ConflictError,
 } from "./resolve-dependencies.js";
 export { AddTemplateUseCase } from "./use-cases/add-template.use-case.js";
+export { RemoveTemplateUseCase } from "./use-cases/remove-template.use-case.js";
 export { ValidateTemplatesUseCase } from "./use-cases/validate-templates.use-case.js";
 export type {
   AddTemplateInput,
   AddTemplateResult,
 } from "./use-cases/add-template.use-case.js";
+export type {
+  RemoveTemplateInput,
+  RemoveTemplateResult,
+} from "./use-cases/remove-template.use-case.js";
 export type {
   ValidateTemplatesOutput,
   ValidationResult,
