@@ -95,6 +95,7 @@ export function useEditorWorkspace() {
   const sessionIdRef = useRef<string | null>(null);
   const writesSuspendedRef = useRef(false);
   const resumeWritesAtEpochRef = useRef<number | null>(null);
+  const sessionGenerationRef = useRef(0);
 
   // An updater queued during a conflict reload runs when React flushes, not
   // when the update was called; resuming writes synchronously after
@@ -192,6 +193,7 @@ export function useEditorWorkspace() {
 
   const setSessionId = useCallback(
     async (sessionId: string) => {
+      sessionGenerationRef.current += 1;
       resumeWritesAtEpochRef.current = null;
       writesSuspendedRef.current = false;
       if (pendingWriteRef.current) {
@@ -205,6 +207,7 @@ export function useEditorWorkspace() {
   );
 
   const clearSession = useCallback(async () => {
+    sessionGenerationRef.current += 1;
     resumeWritesAtEpochRef.current = null;
     writesSuspendedRef.current = false;
     const sessionId = sessionIdRef.current;
@@ -307,6 +310,7 @@ export function useEditorWorkspace() {
   const reloadAfterConflict = useCallback(
     async (sessionId: string): Promise<boolean> => {
       if (sessionIdRef.current !== sessionId) return true;
+      const generation = sessionGenerationRef.current;
       if (pendingWriteRef.current) {
         clearTimeout(pendingWriteRef.current);
         pendingWriteRef.current = null;
@@ -320,9 +324,20 @@ export function useEditorWorkspace() {
       try {
         result = await getEditorWorkspacePersistence().loadWorkspace(sessionId);
       } catch {
+        if (
+          sessionGenerationRef.current !== generation ||
+          sessionIdRef.current !== sessionId
+        ) {
+          return true;
+        }
         return false;
       }
-      if (sessionIdRef.current !== sessionId) return true;
+      if (
+        sessionGenerationRef.current !== generation ||
+        sessionIdRef.current !== sessionId
+      ) {
+        return true;
+      }
       if (!result.success) return false;
       if (pendingWriteRef.current) {
         clearTimeout(pendingWriteRef.current);

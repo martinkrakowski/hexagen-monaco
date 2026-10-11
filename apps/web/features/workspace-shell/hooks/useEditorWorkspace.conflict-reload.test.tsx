@@ -14,6 +14,8 @@ const harness = vi.hoisted(() => {
     savedPayloads: [] as unknown[],
     loadCalls: 0,
     holdLoad: false,
+    holdOnlyFirst: false,
+    heldPending: false,
     resolveLoad: null as null | (() => void),
     loadResult: { success: true, value: null } as unknown,
     throwLoad: false,
@@ -27,12 +29,16 @@ const harness = vi.hoisted(() => {
     loadWorkspace: async () => {
       state.loadCalls += 1;
       if (state.throwLoad) throw new Error("load exploded");
-      if (state.holdLoad) {
+      const result = state.loadResult;
+      const shouldHold =
+        state.holdLoad && !(state.holdOnlyFirst && state.heldPending);
+      if (shouldHold) {
+        state.heldPending = true;
         await new Promise<void>((resolve) => {
           state.resolveLoad = () => resolve();
         });
       }
-      return state.loadResult as never;
+      return result as never;
     },
     clearWorkspace: async () => ({ success: true, value: undefined }),
   };
@@ -80,6 +86,8 @@ describe("useEditorWorkspace reloadAfterConflict", () => {
     harness.state.savedPayloads = [];
     harness.state.loadCalls = 0;
     harness.state.holdLoad = false;
+    harness.state.holdOnlyFirst = false;
+    harness.state.heldPending = false;
     harness.state.resolveLoad = null;
     harness.state.loadResult = { success: true, value: null };
     harness.state.throwLoad = false;
@@ -431,5 +439,78 @@ describe("useEditorWorkspace reloadAfterConflict", () => {
       files: Record<string, { content: string }>;
     };
     assert.equal(payload.files["a.ts"].content, "loaded+edit");
+  });
+
+  it("a reload overtaken by leaving the project and coming back applies nothing", async () => {
+    const result = await mountWithSession();
+
+    // Hold only the reload's own load; the later setSessionId loads answer
+    // immediately with the newer workspace.
+    harness.state.holdLoad = true;
+    harness.state.holdOnlyFirst = true;
+    harness.state.loadResult = {
+      success: true,
+      value: loadedWorkspace("older"),
+    };
+    let reloadP!: Promise<boolean>;
+    await act(async () => {
+      reloadP = result.current.reloadAfterConflict("p1");
+      await vi.advanceTimersByTimeAsync(100);
+    });
+
+    harness.state.loadResult = {
+      success: true,
+      value: loadedWorkspace("newer"),
+    };
+    await act(async () => {
+      await result.current.setSessionId("p2");
+    });
+    await act(async () => {
+      await result.current.setSessionId("p1");
+    });
+
+    // Edit on the newer copy and let it save.
+    await act(async () => {
+      result.current.updateFile("a.ts", "newer+edit");
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+    const savesAfterEdit = harness.state.saveCalls;
+    assert.ok(savesAfterEdit >= 1, "the edit on the newer copy saved");
+
+    // The held (older) load answers late: the overtaken reload must apply
+    // nothing.
+    await act(async () => {
+      harness.state.resolveLoad!();
+      const outcome = await reloadP;
+      assert.equal(outcome, true, "an overtaken reload resolves true");
+    });
+
+    const file = result.current.state.files.get("a.ts");
+    assert.ok(file, "the state still holds the file");
+    assert.equal(
+      file.content,
+      "newer+edit",
+      "the older copy must not overwrite the newer copy plus the edit",
+    );
+
+    harness.state.saveCalls = 0;
+    harness.state.savedPayloads = [];
+    await act(async () => {
+      result.current.updateFile("a.ts", "newer+edit2");
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+    assert.equal(
+      harness.state.saveCalls,
+      1,
+      "a further edit saves exactly once more",
+    );
+    const payload = harness.state.savedPayloads[0] as {
+      files: Record<string, { content: string }>;
+    };
+    assert.equal(payload.files["a.ts"].content, "newer+edit2");
   });
 });
