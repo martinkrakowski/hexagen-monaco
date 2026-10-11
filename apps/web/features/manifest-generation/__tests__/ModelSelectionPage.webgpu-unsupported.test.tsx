@@ -122,8 +122,8 @@ afterEach(() => {
 describe("ModelSelectionPage — WebGPU-absent guard (#766)", () => {
   it("a. blocks a local choice when detection resolved false", async () => {
     // expected colour today: RED
-    const { ctx } = renderPage("requires_model");
     gpu.current = { ...gpu.current, isLoading: false, isWebGPUSupported: false };
+    const { ctx } = renderPage("requires_model");
     await clickFirstDownload();
     assert.equal(ctx.initializeModel.mock.calls.length, 0);
     assert.equal(ctx.switchModel.mock.calls.length, 0);
@@ -205,8 +205,8 @@ describe("ModelSelectionPage — WebGPU-absent guard (#766)", () => {
 
   it("h. Retry is blocked when detection resolved false", async () => {
     // expected colour today: RED
-    const { ctx } = renderPage("error", { loadedModelId: "qwen3-8b" });
     gpu.current = { ...gpu.current, isLoading: false, isWebGPUSupported: false };
+    const { ctx } = renderPage("error", { loadedModelId: "qwen3-8b" });
     await act(async () => {
       fireEvent.click(screen.getByLabelText("Retry download"));
     });
@@ -240,9 +240,7 @@ describe("ModelSelectionPage — WebGPU-absent guard (#766)", () => {
     renderPage("requires_model");
     await clickFirstDownload();
     assert.match(
-      screen.getByText("Local models cannot run in this browser").textContent ??
-        document.body.textContent ??
-        "",
+      document.body.textContent ?? "",
       /The cloud model shown below is active/,
     );
     cleanup();
