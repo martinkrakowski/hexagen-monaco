@@ -1,6 +1,5 @@
 import type { RecordedFileState, RemovalRefusal } from "../../domain/index.js";
 import {
-  configState,
   emptyConfig,
   planTemplateRemoval,
   recordedPaths,
@@ -10,9 +9,11 @@ import type { TemplateRegistryPort } from "../ports/template-registry.port.js";
 import type { TemplateConfigStorePort } from "../ports/template-config-store.port.js";
 import type { ProjectRemovalFilesPort } from "../ports/project-removal-files.port.js";
 import type {
+  RemovalDeleteOutcome,
   RemovalDeleteRequest,
   RemovalSkipReason,
 } from "../ports/project-removal-files.port.js";
+import { RemovalDeleteError } from "../ports/project-removal-files.port.js";
 
 /**
  * `hexagen remove <template>` (proposal 2026-10-10, "The decided
@@ -78,7 +79,6 @@ export type RemoveTemplateResult =
       checklist: string[];
       /** Installed templates whose `auto` questions derive from this one. */
       derivedAnswerWarnings: string[];
-      registrySaved: boolean;
     });
 
 export class RemoveTemplateUseCase {
@@ -100,9 +100,12 @@ export class RemoveTemplateUseCase {
     // Step 1. `absent` is a refusal unless --force, and even then there is
     // nothing to remove. A schema fault from loadState propagates: the
     // command exits 1 on it.
-    const state = this.configStore.loadState
-      ? await this.configStore.loadState(projectRoot)
-      : configState(await this.configStore.load(projectRoot));
+    if (!this.configStore.loadState) {
+      throw new Error(
+        "the config store does not implement loadState: a missing registry cannot be told from an empty one",
+      );
+    }
+    const state = await this.configStore.loadState(projectRoot);
     if (state.state === "absent") {
       return force
         ? { kind: "not-installed", templateId }
@@ -178,12 +181,31 @@ export class RemoveTemplateUseCase {
       path: p,
       expectedHashes: changed.has(p) ? null : (hashesByPath.get(p) ?? []),
     }));
-    const outcome = await this.files.deleteFiles(projectRoot, requests);
-    const prunedDirs = await this.files.pruneEmptyDirs(
-      projectRoot,
-      outcome.deleted,
-    );
-
+    let outcome: RemovalDeleteOutcome;
+    let prunedDirs: string[];
+    // With nothing to delete (every --keep-files run) the filesystem is
+    // not touched at all: neither deleteFiles nor pruneEmptyDirs is called.
+    if (requests.length === 0) {
+      outcome = { deleted: [], skipped: [] };
+      prunedDirs = [];
+    } else {
+      // A delete that fails part-way may have emptied folders before it
+      // threw: prune what it did delete, then rethrow. The registry is
+      // still NOT saved — a re-run reports the pruned-away files as
+      // absent and finishes the job.
+      try {
+        outcome = await this.files.deleteFiles(projectRoot, requests);
+        prunedDirs = await this.files.pruneEmptyDirs(
+          projectRoot,
+          outcome.deleted,
+        );
+      } catch (err) {
+        if (err instanceof RemovalDeleteError) {
+          await this.files.pruneEmptyDirs(projectRoot, err.partial.deleted);
+        }
+        throw err;
+      }
+    }
     // The adapter re-checked each file immediately before unlinking: what
     // it skipped at the last moment joins the plan's kept lists, and the
     // removal still counts as worked.
@@ -240,7 +262,6 @@ export class RemoveTemplateUseCase {
       conflictCopies,
       checklist,
       derivedAnswerWarnings,
-      registrySaved: true,
     };
   }
 }

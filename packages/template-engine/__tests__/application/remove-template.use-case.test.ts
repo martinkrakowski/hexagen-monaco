@@ -13,6 +13,7 @@ import type { TemplateManifest } from "../../src/domain/index.js";
 import type { TemplateRegistryPort } from "../../src/application/ports/template-registry.port.js";
 import type { QuestionEnginePort } from "../../src/application/ports/question-engine.port.js";
 import type { ProjectRemovalFilesPort } from "../../src/application/ports/project-removal-files.port.js";
+import { RemovalDeleteError } from "../../src/application/ports/project-removal-files.port.js";
 
 // RemoveTemplateUseCase deletes files in a user's project. Every test
 // works only inside its own fs.mkdtemp directory, removed in afterEach.
@@ -181,7 +182,6 @@ describe("RemoveTemplateUseCase", () => {
     expect(result.conflictCopies).toEqual(["dir/one.hexagen-update.txt"]);
     expect(result.checklist).toEqual(["run the tests"]);
     expect(result.derivedAnswerWarnings).toEqual([]);
-    assert.equal(result.registrySaved, true);
 
     await assert.rejects(
       fs.access(path.join(world.projectRoot, "dir/one.txt")),
@@ -489,7 +489,6 @@ describe("RemoveTemplateUseCase", () => {
     assert.equal(second.kind, "removed");
     expect(second.deleted).toEqual([]);
     expect(second.alreadyAbsent).toEqual(["s/inner/x.txt", "s/y.txt"]);
-    assert.equal(second.registrySaved, true);
     const after = JSON.parse(await readRegistryFile(world.projectRoot));
     assert.equal(Object.hasOwn(after.templates, "t"), false);
   });
@@ -523,6 +522,10 @@ describe("RemoveTemplateUseCase", () => {
       templateId: "t",
     });
     assert.equal(result.kind, "no-registry");
+    // No registry file was created by the attempted removal.
+    await assert.rejects(
+      fs.access(path.join(world.projectRoot, TEMPLATE_CONFIG_FILE)),
+    );
     const forced = await world.remove().execute({
       projectRoot: world.projectRoot,
       templateId: "t",
@@ -637,7 +640,174 @@ describe("RemoveTemplateUseCase", () => {
       await fs.readFile(path.join(world.projectRoot, "r.txt"), "utf-8"),
       "changed-late\n",
     );
-    assert.equal(result.registrySaved, true);
+    const after = JSON.parse(await readRegistryFile(world.projectRoot));
+    assert.equal(Object.hasOwn(after.templates, "t"), false);
+  });
+
+  it("a delete that fails part-way prunes what it did delete, saves nothing, and a second run completes the job", async () => {
+    const world = await makeWorld(
+      [
+        manifest("t", ["solo/a.txt", "keep/b.txt"]),
+        manifest("other", ["other.txt"]),
+      ],
+      {
+        "t/files/solo/a.txt": "a-content\n",
+        "t/files/keep/b.txt": "b-content\n",
+        "other/files/other.txt": OTHER,
+      },
+    );
+    await world.add().execute({
+      templateIds: ["t", "other"],
+      projectRoot: world.projectRoot,
+    });
+    const registryBefore = await readRegistryFile(world.projectRoot);
+
+    // A proxy over the real adapter: deletes A for real, then throws.
+    const halfWay: ProjectRemovalFilesPort = Object.create(
+      world.removalFiles,
+    ) as ProjectRemovalFilesPort;
+    halfWay.deleteFiles = async (root, requests) => {
+      const a = requests.find((r) => r.path === "solo/a.txt");
+      if (a) {
+        await world.removalFiles.deleteFiles(root, [a]);
+      }
+      throw new RemovalDeleteError("disk exploded", "keep/b.txt", {
+        deleted: ["solo/a.txt"],
+        skipped: [],
+      });
+    };
+
+    const failing = new RemoveTemplateUseCase(
+      world.registry,
+      world.configStore,
+      halfWay,
+    );
+    await assert.rejects(
+      failing.execute({ projectRoot: world.projectRoot, templateId: "t" }),
+      /disk exploded/,
+    );
+    // A is gone, B is present, A's emptied folder is pruned.
+    await assert.rejects(fs.access(path.join(world.projectRoot, "solo/a.txt")));
+    await assert.rejects(fs.access(path.join(world.projectRoot, "solo")));
+    assert.equal(
+      await fs.readFile(path.join(world.projectRoot, "keep/b.txt"), "utf-8"),
+      "b-content\n",
+    );
+    assert.equal(await readRegistryFile(world.projectRoot), registryBefore);
+
+    // The second run with the real adapter finishes the job.
+    const second = await world.remove().execute({
+      projectRoot: world.projectRoot,
+      templateId: "t",
+    });
+    assert.equal(second.kind, "removed");
+    expect(second.alreadyAbsent).toContain("solo/a.txt");
+    expect(second.deleted).toEqual(["keep/b.txt"]);
+    const after = JSON.parse(await readRegistryFile(world.projectRoot));
+    assert.equal(Object.hasOwn(after.templates, "t"), false);
+  });
+
+  it("with --force the delete requests carry null for a changed file and the recorded hash for an unchanged one", async () => {
+    const world = await makeWorld([manifest("t", ["a.txt", "b.txt"])], {
+      "t/files/a.txt": "a-original\n",
+      "t/files/b.txt": "b-original\n",
+    });
+    await world.add().execute({
+      templateIds: ["t"],
+      projectRoot: world.projectRoot,
+    });
+    await fs.writeFile(
+      path.join(world.projectRoot, "a.txt"),
+      "the user rewrote this\n",
+      "utf-8",
+    );
+    const config = await world.configStore.load(world.projectRoot);
+    const bHash = config.templates.t.generatedFiles.find(
+      (f) => f.path === "b.txt",
+    )?.contentHash;
+    assert.equal(typeof bHash, "string");
+
+    const spy = Object.create(world.removalFiles) as ProjectRemovalFilesPort & {
+      calls: { path: string; expectedHashes: readonly string[] | null }[][];
+    };
+    spy.calls = [];
+    spy.deleteFiles = (root, requests) => {
+      spy.calls.push(
+        requests.map((r) => ({
+          path: r.path,
+          expectedHashes: r.expectedHashes,
+        })),
+      );
+      return world.removalFiles.deleteFiles(root, requests);
+    };
+    const useCase = new RemoveTemplateUseCase(
+      world.registry,
+      world.configStore,
+      spy,
+    );
+    const result = await useCase.execute({
+      projectRoot: world.projectRoot,
+      templateId: "t",
+      force: true,
+    });
+    assert.equal(result.kind, "removed");
+    assert.deepEqual(spy.calls, [
+      [
+        { path: "a.txt", expectedHashes: null },
+        { path: "b.txt", expectedHashes: [bHash] },
+      ],
+    ]);
+  });
+
+  it("--keep-files with an unsafe recorded path drops the entry and touches nothing, calling no deleteFiles", async () => {
+    const world = await makeWorld([manifest("t", ["ok.txt", "k/deep/k.txt"])], {
+      "t/files/ok.txt": "ok-content\n",
+      "t/files/k/deep/k.txt": "k-content\n",
+    });
+    await world.add().execute({
+      templateIds: ["t"],
+      projectRoot: world.projectRoot,
+    });
+    const SENTINEL = "sentinel-content\n";
+    await fs.writeFile(path.join(world.dir, "outside.txt"), SENTINEL, "utf-8");
+    const config = await world.configStore.load(world.projectRoot);
+    config.templates.t.generatedFiles.push({
+      path: "../outside.txt",
+      contentHash: "whatever",
+    });
+    await world.configStore.save(world.projectRoot, config);
+    const treeBefore = await snapshotTree(world.projectRoot);
+    delete treeBefore[TEMPLATE_CONFIG_FILE];
+
+    const spy = Object.create(world.removalFiles) as ProjectRemovalFilesPort & {
+      deleteCalls: number;
+    };
+    spy.deleteCalls = 0;
+    spy.deleteFiles = (root, requests) => {
+      spy.deleteCalls += 1;
+      return world.removalFiles.deleteFiles(root, requests);
+    };
+    const useCase = new RemoveTemplateUseCase(
+      world.registry,
+      world.configStore,
+      spy,
+    );
+
+    const result = await useCase.execute({
+      projectRoot: world.projectRoot,
+      templateId: "t",
+      keepFiles: true,
+    });
+    assert.equal(result.kind, "removed");
+    assert.equal(spy.deleteCalls, 0);
+    // Every file and folder is untouched; only the registry entry went.
+    const filesAfter = await snapshotTree(world.projectRoot);
+    delete filesAfter[TEMPLATE_CONFIG_FILE];
+    assert.deepEqual(filesAfter, treeBefore);
+    assert.equal(
+      await fs.readFile(path.join(world.dir, "outside.txt"), "utf-8"),
+      SENTINEL,
+    );
     const after = JSON.parse(await readRegistryFile(world.projectRoot));
     assert.equal(Object.hasOwn(after.templates, "t"), false);
   });
