@@ -818,7 +818,9 @@ export class CachedEditorWorkspaceAdapter
     result: WriteResult,
   ): Promise<void> {
     if (result.ok) return;
-    if (result.reason !== "error" || result.status !== 0) return;
+    // "error" is every answer that does not say whether the write was
+    // committed: no answer at all, a 5xx, a 2xx without a revision.
+    if (result.reason !== "error") return;
     const confirm = await this.remote.read(userId, sessionId);
     if (!confirm.ok) {
       this.logger.warn(
@@ -827,6 +829,23 @@ export class CachedEditorWorkspaceAdapter
       return;
     }
     if (!samePayload(confirm.workspace, sent)) return;
+    // The requests above can take longer than a discard waits for a load.
+    // When no discard is running any more, a later load may have adopted
+    // this very copy: finish the discard only while nothing has (no stamp
+    // other than a discard marker, no other load in flight), as
+    // overtakenLoad does.
+    if (!this.discarding.has(sessionId)) {
+      let stamp: LiftStamp | null;
+      try {
+        stamp = await this.cache.getLiftStamp(sessionId);
+      } catch {
+        return;
+      }
+      if (!this.discarding.has(sessionId)) {
+        if (stamp !== null && !stamp.discarded) return;
+        if ((this.loadsInFlight.get(sessionId)?.size ?? 0) > 1) return;
+      }
+    }
     await this.undoWriteAfterDiscard(sessionId, userId, confirm.rev);
   }
 
