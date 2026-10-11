@@ -71,6 +71,10 @@ reading (delete less, refuse more):
 - "Stale registry records" are the template's records of files that are already gone: they leave the
   registry with the entry, and are reported as "already absent". After a removal that worked, nothing
   of the template is left in the registry, whatever was kept on disk.
+- A recorded path that would leave the project root (an absolute path, or one with `..` that escapes) is
+  never touched, also under `--force`: the command refuses. `--keep-files`, which touches no file, is
+  the way to drop such an entry. The same holds for the registry file itself and for anything under `.git`.
+  A recorded path that is no longer a plain file (a folder, a symbolic link) is kept and listed.
 - `.hexagen-update.*` conflict copies are listed and not deleted, as the proposal's table has it. He
   was not asked about them by name.
 - From the proposal, unchanged: a template that is not installed prints "not installed" and exits 0; a
@@ -154,7 +158,7 @@ beyond the code paths cited below).
 
 **Decided:** `hexagen remove <template> [--dry-run] [--force] [--keep-files]`, one template, one name.
 
-**Name and synopsis.** `hexagen remove <template> [<template> ...] [--dry-run] [--force] [--keep-files]`.
+**Name and synopsis (as proposed; the several-names form is superseded).** `hexagen remove <template> [<template> ...] [--dry-run] [--force] [--keep-files]`.
 Alternatives: `hexagen templates remove <id>` (groups it with `templates list|info`, avoids the clash with
 `arch remove`, but `add` is top-level so it is asymmetric); `hexagen uninstall <id>` (no clash, but a new verb).
 Recommended: `hexagen remove`, with the help text saying "add-on template", mirroring `add`.
@@ -169,7 +173,7 @@ Recommended: `hexagen remove`, with the help text saying "add-on template", mirr
 
 **Decided:** 0 and 1 only; a removal that worked exits 0 even when files were kept. No code 2.
 
-**Exit codes.** 0 removed, or nothing to do, or a dry run. 1 refused (dependents, unreadable registry, no
+**Exit codes (as proposed; code 2 is superseded).** 0 removed, or nothing to do, or a dry run. 1 refused (dependents, unreadable registry, no
 project root) or a failure. 2 removed with files left for the user to deal with (changed files, conflict
 copies); a script can tell "clean" from "needs a look". The existing commands use only 0 and 1
 (`process.exit(1)` in `commands/add/index.ts`); a code 2 would be new (not verified against the other commands).
@@ -253,7 +257,7 @@ for importers is not verified as feasible without parsing). Recommended: print t
 
 ## Smallest first version
 
-**Decided:** this version is built, with two changes to the list below. `--force` is in (item 4), and
+**Decided:** this version is the one to build (nothing is built yet), with two changes to the list below. `--force` is in (item 4), and
 the clean-up of emptied folders is done by the command, not left on the printed list (item 5).
 `AddTemplateUseCase`'s merge on a re-add lands first, as its own pull request. The lane cut is made
 again from the decided contract; lane 3's "later fourth lane" no longer exists.
@@ -263,9 +267,11 @@ One command, `hexagen remove <id>`, with:
 1. the registry entry removed (atomic save);
 2. recorded files whose current hash equals the recorded hash deleted, nothing else;
 3. `--dry-run` (listing what would happen) and `--keep-files`;
-4. the refusal when another installed template `requires` it, no `--force` yet;
+4. the refusal when another installed template `requires` it, no `--force` yet (superseded: `--force` is
+   in and overrides this refusal);
 5. everything else printed as a list for the user to do by hand: changed files, shared files, conflict
-   copies, the template's checklist, the empty-directory and `package.json` clean-up.
+   copies, the template's checklist, the empty-directory and `package.json` clean-up. (Superseded in part:
+   the command removes the folders it leaves empty itself; the rest stays a printed list.)
 
 Rough size: three lanes of about 45 minutes each.
 
@@ -275,6 +281,8 @@ Rough size: three lanes of about 45 minutes each.
   `cli.ts`, with `--dry-run`, `--keep-files`, exit codes, and the root-escape check; tests on a temp directory.
 - Lane 3: documentation (command help, a short section in the template docs, the CLI reference) and a
   review pass. `--force`, conflict-copy deletion and empty-directory pruning are a later fourth lane.
+  (Superseded: `--force` and the pruning of emptied folders are in the first version; conflict copies are
+  listed, not deleted.)
 
 ## Questions for the owner
 
