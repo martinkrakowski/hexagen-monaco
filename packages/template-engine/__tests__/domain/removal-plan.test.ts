@@ -404,6 +404,43 @@ describe("planTemplateRemoval", () => {
     }
   });
 
+  it("keeps a path another template names in a malformed or unsafe record, also with force", () => {
+    const config = makeConfig({
+      a: installRecord([
+        { path: "x.ts", contentHash: "h1" },
+        { path: "y.ts", contentHash: "h2" },
+        { path: "z.ts", contentHash: "h3" },
+        { path: "mine.ts", contentHash: "h4" },
+      ]),
+      b: {
+        ...installRecord([]),
+        generatedFiles: [
+          { path: "x.ts" }, // no hash
+          { path: "y.ts.", contentHash: "h" }, // unsafe spelling of y.ts
+          { path: ".\\Z.ts ", contentHash: 7 }, // backslash, case, space
+          null,
+          { path: 3 },
+        ] as unknown as GeneratedFileRecord[],
+      },
+    });
+    const fileStates = states([
+      ["x.ts", file("h1")],
+      ["y.ts", file("h2")],
+      ["z.ts", file("h3")],
+      ["mine.ts", file("h4")],
+    ]);
+    for (const force of [false, true]) {
+      const result = plan(config, "a", {
+        fileStates,
+        force,
+        requiresById: new Map([["b", []]]),
+      });
+      assert.ok(result.kind === "remove");
+      assert.deepEqual(result.keptShared, ["x.ts", "y.ts", "z.ts"]);
+      assert.deepEqual(result.deleteFiles, ["mine.ts"]);
+    }
+  });
+
   it("classifies absent as alreadyAbsent and other or unknown state as keptOther, also with force", () => {
     const config = makeConfig({
       a: installRecord([
