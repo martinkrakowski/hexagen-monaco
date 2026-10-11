@@ -155,9 +155,12 @@ function printCheckTable(legs) {
 }
 
 function yarnTestWorkspaces() {
+  // On Windows `yarn` is a `.cmd` shim, which execFileSync can only start through
+  // a shell. The arguments are constants, so the shell adds no injection surface.
   const output = execFileSync("yarn", ["workspaces", "list", "--json"], {
     cwd: REPO_ROOT,
     encoding: "utf8",
+    shell: process.platform === "win32",
   });
   const names = new Set();
   for (const line of output.split("\n")) {
