@@ -26,3 +26,4 @@ export type {
   RemovalSkipReason,
   RemovalDeleteOutcome,
 } from "./ports/project-removal-files.port.js";
+export { RemovalDeleteError } from "./ports/project-removal-files.port.js";

@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { FileSystemProjectRemovalFiles } from "../../src/infrastructure/project-removal-files.adapter.js";
 import { FileSystemFileEmitter } from "../../src/infrastructure/file-emitter.adapter.js";
+import { RemovalDeleteError } from "../../src/application/index.js";
 import { emptyConfig } from "../../src/domain/index.js";
 import type { TemplateManifest } from "../../src/domain/index.js";
 
@@ -354,6 +355,94 @@ describe("FileSystemProjectRemovalFiles.deleteFiles", () => {
       "kept",
     );
   });
+});
+
+describe("FileSystemProjectRemovalFiles: review pins", () => {
+  it.skipIf(process.platform === "win32")(
+    "deletes through a project root that is itself a symbolic link, and nothing beside it",
+    async () => {
+      await writeFile("src/gen.ts", "generated");
+      await writeFile("src/keep.ts", "kept");
+      const link = path.join(tmp, "project-link");
+      await fs.symlink(project, link);
+      const states = await removals.inspect(link, ["src/gen.ts"]);
+      const state = states.get("src/gen.ts");
+      assert.ok(state !== undefined && state.kind === "file");
+      const outcome = await removals.deleteFiles(link, [
+        { path: "src/gen.ts", expectedHashes: [state.contentHash] },
+      ]);
+      assert.deepEqual(outcome.deleted, ["src/gen.ts"]);
+      assert.equal(await exists(path.join(project, "src/gen.ts")), false);
+      assert.equal(await exists(path.join(project, "src/keep.ts")), true);
+    },
+  );
+
+  it.skipIf(process.platform === "win32")(
+    "does not prune empty folders reached through a symbolic link above them",
+    async () => {
+      // outside/b/c is an empty tree OUTSIDE the project; project/a -> outside.
+      const outside = path.join(tmp, "outside");
+      await fs.mkdir(path.join(outside, "b", "c"), { recursive: true });
+      await fs.symlink(outside, path.join(project, "a"));
+      const removed = await removals.pruneEmptyDirs(project, ["a/b/c/x.txt"]);
+      assert.deepEqual(removed, []);
+      assert.equal(await exists(path.join(outside, "b", "c")), true);
+      assert.equal(await exists(path.join(outside, "b")), true);
+    },
+  );
+
+  it.skipIf(
+    process.platform === "win32" ||
+      (typeof process.getuid === "function" && process.getuid() === 0),
+  )(
+    "a failed unlink throws an error that carries what was already deleted",
+    async () => {
+      await writeFile("ok/first.ts", "one");
+      const locked = await writeFile("locked/second.ts", "two");
+      await fs.chmod(path.dirname(locked), 0o555);
+      try {
+        await assert.rejects(
+          removals.deleteFiles(project, [
+            { path: "ok/first.ts", expectedHashes: null },
+            { path: "locked/second.ts", expectedHashes: null },
+          ]),
+          (err: unknown) => {
+            assert.ok(err instanceof RemovalDeleteError);
+            assert.equal(err.path, "locked/second.ts");
+            assert.deepEqual(err.partial.deleted, ["ok/first.ts"]);
+            return true;
+          },
+        );
+        assert.equal(await exists(path.join(project, "ok/first.ts")), false);
+        assert.equal(await exists(locked), true);
+      } finally {
+        await fs.chmod(path.dirname(locked), 0o755);
+      }
+    },
+  );
+
+  it.skipIf(
+    process.platform === "win32" ||
+      (typeof process.getuid === "function" && process.getuid() === 0),
+  )(
+    "keeps a file it cannot read and says unreadable, not changed",
+    async () => {
+      const secret = await writeFile("secret.ts", "content");
+      await fs.chmod(secret, 0o000);
+      try {
+        const outcome = await removals.deleteFiles(project, [
+          { path: "secret.ts", expectedHashes: ["anything"] },
+        ]);
+        assert.deepEqual(outcome.deleted, []);
+        assert.deepEqual(outcome.skipped, [
+          { path: "secret.ts", reason: "unreadable" },
+        ]);
+        assert.equal(await exists(secret), true);
+      } finally {
+        await fs.chmod(secret, 0o644);
+      }
+    },
+  );
 });
 
 describe("FileSystemProjectRemovalFiles.pruneEmptyDirs", () => {

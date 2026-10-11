@@ -4,6 +4,7 @@ import crypto from "node:crypto";
 import type { Stats } from "node:fs";
 import { conflictFilePath, normaliseRecordedPath } from "../domain/index.js";
 import type { RecordedFileState } from "../domain/index.js";
+import { RemovalDeleteError } from "../application/ports/project-removal-files.port.js";
 import type {
   ProjectRemovalFilesPort,
   RemovalDeleteOutcome,
@@ -23,7 +24,7 @@ import type {
 type Located =
   | { kind: "unsafe" }
   | { kind: "absent" }
-  | { kind: "other"; detail: string }
+  | { kind: "other"; detail: string; unreadable?: true }
   | { kind: "file"; abs: string };
 
 export class FileSystemProjectRemovalFiles implements ProjectRemovalFilesPort {
@@ -50,7 +51,11 @@ export class FileSystemProjectRemovalFiles implements ProjectRemovalFilesPort {
       } catch (err) {
         const code = (err as NodeJS.ErrnoException).code;
         if (code === "ENOENT") return { kind: "absent" };
-        return { kind: "other", detail: code ?? "lstat error" };
+        return {
+          kind: "other",
+          detail: code ?? "lstat error",
+          unreadable: true,
+        };
       }
       if (stat.isSymbolicLink()) {
         return { kind: "other", detail: "symbolic link in the path" };
@@ -66,7 +71,7 @@ export class FileSystemProjectRemovalFiles implements ProjectRemovalFilesPort {
     } catch (err) {
       const code = (err as NodeJS.ErrnoException).code;
       if (code === "ENOENT") return { kind: "absent" };
-      return { kind: "other", detail: code ?? "lstat error" };
+      return { kind: "other", detail: code ?? "lstat error", unreadable: true };
     }
     if (stat.isSymbolicLink()) {
       return { kind: "other", detail: "symbolic link" };
@@ -77,11 +82,22 @@ export class FileSystemProjectRemovalFiles implements ProjectRemovalFilesPort {
     if (!abs.startsWith(realRoot + path.sep)) {
       return { kind: "unsafe" };
     }
-    const realParent = await fs.realpath(path.dirname(abs));
-    const relReal = path
-      .relative(realRoot, path.join(realParent, path.basename(abs)))
-      .split(path.sep)
-      .join("/");
+    // The file itself is canonicalised, not only its folder: a short name
+    // or a case variant of the LAST segment (the registry file, or `.git`
+    // when it is a file) must be seen under its real name too.
+    let realAbs: string;
+    try {
+      realAbs = await fs.realpath(abs);
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code === "ENOENT") return { kind: "absent" };
+      return {
+        kind: "other",
+        detail: code ?? "realpath error",
+        unreadable: true,
+      };
+    }
+    const relReal = path.relative(realRoot, realAbs).split(path.sep).join("/");
     if (relReal.startsWith("..") || normaliseRecordedPath(relReal) === null) {
       return { kind: "unsafe" };
     }
@@ -141,7 +157,10 @@ export class FileSystemProjectRemovalFiles implements ProjectRemovalFilesPort {
         continue;
       }
       if (located.kind === "other") {
-        skipped.push({ path: request.path, reason: "not-a-plain-file" });
+        skipped.push({
+          path: request.path,
+          reason: located.unreadable ? "unreadable" : "not-a-plain-file",
+        });
         continue;
       }
       if (request.expectedHashes !== null) {
@@ -149,7 +168,7 @@ export class FileSystemProjectRemovalFiles implements ProjectRemovalFilesPort {
         try {
           hash = sha256(await fs.readFile(located.abs, "utf-8"));
         } catch {
-          skipped.push({ path: request.path, reason: "changed" });
+          skipped.push({ path: request.path, reason: "unreadable" });
           continue;
         }
         if (!request.expectedHashes.includes(hash)) {
@@ -164,9 +183,11 @@ export class FileSystemProjectRemovalFiles implements ProjectRemovalFilesPort {
           skipped.push({ path: request.path, reason: "absent" });
           continue;
         }
-        throw new Error(
+        throw new RemovalDeleteError(
           `Failed to delete ${request.path} after ${deleted.length} file(s) were already deleted: ` +
             (err as Error).message,
+          request.path,
+          { deleted, skipped },
         );
       }
       deleted.push(request.path);
@@ -199,6 +220,14 @@ export class FileSystemProjectRemovalFiles implements ProjectRemovalFilesPort {
           throw err;
         }
         if (stat.isSymbolicLink() || !stat.isDirectory()) break;
+        // `lstat` does not follow the LAST component only: a symbolic link
+        // higher up would lead this walk out of the project. The folder's
+        // real path must be the path walked, or the walk stops.
+        try {
+          if ((await fs.realpath(current)) !== current) break;
+        } catch {
+          break;
+        }
         try {
           await fs.rmdir(current);
         } catch (err) {

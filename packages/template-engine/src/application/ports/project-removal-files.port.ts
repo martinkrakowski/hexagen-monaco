@@ -10,10 +10,27 @@ export type RemovalSkipReason =
   | "absent"
   | "changed"
   | "not-a-plain-file"
+  /** The file could not be examined or read (a permission error, for one). It is kept. */
+  | "unreadable"
   | "unsafe-path";
 export interface RemovalDeleteOutcome {
   deleted: string[];
   skipped: { path: string; reason: RemovalSkipReason }[];
+}
+/**
+ * A deletion failed part-way. `partial` holds what WAS deleted and skipped
+ * before the failure, so the caller can still prune and report; `path` is
+ * the file that could not be deleted.
+ */
+export class RemovalDeleteError extends Error {
+  constructor(
+    message: string,
+    readonly path: string,
+    readonly partial: RemovalDeleteOutcome,
+  ) {
+    super(message);
+    this.name = "RemovalDeleteError";
+  }
 }
 export interface ProjectRemovalFilesPort {
   /** The state of each path under the project root. Reads only. One entry per given path. */
