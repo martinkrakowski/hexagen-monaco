@@ -37,7 +37,7 @@ jobs:
   test-legs:
     name: "Plan the test legs"
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 5
     outputs:
       matrix: ${{ steps.plan.outputs.matrix }}
     steps:
@@ -46,43 +46,12 @@ jobs:
         with:
           persist-credentials: false
 
-      # Corepack must be enabled BEFORE setup-node: setup-node@v5's environment
-      # probe runs `yarn` (e.g. `yarn cache dir`), and the repo pins yarn@4 via
-      # packageManager — classic global yarn errors on that. Enabling Corepack
-      # first makes `yarn` resolve to the pinned yarn@4 shim during the probe.
-      - name: "Enable Corepack"
-        run: corepack enable
-
-      # No version literal: `corepack prepare --activate` with no spec reads
-      # `packageManager` from the root package.json, so a Yarn bump is a
-      # one-line change there and CI cannot drift from the declared pin.
-      - name: "Prepare Yarn"
-        run: corepack prepare --activate
-
-      - name: "Setup Node.js"
-        uses: actions/setup-node@v5
-        with:
-          node-version: "22.7"
-
-      # Yarn 4 default httpTimeout is 60s. Public-PR hardened mode makes
-      # resolution slower; a single TLS socket stall (YN0001 RequestError)
-      # fails the whole job. Timeout + retries, not a lockfile change.
-      - name: "Install Dependencies"
-        env:
-          YARN_HTTP_TIMEOUT: "120000"
-        run: |
-          for attempt in 1 2 3; do
-            yarn install --immutable && exit 0
-            echo "yarn install failed (attempt ${attempt}/3)"
-            if [ "$attempt" -eq 3 ]; then
-              exit 1
-            fi
-            sleep 15
-          done
-
-      - name: "Check leg membership (every package with tests is in exactly one leg)"
-        run: node scripts/ci/test-legs.mjs --check
-
+      # The runner's preinstalled node is enough here:
+      # `scripts/ci/test-legs.mjs --matrix` reads only the workspaces'
+      # package.json files. It exits 1 (failing this job, and through it the
+      # aggregate) when a package with tests is in no leg or in two, or a
+      # leg is empty. The cross-check against yarn's own workspace list
+      # needs yarn and runs in `leg-build`.
       - name: "Emit the matrix"
         id: plan
         run: |
@@ -211,6 +180,12 @@ jobs:
         # run `yarn constraints` by hand. Runs right after install because it
         # reads manifests only; no build required.
         run: yarn constraints
+
+      # The second half of F50's membership check: the legs computed from the
+      # folders must equal the workspaces yarn itself reports as having a test
+      # script. It needs yarn, which the planning job no longer installs.
+      - name: "Check leg membership (every package with tests is in exactly one leg)"
+        run: node scripts/ci/test-legs.mjs --check
 
       # This is both the old "Build All Packages" and the old "Verify Build
       # After Sync": under F48 the committed tree is the synced tree, so one
