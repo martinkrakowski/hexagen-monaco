@@ -209,6 +209,9 @@ function makeAdapters(options?: {
   const cache = new IDBEditorWorkspaceAdapter();
   const remote = new HttpEditorWorkspaceAdapter(
     fetchImpl,
+    // One hour: these tests park requests past the 10 s waits on purpose. In
+    // production a request ends after 8 s, so the 10 s overrun branches are
+    // reached only by a hang in the cache or the user-id lookup.
     options?.requestTimeoutMs ?? 3_600_000,
   );
   const { warns, logger } = warnCollector();

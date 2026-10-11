@@ -191,3 +191,339 @@ describe("CachedEditorWorkspaceAdapter with a timed-out remote", () => {
     );
   });
 });
+
+/**
+ * A minimal Response for the fake server: status, ok, an optional ETag of
+ * the adapter's `"rev:<n>"` shape, and a json() body.
+ */
+function fakeResponse(status: number, body?: unknown, rev?: number): Response {
+  const headers = new Headers();
+  if (rev !== undefined) headers.set("ETag", `"rev:${rev}"`);
+  return {
+    status,
+    ok: status >= 200 && status < 300,
+    headers,
+    json: async () => body,
+  } as unknown as Response;
+}
+
+/**
+ * A fake document server for the no-answer tests. It holds one document
+ * `{ rev, payload }` (or null), answers GET/DELETE from it, and can APPLY a
+ * PUT — store the payload, bump the rev — and then never answer it (a
+ * never-settling promise): the write that may still have landed. Every call
+ * is recorded with its method and If-Match header.
+ */
+function makeNoAnswerServer(
+  initial: {
+    rev: number;
+    payload: unknown;
+  } | null,
+) {
+  const server = {
+    doc: initial,
+    applyPut: true,
+    failGets: false,
+    calls: [] as Array<{ method: string; ifMatch: string | null }>,
+  };
+  const fetchImpl = vi.fn(async (_url: string | URL, init?: RequestInit) => {
+    const method = (init?.method ?? "GET").toUpperCase();
+    const headers = new Headers(
+      init?.headers as Record<string, string> | undefined,
+    );
+    server.calls.push({ method, ifMatch: headers.get("If-Match") });
+    if (method === "GET") {
+      if (server.failGets) return fakeResponse(500);
+      if (server.doc === null) return fakeResponse(404);
+      return fakeResponse(
+        200,
+        { payload: server.doc.payload, updatedAt: 1 },
+        server.doc.rev,
+      );
+    }
+    if (method === "PUT") {
+      if (server.applyPut) {
+        const body = JSON.parse(String(init?.body)) as { payload: unknown };
+        server.doc = { rev: (server.doc?.rev ?? 0) + 1, payload: body.payload };
+      }
+      return new Promise<Response>(() => {});
+    }
+    // DELETE
+    if (server.doc === null) return fakeResponse(404);
+    if (headers.get("If-Match") === `"rev:${server.doc.rev}"`) {
+      server.doc = null;
+      return fakeResponse(204);
+    }
+    return fakeResponse(412, undefined, server.doc.rev);
+  }) as unknown as MockedFunction<typeof fetch>;
+  return { server, fetch: fetchImpl };
+}
+
+describe("a write with no answer that a discard overtook", () => {
+  it("save path: the parked write is read back and deleted with the rev it landed on", async () => {
+    const { server, fetch } = makeNoAnswerServer({
+      rev: 5,
+      payload: makeWorkspace(1000),
+    });
+    const { adapter, cache, warns } = makeAdapters(fetch);
+    await cache.setLiftStamp(UUID, {
+      ownerId: "user-1",
+      rev: 5,
+      syncedUpdatedAt: 1000,
+      confirmed: true,
+    });
+    await adapter.saveWorkspace(UUID, makeWorkspace(2000));
+    await vi.advanceTimersByTimeAsync(1_500);
+    assert.ok(server.doc, "the document exists");
+    assert.equal(server.doc.rev, 6, "the parked PUT was applied at rev 6");
+    assert.deepEqual(
+      (server.doc.payload as { updatedAt: number }).updatedAt,
+      2000,
+      "the parked PUT stored the 2000 payload",
+    );
+
+    const clearPromise = adapter.clearWorkspace(UUID);
+    await vi.advanceTimersByTimeAsync(8_000);
+    await clearPromise;
+
+    assert.ok(
+      server.calls.some(
+        (c) => c.method === "DELETE" && c.ifMatch === '"rev:6"',
+      ),
+      "a DELETE with If-Match rev:6 was sent",
+    );
+    assert.equal(server.doc, null, "the server has no document");
+
+    const inCache = await cache.loadWorkspace(UUID);
+    assert.ok(inCache.success && inCache.value === null, "cache is empty");
+
+    const putsBeforeLoad = server.calls.filter(
+      (c) => c.method === "PUT",
+    ).length;
+    const loaded = await adapter.loadWorkspace(UUID);
+    assert.ok(loaded.success);
+    assert.equal(loaded.value, null, "the load answers null");
+    assert.equal(
+      server.calls.filter((c) => c.method === "PUT").length,
+      putsBeforeLoad,
+      "no further PUT was sent",
+    );
+    assert.equal(
+      warns.some((w) => w.includes("could not be checked")),
+      false,
+      "the confirming read succeeded",
+    );
+  });
+
+  it("save path: a parked write that did NOT land is left alone and the discard deletes rev 5", async () => {
+    const { server, fetch } = makeNoAnswerServer({
+      rev: 5,
+      payload: makeWorkspace(1000),
+    });
+    server.applyPut = false;
+    const { adapter, cache } = makeAdapters(fetch);
+    await cache.setLiftStamp(UUID, {
+      ownerId: "user-1",
+      rev: 5,
+      syncedUpdatedAt: 1000,
+      confirmed: true,
+    });
+    await adapter.saveWorkspace(UUID, makeWorkspace(2000));
+    await vi.advanceTimersByTimeAsync(1_500);
+    assert.ok(server.doc, "the document exists");
+    assert.equal(server.doc.rev, 5, "the parked PUT was NOT applied");
+
+    const clearPromise = adapter.clearWorkspace(UUID);
+    await vi.advanceTimersByTimeAsync(8_000);
+    await clearPromise;
+
+    assert.equal(
+      server.calls.some(
+        (c) => c.method === "DELETE" && c.ifMatch === '"rev:6"',
+      ),
+      false,
+      "no DELETE with rev:6 was sent",
+    );
+    assert.ok(
+      server.calls.some(
+        (c) => c.method === "DELETE" && c.ifMatch === '"rev:5"',
+      ),
+      "the discard's own DELETE with If-Match rev:5 was sent",
+    );
+    assert.equal(server.doc, null, "the document was removed");
+
+    const loaded = await adapter.loadWorkspace(UUID);
+    assert.ok(loaded.success);
+    assert.equal(loaded.value, null, "the next load answers null");
+  });
+
+  it("catch-up path: the load's parked catch-up PUT is read back and deleted", async () => {
+    const { server, fetch } = makeNoAnswerServer({
+      rev: 5,
+      payload: makeWorkspace(1000),
+    });
+    const { adapter, cache } = makeAdapters(fetch);
+    await cache.saveWorkspace(UUID, makeWorkspace(2000));
+    await cache.setLiftStamp(UUID, {
+      ownerId: "user-1",
+      rev: 5,
+      syncedUpdatedAt: 1000,
+      confirmed: true,
+    });
+
+    const loadPromise = adapter.loadWorkspace(UUID);
+    await vi.advanceTimersByTimeAsync(0);
+    assert.ok(server.doc, "the document exists");
+    assert.equal(
+      server.doc.rev,
+      6,
+      "the parked catch-up PUT was applied at rev 6",
+    );
+
+    const clearPromise = adapter.clearWorkspace(UUID);
+    await vi.advanceTimersByTimeAsync(8_000);
+    const loadResult = await loadPromise;
+    await clearPromise;
+
+    assert.ok(
+      server.calls.some(
+        (c) => c.method === "DELETE" && c.ifMatch === '"rev:6"',
+      ),
+      "a DELETE with If-Match rev:6 was sent",
+    );
+    assert.equal(server.doc, null, "the document is gone from the server");
+    assert.ok(loadResult.success);
+    assert.equal(loadResult.value, null, "the load answered null");
+  });
+
+  it("lift path: the load's parked create-only PUT is read back and deleted", async () => {
+    const { server, fetch } = makeNoAnswerServer(null);
+    const { adapter, cache } = makeAdapters(fetch);
+    await cache.saveWorkspace(UUID, makeWorkspace(2000));
+
+    const loadPromise = adapter.loadWorkspace(UUID);
+    await vi.advanceTimersByTimeAsync(0);
+    assert.ok(server.doc, "the document was created");
+    assert.equal(server.doc.rev, 1, "the parked lift PUT was applied at rev 1");
+
+    const clearPromise = adapter.clearWorkspace(UUID);
+    await vi.advanceTimersByTimeAsync(8_000);
+    const loadResult = await loadPromise;
+    await clearPromise;
+
+    assert.ok(
+      server.calls.some(
+        (c) => c.method === "DELETE" && c.ifMatch === '"rev:1"',
+      ),
+      "a DELETE with If-Match rev:1 was sent",
+    );
+    assert.equal(server.doc, null, "the document is gone from the server");
+    assert.ok(loadResult.success);
+    assert.equal(loadResult.value, null, "the load answered null");
+  });
+
+  it("a confirming read that fails logs the limit: the write stays on the server", async () => {
+    const { server, fetch } = makeNoAnswerServer({
+      rev: 5,
+      payload: makeWorkspace(1000),
+    });
+    const { adapter, cache, warns } = makeAdapters(fetch);
+    await cache.setLiftStamp(UUID, {
+      ownerId: "user-1",
+      rev: 5,
+      syncedUpdatedAt: 1000,
+      confirmed: true,
+    });
+    await adapter.saveWorkspace(UUID, makeWorkspace(2000));
+    await vi.advanceTimersByTimeAsync(1_500);
+    assert.equal(server.doc?.rev, 6, "the parked PUT was applied at rev 6");
+
+    server.failGets = true;
+    const clearPromise = adapter.clearWorkspace(UUID);
+    await vi.advanceTimersByTimeAsync(8_000);
+    const clearResult = await clearPromise;
+
+    assert.ok(clearResult.success, "the discard settles");
+    assert.ok(
+      warns.some((w) => w.includes("got no answer and could not be checked")),
+      "the could-not-be-checked warning was logged",
+    );
+    assert.ok(server.doc, "the document stays on the server");
+    assert.equal(server.doc.rev, 6, "still the write's revision");
+  });
+
+  it("no discard: the timed-out save path sends no GET and no DELETE", async () => {
+    const { server, fetch } = makeNoAnswerServer({
+      rev: 5,
+      payload: makeWorkspace(1000),
+    });
+    const { adapter, cache } = makeAdapters(fetch);
+    await cache.setLiftStamp(UUID, {
+      ownerId: "user-1",
+      rev: 5,
+      syncedUpdatedAt: 1000,
+      confirmed: true,
+    });
+    await adapter.saveWorkspace(UUID, makeWorkspace(2000));
+    await vi.advanceTimersByTimeAsync(1_500);
+    await vi.advanceTimersByTimeAsync(8_000);
+
+    const methods = server.calls.map((c) => c.method);
+    assert.equal(
+      methods.filter((m) => m === "GET").length,
+      0,
+      "no GET was sent",
+    );
+    assert.equal(
+      methods.filter((m) => m === "DELETE").length,
+      0,
+      "no DELETE was sent",
+    );
+    assert.deepEqual(methods, ["PUT"], "only the PUT went out");
+  });
+
+  it("a server copy another device changed is not deleted: the read keeps it", async () => {
+    const { server, fetch } = makeNoAnswerServer({
+      rev: 5,
+      payload: makeWorkspace(1000),
+    });
+    server.applyPut = false;
+    const { adapter, cache, warns } = makeAdapters(fetch);
+    await cache.setLiftStamp(UUID, {
+      ownerId: "user-1",
+      rev: 5,
+      syncedUpdatedAt: 1000,
+      confirmed: true,
+    });
+    await adapter.saveWorkspace(UUID, makeWorkspace(2000));
+    await vi.advanceTimersByTimeAsync(1_500);
+    // While the write is parked without an answer, another device writes a
+    // different payload at another revision.
+    server.doc = { rev: 7, payload: makeWorkspace(3000) };
+
+    const clearPromise = adapter.clearWorkspace(UUID);
+    await vi.advanceTimersByTimeAsync(8_000);
+    const clearResult = await clearPromise;
+
+    assert.ok(clearResult.success, "the discard settles");
+    assert.equal(
+      server.calls.some(
+        (c) => c.method === "DELETE" && c.ifMatch === '"rev:7"',
+      ),
+      false,
+      "no DELETE with the other device's rev:7 was sent",
+    );
+    assert.ok(server.doc, "the other device's copy is kept");
+    assert.equal(
+      (server.doc.payload as { updatedAt: number }).updatedAt,
+      3000,
+      "still the other device's payload",
+    );
+    assert.ok(
+      warns.some((w) =>
+        w.includes("server copy changed on another device, not deleted"),
+      ),
+      "the conflict warning was logged",
+    );
+  });
+});
