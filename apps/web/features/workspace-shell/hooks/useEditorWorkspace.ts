@@ -67,6 +67,22 @@ export interface EditorWorkspaceState {
   unpushed: boolean;
 }
 
+function stateFromLoaded(raw: unknown): EditorWorkspaceState {
+  const validated = validateWorkspace(raw);
+  if (validated === null) {
+    return { selectedFileId: null, files: new Map(), unpushed: false };
+  }
+  const files = new Map<string, PersistedEditorWorkspaceFile>();
+  for (const [fileId, file] of Object.entries(validated.files)) {
+    files.set(fileId, file);
+  }
+  return {
+    selectedFileId: validated.selectedFileId,
+    files,
+    unpushed: validated.unpushed ?? false,
+  };
+}
+
 export function useEditorWorkspace() {
   const [state, setState] = useState<EditorWorkspaceState>({
     selectedFileId: null,
@@ -74,8 +90,29 @@ export function useEditorWorkspace() {
     unpushed: false,
   });
   const [isLoaded, setIsLoaded] = useState(false);
+  const [reloadEpoch, setReloadEpoch] = useState(0);
   const pendingWriteRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sessionIdRef = useRef<string | null>(null);
+  const writesSuspendedRef = useRef(false);
+  const resumeWritesAtEpochRef = useRef<number | null>(null);
+  const sessionGenerationRef = useRef(0);
+
+  // An updater queued during a conflict reload runs when React flushes, not
+  // when the update was called; resuming writes synchronously after
+  // setState would let such an updater (running after the resume) arm a
+  // save of the copy that LOST the conflict. Resume only in the effect that
+  // runs after the commit that applied the loaded state: by then every
+  // updater queued before that commit has already run while writes were
+  // still suspended.
+  useEffect(() => {
+    if (
+      resumeWritesAtEpochRef.current !== null &&
+      resumeWritesAtEpochRef.current === reloadEpoch
+    ) {
+      resumeWritesAtEpochRef.current = null;
+      writesSuspendedRef.current = false;
+    }
+  }, [reloadEpoch]);
 
   const loadWorkspace = useCallback(async (sessionId: string) => {
     const persistence = getEditorWorkspacePersistence();
@@ -86,20 +123,7 @@ export function useEditorWorkspace() {
       return;
     }
 
-    const validated = validateWorkspace(result.value);
-    if (validated === null) {
-      setState({ selectedFileId: null, files: new Map(), unpushed: false });
-    } else {
-      const files = new Map<string, PersistedEditorWorkspaceFile>();
-      for (const [fileId, file] of Object.entries(validated.files)) {
-        files.set(fileId, file);
-      }
-      setState({
-        selectedFileId: validated.selectedFileId,
-        files,
-        unpushed: validated.unpushed ?? false,
-      });
-    }
+    setState(stateFromLoaded(result.value));
     setIsLoaded(true);
   }, []);
 
@@ -130,6 +154,7 @@ export function useEditorWorkspace() {
 
   const scheduleWrite = useCallback(
     (sessionId: string, nextState: EditorWorkspaceState) => {
+      if (writesSuspendedRef.current) return;
       if (pendingWriteRef.current) {
         clearTimeout(pendingWriteRef.current);
       }
@@ -168,6 +193,9 @@ export function useEditorWorkspace() {
 
   const setSessionId = useCallback(
     async (sessionId: string) => {
+      sessionGenerationRef.current += 1;
+      resumeWritesAtEpochRef.current = null;
+      writesSuspendedRef.current = false;
       if (pendingWriteRef.current) {
         clearTimeout(pendingWriteRef.current);
         pendingWriteRef.current = null;
@@ -179,6 +207,9 @@ export function useEditorWorkspace() {
   );
 
   const clearSession = useCallback(async () => {
+    sessionGenerationRef.current += 1;
+    resumeWritesAtEpochRef.current = null;
+    writesSuspendedRef.current = false;
     const sessionId = sessionIdRef.current;
     if (!sessionId) return;
 
@@ -276,11 +307,60 @@ export function useEditorWorkspace() {
     });
   }, [scheduleWrite]);
 
+  const reloadAfterConflict = useCallback(
+    async (sessionId: string): Promise<boolean> => {
+      if (sessionIdRef.current !== sessionId) return true;
+      const generation = sessionGenerationRef.current;
+      if (pendingWriteRef.current) {
+        clearTimeout(pendingWriteRef.current);
+        pendingWriteRef.current = null;
+      }
+      writesSuspendedRef.current = true;
+      let result: Awaited<
+        ReturnType<
+          ReturnType<typeof getEditorWorkspacePersistence>["loadWorkspace"]
+        >
+      >;
+      try {
+        result = await getEditorWorkspacePersistence().loadWorkspace(sessionId);
+      } catch {
+        if (
+          sessionGenerationRef.current !== generation ||
+          sessionIdRef.current !== sessionId
+        ) {
+          return true;
+        }
+        return false;
+      }
+      if (
+        sessionGenerationRef.current !== generation ||
+        sessionIdRef.current !== sessionId
+      ) {
+        return true;
+      }
+      if (!result.success) return false;
+      if (pendingWriteRef.current) {
+        clearTimeout(pendingWriteRef.current);
+        pendingWriteRef.current = null;
+      }
+      setState(stateFromLoaded(result.value));
+      setIsLoaded(true);
+      setReloadEpoch((e) => {
+        const next = e + 1;
+        resumeWritesAtEpochRef.current = next;
+        return next;
+      });
+      return true;
+    },
+    [],
+  );
+
   return {
     state,
     isLoaded,
     setSessionId,
     clearSession,
+    reloadAfterConflict,
     updateFile,
     selectFile,
     markFileSaved,
