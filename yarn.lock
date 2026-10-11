@@ -1432,7 +1432,7 @@ __metadata:
     "@types/node": "npm:^20.0.0"
     ajv: "npm:^8.17.1"
     eslint: "npm:^8.57.0"
-    js-yaml: "npm:^4.1.1"
+    js-yaml: "npm:^4.1.0"
     tsx: "npm:^4.21.0"
     typescript: "npm:^5.4.5"
     vitest: "npm:^4.1.9"
