@@ -97,6 +97,26 @@ const KNOWN_SPLITS = [
   "lucide-react",
 ];
 
+/**
+ * A split that is ALLOWED, written down so that a third range cannot appear
+ * unnoticed (issue #521). `react` stays in KNOWN_SPLITS (18 in apps/tui vs 19
+ * is still undecided), but the two sides of the split are now fixed: every
+ * workspace declares `default`, except the workspaces named under `except`.
+ * `react-dom` has no declaration in apps/tui today; if it gains one, it must
+ * be the 18 line as well.
+ *
+ * Why it matters: React's peers must be ONE instance at runtime. In #521
+ * `packages/model-settings` declared `react: ^19.0.0` beside web's `^19.2.4`;
+ * the caret floated to 19.2.5, the package got its own copy, and no apps/web
+ * test could mount one of its components ("Invalid hook call"). The devDep
+ * of a package that web renders tracks web's range. peerDependencies are not
+ * checked: they express compatibility, not a resolution choice.
+ */
+const EXPECTED_SPLITS = {
+  react: { default: "^19.2.4", except: { "@hexagen/tui": "^18.3.1" } },
+  "react-dom": { default: "^19.2.4", except: { "@hexagen/tui": "^18.3.1" } },
+};
+
 module.exports = {
   async constraints({ Yarn }) {
     for (const [ident, range] of Object.entries(PINNED)) {
@@ -105,6 +125,17 @@ module.exports = {
         // forcing them to the pinned range would narrow what a consumer may use.
         if (dependency.type === "peerDependencies") continue;
         dependency.update(range);
+      }
+    }
+
+    // A declared split has exactly the ranges written in EXPECTED_SPLITS.
+    for (const [ident, { default: range, except }] of Object.entries(
+      EXPECTED_SPLITS,
+    )) {
+      for (const dependency of Yarn.dependencies({ ident })) {
+        if (dependency.type === "peerDependencies") continue;
+        const name = dependency.workspace.ident;
+        dependency.update((name && except[name]) || range);
       }
     }
 
