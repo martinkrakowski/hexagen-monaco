@@ -136,7 +136,10 @@ describe("ModelSelectionStateMachine", () => {
       assert.strictEqual(canTransition("unsupported", "idle"), true);
       assert.strictEqual(canTransition("unsupported", "model_selection"), true);
       assert.strictEqual(canTransition("unsupported", "key_validation"), true);
-      assert.strictEqual(canTransition("unsupported", "model_downloading"), false);
+      assert.strictEqual(
+        canTransition("unsupported", "model_downloading"),
+        false,
+      );
     });
 
     it("should transition to unsupported on WEBGPU_UNAVAILABLE (#766)", () => {

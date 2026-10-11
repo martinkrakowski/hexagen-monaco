@@ -47,7 +47,12 @@ function getValidTransitions(
 ): GenerateWithAiScreenState[] {
   switch (state) {
     case "idle":
-      return ["model_selection", "generating", "wizard_hydration", "unsupported"];
+      return [
+        "model_selection",
+        "generating",
+        "wizard_hydration",
+        "unsupported",
+      ];
     case "model_selection":
       return ["model_downloading", "key_validation", "idle", "unsupported"];
     case "model_downloading":
