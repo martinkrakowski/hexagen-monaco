@@ -202,11 +202,15 @@ interface TestAdapters {
 function makeAdapters(options?: {
   tenantId?: string | null;
   userId?: string | null;
+  requestTimeoutMs?: number;
 }): TestAdapters {
   const server = new Map<string, ServerDoc>();
   const fetchImpl = makeServerFetch(server, new Set([UUID]));
   const cache = new IDBEditorWorkspaceAdapter();
-  const remote = new HttpEditorWorkspaceAdapter(fetchImpl);
+  const remote = new HttpEditorWorkspaceAdapter(
+    fetchImpl,
+    options?.requestTimeoutMs ?? 3_600_000,
+  );
   const { warns, logger } = warnCollector();
   const tenantId = options?.tenantId !== undefined ? options.tenantId : null;
   const userId = options?.userId !== undefined ? options.userId : "user-1";
