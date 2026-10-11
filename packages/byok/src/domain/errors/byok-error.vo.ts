@@ -19,3 +19,8 @@ export type ByokError =
       limitType: string;
       resetAt: string;
     };
+
+// PLANT: a domain file reaching into the infrastructure layer (type only, so the build still passes)
+import type { ConsoleAuditLogAdapter as PlantedInfrastructureType } from "../../infrastructure/adapters/console-audit-log.adapter.js";
+
+export type PlantedLayerLeak = PlantedInfrastructureType;
