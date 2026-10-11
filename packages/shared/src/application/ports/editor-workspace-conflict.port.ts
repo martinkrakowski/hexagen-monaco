@@ -54,11 +54,14 @@ export interface WorkspaceConflictBackup {
  * Implemented by the cached editor workspace adapter; the UI lane consumes it.
  *
  * Requirements on the caller:
- * - After a successful `useOtherDeviceCopy` the caller MUST load the workspace
- *   again (`loadWorkspace`) and show what it returns. Until that load starts,
- *   every `saveWorkspace` of the id is refused with a `Conflict` error, so
- *   that an autosave of the old in-memory content cannot overwrite the copy
- *   that was just taken.
+ * - After ANY return of `useOtherDeviceCopy`, success or failure, the caller
+ *   MUST cancel its own pending saves, load the workspace again
+ *   (`loadWorkspace`) and show what it returns. From the moment the browser
+ *   copy is being replaced until that load has ANSWERED, every
+ *   `saveWorkspace` of the id is refused with a `Conflict` error and writes
+ *   nothing, so that an autosave of the old in-memory content cannot
+ *   overwrite the copy that was taken. (A failure that changed nothing
+ *   refuses no save; loading again is then harmless.)
  * - A second call of the same resolve while one is running returns the first
  *   call's result; the other resolve is refused until the first has ended.
  * - When the server copy has been deleted meanwhile, `useOtherDeviceCopy`
@@ -87,7 +90,11 @@ export interface EditorWorkspaceConflictPort {
   useOtherDeviceCopy(
     sessionId: string,
   ): Promise<Result<void, PersistenceError>>;
-  /** The backups kept for a project, oldest first (at most three). */
+  /**
+   * The backups kept for a project, oldest first (at most three). They are
+   * kept in this browser only, survive a discard of the workspace, and are
+   * never expired by the application.
+   */
   listConflictBackups(
     sessionId: string,
   ): Promise<Result<WorkspaceConflictBackup[], PersistenceError>>;

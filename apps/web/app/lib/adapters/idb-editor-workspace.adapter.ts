@@ -221,6 +221,8 @@ export class IDBEditorWorkspaceAdapter implements EditorWorkspacePersistencePort
 
   /**
    * Keeps the copy that lost a conflict choice (the newest three per id).
+   * Backups are the one per-id entry that a discard (`clearWorkspace`) does
+   * NOT delete: a discard is when a user may want one back. Nothing expires them.
    * NOT best-effort: the caller overwrites the losing copy only after this
    * has answered success.
    */
@@ -231,8 +233,23 @@ export class IDBEditorWorkspaceAdapter implements EditorWorkspacePersistencePort
       try {
         await update<WorkspaceConflictBackup[] | undefined>(
           `${CONFLICT_BACKUP_KEY_PREFIX}${backup.sessionId}`,
-          (existing) =>
-            [...(existing ?? []), backup].slice(-MAX_CONFLICT_BACKUPS),
+          (existing) => {
+            const list = existing ?? [];
+            const newest = list[list.length - 1];
+            // A repeated attempt on the same conflict backs up the same copy
+            // again: it replaces its twin instead of pushing out an older,
+            // different backup.
+            if (
+              newest !== undefined &&
+              newest.lost === backup.lost &&
+              newest.serverRev === backup.serverRev &&
+              JSON.stringify(newest.workspace) ===
+                JSON.stringify(backup.workspace)
+            ) {
+              return [...list.slice(0, -1), backup];
+            }
+            return [...list, backup].slice(-MAX_CONFLICT_BACKUPS);
+          },
         );
         return { success: true as const, value: undefined };
       } catch (e) {

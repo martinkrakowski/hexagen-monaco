@@ -548,8 +548,6 @@ export class CachedEditorWorkspaceAdapter
       const ended = await this.settledWithin(discards, DISCARD_LOAD_WAIT_MS);
       if (!ended) return { success: true, value: null };
     }
-    // The caller is loading: saves of this id are accepted again.
-    this.reloadRequired.delete(sessionId);
     // From here to the registration below there is NO await: a discard that
     // starts later finds this load registered and its epoch already captured.
     const epochAtStart = this.epochs.get(sessionId) ?? 0;
@@ -563,6 +561,10 @@ export class CachedEditorWorkspaceAdapter
     try {
       return await load;
     } finally {
+      // The caller has its answer: saves of this id are accepted again. (Not
+      // earlier: a save of the old in-memory content while the load is still
+      // out would be uploaded over the copy that was taken.)
+      this.reloadRequired.delete(sessionId);
       loads.delete(load);
       if (loads.size === 0 && this.loadsInFlight.get(sessionId) === loads) {
         this.loadsInFlight.delete(sessionId);
@@ -1326,13 +1328,36 @@ export class CachedEditorWorkspaceAdapter
       precondition,
     );
 
+    // What a discard that overtook the upload calls for. The server held
+    // another device's copy, which a discard never deletes (it is paused):
+    // that copy is put back. Only when there was no server copy is the
+    // upload deleted, like any write a discard overtook.
+    const undoAfterDiscard = async (uploadedRev: number): Promise<void> => {
+      if (!readResult.ok) {
+        await this.undoWriteAfterDiscard(sessionId, userId, uploadedRev);
+        return;
+      }
+      const back = await this.remote.write(
+        userId,
+        sessionId,
+        readResult.workspace,
+        sessionId,
+        { ifMatch: uploadedRev },
+      );
+      if (!back.ok) {
+        this.logger.warn(
+          `workspace ${sessionId}: a discard overtook "keep this device's copy" and the other device's copy could not be put back on the server (${back.message}); it is kept in this browser's backups`,
+        );
+      }
+    };
+
     // `rev` is set only when this browser's copy IS the server's copy now.
     let rev: number;
     let confirmed = false;
     if (putResult.ok) {
       rev = putResult.rev;
       if (gone()) {
-        await this.undoWriteAfterDiscard(sessionId, userId, rev);
+        await undoAfterDiscard(rev);
         return discarded;
       }
       const confirm = await this.remote.read(userId, sessionId);
@@ -1363,9 +1388,9 @@ export class CachedEditorWorkspaceAdapter
     }
 
     // A discard ran while the requests above were out: what this resolve put
-    // on the server is discarded content. Delete it (or leave a marker).
+    // on the server is discarded content. Take it off again.
     if (gone()) {
-      await this.undoWriteAfterDiscard(sessionId, userId, rev);
+      await undoAfterDiscard(rev);
       return discarded;
     }
     const stamped = await this.stampVerified(sessionId, {
@@ -1375,7 +1400,7 @@ export class CachedEditorWorkspaceAdapter
       confirmed,
     });
     if (gone()) {
-      await this.undoWriteAfterDiscard(sessionId, userId, rev);
+      await undoAfterDiscard(rev);
       return discarded;
     }
     if (!stamped) {
@@ -1724,21 +1749,12 @@ export class CachedEditorWorkspaceAdapter
     // revived by a later loadWorkspace.
     if (this.discarding.has(sessionId))
       return { success: true, value: undefined };
-    // "Use the other device's copy" is replacing the browser copy right now:
-    // a save in between would be overwritten unseen, so it writes nothing.
-    if (this.replacingBrowserCopy.has(sessionId))
-      return { success: true, value: undefined };
-    // The browser copy was replaced by a resolve and the caller has not
-    // loaded it yet: what it holds in memory is the copy that lost.
-    if (this.reloadRequired.has(sessionId)) {
-      return {
-        success: false,
-        error: {
-          kind: "Conflict",
-          message: `workspace ${sessionId}: the other device's copy was taken; load the workspace again before saving`,
-        },
-      };
-    }
+    // "Use the other device's copy" is replacing the browser copy right now,
+    // or has replaced it and the caller has not loaded it yet: what the
+    // caller holds in memory is the copy that lost. The save is refused and
+    // says so; it writes nothing.
+    const refused = this.saveRefusedByResolve(sessionId);
+    if (refused !== null) return refused;
     const cacheResult = await this.cache.saveWorkspace(sessionId, workspace);
     if (!cacheResult.success) return cacheResult;
 
@@ -1787,9 +1803,32 @@ export class CachedEditorWorkspaceAdapter
     // Item 1: a save made while a discard is waiting must not arm a timer or
     // set a precondition, lest it survive the discard.
     if (this.discarding.has(sessionId)) return cacheResult;
+    // A resolve may have begun, or ended, while this save was at the awaits
+    // above: its content must not be armed for upload over the copy taken.
+    const refusedLate = this.saveRefusedByResolve(sessionId);
+    if (refusedLate !== null) return refusedLate;
     this.armRemoteWrite(sessionId, workspace, userId, precondition);
 
     return cacheResult;
+  }
+
+  /** The refusal of a save while a resolve replaces, or has replaced, the browser copy. */
+  private saveRefusedByResolve(
+    sessionId: string,
+  ): Result<void, PersistenceError> | null {
+    if (
+      !this.replacingBrowserCopy.has(sessionId) &&
+      !this.reloadRequired.has(sessionId)
+    ) {
+      return null;
+    }
+    return {
+      success: false,
+      error: {
+        kind: "Conflict",
+        message: `workspace ${sessionId}: the other device's copy is being taken or was taken; load the workspace again before saving`,
+      },
+    };
   }
 
   /** Arms (or re-arms) the debounced server write of an id. */
