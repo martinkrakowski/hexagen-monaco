@@ -236,12 +236,16 @@ test("parseStructuredConfig: large input scales linearly", () => {
   // machine, minimum of 7 samples per size: the parser is linear — CPU
   // slopes of 0.966-1.060 over five runs with all 8 cores loaded by
   // background spinners, and 0.972-1.166 over three unloaded runs.
-  // Wall-clock minima are the wrong clock: the old wall-based test read
-  // exponents of 1.74-1.98 on loaded machines inside the full test run,
-  // and in a side-by-side run under the same load the wall two-point
-  // exponent (0.820-1.094) and the five-point wall slope (0.890-1.156)
-  // scattered run to run while the CPU slope did not move with load.
-  // CPU time does not grow when the scheduler takes the thread away.
+  // NOT explained: the old two-point wall-clock test read exponents of
+  // 1.74-1.98 on three machines inside the full test run. That was not
+  // reproduced: side by side on the lane host, under the same load, the
+  // old two-point wall exponent read 0.82-1.09 and the five-point wall
+  // slope 0.89-1.16, no higher than the CPU slope. CPU time is used
+  // because it cannot grow when the scheduler takes the thread away, and
+  // five sizes because two points make an exponent out of one bad sample.
+  // If this test fails, its message carries BOTH clocks per size: a curve
+  // that bends in wall time only is the machine, one that bends in CPU
+  // time is the parser (or the collector).
   const ABS_SMALL = 400_000;
   const CAP_SMALL_MS = 500;
   const SIZES = [400_000, 800_000, 1_600_000, 3_200_000, 6_400_000]; // 16x span
@@ -313,7 +317,7 @@ test("parseStructuredConfig: large input scales linearly", () => {
   );
   assert.ok(
     slope < BOUND,
-    `fitted exponent ${slope.toFixed(3)} >= ${BOUND} (cpuMins=${cpuText}ms)`,
+    `fitted exponent ${slope.toFixed(3)} >= ${BOUND} (sizes=${SIZES.join(",")} cpuMins=${cpuText}ms wallMins=${wallText}ms)`,
   );
   // Correctness on the 3.2M input is preserved from the original assertion.
   assert.strictEqual(
