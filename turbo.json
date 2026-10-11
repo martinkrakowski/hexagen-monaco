@@ -1,9 +1,11 @@
 {
   "$schema": "https://turbo.build/schema.json",
   "globalDependencies": [
-    "**/.env.*",
-    "!**/dist/**",
-    "!**/.next/**",
+    ".env.*",
+    "apps/*/.env.*",
+    "packages/*/.env.*",
+    "tools/*/.env.*",
+    "deploy/.env.*",
     "tsconfig.base.json"
   ],
   "globalEnv": [
