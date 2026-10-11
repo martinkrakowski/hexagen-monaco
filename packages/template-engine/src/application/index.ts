@@ -5,11 +5,16 @@ export {
   ConflictError,
 } from "./resolve-dependencies.js";
 export { AddTemplateUseCase } from "./use-cases/add-template.use-case.js";
+export { RemoveTemplateUseCase } from "./use-cases/remove-template.use-case.js";
 export { ValidateTemplatesUseCase } from "./use-cases/validate-templates.use-case.js";
 export type {
   AddTemplateInput,
   AddTemplateResult,
 } from "./use-cases/add-template.use-case.js";
+export type {
+  RemoveTemplateInput,
+  RemoveTemplateResult,
+} from "./use-cases/remove-template.use-case.js";
 export type {
   ValidateTemplatesOutput,
   ValidationResult,
@@ -20,3 +25,10 @@ export type { FileEmitterPort, EmitResult } from "./ports/file-emitter.port.js";
 export type { TemplateConfigStorePort } from "./ports/template-config-store.port.js";
 export type { ProjectFilePresencePort } from "./ports/project-file-presence.port.js";
 export type { EnvironmentReaderPort } from "./ports/environment-reader.port.js";
+export type {
+  ProjectRemovalFilesPort,
+  RemovalDeleteRequest,
+  RemovalSkipReason,
+  RemovalDeleteOutcome,
+} from "./ports/project-removal-files.port.js";
+export { RemovalDeleteError } from "./ports/project-removal-files.port.js";
