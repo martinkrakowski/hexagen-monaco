@@ -163,10 +163,31 @@ export function useModelSelectionFlowEffects({
       return;
     }
 
+    // #766: the remembered local model is resumed only once WebGPU detection
+    // has resolved. While it is loading this effect waits (it re-runs when
+    // gpuDetection.isLoading flips) and hasCheckedCache stays false.
+    if (gpuDetection.isLoading) {
+      return;
+    }
+
     if (!hasCheckedCache.current) {
       hasCheckedCache.current = true;
 
       const lastModelId = preferences.current.lastModelId;
+
+      // Same rule as ModelSelectionPage (#873): detection resolved false, or
+      // the engine already reported it cannot run, means no local model.
+      const localUnsupported =
+        !gpuDetection.isWebGPUSupported ||
+        engineState.status === "no_webgpu" ||
+        engineState.status === "unsupported_browser";
+
+      if (localUnsupported) {
+        if (lastModelId) {
+          setFlowState((prev) => ({ ...prev, localUnsupportedNotice: true }));
+        }
+        return;
+      }
 
       if (preferences.current.rememberChoice && lastModelId) {
         setFlowState((prev) => ({
@@ -226,6 +247,8 @@ export function useModelSelectionFlowEffects({
   }, [
     engineState.loadedModelId,
     engineState.status,
+    gpuDetection.isLoading,
+    gpuDetection.isWebGPUSupported,
     hasAnyCachedModel,
     hasModelInCache,
     initializeModel,

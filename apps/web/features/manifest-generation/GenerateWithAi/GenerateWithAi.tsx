@@ -4,6 +4,10 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
 import { withCarriedName } from "../carriedName";
+import {
+  LOCAL_UNSUPPORTED_BODY,
+  LOCAL_UNSUPPORTED_TITLE,
+} from "../localUnsupportedCopy";
 import { useModelSelectionFlowState } from "../ModelSelectionFlow/useModelSelectionFlowState";
 import { useStagedManifestGeneration } from "../useStagedManifestGeneration";
 import { getModelPreferences } from "../ModelSelectionFlow/modelPreferencesStorage";
@@ -14,7 +18,7 @@ import {
 } from "@hexagen/agentic-interaction";
 import type { DomainModelId } from "../../../lib/llm-interfaces";
 import type { LLMEngineStatus, ModelMetadata } from "@hexagen/local-llm";
-import { Button } from "@hexagen/ui";
+import { Alert, Button } from "@hexagen/ui";
 import { ModelProgressCard } from "@/ModelProgressCard";
 import { TextareaComposer } from "@/chat/TextareaComposer";
 import { AiReadyIndicator } from "./AiReadyIndicator";
@@ -394,6 +398,13 @@ export function GenerateWithAi({
     <ModelSetupPrompt onSetupModel={() => navigateToModelSelection(false)} />
   );
 
+  // #766: the remembered local model was not resumed because WebGPU is absent.
+  const localUnsupportedNotice = flowState.localUnsupportedNotice && (
+    <Alert tone="warning" title={LOCAL_UNSUPPORTED_TITLE}>
+      {LOCAL_UNSUPPORTED_BODY}
+    </Alert>
+  );
+
   const errorSection = hasError && (
     <div className="p-4 bg-destructive/10 border border-destructive rounded-md space-y-3">
       <div className="flex items-start gap-3">
@@ -544,6 +555,7 @@ export function GenerateWithAi({
             subtitle="Describe what you want to build. The more context you provide, the better the result."
           />
           {setupPrompt}
+          {localUnsupportedNotice}
           {errorSection}
           {exampleCards}
           {capabilityWarning}

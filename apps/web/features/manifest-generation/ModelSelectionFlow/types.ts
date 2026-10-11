@@ -20,6 +20,11 @@ export interface ModelSelectionFlowState {
   cloudProvider?: "openai" | "anthropic" | "azure" | "other";
   generationProgress?: number;
   isModelReady?: boolean;
+  /**
+   * True when the remembered local model was NOT resumed because WebGPU is
+   * absent (#766). The generation page shows the local-unsupported notice.
+   */
+  localUnsupportedNotice?: boolean;
   clarificationTriggers?: Array<{
     type: string;
     contextName?: string;

@@ -1122,4 +1122,34 @@ describe("AIGenerationPage — Plan Workbench C2", () => {
     );
     assert.equal(screen.queryByLabelText("Project description"), null);
   });
+
+  it("#766: a blocked remembered-model resume shows the local-unsupported notice above a usable form", async () => {
+    flowStateOverride.current = {
+      state: "idle",
+      isModelReady: false,
+      localUnsupportedNotice: true,
+    };
+    render(<AIGenerationPage llmContext={makeLlmContext()} />);
+    await settleMountEffects();
+
+    assert.ok(screen.getByText("Local models cannot run in this browser"));
+    assert.ok(
+      screen.getByText(
+        "This browser does not support WebGPU, which local models need. Open this page in a browser that supports WebGPU, or go back.",
+      ),
+    );
+    // Not an empty pane: the form and the composer are still there.
+    assert.ok(screen.getByText("Project with AI"));
+    assert.ok(composerTextarea());
+  });
+
+  it("#766: without the flag the local-unsupported notice is not shown", async () => {
+    render(<AIGenerationPage llmContext={makeLlmContext()} />);
+    await settleMountEffects();
+
+    assert.equal(
+      screen.queryByText("Local models cannot run in this browser"),
+      null,
+    );
+  });
 });
