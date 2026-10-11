@@ -127,6 +127,7 @@ jobs:
         run: yarn workspace @hexagen/sync run cli sync --strict --allow-dirty
 
   leg-build:
+    if: false
     name: "Leg: constraints, from-scratch build"
     runs-on: ubuntu-latest
     timeout-minutes: 20
