@@ -14,6 +14,7 @@ export function computeLegs(
   namedLegs: Record<string, string[]>,
 ): { legs: TestLeg[]; errors: string[] };
 
-export function toMatrix(legs: TestLeg[]): {
-  include: { leg: string; filters: string }[];
-};
+export function toMatrix(
+  legs: TestLeg[],
+  shardedLegs?: Record<string, number>,
+): { include: { leg: string; filters: string; args: string }[] };
