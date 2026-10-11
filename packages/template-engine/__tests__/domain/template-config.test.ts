@@ -5,8 +5,10 @@ import {
   configState,
   emptyConfig,
   isInstalled,
+  mergeGeneratedFiles,
 } from "../../src/domain/template-config.js";
 import type {
+  GeneratedFileRecord,
   TemplateConfig,
   TemplateInstallRecord,
 } from "../../src/domain/template-config.js";
@@ -64,5 +66,136 @@ describe("configState", () => {
       state: "populated",
       config: POPULATED,
     });
+  });
+});
+
+describe("mergeGeneratedFiles", () => {
+  const h = (s: string) => s;
+
+  it("returns current unchanged when there is no earlier record", () => {
+    const current = [
+      { path: "a.txt", contentHash: h("A") },
+      { path: "b.txt", contentHash: h("B") },
+    ];
+    assert.deepStrictEqual(mergeGeneratedFiles(undefined, current), current);
+  });
+
+  it("keeps an earlier-only path with its earlier hash", () => {
+    const earlier = [
+      { path: "old.txt", contentHash: h("OLD") },
+      { path: "both.txt", contentHash: h("E") },
+    ];
+    const current = [{ path: "both.txt", contentHash: h("C") }];
+    assert.deepStrictEqual(mergeGeneratedFiles(earlier, current), [
+      { path: "old.txt", contentHash: h("OLD") },
+      { path: "both.txt", contentHash: h("C") },
+    ]);
+  });
+
+  it("keeps the earlier position for a path present in both", () => {
+    const earlier = [
+      { path: "first.txt", contentHash: h("E") },
+      { path: "second.txt", contentHash: h("E2") },
+    ];
+    const current = [
+      { path: "second.txt", contentHash: h("C2") },
+      { path: "first.txt", contentHash: h("C1") },
+    ];
+    assert.deepStrictEqual(mergeGeneratedFiles(earlier, current), [
+      { path: "first.txt", contentHash: h("C1") },
+      { path: "second.txt", contentHash: h("C2") },
+    ]);
+  });
+
+  it("appends new paths in the order this run wrote them", () => {
+    const earlier = [{ path: "a.txt", contentHash: h("A") }];
+    const current = [
+      { path: "c.txt", contentHash: h("C") },
+      { path: "b.txt", contentHash: h("B") },
+    ];
+    assert.deepStrictEqual(mergeGeneratedFiles(earlier, current), [
+      { path: "a.txt", contentHash: h("A") },
+      { path: "c.txt", contentHash: h("C") },
+      { path: "b.txt", contentHash: h("B") },
+    ]);
+  });
+
+  it("lets the last current entry win for a duplicated path", () => {
+    const earlier = [{ path: "a.txt", contentHash: h("A") }];
+    const current = [
+      { path: "n.txt", contentHash: h("N1") },
+      { path: "n.txt", contentHash: h("N2") },
+    ];
+    assert.deepStrictEqual(mergeGeneratedFiles(earlier, current), [
+      { path: "a.txt", contentHash: h("A") },
+      { path: "n.txt", contentHash: h("N2") },
+    ]);
+  });
+
+  it("keeps the first position and the last earlier hash for a path duplicated in earlier", () => {
+    const earlier = [
+      { path: "d.txt", contentHash: h("D1") },
+      { path: "x.txt", contentHash: h("X") },
+      { path: "d.txt", contentHash: h("D2") },
+    ];
+    const current: GeneratedFileRecord[] = [];
+    assert.deepStrictEqual(mergeGeneratedFiles(earlier, current), [
+      { path: "d.txt", contentHash: h("D2") },
+      { path: "x.txt", contentHash: h("X") },
+    ]);
+  });
+
+  it("takes the current hash over the earlier hash for a path duplicated in earlier", () => {
+    const earlier = [
+      { path: "d.txt", contentHash: h("D1") },
+      { path: "d.txt", contentHash: h("D2") },
+    ];
+    const current = [{ path: "d.txt", contentHash: h("C") }];
+    assert.deepStrictEqual(mergeGeneratedFiles(earlier, current), [
+      { path: "d.txt", contentHash: h("C") },
+    ]);
+  });
+
+  it("treats a non-array earlier record as empty", () => {
+    const current = [{ path: "a.txt", contentHash: h("A") }];
+    assert.deepStrictEqual(mergeGeneratedFiles("x", current), current);
+    assert.deepStrictEqual(mergeGeneratedFiles(null, current), current);
+    assert.deepStrictEqual(mergeGeneratedFiles({}, current), current);
+  });
+
+  it("skips malformed earlier entries", () => {
+    const earlier = [
+      null,
+      { path: 1, contentHash: "h" },
+      { path: "", contentHash: "h" },
+      { path: "a" },
+      { path: "ok.txt", contentHash: h("OK") },
+    ];
+    const current: GeneratedFileRecord[] = [];
+    assert.deepStrictEqual(mergeGeneratedFiles(earlier, current), [
+      { path: "ok.txt", contentHash: h("OK") },
+    ]);
+  });
+
+  it("does not mutate its inputs and returns plain records without extra keys", () => {
+    const earlier = [
+      { path: "a.txt", contentHash: h("A"), note: "hand-edited" },
+    ] as unknown[];
+    const current = [{ path: "b.txt", contentHash: h("B") }];
+    const earlierCopy = JSON.parse(JSON.stringify(earlier));
+    const currentCopy = JSON.parse(JSON.stringify(current));
+
+    const merged = mergeGeneratedFiles(earlier, current);
+
+    assert.deepStrictEqual(merged, [
+      { path: "a.txt", contentHash: h("A") },
+      { path: "b.txt", contentHash: h("B") },
+    ]);
+    assert.deepStrictEqual(Object.keys(merged[0]).sort(), [
+      "contentHash",
+      "path",
+    ]);
+    assert.deepStrictEqual(earlier, earlierCopy);
+    assert.deepStrictEqual(current, currentCopy);
   });
 });
