@@ -201,7 +201,11 @@ export class RemoveTemplateUseCase {
         );
       } catch (err) {
         if (err instanceof RemovalDeleteError) {
-          await this.files.pruneEmptyDirs(projectRoot, err.partial.deleted);
+          try {
+            await this.files.pruneEmptyDirs(projectRoot, err.partial.deleted);
+          } catch {
+            // The delete's error is the one to report, not the prune's.
+          }
         }
         throw err;
       }
