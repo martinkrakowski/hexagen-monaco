@@ -67,6 +67,22 @@ export interface EditorWorkspaceState {
   unpushed: boolean;
 }
 
+function stateFromLoaded(raw: unknown): EditorWorkspaceState {
+  const validated = validateWorkspace(raw);
+  if (validated === null) {
+    return { selectedFileId: null, files: new Map(), unpushed: false };
+  }
+  const files = new Map<string, PersistedEditorWorkspaceFile>();
+  for (const [fileId, file] of Object.entries(validated.files)) {
+    files.set(fileId, file);
+  }
+  return {
+    selectedFileId: validated.selectedFileId,
+    files,
+    unpushed: validated.unpushed ?? false,
+  };
+}
+
 export function useEditorWorkspace() {
   const [state, setState] = useState<EditorWorkspaceState>({
     selectedFileId: null,
@@ -86,20 +102,7 @@ export function useEditorWorkspace() {
       return;
     }
 
-    const validated = validateWorkspace(result.value);
-    if (validated === null) {
-      setState({ selectedFileId: null, files: new Map(), unpushed: false });
-    } else {
-      const files = new Map<string, PersistedEditorWorkspaceFile>();
-      for (const [fileId, file] of Object.entries(validated.files)) {
-        files.set(fileId, file);
-      }
-      setState({
-        selectedFileId: validated.selectedFileId,
-        files,
-        unpushed: validated.unpushed ?? false,
-      });
-    }
+    setState(stateFromLoaded(result.value));
     setIsLoaded(true);
   }, []);
 
