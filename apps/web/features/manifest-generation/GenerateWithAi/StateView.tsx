@@ -139,9 +139,14 @@ export function StateView({
           Your browser does not support WebGPU, which is required for local AI
           models. Please use Chrome or Edge, or switch to cloud model.
         </p>
-        <Button onClick={() => actions.transitionTo("idle")}>
-          Back to Description
-        </Button>
+        <div className="flex flex-wrap justify-center gap-2">
+          <Button onClick={() => actions.transitionTo("model_selection")}>
+            Use a cloud model
+          </Button>
+          <Button variant="ghost" onClick={() => actions.transitionTo("idle")}>
+            Back to Description
+          </Button>
+        </div>
       </div>
     );
   }
