@@ -147,11 +147,19 @@ describe("AddTemplateUseCase — re-add merges generatedFiles", () => {
     const USER_TEXT = "the user rewrote this\n";
     await fs.writeFile(path.join(projectRoot, "one.txt"), USER_TEXT, "utf-8");
 
-    await makeUseCase(ms).execute({
+    const second = await makeUseCase(ms).execute({
       templateIds: ["t"],
       projectRoot,
       skipInstalled: false,
     });
+
+    // The emitter took its conflict path for one.txt: a warning, and the new
+    // content beside the user's file.
+    assert.equal(
+      second.warnings.some((w) => w.includes("one.txt")),
+      true,
+    );
+    await fs.access(path.join(projectRoot, "one.hexagen-update.txt"));
 
     // The record still lists both paths, byte-for-byte as the first run
     // recorded them — including one.txt's first-run hash, which is NOT the

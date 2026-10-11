@@ -69,6 +69,7 @@ export function mergeGeneratedFiles(
         typeof entry === "object" &&
         entry !== null &&
         typeof (entry as { path?: unknown }).path === "string" &&
+        (entry as { path: string }).path !== "" &&
         typeof (entry as { contentHash?: unknown }).contentHash === "string"
       ) {
         validEarlier.push({

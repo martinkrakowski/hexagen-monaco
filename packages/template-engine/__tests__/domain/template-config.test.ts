@@ -167,6 +167,7 @@ describe("mergeGeneratedFiles", () => {
     const earlier = [
       null,
       { path: 1, contentHash: "h" },
+      { path: "", contentHash: "h" },
       { path: "a" },
       { path: "ok.txt", contentHash: h("OK") },
     ];
