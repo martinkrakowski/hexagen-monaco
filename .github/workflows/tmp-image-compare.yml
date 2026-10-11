@@ -1,0 +1,77 @@
+# THROW-AWAY: never merged. Builds apps/web/Dockerfile three times with no cache
+# (main twice, as the control for what differs between two builds of the same
+# sources, and this branch once) and compares the exported images.
+name: "TEMP image compare (R6)"
+on:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  build:
+    name: "image (${{ matrix.variant }})"
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [main-a, main-b, branch]
+    steps:
+      - name: "Checkout"
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ startsWith(matrix.variant, 'main') && 'main' || github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: "What is in the context"
+        run: |
+          git log --oneline -1
+          ls -a
+          test -f .dockerignore && cat .dockerignore || echo "no .dockerignore"
+          test -d .git && echo ".git is in the context" || echo "no .git"
+      - name: "Set up Docker Buildx"
+        uses: docker/setup-buildx-action@988b5a0280414f521da01fcc63a27aeeb4b104db # v3.6.1
+      - name: "Build (no cache, plain progress)"
+        run: docker buildx build --no-cache --progress=plain --load -t cmp:img -f apps/web/Dockerfile . 2>&1 | tee build.log
+      - name: "Install-step lines about husky and git"
+        run: grep -n -i "husky\|\.git can\|git command\|prepare" build.log | head -40 || true
+      - name: "Export and list"
+        run: |
+          mkdir -p out root
+          cid="$(docker create cmp:img)"
+          docker export "$cid" > image.tar
+          bid="$(tar -xOf image.tar app/apps/web/.next/BUILD_ID)"
+          echo "BUILD_ID=$bid"
+          tar --numeric-owner -tvf image.tar | sed -E 's/^([^ ]+ +[^ ]+ +[^ ]+) +[^ ]+ +[^ ]+ /\1 /' | sed "s/$bid/BUILD_ID/g" | LC_ALL=C sort -k4 > out/sizes.txt
+          awk '{ $3=""; print }' out/sizes.txt > out/names.txt
+          sudo tar -xf image.tar -C root
+          (cd root && sudo find . -type f -print0 | LC_ALL=C sort -z | sudo xargs -0 sha256sum) | sed "s/$bid/BUILD_ID/g" > out/hashes.txt
+          docker inspect --format '{{json .Config}}' cmp:img | jq -S '{Cmd, Entrypoint, Env, User, WorkingDir, ExposedPorts, Volumes, Labels}' > out/config.json
+          cat out/config.json
+          wc -l out/*.txt
+          grep -i "husky\|\.git can\|git command" build.log > out/husky.txt || true
+      - name: "Upload"
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: image-${{ matrix.variant }}
+          path: out
+          retention-days: 3
+  compare:
+    name: "compare the three images"
+    needs: [build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: "Download"
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          path: art
+      - name: "Diff"
+        run: |
+          for f in names.txt sizes.txt hashes.txt config.json husky.txt; do
+            for other in main-b branch; do
+              echo "===== $f: main-a against $other ====="
+              diff "art/image-main-a/$f" "art/image-$other/$f" > "d-$f-$other.txt" || true
+              echo "differing lines: $(grep -c '^[<>]' "d-$f-$other.txt" || true)"
+              head -150 "d-$f-$other.txt"
+            done
+          done
