@@ -44,3 +44,19 @@ export { findingMatchesQuery } from "./findings/finding-query.js";
 
 export { conflictFilePath } from "./conflict-path.js";
 export { isContainedRelativePath } from "./output-path-safety.js";
+
+// The removal plan (proposal 2026-10-10): the pure decision for
+// `hexagen remove <template>` — what a removal would do, given the
+// registry, the manifests and the current hash of each recorded file.
+export type {
+  RecordedFileState,
+  RecordedSafePath,
+  RemovalPlanInput,
+  RemovalRefusal,
+  RemovalPlan,
+} from "./removal-plan.js";
+export {
+  normaliseRecordedPath,
+  recordedPaths,
+  planTemplateRemoval,
+} from "./removal-plan.js";
