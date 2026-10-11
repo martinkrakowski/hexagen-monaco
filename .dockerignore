@@ -1,0 +1,5 @@
+# Keeps a local node_modules out of the build context: apps/web/Dockerfile installs
+# first and copies the sources second, so a copied node_modules would overwrite the
+# installed one. CI's checkout has none, so this changes nothing there.
+node_modules
+**/node_modules
