@@ -283,23 +283,6 @@ describe("useModelSelectionFlowState", () => {
       assert.strictEqual(result.current[0].state, "model_selection");
     });
 
-    it("selecting a model moves to model_downloading", async () => {
-      const { result } = await renderFlowState();
-      const { selectLocalModel } = result.current[1];
-
-      await act(async () => {
-        selectLocalModel(DomainModelId.QWEN3_8B, true);
-      });
-
-      assert.strictEqual(result.current[0].state, "model_downloading");
-      assert.strictEqual(
-        result.current[0].selectedModelId,
-        DomainModelId.QWEN3_8B,
-      );
-      assert.strictEqual(result.current[0].rememberedChoice, true);
-      assert.strictEqual(result.current[0].generationProgress, 0);
-    });
-
     it("should transition model_downloading → generating (model ready)", async () => {
       llmContext = {
         ...llmContext,
@@ -309,9 +292,9 @@ describe("useModelSelectionFlowState", () => {
       const { result } = await renderFlowState();
       assert.strictEqual(result.current[0].state, "idle");
 
-      const { selectLocalModel } = result.current[1];
+      const { repairModelDownload } = result.current[1];
       await act(async () => {
-        selectLocalModel(DomainModelId.QWEN3_8B, false);
+        repairModelDownload(DomainModelId.QWEN3_8B);
       });
 
       assert.strictEqual(result.current[0].state, "generating");
@@ -322,10 +305,10 @@ describe("useModelSelectionFlowState", () => {
       mockInitializeModel.mockRejectedValue(new Error("Download failed"));
       llmContext = { ...llmContext, initializeModel: mockInitializeModel };
       const { result } = await renderFlowState();
-      const { selectLocalModel } = result.current[1];
+      const { repairModelDownload } = result.current[1];
 
       await act(async () => {
-        selectLocalModel(DomainModelId.QWEN3_8B, true);
+        repairModelDownload(DomainModelId.QWEN3_8B);
         await new Promise((resolve) => setTimeout(resolve, 0));
       });
 
@@ -415,43 +398,6 @@ describe("useModelSelectionFlowState", () => {
       } finally {
         vi.useRealTimers();
       }
-    });
-
-    it("should select local model with remember=true/false", async () => {
-      const { result } = await renderFlowState();
-      const { selectLocalModel } = result.current[1];
-
-      // With remember=true → saves preferences, sets selectedModelId and rememberedChoice
-      await act(async () => {
-        selectLocalModel(DomainModelId.QWEN3_8B, true);
-      });
-      assert.strictEqual(result.current[0].state, "model_downloading");
-      assert.strictEqual(
-        result.current[0].selectedModelId,
-        DomainModelId.QWEN3_8B,
-      );
-      assert.strictEqual(result.current[0].rememberedChoice, true);
-      assert.ok(
-        mockSaveModelPreferences.mock.calls.some(
-          (call) => call[0]?.lastModelId === DomainModelId.QWEN3_8B,
-        ),
-      );
-
-      // With remember=false → does NOT save lastModelId preference
-      mockSaveModelPreferences.mockClear();
-      await act(async () => {
-        selectLocalModel(DomainModelId.LLAMA_3_2_3B, false);
-      });
-      assert.strictEqual(
-        result.current[0].selectedModelId,
-        DomainModelId.LLAMA_3_2_3B,
-      );
-      assert.strictEqual(result.current[0].rememberedChoice, false);
-      assert.ok(
-        !mockSaveModelPreferences.mock.calls.some(
-          (call) => call[0]?.lastModelId !== undefined,
-        ),
-      );
     });
 
     it("should cancel model download", async () => {

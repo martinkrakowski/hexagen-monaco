@@ -55,13 +55,12 @@ export function useModelSelectionFlowState(
     setApiKeyManager,
   });
 
-  const { selectLocalModel, cancelModelDownload, repairModelDownload } =
-    useModelDownloadActions({
-      setFlowState,
-      initializeModel,
-      cancelDownload,
-      downloadIntentRef,
-    });
+  const { cancelModelDownload, repairModelDownload } = useModelDownloadActions({
+    setFlowState,
+    initializeModel,
+    cancelDownload,
+    downloadIntentRef,
+  });
 
   const {
     selectCloudProvider,
@@ -166,7 +165,6 @@ export function useModelSelectionFlowState(
   const actions: ModelSelectionFlowActions = useMemo(
     () => ({
       transitionTo,
-      selectLocalModel,
       selectCloudProvider,
       skipAiSetup,
       cancelModelDownload,
@@ -185,7 +183,6 @@ export function useModelSelectionFlowState(
     }),
     [
       transitionTo,
-      selectLocalModel,
       selectCloudProvider,
       skipAiSetup,
       cancelModelDownload,
