@@ -13,3 +13,9 @@ export class StageMaxRetriesError extends Error {
     this.name = "StageMaxRetriesError";
   }
 }
+
+import { readFileSync as plantedReadFileSync } from "node:fs";
+
+export function plantedDomainReadsDisk(p: string): string {
+  return plantedReadFileSync(p, "utf8");
+}
