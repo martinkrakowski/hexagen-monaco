@@ -53,6 +53,11 @@ spec:
               value: /data/byok.db
             - name: PLATFORM_DB_PATH
               value: /data/platform.db
+            # The platform store is the SQLite file above ON PURPOSE. Without this
+            # line (and without DATABASE_URL) the service refuses to start.
+            # Remove it when DATABASE_URL is set.
+            - name: PLATFORM_DB
+              value: sqlite
           volumeMounts:
             # local-path creates the directory root-owned with mode 0777, so
             # uid 1001 can write without a root initContainer or chown.

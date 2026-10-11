@@ -29,6 +29,10 @@ services:
       - BYOK_DB_PATH=/data/byok.db
       # Accounts, saved projects, run history, entitlements (single-tenant).
       - PLATFORM_DB_PATH=/data/platform.db
+      # The platform store is the SQLite file above ON PURPOSE. Without this
+      # line (and without DATABASE_URL) the service refuses to start.
+      # Remove it when DATABASE_URL is set.
+      - PLATFORM_DB=sqlite
     # The quota DB persists across redeploys here: image reload + `up -d`
     # recreate the container, not the named volume.
     volumes:

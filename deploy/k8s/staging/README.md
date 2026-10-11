@@ -153,6 +153,8 @@ to the `env:` list in `deployment.yaml`:
       key: uri
 ```
 
+When you add it, remove the `PLATFORM_DB` entry: with both set Postgres is used and the service logs a warning.
+
 The operator creates Secret `hexagen-pg-app` and Service `hexagen-pg-rw` in
 `webapps`. The repo and the scripts never hold the password.
 

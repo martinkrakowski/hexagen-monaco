@@ -367,6 +367,11 @@ jobs:
   standalone-smoke:
     name: "Standalone packaging smoke test"
     runs-on: ubuntu-latest
+    env:
+      # The packaged artifact runs on SQLite on purpose. This job starts no
+      # server today (it spawns the CLI); the variable is here so a server
+      # started in this job later does not refuse to start.
+      PLATFORM_DB: sqlite
     steps:
       - name: "Checkout Repository"
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -494,7 +499,7 @@ jobs:
           cache-to: ${{ github.event_name == 'push' && 'type=gha,scope=container-smoke,mode=max' || '' }}
 
       - name: "Boot the container the way compose does"
-        run: docker run -d --name hexagen-smoke -p 127.0.0.1:3123:3000 -e HOSTNAME=0.0.0.0 -e NEXTAUTH_URL=http://127.0.0.1:3123 -e NEXTAUTH_SECRET=ci-smoke-placeholder -e AUTH_SECRET=ci-smoke-placeholder -e QUOTA_DB_PATH=/data/quota.db -e BYOK_DB_PATH=/data/byok.db -e PLATFORM_DB_PATH=/data/platform.db hexagen-monaco-web:smoke
+        run: docker run -d --name hexagen-smoke -p 127.0.0.1:3123:3000 -e HOSTNAME=0.0.0.0 -e NEXTAUTH_URL=http://127.0.0.1:3123 -e NEXTAUTH_SECRET=ci-smoke-placeholder -e AUTH_SECRET=ci-smoke-placeholder -e QUOTA_DB_PATH=/data/quota.db -e BYOK_DB_PATH=/data/byok.db -e PLATFORM_DB_PATH=/data/platform.db -e PLATFORM_DB=sqlite hexagen-monaco-web:smoke
 
       - name: "Wait until the app answers like the deploy healthcheck"
         run: node scripts/verify-container-scan.mjs --wait http://127.0.0.1:3123/api/auth/providers
