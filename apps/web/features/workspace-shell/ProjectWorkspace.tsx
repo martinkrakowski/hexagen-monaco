@@ -28,6 +28,7 @@ import type { ViewMode } from "@/types/view-mode";
 import { PhaseToggle, type WorkspacePhase } from "./plan-phase/PhaseToggle";
 import { PlanPhaseView } from "./plan-phase/PlanPhaseView";
 import { DerivedFromPlanLink } from "./plan-phase/DerivedFromPlanLink";
+import { WorkspaceConflictNotice } from "./WorkspaceConflictNotice";
 
 export interface ProjectWorkspaceProps {
   currentStepIndex: number;
@@ -199,6 +200,11 @@ const ProjectWorkspaceLayout = React.memo(function ProjectWorkspaceLayout({
           }
         />
 
+        <WorkspaceConflictNotice
+          key={editor.activeWorkspace?.projectId ?? "none"}
+          projectId={editor.activeWorkspace?.projectId ?? null}
+          onReload={editor.reloadAfterConflict}
+        />
         <main className="flex-1 flex flex-col overflow-hidden">
           {planPhaseActive ? (
             // Share the one wizard form instance (owned above the phase branch)
