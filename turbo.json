@@ -1,6 +1,11 @@
 {
   "$schema": "https://turbo.build/schema.json",
-  "globalDependencies": ["**/.env.*", "tsconfig.base.json"],
+  "globalDependencies": [
+    "**/.env.*",
+    "!**/dist/**",
+    "!**/.next/**",
+    "tsconfig.base.json"
+  ],
   "globalEnv": [
     "APP_VERSION",
     "CI",
@@ -125,7 +130,7 @@
       "cache": false
     },
     "typecheck:test": {
-      "dependsOn": ["^build"],
+      "dependsOn": ["^build", "build"],
       "inputs": [
         "src/**/*.ts",
         "src/**/*.tsx",
@@ -138,8 +143,8 @@
       "outputs": [],
       "cache": false
     },
-    "@hexagen/sync#typecheck:test": {
-      "dependsOn": ["^build", "build"],
+    "web#typecheck:test": {
+      "dependsOn": ["^build"],
       "inputs": [
         "src/**/*.ts",
         "src/**/*.tsx",
