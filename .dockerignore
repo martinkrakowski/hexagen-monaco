@@ -3,3 +3,6 @@
 # installed one. CI's checkout has none, so this changes nothing there.
 node_modules
 **/node_modules
+# The same for yarn's install state: gitignored, so absent in CI, present on a
+# developer's machine, where it would replace the one the install just wrote.
+.yarn/install-state.gz

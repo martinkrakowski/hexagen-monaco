@@ -10,9 +10,11 @@ RUN corepack enable && corepack prepare yarn@4.12.0 --activate
 # changes, and BuildKit caches the builder's COPY --from=manifests by content, so
 # the install layer below is reused. The three groups are the root package.json's
 # `workspaces` (apps/*, packages/*, tools/*) — a new group must be added here.
-# bin/ is copied because tools/orchestration declares bins that are committed
-# source files, which yarn links at install time. The `test -f` lines fail the
-# build if the loop collected nothing.
+# A workspace's committed bin/ folder is copied so that a `bin` entry pointing
+# at a committed file exists at install time, as it did when the whole tree was
+# copied first (today no dependent links one: yarn drops a bin whose target is
+# missing without an error). The `test -f` lines fail the build if the loop
+# collected nothing.
 FROM base AS manifests
 WORKDIR /src
 COPY . .
@@ -42,9 +44,10 @@ WORKDIR /app
 RUN apk add --no-cache python3 make g++
 
 # Copy the manifests only (cached by content) and install from them. The install
-# runs with the SAME replaced .yarnrc.yml as before. The root `prepare` script
-# (husky) runs inside the install and now finds no .git (it prints that and exits
-# 0; hooks are not needed in an image build).
+# runs with the SAME replaced .yarnrc.yml as before. Yarn 4 runs only
+# preinstall, install and postinstall for a workspace: the root `prepare`
+# script (husky) never ran in this install, before or after this change, so
+# the missing .git and .husky make no difference.
 COPY --from=manifests /manifests/ ./
 RUN echo 'nodeLinker: node-modules' > .yarnrc.yml && yarn install
 
