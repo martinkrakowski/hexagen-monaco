@@ -3,18 +3,6 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import type { Violation, AISuggestion } from "@hexagen/prompt-compiler";
 
-/**
- * See the note in `governance-capability-probe.test.tsx`: `yarn.lock` gives
- * `packages/model-settings` its own React instance, so none of its hooks can
- * run inside an `apps/web` render. It is a collaborator of the views under
- * test, never the subject.
- */
-vi.mock("@hexagen/model-settings", async (importOriginal) => ({
-  ...(await importOriginal<Record<string, unknown>>()),
-  useHardwareDetection: () => ({ profile: null, isDetecting: false }),
-  ModelSettingsView: () => <div data-testid="model-settings-view" />,
-}));
-
 vi.mock("@/lib/local-llm-context", () => ({
   useLocalLLMConfig: () => ({
     engineState: {
@@ -109,6 +97,7 @@ describe("GovernanceAssistantPanel — stored chat history notice", () => {
     );
     await new Promise((resolve) => setTimeout(resolve, 50));
 
+    // population-guard: the offer is null, so the notice must be absent.
     expect(container.textContent).not.toContain("Stored assistant messages");
   });
 

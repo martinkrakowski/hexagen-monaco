@@ -41,16 +41,6 @@ vi.mock("../../../app/lib/wire", async (importOriginal) => ({
   hasServerLLMAccessKey: vi.fn(() => true),
 }));
 
-// The model catalog ships prebuilt from packages/model-settings/dist with its
-// own bundled React — RENDERING it here crashes on dual-React hooks, and the
-// catalog UI plays no part in the return legs. Stub only the view component;
-// the passthrough keeps the package's other exports (setHardwareProfiler et
-// al.) real for the rest of the import graph.
-vi.mock("@hexagen/model-settings", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@hexagen/model-settings")>()),
-  ModelSettingsView: () => <div data-testid="model-settings-stub" />,
-}));
-
 import { ModelSelectionPage } from "../ModelSelectionPage";
 import type { LocalLLMContext } from "../../../lib/llm-interfaces";
 import type { LLMEngineStatus } from "@hexagen/local-llm";
