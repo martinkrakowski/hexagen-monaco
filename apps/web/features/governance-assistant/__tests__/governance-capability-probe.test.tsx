@@ -5,31 +5,6 @@ import { SecretVaultProvider } from "@/lib/vault-context";
 import { invalidateCapabilityCache } from "@/lib/manifest-generation";
 import { GovernanceAssistantPanel } from "../GovernanceAssistantPanel/GovernanceAssistantPanel";
 
-/**
- * `@hexagen/model-settings` is replaced here, and ONLY here, because it cannot
- * be mounted from `apps/web` at all: `yarn.lock` resolves that workspace's
- * `react@^19.0.0` dev-dependency to 19.2.5 while `apps/web` gets 19.2.4, so
- * `packages/model-settings/node_modules/react` is a second React instance and
- * any of its hooks throws "Invalid hook call" under this runner. That is a
- * pre-existing dependency defect, reported separately — not something this
- * suite is asserting about.
- *
- * The substitution is a collaborator, not the subject: what is under test is
- * how many times the PANEL probes `/api/manifest/capabilities`, and the panel,
- * its capability transport and the settings view it routes to are all the real
- * modules. `importOriginal` is spread first so `wire.client`'s
- * `setHardwareProfiler(...)` DI call still finds its export.
- */
-vi.mock("@hexagen/model-settings", async (importOriginal) => ({
-  ...(await importOriginal<Record<string, unknown>>()),
-  useHardwareDetection: () => ({ profile: null, isDetecting: false }),
-  ModelSettingsView: (props: Record<string, unknown>) => (
-    <div data-testid="model-settings-view">
-      chat:{String(props.serverModelName)}
-    </div>
-  ),
-}));
-
 const CAPABILITIES_URL = "/api/manifest/capabilities";
 
 const originalFetch = globalThis.fetch;

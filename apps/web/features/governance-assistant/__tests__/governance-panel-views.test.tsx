@@ -12,24 +12,6 @@ import {
   type LocalModeViewProps,
 } from "../GovernanceAssistantPanel/view/LocalModeView";
 
-/**
- * See the note in `governance-capability-probe.test.tsx`: `yarn.lock` gives
- * `packages/model-settings` its own React instance, so none of its hooks can
- * run inside an `apps/web` render. It is a collaborator of the views under
- * test, never the subject.
- */
-vi.mock("@hexagen/model-settings", async (importOriginal) => ({
-  ...(await importOriginal<Record<string, unknown>>()),
-  useHardwareDetection: () => ({ profile: null, isDetecting: false }),
-  ModelSettingsView: (props: Record<string, unknown>) => (
-    <div data-testid="model-settings-view">
-      chat:{String(props.serverModelName)}|generation:
-      {String(props.generationModelName)}|warn:
-      {String(props.requiresModelWarning)}
-    </div>
-  ),
-}));
-
 const originalFetch = globalThis.fetch;
 afterEach(() => {
   globalThis.fetch = originalFetch;
@@ -193,8 +175,8 @@ describe("LocalModeView — one discriminant selects one card (REA-002)", () => 
       marker: /Loading Model/,
     },
     { lifecycle: { kind: "failed", message: "boom" }, marker: /Engine Error/ },
-    { lifecycle: { kind: "requires-model" }, marker: /warn:true/ },
-    { lifecycle: { kind: "usable" }, marker: /warn:false/ },
+    { lifecycle: { kind: "requires-model" }, marker: /A model is required/ },
+    { lifecycle: { kind: "usable" }, marker: /AI Model Settings/ },
   ];
 
   it("covers every lifecycle kind", () => {
@@ -232,6 +214,12 @@ describe("LocalModeView — one discriminant selects one card (REA-002)", () => 
       } else {
         expect(container.textContent).toMatch(marker);
       }
+      if (lifecycle.kind === "usable") {
+        // The usable card is the settings card WITHOUT the requires-model
+        // warning (the stub used to print `warn:false`).
+        // population-guard: the marker above proved the card is not empty.
+        expect(container.textContent).not.toMatch(/A model is required/);
+      }
     });
   }
 
@@ -246,6 +234,7 @@ describe("LocalModeView — one discriminant selects one card (REA-002)", () => 
       />,
     );
     expect(container.textContent).toMatch(/Browser Not Supported/);
+    // population-guard: the other unsupported variant must not leak in.
     expect(container.textContent).not.toMatch(/WebGPU Not Available/);
   });
 
@@ -257,6 +246,7 @@ describe("LocalModeView — one discriminant selects one card (REA-002)", () => 
         {...localProps(
           { kind: "usable" },
           {
+            serverAssistantAvailable: true,
             capabilities: {
               chatModelName: "z-ai/glm-5.2",
               generationModelName: "inception/mercury-2",
@@ -266,9 +256,14 @@ describe("LocalModeView — one discriminant selects one card (REA-002)", () => 
       />,
     );
 
-    const card = screen.getByTestId("model-settings-view");
-    expect(card.textContent).toContain("chat:z-ai/glm-5.2");
-    expect(card.textContent).toContain("generation:inception/mercury-2");
+    // The real card names each server model under its own label, so a swap
+    // of the two props fails here as it did against the stub.
+    expect(
+      screen.getByText("Manifest Generation").parentElement?.textContent,
+    ).toContain("inception/mercury-2");
+    expect(
+      screen.getByText("Assistant Q&A").parentElement?.textContent,
+    ).toContain("z-ai/glm-5.2");
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 });
