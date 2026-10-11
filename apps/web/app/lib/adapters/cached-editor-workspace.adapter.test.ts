@@ -202,11 +202,18 @@ interface TestAdapters {
 function makeAdapters(options?: {
   tenantId?: string | null;
   userId?: string | null;
+  requestTimeoutMs?: number;
 }): TestAdapters {
   const server = new Map<string, ServerDoc>();
   const fetchImpl = makeServerFetch(server, new Set([UUID]));
   const cache = new IDBEditorWorkspaceAdapter();
-  const remote = new HttpEditorWorkspaceAdapter(fetchImpl);
+  const remote = new HttpEditorWorkspaceAdapter(
+    fetchImpl,
+    // One hour: these tests park requests past the 10 s waits on purpose. In
+    // production a request ends after 8 s, so the 10 s overrun branches are
+    // reached only by a hang in the cache or the user-id lookup.
+    options?.requestTimeoutMs ?? 3_600_000,
+  );
   const { warns, logger } = warnCollector();
   const tenantId = options?.tenantId !== undefined ? options.tenantId : null;
   const userId = options?.userId !== undefined ? options.userId : "user-1";
