@@ -1109,3 +1109,6 @@ export const TEMPLATE_QUESTIONS: Record<
     },
   ],
 };
+
+// planted: this generated file no longer matches its generator
+export const PLANTED_STALE = true;
