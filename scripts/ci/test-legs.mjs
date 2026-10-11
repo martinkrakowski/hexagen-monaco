@@ -11,6 +11,11 @@ const NAMED_LEGS = {
   "arch-linter": ["@hexagen/arch-linter"],
 };
 
+// A leg listed here runs as that many vitest shards (`--shard=i/n`), each a
+// matrix entry of its own. Every shard index 1..n is emitted, so together
+// they run every test file of the leg exactly once.
+const SHARDED_LEGS = { web: 3 };
+
 const REPO_ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const WORKSPACE_PATTERN = /^[^/*]+\/\*$/;
 
@@ -133,12 +138,41 @@ export function computeLegs(workspaces, namedLegs) {
   return { legs, errors };
 }
 
-export function toMatrix(legs) {
+export function toMatrix(legs, shardedLegs = {}) {
+  const legByName = new Map(legs.map((leg) => [leg.leg, leg]));
+  for (const [name, n] of Object.entries(shardedLegs)) {
+    if (!Number.isInteger(n) || n < 2) {
+      throw new Error(
+        `The sharded leg "${name}" has shard count ${n}; it must be an integer >= 2.`,
+      );
+    }
+    const leg = legByName.get(name);
+    if (!leg) {
+      throw new Error(`The sharded leg "${name}" names no leg.`);
+    }
+    if (leg.packages.length > 1) {
+      throw new Error(
+        `The sharded leg "${name}" holds more than one package (${leg.packages.join(", ")}); a shard splits the files of ONE vitest run.`,
+      );
+    }
+  }
   return {
-    include: legs.map((leg) => ({
-      leg: leg.leg,
-      filters: leg.packages.map((name) => `--filter=${name}`).join(" "),
-    })),
+    include: legs.flatMap((leg) => {
+      const filters = leg.packages.map((name) => `--filter=${name}`).join(" ");
+      const n = shardedLegs[leg.leg];
+      if (typeof n !== "number") {
+        return [{ leg: leg.leg, filters, args: "" }];
+      }
+      const entries = [];
+      for (let i = 1; i <= n; i += 1) {
+        entries.push({
+          leg: `${leg.leg} ${i}/${n}`,
+          filters,
+          args: `-- --shard=${i}/${n}`,
+        });
+      }
+      return entries;
+    }),
   };
 }
 
@@ -191,11 +225,27 @@ function main() {
       for (const error of errors) console.error(error);
       process.exit(1);
     }
-    console.log(JSON.stringify(toMatrix(legs)));
+    let matrix;
+    try {
+      matrix = toMatrix(legs, SHARDED_LEGS);
+    } catch (error) {
+      console.error(error.message);
+      process.exit(1);
+    }
+    console.log(JSON.stringify(matrix));
     return;
   }
 
   printCheckTable(legs);
+  try {
+    toMatrix(legs, SHARDED_LEGS);
+  } catch (error) {
+    console.error(error.message);
+    process.exit(1);
+  }
+  for (const [name, n] of Object.entries(SHARDED_LEGS)) {
+    console.log(`${name} runs as ${n} shards`);
+  }
   if (errors.length > 0) {
     for (const error of errors) console.error(error);
     process.exit(1);

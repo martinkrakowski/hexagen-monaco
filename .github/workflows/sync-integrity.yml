@@ -371,9 +371,12 @@ jobs:
 
       # turbo adds each package's build dependencies (`^build`, and the
       # per-package exceptions in turbo.json) itself; `fail-fast: false` so
-      # one red leg does not hide the others.
+      # one red leg does not hide the others. For a sharded leg `matrix.args`
+      # is `-- --shard=i/n`, which turbo hands to the package's `vitest run`
+      # and not to the builds it runs first; the shards of a leg are separate
+      # matrix entries, so the aggregate is red when any of them is.
       - name: "Run Test Suite (${{ matrix.leg }})"
-        run: yarn turbo run test ${{ matrix.filters }} --output-logs=full --log-order=stream
+        run: yarn turbo run test ${{ matrix.filters }} --output-logs=full --log-order=stream ${{ matrix.args }}
 
   # Without `if: always()` this job would be SKIPPED when a leg fails, and
   # the merge script counts a skipped check as not failed.
