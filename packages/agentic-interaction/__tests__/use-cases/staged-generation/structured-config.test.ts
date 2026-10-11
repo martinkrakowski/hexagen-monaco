@@ -228,28 +228,40 @@ test("parseStructuredConfig: large input scales linearly", () => {
     "project: large-test\nbounded_contexts:\n  - name: TestContext\n    type: core\n";
   const makeYaml = (chars: number): string =>
     baseYaml + " ".repeat(Math.max(0, chars - baseYaml.length));
-  // (A) an absolute cap on the small input, checked first: a quadratic parse
-  // fails here and never reaches the large input. (B) the growth exponent
-  // between the two sizes. Both use the minimum of 7 samples after a warm-up,
-  // on ONE input string per size built outside the timed region (the earlier
-  // test built a fresh 3.2 MB string inside it). Both sizes take milliseconds:
-  // with a 50,000-character baseline the small parse took 0.44 ms on a shared
-  // CI runner and timer resolution decided the ratio.
+  // Two purposes. (A) is an absolute cap on the small input, checked FIRST:
+  // a quadratic parser fails it fast and never reaches the growth
+  // measurement. (B) is the growth law, measured as a FITTED EXPONENT over
+  // five sizes (200k -> 3.2M, a 16x span), not the old two-point 8x ratio:
+  // two points are not a scaling measurement — the 400k point fits a CPU
+  // cache and the 3.2M point does not, the minimum of a few-millisecond
+  // samples is set by timer and scheduler noise, and one garbage collection
+  // lands in one of them. Fitted over seven sizes (100k -> 6.4M), the SAME
+  // parser measured slopes of 1.04, 1.07 and 1.13 across three runs
+  // (minima; a newline-every-80-chars shape measured 1.05).
   const ABS_SMALL = 400_000;
-  const ABS_LARGE = 3_200_000; // 8x
   // Measured on this machine: linear small → 7.61 ms (large 66.56 ms,
   // exponent 1.04); quadratic mutant (re-walk of the remaining input per step)
   // small → 24,101 ms. The cap sits ~66x above the linear minimum and the
   // mutant lands ~48x over it, so a quadratic implementation fails fast here.
   const CAP_SMALL_MS = 500;
-  const BOUND = 1.7;
+  const SIZES = [200_000, 400_000, 800_000, 1_600_000, 3_200_000]; // 16x span
+  // (B) bound, chosen from the seven-size measurements above: 1.35 sits
+  // clearly above every slope the linear parser measured (highest 1.13) and
+  // clearly below 2, where a quadratic parser lands. An n^1.5 mutant that
+  // still passes the 500 ms cap at 400k (about 60 ms of added cost) fits
+  // about 1.46 and fails this bound.
+  const BOUND = 1.35;
+  const SAMPLES = 7;
+  // One seam so a mutant check can re-point every warm-up and timed parse
+  // at a wrapped parser without touching the measurement below.
+  const measureParse = (input: string) => parseStructuredConfig(input);
   const sample = (chars: number, stopAboveMs: number): number => {
     const input = makeYaml(chars); // built ONCE outside the timed region
-    parseStructuredConfig(input); // warm-up, not measured
+    measureParse(input); // warm-up, not measured
     let best = Infinity;
-    for (let n = 1; n <= 7; ++n) {
+    for (let n = 1; n <= SAMPLES; ++n) {
       const t0 = performance.now();
-      parseStructuredConfig(input);
+      measureParse(input);
       const ms = performance.now() - t0;
       if (ms < best) best = ms;
       // Stop early only when the MINIMUM so far is over the limit after at
@@ -258,28 +270,44 @@ test("parseStructuredConfig: large input scales linearly", () => {
     }
     return best;
   };
-  // Check SMALL FIRST and assert it before touching LARGE, so the mutant never runs LARGE.
+  // (A) FIRST: assert the small input before touching any larger size, so
+  // a quadratic implementation fails fast and never runs the growth law.
   const minSmall = sample(ABS_SMALL, CAP_SMALL_MS);
   assert.ok(
     minSmall < CAP_SMALL_MS,
     `small=${minSmall}ms >= cap ${CAP_SMALL_MS}ms`,
   );
-  // No early stop on LARGE: one slow sample on a loaded machine must not
-  // become the minimum. A quadratic implementation never gets here.
-  const minLarge = sample(ABS_LARGE, Number.POSITIVE_INFINITY);
-  const exponent = Math.log(minLarge / minSmall) / Math.log(8);
+  // (B) the growth law: minimum of 7 samples per size, no early stop — one
+  // slow sample on a loaded machine must not become the minimum, and a
+  // quadratic implementation never gets this far. Then the least-squares
+  // slope of log(min ms) against log(size) over all five sizes.
+  const mins = SIZES.map((size) => sample(size, Number.POSITIVE_INFINITY));
+  const xs = SIZES.map((s) => Math.log(s));
+  const ys = mins.map((m) => Math.log(m));
+  const n = xs.length;
+  const sx = xs.reduce((a, b) => a + b, 0);
+  const sy = ys.reduce((a, b) => a + b, 0);
+  const sxy = xs.reduce((a, x, i) => a + x * ys[i], 0);
+  const sxx = xs.reduce((a, x) => a + x * x, 0);
+  const slope = (n * sxy - sx * sy) / (n * sxx - sx * sx);
+  const minsText = mins.map((m) => m.toFixed(2)).join(",");
   console.log(
-    `[PSC] small=${minSmall.toFixed(2)}ms large=${minLarge.toFixed(2)}ms exponent=${exponent.toFixed(3)}`,
+    `[PSC] sizes=${SIZES.join(",")} mins=${minsText}ms slope=${slope.toFixed(3)}`,
   );
   assert.ok(
-    exponent < BOUND,
-    `exponent ${exponent.toFixed(3)} >= ${BOUND} (small=${minSmall}ms, large=${minLarge}ms)`,
+    slope < BOUND,
+    `fitted exponent ${slope.toFixed(3)} >= ${BOUND} (mins=${minsText}ms)`,
   );
   // Correctness on the large input is preserved from the original assertion.
   assert.strictEqual(
-    parseStructuredConfig(makeYaml(ABS_LARGE)).bounded_contexts.length,
+    measureParse(makeYaml(SIZES[SIZES.length - 1])).bounded_contexts.length,
     1,
   );
+  // What this GIVES UP compared with the old two-point test: a slowdown
+  // confined to the largest size alone can hide in the fit (the old 8x
+  // ratio caught it directly); it runs ~48 parses instead of ~16 (a few
+  // seconds more); and it asserts no absolute time on the large input —
+  // only the small-input cap (A) and the growth law (B).
 }, 30_000);
 
 // P18.3: buildDomainAnalysisFromConfig tests
