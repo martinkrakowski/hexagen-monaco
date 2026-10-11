@@ -65,8 +65,9 @@ export interface RecordedSafePath {
 /**
  * Posix-normalises a recorded path ("./a//b/../c" -> "a/c"), or returns
  * null when it is unsafe: not contained in the project root, the root
- * itself, a NUL character, the registry file (or one of its `.tmp.`
- * copies), or anything under `.git`. Such a path is never touched, not
+ * itself, a NUL character, a segment that ends in a dot or a space or
+ * holds a colon, the registry file (or one of its `.tmp.` copies) and
+ * anything under `.git`, both in any letter case. Such a path is never touched, not
  * even with `--force`.
  */
 export function normaliseRecordedPath(raw: string): string | null {
@@ -83,13 +84,22 @@ export function normaliseRecordedPath(raw: string): string | null {
   }
   const normalised = stack.join("/");
   if (normalised === "") return null;
-  if (
-    normalised === TEMPLATE_CONFIG_FILE ||
-    normalised.startsWith(`${TEMPLATE_CONFIG_FILE}.tmp.`)
-  ) {
+  for (const segment of stack) {
+    // Windows drops trailing dots and spaces from a path component
+    // (".git./config" IS ".git/config" there), and a colon names an
+    // alternate data stream of the file before it. Neither spelling is one
+    // an emitter records, so both are refused on every platform.
+    if (segment.endsWith(".") || segment.endsWith(" ")) return null;
+    if (segment.includes(":")) return null;
+  }
+  // The protected names are compared without case: on macOS and Windows
+  // ".GIT/config" is the repository's own file.
+  const folded = normalised.toLowerCase();
+  const registry = TEMPLATE_CONFIG_FILE.toLowerCase();
+  if (folded === registry || folded.startsWith(`${registry}.tmp.`)) {
     return null;
   }
-  if (stack[0] === ".git") return null;
+  if (stack[0].toLowerCase() === ".git") return null;
   return normalised;
 }
 
@@ -155,6 +165,10 @@ export function recordedPaths(
   return { safe, unsafe, malformed };
 }
 
+function sharedPathKey(path: string): string {
+  return path.normalize("NFC").toLowerCase();
+}
+
 /**
  * The removal decision for one installed template. Refuses (naming the
  * reasons) while `--force` is absent and dependents or unknown
@@ -211,10 +225,14 @@ export function planTemplateRemoval(input: RemovalPlanInput): RemovalPlan {
     return { kind: "refused", templateId, refusals };
   }
 
+  // Shared paths are matched on a folded key: "A.txt" and "a.txt", or two
+  // Unicode spellings of one name, are ONE file on a case-insensitive
+  // filesystem. On a case-sensitive one this only keeps more. A path the
+  // other template records in an unsafe spelling is not seen here.
   const sharedPaths = new Set<string>();
   for (const id of otherIds) {
     for (const recorded of recordedPaths(config, id).safe) {
-      sharedPaths.add(recorded.path);
+      sharedPaths.add(sharedPathKey(recorded.path));
     }
   }
 
@@ -227,7 +245,7 @@ export function planTemplateRemoval(input: RemovalPlanInput): RemovalPlan {
   const alreadyAbsent: string[] = [];
 
   for (const { path, contentHashes } of safe) {
-    if (sharedPaths.has(path)) {
+    if (sharedPaths.has(sharedPathKey(path))) {
       keptShared.push(path);
       continue;
     }

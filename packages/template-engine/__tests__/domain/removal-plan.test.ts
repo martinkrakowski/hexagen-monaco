@@ -37,6 +37,12 @@ describe("normaliseRecordedPath", () => {
     assert.equal(normaliseRecordedPath("a/b.ts"), "a/b.ts");
   });
 
+  it("keeps names that only look like the protected ones", () => {
+    for (const ok of [".gitignore", ".github/workflows/ci.yml", "a/.git/x"]) {
+      assert.equal(normaliseRecordedPath(ok), ok);
+    }
+  });
+
   it("drops '.' and empty segments", () => {
     assert.equal(normaliseRecordedPath("./a//b.ts"), "a/b.ts");
   });
@@ -61,6 +67,21 @@ describe("normaliseRecordedPath", () => {
       ".hexagen-template-config.json.tmp.123",
       ".git/config",
       "x/../.git/config",
+      // Letter case: one file on macOS and Windows.
+      ".GIT/config",
+      ".Git/hooks/pre-commit",
+      ".Hexagen-Template-Config.json",
+      ".HEXAGEN-TEMPLATE-CONFIG.JSON.tmp.1",
+      // Windows drops trailing dots and spaces from a component.
+      ".git./config",
+      ".git /config",
+      ".hexagen-template-config.json.",
+      "a/b.txt.",
+      "a /b.txt",
+      // A colon names an alternate data stream.
+      ".hexagen-template-config.json::$DATA",
+      ".git:x",
+      "a/b.txt:stream",
     ];
     for (const raw of unsafe) {
       assert.equal(
@@ -296,6 +317,25 @@ describe("planTemplateRemoval", () => {
     for (const { config, fileStates } of table) {
       const result = plan(config, "a", { fileStates });
       assert.ok(result.kind === "remove", "table entry must plan a removal");
+      // Every changed file of the row is KEPT AND LISTED, so the pin cannot
+      // pass on a row where the loop below has nothing to look at.
+      let changedInRow = 0;
+      for (const recorded of recordedPaths(config, "a").safe) {
+        const state = fileStates.get(recorded.path);
+        if (
+          state !== undefined &&
+          state.kind === "file" &&
+          !recorded.contentHashes.includes(state.contentHash)
+        ) {
+          changedInRow += 1;
+          assert.ok(
+            result.keptChanged.includes(recorded.path),
+            `${recorded.path} changed and is not listed as kept`,
+          );
+          assert.ok(!result.deleteFiles.includes(recorded.path));
+        }
+      }
+      assert.ok(changedInRow > 0, "every row must hold a changed file");
       for (const path of result.deleteFiles) {
         const state = fileStates.get(path);
         assert.ok(
@@ -332,6 +372,35 @@ describe("planTemplateRemoval", () => {
       assert.deepEqual(result.keptShared, ["a/x.ts"]);
       assert.deepEqual(result.deleteFiles, []);
       assert.deepEqual(result.deleteChanged, []);
+    }
+  });
+
+  it("keeps a path another template records in a different letter case or Unicode form, also with force", () => {
+    const nfc = "caf\u00e9.ts";
+    const nfd = "cafe\u0301.ts";
+    const config = makeConfig({
+      a: installRecord([
+        { path: "src/A.txt", contentHash: "h1" },
+        { path: nfc, contentHash: "h2" },
+      ]),
+      b: installRecord([
+        { path: "SRC/a.txt", contentHash: "h1" },
+        { path: nfd, contentHash: "h2" },
+      ]),
+    });
+    const fileStates = states([
+      ["src/A.txt", file("h1")],
+      [nfc, file("h2")],
+    ]);
+    for (const force of [false, true]) {
+      const result = plan(config, "a", {
+        fileStates,
+        force,
+        requiresById: new Map([["b", []]]),
+      });
+      assert.ok(result.kind === "remove");
+      assert.deepEqual(result.keptShared, [nfc, "src/A.txt"].sort());
+      assert.deepEqual(result.deleteFiles, []);
     }
   });
 
