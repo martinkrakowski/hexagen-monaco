@@ -3,6 +3,7 @@ import type { MockedFunction } from "vitest";
 import assert from "node:assert/strict";
 import {
   REMOTE_REQUEST_TIMEOUT_MS,
+  DISCARD_LOAD_WAIT_MS,
   HttpEditorWorkspaceAdapter,
   DOCUMENT_ID_PATTERN,
   defaultUserIdSource,
@@ -473,10 +474,10 @@ describe("HttpEditorWorkspaceAdapter time limit", () => {
   });
 
   it("a late answer is dropped without an unhandled rejection", async () => {
-    let resolveFetch: (r: Response) => void = () => {};
+    let rejectFetch: (e: unknown) => void = () => {};
     const fetchImpl = (async () =>
-      new Promise<Response>((resolve) => {
-        resolveFetch = resolve;
+      new Promise<Response>((_, reject) => {
+        rejectFetch = reject;
       })) as unknown as typeof fetch;
     const adapter = new HttpEditorWorkspaceAdapter(fetchImpl);
     const pending = adapter.read("owner1", "ws1");
@@ -486,15 +487,37 @@ describe("HttpEditorWorkspaceAdapter time limit", () => {
     if (!result.ok) {
       assert.match(result.message, /timed out/);
     }
-    resolveFetch(
-      new Response(JSON.stringify({ payload: {}, updatedAt: 1 }), {
-        status: 200,
-        headers: { ETag: '"rev:1"' },
-      }),
-    );
+    rejectFetch(new Error("the connection dropped"));
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(0);
+    assert.equal(result.ok, false);
+    if (!result.ok) {
+      assert.match(result.message, /timed out/);
+    }
+  });
+
+  it("a fetch rejecting with an AbortError when its signal aborts still reports the timeout", async () => {
+    const fetchImpl = (async (
+      _url: string | URL,
+      init?: RequestInit,
+    ): Promise<Response> => {
+      return new Promise<Response>((_, reject) => {
+        init?.signal?.addEventListener("abort", () => {
+          reject(new DOMException("aborted", "AbortError"));
+        });
+      });
+    }) as unknown as typeof fetch;
+    const adapter = new HttpEditorWorkspaceAdapter(fetchImpl);
+    const pending = adapter.read("owner1", "ws1");
+    await vi.advanceTimersByTimeAsync(8_000);
+    const result = await pending;
+    assert.equal(result.ok, false);
+    if (!result.ok) {
+      assert.match(result.message, /timed out/);
+    }
   });
 
   it("REMOTE_REQUEST_TIMEOUT_MS is below the discard/load wait", () => {
-    assert.ok(REMOTE_REQUEST_TIMEOUT_MS < 10_000);
+    assert.ok(REMOTE_REQUEST_TIMEOUT_MS < DISCARD_LOAD_WAIT_MS);
   });
 });

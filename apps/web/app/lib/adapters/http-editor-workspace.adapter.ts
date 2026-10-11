@@ -483,7 +483,7 @@ const REMOTE_DEBOUNCE_MS = 1500;
  * them end after REMOTE_REQUEST_TIMEOUT_MS; this bound is the second line,
  * for a wait on something else.
  */
-const DISCARD_LOAD_WAIT_MS = 10_000;
+export const DISCARD_LOAD_WAIT_MS = 10_000;
 
 /** What a resolve knows once its checks have passed. */
 interface ResolveContext {
@@ -801,6 +801,33 @@ export class CachedEditorWorkspaceAdapter
         });
       }
     }
+  }
+
+  /**
+   * A write got no answer from the server (a timeout, a dropped connection)
+   * and a discard has overtaken it: the write may still have been committed.
+   * One read decides. When the server holds exactly what this write sent, it
+   * landed, and it is deleted like any write a discard overtook. When the
+   * read fails too, nothing more is known: if the write did land, the next
+   * load shows the workspace again.
+   */
+  private async undoUnansweredWriteAfterDiscard(
+    sessionId: string,
+    userId: string,
+    sent: PersistedEditorWorkspace,
+    result: WriteResult,
+  ): Promise<void> {
+    if (result.ok) return;
+    if (result.reason !== "error" || result.status !== 0) return;
+    const confirm = await this.remote.read(userId, sessionId);
+    if (!confirm.ok) {
+      this.logger.warn(
+        `workspace ${sessionId}: a write that a discard overtook got no answer and could not be checked; if it landed, the next load shows it again`,
+      );
+      return;
+    }
+    if (!samePayload(confirm.workspace, sent)) return;
+    await this.undoWriteAfterDiscard(sessionId, userId, confirm.rev);
   }
 
   private async loadFromRemote(
@@ -1681,6 +1708,13 @@ export class CachedEditorWorkspaceAdapter
       // The PUT raced a discard: undo it when it landed, answer "none".
       if (putResult.ok) {
         await this.undoWriteAfterDiscard(sessionId, userId, putResult.rev);
+      } else {
+        await this.undoUnansweredWriteAfterDiscard(
+          sessionId,
+          userId,
+          cacheEntry,
+          putResult,
+        );
       }
       return { success: true, value: null };
     }
@@ -1777,6 +1811,13 @@ export class CachedEditorWorkspaceAdapter
       // The PUT raced a discard: undo it when it landed, answer "none".
       if (putResult.ok) {
         await this.undoWriteAfterDiscard(sessionId, userId, putResult.rev);
+      } else {
+        await this.undoUnansweredWriteAfterDiscard(
+          sessionId,
+          userId,
+          cacheEntry,
+          putResult,
+        );
       }
       return { success: true, value: null };
     }
@@ -2069,6 +2110,17 @@ export class CachedEditorWorkspaceAdapter
         precondition,
       );
       if (!result.ok) {
+        // No answer and a discard has overtaken this write: it may have landed.
+        // The discard is waiting for this write, so the check runs before its
+        // own DELETE.
+        if (this.discardedSince(sessionId, epochAtStart)) {
+          await this.undoUnansweredWriteAfterDiscard(
+            sessionId,
+            userId,
+            workspace,
+            result,
+          );
+        }
         switch (result.reason) {
           case "conflict":
             if ("createOnly" in precondition) {
