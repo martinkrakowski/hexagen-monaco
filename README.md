@@ -34,6 +34,7 @@ Generated projects opt into **44 production-ready templates** — typed LLM adap
 npx hexagen templates list             # browse available templates
 npx hexagen templates info <id>        # inspect questions, outputs, dependencies
 npx hexagen add llm-adapter docker     # install one or more (dependencies auto-resolved)
+npx hexagen remove <id>                # remove an installed template (asks first; --dry-run shows the plan)
 npx hexagen validate-templates         # health-check installed templates
 ```
 
@@ -216,6 +217,7 @@ npx hexagen templates list             # list available templates (✅ marks ins
 npx hexagen templates info <id>        # inspect a template's questions, outputs, deps
 npx hexagen add <id> [<id> ...]        # install one or more (dependencies auto-resolved)
 npx hexagen add <id> --force           # re-apply an installed template
+npx hexagen remove <id>                # remove an installed template (asks first; --dry-run shows the plan)
 npx hexagen validate-templates         # verify installed templates are healthy
 ```
 
@@ -225,6 +227,36 @@ Templates are:
 - **Dependency-aware** — install order is topologically sorted; missing dependencies and cycles are caught before any file is written.
 - **Non-destructive** — a user-modified generated file is never overwritten; a `.hexagen-update.<ext>` conflict copy is written alongside it.
 - **Idempotent** — re-running `hexagen add` on an unchanged project is a no-op (generated files are SHA-256 tracked).
+
+### Removing a template
+
+`npx hexagen remove <id>` removes ONE installed add-on template: it deletes the files the template wrote that are unchanged since it was installed, removes the folders this leaves empty, and removes the template's entry from `.hexagen-template-config.json`.
+
+```bash
+npx hexagen remove <id>          # remove the template (asks for confirmation first)
+npx hexagen remove <id> --dry-run    # print the plan and change nothing
+npx hexagen remove <id> --keep-files # remove the registry entry only; delete no file
+npx hexagen remove <id> --force      # skip the prompt and override the refusals
+```
+
+**What it keeps, and tells you:**
+
+- A file you changed since the install — kept unless you pass `--force`.
+- A file another installed template also records — always kept, also with `--force`.
+- `.hexagen-update.*` conflict copies — listed, never deleted.
+- `package.json` — never edited: the template's checklist is printed as the reminder of manual steps.
+
+**When it refuses (exit code 1):**
+
+- Another installed template requires this one — it names them; `--force` overrides.
+- An installed template that can no longer be read may require it — `--force` overrides.
+- The registry records a path outside the project — never overridden by `--force`; `--keep-files` drops the entry without touching a file.
+- There is no registry file in the project.
+- It is run without a terminal and without `--force` — it never waits for input.
+
+Exit codes: 0 when the removal worked (also when files were kept and listed, when the template was not installed, after a dry run, and when you answer "no" to the prompt); 1 on a refusal or an error. There is no other exit code.
+
+In a monorepo it acts on the registry of the project root only, and says so.
 
 ### Catalog
 
@@ -270,6 +302,7 @@ yarn lint:arch                         # workspace convenience target
 npx hexagen templates list             # list templates (✅ = installed)
 npx hexagen templates info <id>        # inspect a template
 npx hexagen add <id> [<id> ...]        # install (dependencies auto-resolved)
+npx hexagen remove <id>                # remove an installed template (asks first; --dry-run shows the plan)
 npx hexagen validate-templates         # health-check installed templates
 
 # Apps
