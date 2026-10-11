@@ -1,6 +1,13 @@
 {
   "$schema": "https://turbo.build/schema.json",
-  "globalDependencies": ["**/.env.*", "tsconfig.base.json"],
+  "globalDependencies": [
+    ".env.*",
+    "apps/*/.env.*",
+    "packages/*/.env.*",
+    "tools/*/.env.*",
+    "deploy/.env.*",
+    "tsconfig.base.json"
+  ],
   "globalEnv": [
     "APP_VERSION",
     "CI",
@@ -110,7 +117,49 @@
       "outputs": [],
       "cache": false
     },
+    "@hexagen/mcp-server#test": {
+      "dependsOn": ["^build", "build"],
+      "inputs": [
+        "src/**/*.ts",
+        "src/**/*.tsx",
+        "__tests__/**/*.ts",
+        "__tests__/**/*.tsx",
+        "tests/**/*.ts",
+        "tsconfig*.json",
+        "package.json"
+      ],
+      "outputs": [],
+      "cache": false
+    },
+    "@hexagen/orchestration#test": {
+      "dependsOn": ["^build", "build"],
+      "inputs": [
+        "src/**/*.ts",
+        "src/**/*.tsx",
+        "__tests__/**/*.ts",
+        "__tests__/**/*.tsx",
+        "tests/**/*.ts",
+        "tsconfig*.json",
+        "package.json"
+      ],
+      "outputs": [],
+      "cache": false
+    },
     "typecheck:test": {
+      "dependsOn": ["^build", "build"],
+      "inputs": [
+        "src/**/*.ts",
+        "src/**/*.tsx",
+        "__tests__/**/*.ts",
+        "__tests__/**/*.tsx",
+        "tests/**/*.ts",
+        "tsconfig*.json",
+        "package.json"
+      ],
+      "outputs": [],
+      "cache": false
+    },
+    "web#typecheck:test": {
       "dependsOn": ["^build"],
       "inputs": [
         "src/**/*.ts",
@@ -130,6 +179,11 @@
     },
     "typecheck": {
       "dependsOn": ["^build"],
+      "outputs": [],
+      "cache": true
+    },
+    "web#typecheck": {
+      "dependsOn": ["^build", "build"],
       "outputs": [],
       "cache": true
     }
