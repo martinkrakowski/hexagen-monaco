@@ -9,7 +9,13 @@
 import { describe, it, vi, beforeEach, afterEach } from "vitest";
 import assert from "node:assert/strict";
 import React from "react";
-import { render, screen, fireEvent, cleanup, act } from "@testing-library/react";
+import {
+  render,
+  screen,
+  fireEvent,
+  cleanup,
+  act,
+} from "@testing-library/react";
 
 const nav = vi.hoisted(() => ({
   push: vi.fn(),
@@ -61,36 +67,37 @@ vi.stubGlobal("fetch", fetchMock);
 const makeLlmContext = (
   status: LLMEngineStatus,
   overrides?: { loadedModelId?: string },
-): LocalLLMContext => {
+) => {
+  const spies = {
+    initializeModel: vi.fn(async () => {}),
+    cancelDownload: vi.fn(),
+    switchModel: vi.fn(async () => {}),
+  };
   const ctx = {
     engineState: {
       status,
       progress: 0,
       loadedModelId: overrides?.loadedModelId,
     },
-    initializeModel: vi.fn(async () => {}),
-    cancelDownload: vi.fn(),
+    initializeModel: spies.initializeModel,
+    cancelDownload: spies.cancelDownload,
     hasAnyCachedModel: vi.fn(async () => false),
     hasModelInCache: vi.fn(async () => false),
-    switchModel: vi.fn(async () => {}),
+    switchModel: spies.switchModel,
     deleteCachedModel: vi.fn(async () => {}),
     loadedModel: null,
     messages: [],
   };
-  return ctx as unknown as LocalLLMContext & {
-    initializeModel: ReturnType<typeof vi.fn>;
-    switchModel: ReturnType<typeof vi.fn>;
-    cancelDownload: ReturnType<typeof vi.fn>;
-  };
+  return { ctx: ctx as unknown as LocalLLMContext, spies };
 };
 
 const renderPage = (
   status: LLMEngineStatus,
   overrides?: { loadedModelId?: string },
 ) => {
-  const ctx = makeLlmContext(status, overrides);
+  const { ctx, spies } = makeLlmContext(status, overrides);
   const view = render(<ModelSelectionPage llmContext={ctx} />);
-  return { ctx, ...view };
+  return { ctx, spies, ...view };
 };
 
 const clickFirstDownload = async () => {
@@ -122,29 +129,39 @@ afterEach(() => {
 describe("ModelSelectionPage — WebGPU-absent guard (#766)", () => {
   it("a. blocks a local choice when detection resolved false", async () => {
     // expected colour today: RED
-    gpu.current = { ...gpu.current, isLoading: false, isWebGPUSupported: false };
-    const { ctx } = renderPage("requires_model");
+    gpu.current = {
+      ...gpu.current,
+      isLoading: false,
+      isWebGPUSupported: false,
+    };
+    const { spies } = renderPage("requires_model");
     await clickFirstDownload();
-    assert.equal(ctx.initializeModel.mock.calls.length, 0);
-    assert.equal(ctx.switchModel.mock.calls.length, 0);
+    assert.equal(spies.initializeModel.mock.calls.length, 0);
+    assert.equal(spies.switchModel.mock.calls.length, 0);
     screen.getByText("Local models cannot run in this browser");
   });
 
   it("b. detection still loading proceeds as today", async () => {
     // expected colour today: GREEN (a pin)
-    const { ctx } = renderPage("requires_model");
+    const { spies } = renderPage("requires_model");
     await clickFirstDownload();
-    assert.equal(ctx.initializeModel.mock.calls.length, 1);
-    assert.equal(screen.queryByText("Local models cannot run in this browser"), null);
+    assert.equal(spies.initializeModel.mock.calls.length, 1);
+    assert.equal(
+      screen.queryByText("Local models cannot run in this browser"),
+      null,
+    );
   });
 
   it("c. detection resolved true proceeds as today", async () => {
     // expected colour today: GREEN (a pin)
     gpu.current = { ...gpu.current, isLoading: false, isWebGPUSupported: true };
-    const { ctx } = renderPage("requires_model");
+    const { spies } = renderPage("requires_model");
     await clickFirstDownload();
-    assert.equal(ctx.initializeModel.mock.calls.length, 1);
-    assert.equal(screen.queryByText("Local models cannot run in this browser"), null);
+    assert.equal(spies.initializeModel.mock.calls.length, 1);
+    assert.equal(
+      screen.queryByText("Local models cannot run in this browser"),
+      null,
+    );
   });
 
   it("d. switch path: allowed when supported, blocked when not", async () => {
@@ -152,36 +169,44 @@ describe("ModelSelectionPage — WebGPU-absent guard (#766)", () => {
     gpu.current = { ...gpu.current, isLoading: false, isWebGPUSupported: true };
     const ok = renderPage("ready", { loadedModelId: "qwen3-8b" });
     await clickFirstDownload();
-    assert.equal(ok.ctx.switchModel.mock.calls.length, 1);
+    assert.equal(ok.spies.switchModel.mock.calls.length, 1);
     cleanup();
 
-    gpu.current = { ...gpu.current, isLoading: false, isWebGPUSupported: false };
+    gpu.current = {
+      ...gpu.current,
+      isLoading: false,
+      isWebGPUSupported: false,
+    };
     const blocked = renderPage("ready", { loadedModelId: "qwen3-8b" });
     await clickFirstDownload();
-    assert.equal(blocked.ctx.switchModel.mock.calls.length, 0);
+    assert.equal(blocked.spies.switchModel.mock.calls.length, 0);
     screen.getByText("Local models cannot run in this browser");
   });
 
   it("e. engine status no_webgpu blocks a local choice", async () => {
     // expected colour today: RED
-    const { ctx } = renderPage("no_webgpu");
+    const { spies } = renderPage("no_webgpu");
     const downloads = screen.queryAllByRole("button", { name: "Download" });
     if (downloads.length > 0) {
       await act(async () => {
         fireEvent.click(downloads[0]);
       });
     }
-    assert.equal(ctx.initializeModel.mock.calls.length, 0);
-    assert.equal(ctx.switchModel.mock.calls.length, 0);
+    assert.equal(spies.initializeModel.mock.calls.length, 0);
+    assert.equal(spies.switchModel.mock.calls.length, 0);
     screen.getByText("Local models cannot run in this browser");
   });
 
   it("f. no automatic start when detection resolved false", () => {
     // expected colour today: GREEN (a pin)
-    gpu.current = { ...gpu.current, isLoading: false, isWebGPUSupported: false };
-    const { ctx } = renderPage("no_webgpu");
-    assert.equal(ctx.initializeModel.mock.calls.length, 0);
-    assert.equal(ctx.switchModel.mock.calls.length, 0);
+    gpu.current = {
+      ...gpu.current,
+      isLoading: false,
+      isWebGPUSupported: false,
+    };
+    const { spies } = renderPage("no_webgpu");
+    assert.equal(spies.initializeModel.mock.calls.length, 0);
+    assert.equal(spies.switchModel.mock.calls.length, 0);
     assert.equal(
       screen.queryByText("Local models cannot run in this browser"),
       null,
@@ -190,35 +215,47 @@ describe("ModelSelectionPage — WebGPU-absent guard (#766)", () => {
 
   it("g. a download already in flight is cancelled when detection resolves false", async () => {
     // expected colour today: RED
-    const { ctx, rerender } = renderPage("downloading");
-    gpu.current = { ...gpu.current, isLoading: false, isWebGPUSupported: false };
+    const { ctx, spies, rerender } = renderPage("downloading");
+    gpu.current = {
+      ...gpu.current,
+      isLoading: false,
+      isWebGPUSupported: false,
+    };
     await act(async () => {
       rerender(<ModelSelectionPage llmContext={ctx} />);
     });
-    assert.equal(ctx.cancelDownload.mock.calls.length, 1);
+    assert.equal(spies.cancelDownload.mock.calls.length, 1);
     screen.getByText("Local models cannot run in this browser");
     await act(async () => {
       rerender(<ModelSelectionPage llmContext={ctx} />);
     });
-    assert.equal(ctx.cancelDownload.mock.calls.length, 1);
+    assert.equal(spies.cancelDownload.mock.calls.length, 1);
   });
 
   it("h. Retry is blocked when detection resolved false", async () => {
     // expected colour today: RED
-    gpu.current = { ...gpu.current, isLoading: false, isWebGPUSupported: false };
-    const { ctx } = renderPage("error", { loadedModelId: "qwen3-8b" });
+    gpu.current = {
+      ...gpu.current,
+      isLoading: false,
+      isWebGPUSupported: false,
+    };
+    const { spies } = renderPage("error", { loadedModelId: "qwen3-8b" });
     await act(async () => {
       fireEvent.click(screen.getByLabelText("Retry download"));
     });
-    assert.equal(ctx.initializeModel.mock.calls.length, 0);
+    assert.equal(spies.initializeModel.mock.calls.length, 0);
     screen.getByText("Local models cannot run in this browser");
   });
 
   it("i. cloud path untouched when a server key exists", async () => {
     // expected colour today: GREEN (a pin)
     wire.hasKey = true;
-    gpu.current = { ...gpu.current, isLoading: false, isWebGPUSupported: false };
-    const { ctx } = renderPage("requires_model");
+    gpu.current = {
+      ...gpu.current,
+      isLoading: false,
+      isWebGPUSupported: false,
+    };
+    const { spies } = renderPage("requires_model");
     assert.equal(
       screen.queryByText("Local models cannot run in this browser"),
       null,
@@ -230,13 +267,17 @@ describe("ModelSelectionPage — WebGPU-absent guard (#766)", () => {
     assert.deepEqual(nav.push.mock.calls, [
       ["/projects/new/ai?generate=1&name=Vellum%20Notes"],
     ]);
-    assert.equal(ctx.initializeModel.mock.calls.length, 0);
+    assert.equal(spies.initializeModel.mock.calls.length, 0);
   });
 
   it("j. notice wording depends on the server key", async () => {
     // expected colour today: RED
     wire.hasKey = true;
-    gpu.current = { ...gpu.current, isLoading: false, isWebGPUSupported: false };
+    gpu.current = {
+      ...gpu.current,
+      isLoading: false,
+      isWebGPUSupported: false,
+    };
     renderPage("requires_model");
     await clickFirstDownload();
     assert.match(
@@ -246,7 +287,11 @@ describe("ModelSelectionPage — WebGPU-absent guard (#766)", () => {
     cleanup();
 
     wire.hasKey = false;
-    gpu.current = { ...gpu.current, isLoading: false, isWebGPUSupported: false };
+    gpu.current = {
+      ...gpu.current,
+      isLoading: false,
+      isWebGPUSupported: false,
+    };
     renderPage("requires_model");
     await clickFirstDownload();
     assert.match(document.body.textContent ?? "", /or go back/);
@@ -254,7 +299,11 @@ describe("ModelSelectionPage — WebGPU-absent guard (#766)", () => {
 
   it("k. no 'Use a cloud model' button after a blocked click", async () => {
     // expected colour today: GREEN (a pin)
-    gpu.current = { ...gpu.current, isLoading: false, isWebGPUSupported: false };
+    gpu.current = {
+      ...gpu.current,
+      isLoading: false,
+      isWebGPUSupported: false,
+    };
     renderPage("requires_model");
     await clickFirstDownload();
     assert.equal(
@@ -266,7 +315,11 @@ describe("ModelSelectionPage — WebGPU-absent guard (#766)", () => {
   it("l. the notice goes away when the condition does", async () => {
     // expected colour today: RED
     const { ctx, rerender } = renderPage("requires_model");
-    gpu.current = { ...gpu.current, isLoading: false, isWebGPUSupported: false };
+    gpu.current = {
+      ...gpu.current,
+      isLoading: false,
+      isWebGPUSupported: false,
+    };
     await act(async () => {
       rerender(<ModelSelectionPage llmContext={ctx} />);
     });
