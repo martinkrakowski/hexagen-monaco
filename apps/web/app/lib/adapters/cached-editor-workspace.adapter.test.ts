@@ -28,7 +28,10 @@ import {
   HttpEditorWorkspaceAdapter,
 } from "./http-editor-workspace.adapter";
 import type { LiftStamp } from "./idb-editor-workspace.adapter";
-import type { PersistedEditorWorkspace } from "@hexagen/shared";
+import type {
+  PersistedEditorWorkspace,
+  EditorWorkspaceConflictPort,
+} from "@hexagen/shared";
 import type { MockedFunction } from "vitest";
 
 const WORKSPACE_KEY_PREFIX = "hexagen:workspace:";
@@ -5899,5 +5902,1624 @@ describe("round 3: a load and a discard of the same id", () => {
     assert.ok(r2.success && r2.value !== null, "the second load adopts it");
     assert.equal(server.get(UUID)?.rev, 3, "the copy is still on the server");
     assert.equal((await cache.getLiftStamp(UUID))?.rev, 3, "stamped at rev 3");
+  });
+});
+
+describe("CachedEditorWorkspaceAdapter pending conflicts", () => {
+  it("a dirty-cache, server-moved load leaves a pending conflict with where 'load'; a clean load returns null", async () => {
+    const { adapter, cache, server, fetchImpl } = makeAdapters();
+    const oldWs = makeWorkspace(1000);
+    await cache.saveWorkspace(UUID, oldWs);
+    await cache.setLiftStamp(UUID, {
+      ownerId: "user-1",
+      rev: 5,
+      syncedUpdatedAt: 1000,
+      confirmed: true,
+    });
+    server.set(UUID, {
+      payload: { ...oldWs, updatedAt: 2000 },
+      rev: 9,
+      updatedAt: 2000,
+      projectId: UUID,
+    });
+    await cache.saveWorkspace(UUID, makeWorkspace(3000));
+
+    await adapter.loadWorkspace(UUID);
+
+    const pending = adapter.getPendingConflict(UUID);
+    assert.ok(pending, "pending conflict recorded");
+    assert.equal(pending!.where, "load");
+    assert.equal(pending!.sessionId, UUID);
+    assert.ok(pending!.at, "ISO time recorded");
+    assert.equal(putCallsOf(fetchImpl).length, 0, "no PUT on conflict");
+
+    // getPendingConflict returns a COPY, not the stored entry.
+    pending!.where = "save";
+    assert.equal(
+      adapter.getPendingConflict(UUID)!.where,
+      "load",
+      "returns a copy",
+    );
+
+    // Clean load: cache back at the synced value, server back at the stamp
+    // rev with the same payload → no conflict, pending emptied.
+    await cache.saveWorkspace(UUID, oldWs);
+    server.set(UUID, {
+      payload: oldWs,
+      rev: 5,
+      updatedAt: 1000,
+      projectId: UUID,
+    });
+    await adapter.loadWorkspace(UUID);
+    assert.equal(adapter.getPendingConflict(UUID), null, "clean load empties");
+    assert.equal(putCallsOf(fetchImpl).length, 0, "clean load sends no PUT");
+  });
+
+  it("a 412 on the timer PUT leaves a pending conflict with where 'save'", async () => {
+    const { adapter, cache, server, fetchImpl } = makeAdapters();
+    const ws = makeWorkspace(1000);
+    await cache.saveWorkspace(UUID, ws);
+    await cache.setLiftStamp(UUID, {
+      ownerId: "user-1",
+      rev: 5,
+      syncedUpdatedAt: 1000,
+      confirmed: true,
+    });
+    server.set(UUID, { payload: ws, rev: 5, updatedAt: 1000, projectId: UUID });
+    await adapter.loadWorkspace(UUID);
+    assert.equal(adapter.getPendingConflict(UUID), null, "clean start");
+
+    // Server moves; the debounced PUT answers 409 → conflict "save".
+    server.set(UUID, {
+      payload: makeWorkspace(2000),
+      rev: 9,
+      updatedAt: 2000,
+      projectId: UUID,
+    });
+    await adapter.saveWorkspace(UUID, makeWorkspace(3000));
+    await vi.advanceTimersByTimeAsync(REMOTE_DEBOUNCE_MS);
+
+    const pending = adapter.getPendingConflict(UUID);
+    assert.ok(pending, "save conflict pending");
+    assert.equal(pending!.where, "save");
+
+    // Paused: a further save sends no PUT.
+    await adapter.saveWorkspace(UUID, makeWorkspace(4000));
+    await vi.advanceTimersByTimeAsync(REMOTE_DEBOUNCE_MS);
+    assert.equal(putCallsOf(fetchImpl).length, 1, "no second PUT while paused");
+  });
+
+  it("subscribe fires once when the entry is added and once when removed by clearWorkspace; unsubscribe stops it", async () => {
+    const { adapter, cache, server } = makeAdapters();
+    let fires = 0;
+    const unsubscribe = adapter.subscribe(() => {
+      fires += 1;
+    });
+
+    const oldWs = makeWorkspace(1000);
+    await cache.saveWorkspace(UUID, oldWs);
+    await cache.setLiftStamp(UUID, {
+      ownerId: "user-1",
+      rev: 5,
+      syncedUpdatedAt: 1000,
+      confirmed: true,
+    });
+    server.set(UUID, {
+      payload: { ...oldWs, updatedAt: 2000 },
+      rev: 9,
+      updatedAt: 2000,
+      projectId: UUID,
+    });
+    await cache.saveWorkspace(UUID, makeWorkspace(3000));
+    await adapter.loadWorkspace(UUID);
+    assert.equal(fires, 1, "fired on add");
+
+    await adapter.clearWorkspace(UUID);
+    assert.equal(fires, 2, "fired on removal");
+    assert.equal(adapter.getPendingConflict(UUID), null, "cleared");
+
+    unsubscribe();
+
+    // A new conflict after unsubscribing does not fire the listener again.
+    await cache.saveWorkspace(UUID, makeWorkspace(1000));
+    await cache.setLiftStamp(UUID, {
+      ownerId: "user-1",
+      rev: 5,
+      syncedUpdatedAt: 1000,
+      confirmed: true,
+    });
+    server.set(UUID, {
+      payload: makeWorkspace(2000),
+      rev: 9,
+      updatedAt: 2000,
+      projectId: UUID,
+    });
+    await cache.saveWorkspace(UUID, makeWorkspace(3000));
+    await adapter.loadWorkspace(UUID);
+    assert.ok(adapter.getPendingConflict(UUID), "conflict re-added");
+    assert.equal(fires, 2, "no fire after unsubscribe");
+  });
+
+  it("a second loadWorkspace that no longer conflicts empties the pending entry and fires the listener", async () => {
+    const { adapter, cache, server, fetchImpl } = makeAdapters();
+    let fires = 0;
+    adapter.subscribe(() => {
+      fires += 1;
+    });
+
+    const oldWs = makeWorkspace(1000);
+    await cache.saveWorkspace(UUID, oldWs);
+    await cache.setLiftStamp(UUID, {
+      ownerId: "user-1",
+      rev: 5,
+      syncedUpdatedAt: 1000,
+      confirmed: true,
+    });
+    server.set(UUID, {
+      payload: { ...oldWs, updatedAt: 2000 },
+      rev: 9,
+      updatedAt: 2000,
+      projectId: UUID,
+    });
+    await cache.saveWorkspace(UUID, makeWorkspace(3000));
+    await adapter.loadWorkspace(UUID);
+    assert.ok(adapter.getPendingConflict(UUID), "conflict pending");
+    assert.equal(fires, 1);
+
+    // Fix the server up to the stamp rev; the dirty cache catch-up PUT then
+    // succeeds, so the load no longer conflicts.
+    server.set(UUID, {
+      payload: makeWorkspace(3000),
+      rev: 5,
+      updatedAt: 3000,
+      projectId: UUID,
+    });
+    await adapter.loadWorkspace(UUID);
+    assert.equal(adapter.getPendingConflict(UUID), null, "emptied");
+    assert.equal(fires, 2, "fired on removal");
+    assert.equal(putCallsOf(fetchImpl).length, 1, "catch-up PUT only");
+  });
+});
+
+describe("CachedEditorWorkspaceAdapter keepThisDeviceCopy", () => {
+  /** Dirty browser copy + moved server, paused with a pending "load" conflict. */
+  async function makeConflict() {
+    const made = makeAdapters();
+    const oldWs = makeWorkspace(1000);
+    await made.cache.saveWorkspace(UUID, oldWs);
+    await made.cache.setLiftStamp(UUID, {
+      ownerId: "user-1",
+      rev: 5,
+      syncedUpdatedAt: 1000,
+      confirmed: true,
+    });
+    const serverWs = makeWorkspace(2000);
+    made.server.set(UUID, {
+      payload: serverWs,
+      rev: 9,
+      updatedAt: 2000,
+      projectId: UUID,
+    });
+    const localWs = makeWorkspace(3000);
+    await made.cache.saveWorkspace(UUID, localWs);
+    await made.adapter.loadWorkspace(UUID);
+    assert.ok(made.adapter.getPendingConflict(UUID), "conflict pending");
+    return { ...made, serverWs, localWs };
+  }
+
+  it("happy path: one PUT with the browser payload and the server's rev, stamped, unpaused, subscriber fired", async () => {
+    const { adapter, cache, server, fetchImpl, localWs } = await makeConflict();
+    let fires = 0;
+    adapter.subscribe(() => {
+      fires += 1;
+    });
+
+    const result = await adapter.keepThisDeviceCopy(UUID);
+    assert.ok(result.success, "resolve succeeds");
+
+    const puts = putCallsOf(fetchImpl);
+    assert.equal(puts.length, 1, "exactly one PUT");
+    const headers = new Headers(puts[0]![1]!.headers);
+    assert.equal(headers.get("If-Match"), '"rev:9"', "If-Match of server rev");
+    const body = JSON.parse(puts[0]![1]!.body as string);
+    assert.deepEqual(body.payload, localWs, "PUT carries the browser payload");
+    assert.equal(body.projectId, UUID);
+
+    assert.deepEqual(
+      server.get(UUID)!.payload,
+      localWs,
+      "server copy replaced",
+    );
+    const stamp = await cache.getLiftStamp(UUID);
+    assert.ok(stamp, "stamp written");
+    assert.equal(stamp!.rev, 10, "stamp rev is the PUT's new rev");
+    assert.equal(
+      stamp!.syncedUpdatedAt,
+      localWs.updatedAt,
+      "browser updatedAt",
+    );
+    assert.equal(stamp!.confirmed, true, "confirmed by the read-back GET");
+
+    assert.equal(adapter.getPendingConflict(UUID), null, "pending cleared");
+    assert.equal(fires, 1, "subscriber fired");
+
+    // No longer paused: a following save + debounce sends a PUT.
+    await adapter.saveWorkspace(UUID, makeWorkspace(3100));
+    await vi.advanceTimersByTimeAsync(REMOTE_DEBOUNCE_MS);
+    const putsAfter = putCallsOf(fetchImpl);
+    assert.equal(putsAfter.length, 2, "save after resolve sends a PUT");
+    const headersAfter = new Headers(putsAfter[1]![1]!.headers);
+    assert.equal(headersAfter.get("If-Match"), '"rev:10"', "new rev carried");
+  });
+
+  it("the server moves again between the read and the PUT: failure, pending stays, still paused, copies untouched", async () => {
+    const { adapter, cache, server, fetchImpl, serverWs, localWs } =
+      await makeConflict();
+    const original = fetchImpl.getMockImplementation()!;
+    fetchImpl.mockImplementation(
+      async (url: string | URL | Request, init?: RequestInit) => {
+        if ((init?.method ?? "GET").toUpperCase() === "PUT") {
+          return new Response("conflict", {
+            status: 412,
+            headers: { ETag: '"rev:10"' },
+          });
+        }
+        return original(url, init);
+      },
+    );
+
+    const result = await adapter.keepThisDeviceCopy(UUID);
+    assert.ok(!result.success, "resolve fails");
+    assert.ok(adapter.getPendingConflict(UUID), "pending stays");
+
+    const browser = await cache.loadWorkspace(UUID);
+    assert.ok(browser.success && browser.value);
+    assert.deepEqual(browser.value, localWs, "browser copy byte-identical");
+    assert.deepEqual(
+      server.get(UUID)!.payload,
+      serverWs,
+      "server copy untouched",
+    );
+
+    // Still paused: a later save sends NO PUT (beyond the resolve's own one).
+    const putsBefore = putCallsOf(fetchImpl).length;
+    await adapter.saveWorkspace(UUID, makeWorkspace(3100));
+    await vi.advanceTimersByTimeAsync(REMOTE_DEBOUNCE_MS);
+    assert.equal(
+      putCallsOf(fetchImpl).length,
+      putsBefore,
+      "no PUT while still paused",
+    );
+  });
+
+  it("the server read fails (503): failure, nothing changed, zero PUTs", async () => {
+    const { adapter, cache, server, fetchImpl, serverWs, localWs } =
+      await makeConflict();
+    const original = fetchImpl.getMockImplementation()!;
+    fetchImpl.mockImplementation(
+      async (url: string | URL | Request, init?: RequestInit) => {
+        if ((init?.method ?? "GET").toUpperCase() === "GET") {
+          return new Response("unavailable", { status: 503 });
+        }
+        return original(url, init);
+      },
+    );
+
+    const result = await adapter.keepThisDeviceCopy(UUID);
+    assert.ok(!result.success, "resolve fails");
+    assert.ok(adapter.getPendingConflict(UUID), "pending stays");
+
+    assert.equal(putCallsOf(fetchImpl).length, 0, "zero PUTs");
+    const browser = await cache.loadWorkspace(UUID);
+    assert.ok(browser.success && browser.value !== null);
+    assert.deepEqual(browser.value, localWs, "browser copy untouched");
+    assert.deepEqual(
+      server.get(UUID)!.payload,
+      serverWs,
+      "server copy untouched",
+    );
+
+    // Still paused.
+    await adapter.saveWorkspace(UUID, makeWorkspace(3100));
+    await vi.advanceTimersByTimeAsync(REMOTE_DEBOUNCE_MS);
+    assert.equal(putCallsOf(fetchImpl).length, 0, "still paused, no PUT");
+  });
+
+  it("setLiftStamp throws: failure, pending stays, browser copy unchanged, the server holds the browser copy; a second call succeeds", async () => {
+    const { adapter, cache, server, localWs } = await makeConflict();
+    vi.spyOn(cache, "setLiftStamp").mockRejectedValueOnce(
+      new Error("idb down"),
+    );
+
+    const first = await adapter.keepThisDeviceCopy(UUID);
+    assert.ok(!first.success, "resolve fails");
+    assert.ok(adapter.getPendingConflict(UUID), "pending stays");
+
+    const browser = await cache.loadWorkspace(UUID);
+    assert.ok(browser.success && browser.value !== null);
+    assert.deepEqual(browser.value, localWs, "browser copy unchanged");
+    assert.deepEqual(
+      server.get(UUID)!.payload,
+      localWs,
+      "server holds the browser copy",
+    );
+
+    const second = await adapter.keepThisDeviceCopy(UUID);
+    assert.ok(second.success, "second resolve succeeds");
+    assert.equal(adapter.getPendingConflict(UUID), null, "pending cleared");
+  });
+
+  it("race with a save issued while the resolve is parked: the browser keeps the newer value, the server never holds a mix, no second conflict", async () => {
+    const { adapter, cache, server, fetchImpl, localWs } = await makeConflict();
+    const newerWs = makeWorkspace(4000);
+    const original = fetchImpl.getMockImplementation()!;
+    let releasePut!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      releasePut = resolve;
+    });
+    let putArrived!: () => void;
+    const putArrivedPromise = new Promise<void>((resolve) => {
+      putArrived = resolve;
+    });
+    fetchImpl.mockImplementation(
+      async (url: string | URL | Request, init?: RequestInit) => {
+        if ((init?.method ?? "GET").toUpperCase() === "PUT") {
+          putArrived();
+          await gate;
+        }
+        return original(url, init);
+      },
+    );
+
+    const resolving = adapter.keepThisDeviceCopy(UUID);
+    await putArrivedPromise;
+    // The user types while the resolve is parked in its PUT.
+    await adapter.saveWorkspace(UUID, newerWs);
+    releasePut();
+    const result = await resolving;
+
+    assert.ok(result.success, "resolve succeeds");
+    const browser = await cache.loadWorkspace(UUID);
+    assert.ok(browser.success && browser.value !== null);
+    assert.equal(
+      browser.value!.updatedAt,
+      newerWs.updatedAt,
+      "browser cache holds the NEWER value",
+    );
+
+    const matches = (a: unknown, b: unknown) => {
+      try {
+        assert.deepEqual(a, b);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    const serverPayload = server.get(UUID)!.payload;
+    assert.ok(
+      matches(serverPayload, localWs) || matches(serverPayload, newerWs),
+      "server holds either value, never a mix",
+    );
+    assert.equal(
+      adapter.getPendingConflict(UUID),
+      null,
+      "no second conflict recorded",
+    );
+    const rec = await cache.getConflicts();
+    assert.equal(rec!.count, 1, "still exactly one conflict in the log");
+
+    // The debounced PUT carries the newer value; still no conflict.
+    await vi.advanceTimersByTimeAsync(REMOTE_DEBOUNCE_MS);
+    assert.ok(
+      matches(server.get(UUID)!.payload, localWs) ||
+        matches(server.get(UUID)!.payload, newerWs),
+      "server holds either value after the debounce, never a mix",
+    );
+    assert.equal(adapter.getPendingConflict(UUID), null);
+  });
+});
+
+describe("CachedEditorWorkspaceAdapter useOtherDeviceCopy", () => {
+  /** Dirty browser copy + moved server, paused with a pending "load" conflict. */
+  async function makeConflict() {
+    const made = makeAdapters();
+    const oldWs = makeWorkspace(1000);
+    await made.cache.saveWorkspace(UUID, oldWs);
+    await made.cache.setLiftStamp(UUID, {
+      ownerId: "user-1",
+      rev: 5,
+      syncedUpdatedAt: 1000,
+      confirmed: true,
+    });
+    const serverWs = makeWorkspace(2000);
+    made.server.set(UUID, {
+      payload: serverWs,
+      rev: 9,
+      updatedAt: 2000,
+      projectId: UUID,
+    });
+    const localWs = makeWorkspace(3000);
+    await made.cache.saveWorkspace(UUID, localWs);
+    await made.adapter.loadWorkspace(UUID);
+    assert.ok(made.adapter.getPendingConflict(UUID), "conflict pending");
+    return { ...made, serverWs, localWs };
+  }
+
+  it("happy path: browser copy replaced by the server payload, stamped confirmed, zero PUTs, unpaused", async () => {
+    const { adapter, cache, fetchImpl, serverWs } = await makeConflict();
+    let fires = 0;
+    adapter.subscribe(() => {
+      fires += 1;
+    });
+
+    const result = await adapter.useOtherDeviceCopy(UUID);
+    assert.ok(result.success, "resolve succeeds");
+
+    const browser = await cache.loadWorkspace(UUID);
+    assert.ok(browser.success && browser.value);
+    assert.deepEqual(
+      browser.value,
+      serverWs,
+      "browser copy replaced by the server payload",
+    );
+    assert.equal(putCallsOf(fetchImpl).length, 0, "zero PUTs");
+
+    const stamp = await cache.getLiftStamp(UUID);
+    assert.ok(stamp, "stamp written");
+    assert.equal(stamp!.rev, 9, "stamp rev is the server rev");
+    assert.equal(
+      stamp!.syncedUpdatedAt,
+      serverWs.updatedAt,
+      "server updatedAt",
+    );
+    assert.equal(stamp!.confirmed, true, "confirmed immediately");
+
+    assert.equal(adapter.getPendingConflict(UUID), null, "pending cleared");
+    assert.equal(fires, 1, "subscriber fired");
+
+    // The port's requirement: a save before the caller loads again is
+    // refused with a Conflict and writes nothing.
+    const refused = await adapter.saveWorkspace(UUID, makeWorkspace(3200));
+    assert.ok(!refused.success, "save refused before the reload");
+    assert.equal(refused.error.kind, "Conflict");
+    assert.equal(putCallsOf(fetchImpl).length, 0, "no PUT before the reload");
+    await adapter.loadWorkspace(UUID);
+
+    // No longer paused: a following save + debounce sends a PUT with the new rev.
+    await adapter.saveWorkspace(UUID, makeWorkspace(3200));
+    await vi.advanceTimersByTimeAsync(REMOTE_DEBOUNCE_MS);
+    const puts = putCallsOf(fetchImpl);
+    assert.equal(puts.length, 1, "save after resolve sends a PUT");
+    const headers = new Headers(puts[0]![1]!.headers);
+    assert.equal(headers.get("If-Match"), '"rev:9"', "new rev carried");
+  });
+
+  it("the server read fails (503): failure, browser copy and conflict untouched", async () => {
+    const { adapter, cache, fetchImpl, localWs } = await makeConflict();
+    const original = fetchImpl.getMockImplementation()!;
+    fetchImpl.mockImplementation(
+      async (url: string | URL | Request, init?: RequestInit) => {
+        if ((init?.method ?? "GET").toUpperCase() === "GET") {
+          return new Response("unavailable", { status: 503 });
+        }
+        return original(url, init);
+      },
+    );
+
+    const result = await adapter.useOtherDeviceCopy(UUID);
+    assert.ok(!result.success, "resolve fails");
+    assert.ok(adapter.getPendingConflict(UUID), "pending stays");
+
+    assert.equal(putCallsOf(fetchImpl).length, 0, "zero PUTs");
+    const browser = await cache.loadWorkspace(UUID);
+    assert.ok(browser.success && browser.value !== null);
+    assert.deepEqual(browser.value, localWs, "browser copy untouched");
+
+    // Still paused.
+    await adapter.saveWorkspace(UUID, makeWorkspace(3200));
+    await vi.advanceTimersByTimeAsync(REMOTE_DEBOUNCE_MS);
+    assert.equal(putCallsOf(fetchImpl).length, 0, "still paused, no PUT");
+  });
+
+  it("the server payload has schemaVersion 2: failure, browser copy untouched", async () => {
+    const { adapter, cache, server, fetchImpl, localWs, warns } =
+      await makeConflict();
+    server.set(UUID, {
+      payload: { schemaVersion: 2 } as unknown as ReturnType<
+        typeof makeWorkspace
+      >,
+      rev: 9,
+      updatedAt: 2000,
+      projectId: UUID,
+    });
+
+    const result = await adapter.useOtherDeviceCopy(UUID);
+    assert.ok(!result.success, "resolve fails");
+    assert.ok(adapter.getPendingConflict(UUID), "pending stays");
+    assert.ok(
+      warns.some((w) => w.includes("invalid server payload")),
+      "warn logged",
+    );
+
+    const browser = await cache.loadWorkspace(UUID);
+    assert.ok(browser.success && browser.value !== null);
+    assert.deepEqual(browser.value, localWs, "browser copy untouched");
+    assert.equal(putCallsOf(fetchImpl).length, 0, "zero PUTs");
+  });
+
+  it("setLiftStamp rejects: failure, the browser copy keeps the server copy, the choice is paused as not recorded", async () => {
+    const { adapter, cache, fetchImpl, localWs, serverWs } =
+      await makeConflict();
+    vi.spyOn(cache, "setLiftStamp").mockRejectedValueOnce(
+      new Error("idb down"),
+    );
+
+    const result = await adapter.useOtherDeviceCopy(UUID);
+    assert.ok(!result.success, "resolve fails");
+    assert.equal(adapter.getPendingConflict(UUID), null, "choice withdrawn");
+    assert.equal(
+      adapter.getSyncPause(UUID)?.reason,
+      "choice-not-recorded",
+      "paused as choice-not-recorded",
+    );
+
+    // The browser copy is NOT put back: it holds the server copy now.
+    const browser = await cache.loadWorkspace(UUID);
+    assert.ok(browser.success && browser.value !== null);
+    assert.deepEqual(
+      browser.value,
+      serverWs,
+      "browser copy keeps the server copy",
+    );
+    assert.notDeepEqual(browser.value, localWs, "not the previous value");
+
+    // The reload guard: a save is refused with a Conflict until a load ran.
+    const refused = await adapter.saveWorkspace(UUID, makeWorkspace(3200));
+    assert.ok(!refused.success, "save refused");
+    assert.equal(refused.error.kind, "Conflict");
+    await vi.advanceTimersByTimeAsync(REMOTE_DEBOUNCE_MS);
+    assert.equal(putCallsOf(fetchImpl).length, 0, "no PUT at all");
+  });
+
+  it("cache.saveWorkspace fails: failure, previous browser copy untouched", async () => {
+    const { adapter, cache, localWs } = await makeConflict();
+    vi.spyOn(cache, "saveWorkspace").mockResolvedValueOnce({
+      success: false,
+      error: { kind: "SerializationFailed", message: "idb down" },
+    } as unknown as Awaited<ReturnType<typeof cache.saveWorkspace>>);
+
+    const result = await adapter.useOtherDeviceCopy(UUID);
+    assert.ok(!result.success, "resolve fails");
+    assert.ok(adapter.getPendingConflict(UUID), "pending stays");
+
+    const browser = await cache.loadWorkspace(UUID);
+    assert.ok(browser.success && browser.value !== null);
+    assert.deepEqual(browser.value, localWs, "browser copy untouched");
+  });
+});
+
+describe("CachedEditorWorkspaceAdapter satisfies EditorWorkspaceConflictPort", () => {
+  it("an adapter typed as the port exposes exactly the four conflict methods", () => {
+    const { adapter } = makeAdapters();
+    const asPort = adapter satisfies EditorWorkspaceConflictPort;
+    assert.equal(typeof asPort.getPendingConflict, "function");
+    assert.equal(typeof asPort.subscribe, "function");
+    assert.equal(typeof asPort.keepThisDeviceCopy, "function");
+    assert.equal(typeof asPort.useOtherDeviceCopy, "function");
+  });
+});
+
+describe("workspace conflict resolves: backup, one at a time, discard", () => {
+  /** The brief's set-up for a pending load conflict. */
+  async function pendingConflict() {
+    const made = makeAdapters();
+    const browserCopy = makeWorkspace(3000);
+    const serverCopy = makeWorkspace(2000);
+    await made.cache.saveWorkspace(UUID, makeWorkspace(1000));
+    await made.cache.setLiftStamp(UUID, {
+      ownerId: "user-1",
+      rev: 5,
+      syncedUpdatedAt: 1000,
+      confirmed: true,
+    });
+    made.server.set(UUID, {
+      payload: serverCopy,
+      rev: 9,
+      updatedAt: 2000,
+      projectId: UUID,
+    });
+    await made.cache.saveWorkspace(UUID, browserCopy);
+    await made.adapter.loadWorkspace(UUID);
+    assert.ok(made.adapter.getPendingConflict(UUID), "conflict pending");
+    return { ...made, browserCopy, serverCopy };
+  }
+
+  /** Wraps fetchImpl so the FIRST GET after the set-up parks on a gate. */
+  function parkFirstGet(fetchImpl: TestAdapters["fetchImpl"]) {
+    const original = fetchImpl.getMockImplementation()!;
+    let parked = false;
+    let getArrived!: () => void;
+    const arrived = new Promise<void>((resolve) => {
+      getArrived = resolve;
+    });
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    fetchImpl.mockImplementation(
+      async (url: string | URL | Request, init?: RequestInit) => {
+        const method = (init?.method ?? "GET").toUpperCase();
+        if (method === "GET" && !parked) {
+          parked = true;
+          getArrived();
+          await gate;
+        }
+        return original(url, init);
+      },
+    );
+    return { release, arrived };
+  }
+
+  /** Wraps fetchImpl so the FIRST PUT parks and reports its arrival. */
+  function parkFirstPut(fetchImpl: TestAdapters["fetchImpl"]) {
+    const original = fetchImpl.getMockImplementation()!;
+    let parked = false;
+    let putArrived!: () => void;
+    const arrived = new Promise<void>((resolve) => {
+      putArrived = resolve;
+    });
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    fetchImpl.mockImplementation(
+      async (url: string | URL | Request, init?: RequestInit) => {
+        const method = (init?.method ?? "GET").toUpperCase();
+        if (method === "PUT" && !parked) {
+          parked = true;
+          putArrived();
+          await gate;
+        }
+        return original(url, init);
+      },
+    );
+    return { release, arrived };
+  }
+
+  const deepEq = (a: unknown, b: unknown): boolean => {
+    try {
+      assert.deepEqual(a, b);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  const countGets = (fetchImpl: TestAdapters["fetchImpl"]): number =>
+    fetchImpl.mock.calls.filter(
+      (c) => (c[1]?.method ?? "GET").toUpperCase() === "GET",
+    ).length;
+
+  it("keep: the losing server copy is backed up before the PUT", async () => {
+    const { adapter, cache, fetchImpl, server, browserCopy, serverCopy } =
+      await pendingConflict();
+    const backupSpy = vi.spyOn(cache, "addConflictBackup");
+
+    const result = await adapter.keepThisDeviceCopy(UUID);
+    assert.ok(result.success, "resolve succeeds");
+
+    const backups = await adapter.listConflictBackups(UUID);
+    assert.ok(backups.success);
+    assert.equal(backups.value!.length, 1, "one backup");
+    assert.equal(backups.value![0]!.lost, "other-device");
+    assert.equal(backups.value![0]!.serverRev, 9);
+    assert.equal(backups.value![0]!.ownerId, "user-1");
+    assert.deepEqual(backups.value![0]!.workspace, serverCopy);
+
+    assert.deepEqual(
+      server.get(UUID)!.payload,
+      browserCopy,
+      "the server holds the browser copy",
+    );
+
+    // The backup write happened BEFORE the PUT.
+    const putIndex = fetchImpl.mock.calls.findIndex(
+      (c) => (c[1]?.method ?? "GET").toUpperCase() === "PUT",
+    );
+    assert.ok(putIndex >= 0, "a PUT was sent");
+    assert.ok(
+      backupSpy.mock.invocationCallOrder[0]! <
+        fetchImpl.mock.invocationCallOrder[putIndex]!,
+      "the backup was written before the PUT",
+    );
+  });
+
+  it("keep: no backup, no PUT — a failed backup changes nothing", async () => {
+    const { adapter, cache, fetchImpl, server, serverCopy } =
+      await pendingConflict();
+    vi.spyOn(cache, "addConflictBackup").mockResolvedValueOnce({
+      success: false,
+      error: { kind: "StorageQuotaExceeded", message: "x" },
+    } as unknown as Awaited<ReturnType<typeof cache.addConflictBackup>>);
+
+    const result = await adapter.keepThisDeviceCopy(UUID);
+    assert.ok(!result.success, "resolve fails");
+    assert.ok(adapter.getPendingConflict(UUID), "pending stays");
+    assert.equal(putCallsOf(fetchImpl).length, 0, "no PUT was sent");
+    assert.equal(server.get(UUID)!.rev, 9, "server copy still at rev 9");
+    assert.deepEqual(
+      server.get(UUID)!.payload,
+      serverCopy,
+      "server copy untouched",
+    );
+  });
+
+  it("other: the losing browser copy is backed up before the cache is overwritten", async () => {
+    const { adapter, cache, browserCopy, serverCopy } = await pendingConflict();
+    const backupSpy = vi.spyOn(cache, "addConflictBackup");
+    const saveSpy = vi.spyOn(cache, "saveWorkspace");
+
+    const result = await adapter.useOtherDeviceCopy(UUID);
+    assert.ok(result.success, "resolve succeeds");
+
+    const backups = await adapter.listConflictBackups(UUID);
+    assert.ok(backups.success);
+    assert.equal(backups.value!.length, 1, "one backup");
+    assert.equal(backups.value![0]!.lost, "this-device");
+    assert.deepEqual(backups.value![0]!.workspace, browserCopy);
+
+    const browser = await cache.loadWorkspace(UUID);
+    assert.ok(browser.success && browser.value !== null);
+    assert.deepEqual(browser.value, serverCopy, "cache holds the server copy");
+
+    assert.ok(
+      backupSpy.mock.invocationCallOrder[0]! <
+        saveSpy.mock.invocationCallOrder[0]!,
+      "the backup was written before the cache overwrite",
+    );
+  });
+
+  it("other: a failed backup overwrites nothing — the browser copy and the stamp stay", async () => {
+    const { adapter, cache, browserCopy } = await pendingConflict();
+    vi.spyOn(cache, "addConflictBackup").mockResolvedValueOnce({
+      success: false,
+      error: { kind: "StorageQuotaExceeded", message: "x" },
+    } as unknown as Awaited<ReturnType<typeof cache.addConflictBackup>>);
+
+    const result = await adapter.useOtherDeviceCopy(UUID);
+    assert.ok(!result.success, "resolve fails");
+    const browser = await cache.loadWorkspace(UUID);
+    assert.ok(browser.success && browser.value !== null);
+    assert.deepEqual(
+      browser.value,
+      browserCopy,
+      "cache still holds the browser copy",
+    );
+    const stamp = await cache.getLiftStamp(UUID);
+    assert.ok(stamp, "stamp present");
+    assert.equal(stamp!.rev, 5, "stamp unchanged at rev 5");
+  });
+
+  it("a double click joins: two keep resolves share one run — one PUT, one backup", async () => {
+    const { adapter, fetchImpl } = await pendingConflict();
+    const { release } = parkFirstGet(fetchImpl);
+
+    const p1 = adapter.keepThisDeviceCopy(UUID);
+    const p2 = adapter.keepThisDeviceCopy(UUID);
+    release();
+    const [r1, r2] = await Promise.all([p1, p2]);
+
+    assert.ok(r1.success && r2.success, "both calls succeed");
+    assert.equal(putCallsOf(fetchImpl).length, 1, "exactly one PUT");
+    const backups = await adapter.listConflictBackups(UUID);
+    assert.ok(backups.success);
+    assert.equal(backups.value!.length, 1, "exactly one backup");
+  });
+
+  it("both buttons: the second choice is refused while the first runs", async () => {
+    const { adapter, cache, fetchImpl, browserCopy } = await pendingConflict();
+    const { release } = parkFirstGet(fetchImpl);
+
+    const keepP = adapter.keepThisDeviceCopy(UUID);
+    const refused = await adapter.useOtherDeviceCopy(UUID);
+    assert.ok(!refused.success, "the other choice is refused at once");
+    assert.match(refused.error.message, /already being applied/);
+
+    release();
+    assert.ok((await keepP).success, "the first choice succeeds");
+    const browser = await cache.loadWorkspace(UUID);
+    assert.ok(browser.success && browser.value !== null);
+    assert.deepEqual(
+      browser.value,
+      browserCopy,
+      "cache still holds the browser copy",
+    );
+
+    // The mirror: "other" first, "keep" refused, no PUT at all.
+    const second = await pendingConflict();
+    const parked = parkFirstGet(second.fetchImpl);
+    const otherP = second.adapter.useOtherDeviceCopy(UUID);
+    const refused2 = await second.adapter.keepThisDeviceCopy(UUID);
+    assert.ok(!refused2.success, "keep is refused at once");
+    assert.match(refused2.error.message, /already being applied/);
+    parked.release();
+    assert.ok((await otherP).success, "the other resolve succeeds");
+    assert.equal(putCallsOf(second.fetchImpl).length, 0, "no PUT at all");
+  });
+
+  it("a discard during keep (PUT parked): the resolve answers discarded and undoes its own PUT", async () => {
+    const { adapter, cache, fetchImpl, server } = await pendingConflict();
+    const { release, arrived } = parkFirstPut(fetchImpl);
+
+    const resolveP = adapter.keepThisDeviceCopy(UUID);
+    await arrived;
+    const clearP = adapter.clearWorkspace(UUID);
+    release();
+    const [resolveResult, clearResult] = await Promise.all([resolveP, clearP]);
+
+    assert.ok(!resolveResult.success, "the resolve fails");
+    assert.match(resolveResult.error.message, /discarded/);
+    assert.ok(clearResult.success, "the discard succeeds");
+    // The server HELD a copy: it is put back, not deleted.
+    assert.ok(
+      !allMethodsOf(fetchImpl).includes("DELETE"),
+      "no DELETE was sent",
+    );
+    const doc = server.get(UUID);
+    assert.ok(doc, "the server holds a document");
+    assert.deepEqual(
+      doc!.payload,
+      makeWorkspace(2000),
+      "the server holds the OTHER device's copy",
+    );
+    assert.ok(
+      doc!.rev > 9,
+      `the copy is back at a newer revision (${doc!.rev})`,
+    );
+    const puts = putCallsOf(fetchImpl);
+    assert.equal(puts.length, 2, "the resolve's PUT and the put-back PUT");
+    assert.equal(
+      new Headers(puts[1]![1]!.headers).get("If-Match"),
+      '"rev:10"',
+      "the put-back PUT matches the uploaded revision",
+    );
+    const cached = await cache.loadWorkspace(UUID);
+    assert.ok(cached.success && cached.value === null, "cache has no copy");
+
+    // A following load adopts the copy that was put back; it sends no PUT.
+    const putsBefore = putCallsOf(fetchImpl).length;
+    const next = await adapter.loadWorkspace(UUID);
+    assert.ok(next.success && next.value !== null, "load returns the copy");
+    assert.deepEqual(
+      next.value,
+      makeWorkspace(2000),
+      "the load returns the put-back copy",
+    );
+    assert.equal(
+      putCallsOf(fetchImpl).length,
+      putsBefore,
+      "the load sends no PUT",
+    );
+  });
+
+  it("a discard during keep with NO server copy: the upload is deleted, the server is empty", async () => {
+    const { adapter, cache, fetchImpl, server } = await pendingConflict();
+    // No server copy at all: the resolve's PUT is create-only.
+    server.delete(UUID);
+    const { release, arrived } = parkFirstPut(fetchImpl);
+
+    const resolveP = adapter.keepThisDeviceCopy(UUID);
+    await arrived;
+    const clearP = adapter.clearWorkspace(UUID);
+    release();
+    const [resolveResult, clearResult] = await Promise.all([resolveP, clearP]);
+
+    assert.ok(!resolveResult.success, "the resolve fails");
+    assert.match(resolveResult.error.message, /discarded/);
+    assert.ok(clearResult.success, "the discard succeeds");
+    assert.equal(server.has(UUID), false, "the server has no document");
+    assert.ok(allMethodsOf(fetchImpl).includes("DELETE"), "a DELETE was sent");
+    const cached = await cache.loadWorkspace(UUID);
+    assert.ok(cached.success && cached.value === null, "cache is empty");
+  });
+
+  it("a discard during keep when the put-back fails: still discarded, warned, the copy kept in backups", async () => {
+    const { adapter, cache, fetchImpl, warns, server } =
+      await pendingConflict();
+    const realFetch = fetchImpl.getMockImplementation()!;
+    let putCount = 0;
+    fetchImpl.mockImplementation(
+      async (url: string | URL | Request, init?: RequestInit) => {
+        if ((init?.method ?? "GET").toUpperCase() === "PUT") {
+          putCount += 1;
+          if (putCount === 2) return new Response("boom", { status: 500 });
+        }
+        return realFetch(url, init);
+      },
+    );
+    const { release, arrived } = parkFirstPut(fetchImpl);
+
+    const resolveP = adapter.keepThisDeviceCopy(UUID);
+    await arrived;
+    const clearP = adapter.clearWorkspace(UUID);
+    release();
+    const [resolveResult, clearResult] = await Promise.all([resolveP, clearP]);
+
+    assert.ok(!resolveResult.success, "the resolve fails");
+    assert.match(resolveResult.error.message, /discarded/);
+    assert.ok(clearResult.success, "the discard succeeds");
+    assert.ok(
+      warns.some((w) => w.includes("could not be put back")),
+      "a warning was logged",
+    );
+    const backups = await adapter.listConflictBackups(UUID);
+    assert.ok(backups.success);
+    assert.equal(backups.value!.length, 1, "one backup");
+    assert.equal(backups.value![0]!.lost, "other-device");
+    assert.deepEqual(
+      backups.value![0]!.workspace,
+      makeWorkspace(2000),
+      "the other device's copy is kept in the backups",
+    );
+    // What the resolve uploaded (rev 10) is discarded content and is still on
+    // the server: a discard marker at THAT revision makes the next load
+    // delete it instead of adopting it as another device's change.
+    const marker = await cache.getLiftStamp(UUID);
+    assert.ok(marker, "a marker was left");
+    assert.equal(marker!.discarded, true, "it is a discard marker");
+    assert.equal(marker!.rev, 10, "at the uploaded revision");
+    fetchImpl.mockImplementation(realFetch);
+    const reloaded = await adapter.loadWorkspace(UUID);
+    assert.ok(reloaded.success);
+    assert.equal(reloaded.value, null, "the discarded content does not return");
+    assert.equal(server.has(UUID), false, "the next load deleted the upload");
+  });
+
+  it("a discard during keep (first GET parked): no PUT at all, the other device's copy survives", async () => {
+    const { adapter, cache, fetchImpl, server, serverCopy } =
+      await pendingConflict();
+    const { release } = parkFirstGet(fetchImpl);
+
+    const resolveP = adapter.keepThisDeviceCopy(UUID);
+    const clearP = adapter.clearWorkspace(UUID);
+    release();
+    const [resolveResult, clearResult] = await Promise.all([resolveP, clearP]);
+
+    assert.ok(!resolveResult.success, "the resolve fails");
+    assert.match(resolveResult.error.message, /discarded/);
+    assert.ok(clearResult.success, "the discard succeeds");
+    assert.equal(putCallsOf(fetchImpl).length, 0, "no PUT was sent at all");
+    assert.equal(server.get(UUID)!.rev, 9, "the server copy is still rev 9");
+    assert.deepEqual(
+      server.get(UUID)!.payload,
+      serverCopy,
+      "the other device's copy survives",
+    );
+    const cached = await cache.loadWorkspace(UUID);
+    assert.ok(cached.success && cached.value === null, "cache is empty");
+  });
+
+  it("a discard during other: the resolve answers discarded, nothing of the choice survives", async () => {
+    const { adapter, cache, fetchImpl } = await pendingConflict();
+    const { release } = parkFirstGet(fetchImpl);
+
+    const resolveP = adapter.useOtherDeviceCopy(UUID);
+    const clearP = adapter.clearWorkspace(UUID);
+    release();
+    const [resolveResult, clearResult] = await Promise.all([resolveP, clearP]);
+
+    assert.ok(!resolveResult.success, "the resolve fails");
+    assert.match(resolveResult.error.message, /discarded/);
+    assert.ok(clearResult.success, "the discard succeeds");
+    const cached = await cache.loadWorkspace(UUID);
+    assert.ok(cached.success && cached.value === null, "cache has no copy");
+    const stamp = await cache.getLiftStamp(UUID);
+    assert.ok(
+      stamp === null ||
+        stamp.discarded ||
+        !(stamp.rev === 9 && stamp.confirmed),
+      "the stamp is not { rev: 9, confirmed: true }",
+    );
+    assert.equal(adapter.getPendingConflict(UUID), null, "no pending");
+  });
+
+  it("other: the stamp cannot be recorded — the server copy stays, the choice is paused, the reload heals", async () => {
+    const { adapter, cache, browserCopy, serverCopy } = await pendingConflict();
+    const spy = vi
+      .spyOn(cache, "getLiftStamp")
+      .mockImplementation(async () => null);
+
+    const result = await adapter.useOtherDeviceCopy(UUID);
+    assert.ok(!result.success, "resolve fails");
+
+    const browser = await cache.loadWorkspace(UUID);
+    assert.ok(browser.success && browser.value !== null);
+    assert.deepEqual(
+      browser.value,
+      serverCopy,
+      "cache holds the SERVER copy (not put back)",
+    );
+    const backups = await adapter.listConflictBackups(UUID);
+    assert.ok(backups.success);
+    assert.equal(backups.value!.length, 1, "one backup");
+    assert.deepEqual(
+      backups.value![0]!.workspace,
+      browserCopy,
+      "backup of the browser copy",
+    );
+    assert.equal(adapter.getPendingConflict(UUID), null, "choice withdrawn");
+    assert.equal(
+      adapter.getSyncPause(UUID)?.reason,
+      "choice-not-recorded",
+      "paused as choice-not-recorded",
+    );
+    const refused = await adapter.saveWorkspace(UUID, makeWorkspace(3200));
+    assert.ok(!refused.success, "save refused");
+    assert.equal(refused.error.kind, "Conflict");
+
+    spy.mockRestore();
+    await adapter.loadWorkspace(UUID);
+    assert.equal(adapter.getSyncPause(UUID), null, "the load clears the pause");
+    const accepted = await adapter.saveWorkspace(UUID, makeWorkspace(3200));
+    assert.ok(accepted.success, "a save is accepted");
+  });
+
+  it("keep: a PUT that committed but answered 500 succeeds; a PUT that did not commit fails", async () => {
+    const { adapter, cache, fetchImpl } = await pendingConflict();
+    const realFetch = fetchImpl.getMockImplementation()!;
+    // The PUT is applied by the real implementation, then answered with a 500.
+    fetchImpl.mockImplementation(
+      async (url: string | URL | Request, init?: RequestInit) => {
+        if ((init?.method ?? "GET").toUpperCase() === "PUT") {
+          await realFetch(url, init);
+          return new Response("boom", { status: 500 });
+        }
+        return realFetch(url, init);
+      },
+    );
+
+    const committed = await adapter.keepThisDeviceCopy(UUID);
+    assert.ok(committed.success, "resolve succeeds");
+    const backups = await adapter.listConflictBackups(UUID);
+    assert.ok(backups.success);
+    assert.equal(backups.value!.length, 1, "one backup");
+    const stamp = await cache.getLiftStamp(UUID);
+    assert.ok(stamp, "stamp written");
+    assert.equal(stamp!.rev, 10, "stamp at the server's new revision");
+    assert.equal(stamp!.confirmed, true, "confirmed");
+    assert.equal(adapter.getPendingConflict(UUID), null, "pending cleared");
+
+    // The true failure: the PUT is NOT applied and answers 500.
+    const second = await pendingConflict();
+    const real2 = second.fetchImpl.getMockImplementation()!;
+    second.fetchImpl.mockImplementation(
+      async (url: string | URL | Request, init?: RequestInit) => {
+        if ((init?.method ?? "GET").toUpperCase() === "PUT") {
+          return new Response("boom", { status: 500 });
+        }
+        return real2(url, init);
+      },
+    );
+    const failed = await second.adapter.keepThisDeviceCopy(UUID);
+    assert.ok(!failed.success, "resolve fails");
+    assert.ok(second.adapter.getPendingConflict(UUID), "pending still there");
+    const stamp2 = await second.cache.getLiftStamp(UUID);
+    assert.ok(stamp2, "stamp present");
+    assert.equal(stamp2!.rev, 5, "stamp still at rev 5");
+  });
+
+  it("keep: the server moved again before the PUT — Conflict, the rev-9 backup kept, the rev-12 copy survives", async () => {
+    const { adapter, fetchImpl, server } = await pendingConflict();
+    const realFetch = fetchImpl.getMockImplementation()!;
+    let injected = false;
+    fetchImpl.mockImplementation(
+      async (url: string | URL | Request, init?: RequestInit) => {
+        if ((init?.method ?? "GET").toUpperCase() === "GET" && !injected) {
+          injected = true;
+          const response = await realFetch(url, init);
+          // Another device writes before the resolve's PUT.
+          server.set(UUID, {
+            payload: makeWorkspace(1200),
+            rev: 12,
+            updatedAt: 12000,
+            projectId: UUID,
+          });
+          return response;
+        }
+        return realFetch(url, init);
+      },
+    );
+
+    const result = await adapter.keepThisDeviceCopy(UUID);
+    assert.ok(!result.success, "resolve fails");
+    assert.equal(result.error.kind, "Conflict");
+    const backups = await adapter.listConflictBackups(UUID);
+    assert.ok(backups.success);
+    assert.equal(backups.value!.length, 1, "the rev-9 backup exists");
+    assert.equal(backups.value![0]!.serverRev, 9);
+    assert.deepEqual(backups.value![0]!.workspace, makeWorkspace(2000));
+    assert.equal(server.get(UUID)!.rev, 12, "server holds the rev-12 copy");
+    assert.ok(adapter.getPendingConflict(UUID), "pending still there");
+  });
+
+  it("typing during other is not lost unseen: a save that lands before the read is the backup", async () => {
+    const { adapter, cache, fetchImpl } = await pendingConflict();
+    const { release } = parkFirstGet(fetchImpl);
+    const resolveP = adapter.useOtherDeviceCopy(UUID);
+
+    // The user types while the resolve's GET is parked.
+    const saveResult = await adapter.saveWorkspace(UUID, makeWorkspace(4000));
+    release();
+    const resolveResult = await resolveP;
+    assert.ok(resolveResult.success, "resolve succeeds");
+
+    const browser = await cache.loadWorkspace(UUID);
+    assert.ok(browser.success && browser.value !== null);
+    assert.deepEqual(
+      browser.value,
+      makeWorkspace(2000),
+      "cache holds the server copy",
+    );
+    const backups = await adapter.listConflictBackups(UUID);
+    assert.ok(backups.success);
+    assert.equal(backups.value!.length, 1);
+    const backupWs = backups.value![0]!.workspace;
+    assert.ok(
+      deepEq(backupWs, makeWorkspace(3000)) ||
+        deepEq(backupWs, makeWorkspace(4000)),
+      "the backup holds the 3000 or the 4000 copy",
+    );
+    if (deepEq(backupWs, makeWorkspace(3000))) {
+      assert.ok(
+        saveResult.success || saveResult.error.kind === "Conflict",
+        "the 4000 save was answered without being written",
+      );
+    }
+  });
+
+  it("typing during other is not lost unseen: a save right after the resolve is refused, never written and lost", async () => {
+    const { adapter, cache, fetchImpl } = await pendingConflict();
+    const { release } = parkFirstGet(fetchImpl);
+    const resolveP = adapter.useOtherDeviceCopy(UUID);
+    release();
+    const resolveResult = await resolveP;
+    assert.ok(resolveResult.success, "resolve succeeds");
+
+    // The user types right after the resolve settled, before any load.
+    const saveResult = await adapter.saveWorkspace(UUID, makeWorkspace(4000));
+
+    const browser = await cache.loadWorkspace(UUID);
+    assert.ok(browser.success && browser.value !== null);
+    assert.deepEqual(
+      browser.value,
+      makeWorkspace(2000),
+      "cache holds the server copy",
+    );
+    const backups = await adapter.listConflictBackups(UUID);
+    assert.ok(backups.success);
+    assert.equal(backups.value!.length, 1);
+    const backupWs = backups.value![0]!.workspace;
+    assert.ok(
+      deepEq(backupWs, makeWorkspace(3000)) ||
+        deepEq(backupWs, makeWorkspace(4000)),
+      "the backup holds the 3000 or the 4000 copy",
+    );
+    if (deepEq(backupWs, makeWorkspace(3000))) {
+      assert.ok(
+        saveResult.success || saveResult.error.kind === "Conflict",
+        "the 4000 save was answered without being written",
+      );
+    }
+  });
+
+  it("a save while the reload is still out is refused; after the load it is accepted once", async () => {
+    const { adapter, cache, fetchImpl, serverCopy } = await pendingConflict();
+    assert.ok((await adapter.useOtherDeviceCopy(UUID)).success);
+
+    // Park the GET of the load that would answer the reload.
+    const { release } = parkFirstGet(fetchImpl);
+    const loadP = adapter.loadWorkspace(UUID);
+
+    const refused = await adapter.saveWorkspace(UUID, makeWorkspace(4000));
+    assert.ok(!refused.success, "the save is refused while the load is out");
+    assert.equal(refused.error.kind, "Conflict");
+    const browser = await cache.loadWorkspace(UUID);
+    assert.ok(browser.success && browser.value !== null);
+    assert.deepEqual(
+      browser.value,
+      serverCopy,
+      "the cache still holds the server copy",
+    );
+
+    release();
+    const loaded = await loadP;
+    assert.ok(loaded.success && loaded.value !== null);
+
+    const accepted = await adapter.saveWorkspace(UUID, makeWorkspace(4000));
+    assert.ok(accepted.success, "the same save is accepted after the load");
+    await vi.advanceTimersByTimeAsync(2000);
+    const puts = putCallsOf(fetchImpl);
+    assert.equal(puts.length, 1, "exactly ONE PUT was sent");
+    const body = JSON.parse(puts[0]![1]!.body as string);
+    assert.deepEqual(body.payload, makeWorkspace(4000), "the 4000 payload");
+    assert.equal(
+      new Headers(puts[0]![1]!.headers).get("If-Match"),
+      '"rev:9"',
+      "the PUT carries If-Match rev:9",
+    );
+  });
+
+  it("the late save: a save parked inside getLiftStamp is refused after a resolve ran", async () => {
+    const { adapter, cache, fetchImpl, server } = await pendingConflict();
+    // The save's FIRST getLiftStamp call parks on a gate.
+    const realStamp = cache.getLiftStamp.bind(cache);
+    let parked = false;
+    let stampArrived!: () => void;
+    const arrived = new Promise<void>((r) => {
+      stampArrived = r;
+    });
+    let releaseStamp!: () => void;
+    const gate = new Promise<void>((r) => {
+      releaseStamp = r;
+    });
+    vi.spyOn(cache, "getLiftStamp").mockImplementation(async (id) => {
+      if (!parked) {
+        parked = true;
+        stampArrived();
+        await gate;
+      }
+      return realStamp(id);
+    });
+
+    // The save writes the cache and parks inside its getLiftStamp.
+    const saveP = adapter.saveWorkspace(UUID, makeWorkspace(4000));
+    await arrived;
+
+    // While it is parked, the other device's copy is taken.
+    assert.ok((await adapter.useOtherDeviceCopy(UUID)).success);
+
+    releaseStamp();
+    const saveResult = await saveP;
+    assert.ok(!saveResult.success, "the late save answers Conflict");
+    assert.equal(saveResult.error.kind, "Conflict");
+    await vi.advanceTimersByTimeAsync(2000);
+    assert.equal(putCallsOf(fetchImpl).length, 0, "NO PUT was sent");
+    assert.equal(server.get(UUID)!.rev, 9, "the server still holds rev 9");
+    assert.deepEqual(
+      server.get(UUID)!.payload,
+      makeWorkspace(2000),
+      "the server still holds its copy",
+    );
+  });
+
+  it("the late save after the reload: a save that a replacement overtook is refused even when the reload has answered", async () => {
+    const { adapter, cache, fetchImpl, server } = await pendingConflict();
+    const realStamp = cache.getLiftStamp.bind(cache);
+    let parked = false;
+    let stampArrived!: () => void;
+    const arrived = new Promise<void>((r) => {
+      stampArrived = r;
+    });
+    let releaseStamp!: () => void;
+    const gate = new Promise<void>((r) => {
+      releaseStamp = r;
+    });
+    vi.spyOn(cache, "getLiftStamp").mockImplementation(async (id) => {
+      if (!parked) {
+        parked = true;
+        stampArrived();
+        await gate;
+      }
+      return realStamp(id);
+    });
+
+    const saveP = adapter.saveWorkspace(UUID, makeWorkspace(4000));
+    await arrived;
+
+    // The other device's copy is taken AND the interface has reloaded: the
+    // two guards are lifted again while the old save is still parked.
+    assert.ok((await adapter.useOtherDeviceCopy(UUID)).success);
+    const reloaded = await adapter.loadWorkspace(UUID);
+    assert.ok(reloaded.success);
+    assert.deepEqual(reloaded.value, makeWorkspace(2000));
+
+    releaseStamp();
+    const saveResult = await saveP;
+    assert.ok(!saveResult.success, "the overtaken save is refused");
+    assert.equal(saveResult.error.kind, "Conflict");
+    await vi.advanceTimersByTimeAsync(2000);
+    assert.equal(putCallsOf(fetchImpl).length, 0, "NO PUT was sent");
+    assert.deepEqual(
+      server.get(UUID)!.payload,
+      makeWorkspace(2000),
+      "the server still holds the copy that was taken",
+    );
+
+    // A save that begins after the reload is accepted.
+    const later = await adapter.saveWorkspace(UUID, makeWorkspace(5000));
+    assert.ok(later.success, "a save after the reload is accepted");
+  });
+
+  it("backups are listed for the signed-in user only", async () => {
+    const { adapter } = await pendingConflict();
+    assert.ok((await adapter.keepThisDeviceCopy(UUID)).success);
+    const mine = await adapter.listConflictBackups(UUID);
+    assert.ok(mine.success);
+    assert.equal(mine.value!.length, 1, "the owner sees the backup");
+
+    // Another account in the same browser (the same IndexedDB).
+    const other = makeAdapters({ userId: "user-2" });
+    const theirs = await other.adapter.listConflictBackups(UUID);
+    assert.ok(theirs.success);
+    assert.deepEqual(theirs.value, [], "another account sees none");
+    const signedOut = makeAdapters({ userId: null });
+    const none = await signedOut.adapter.listConflictBackups(UUID);
+    assert.ok(none.success);
+    assert.deepEqual(none.value, [], "signed out sees none");
+  });
+
+  it("a listener that throws does not end a resolve", async () => {
+    const { adapter, warns, server, browserCopy } = await pendingConflict();
+    adapter.subscribe(() => {
+      throw new Error("boom");
+    });
+    const result = await adapter.keepThisDeviceCopy(UUID);
+    assert.ok(result.success, "the resolve still succeeds");
+    assert.deepEqual(server.get(UUID)!.payload, browserCopy);
+    assert.equal(adapter.getPendingConflict(UUID), null);
+    assert.ok(
+      warns.some((w) => w.includes("listener threw")),
+      "the throw was logged",
+    );
+  });
+
+  it("the discard waits for a running resolve: the resolve's writes come first, then are cleared", async () => {
+    const { adapter, cache } = await pendingConflict();
+    const realBackup = cache.addConflictBackup.bind(cache);
+    let parked = false;
+    let backupArrived!: () => void;
+    const arrived = new Promise<void>((r) => {
+      backupArrived = r;
+    });
+    let releaseBackup!: () => void;
+    const gate = new Promise<void>((r) => {
+      releaseBackup = r;
+    });
+    vi.spyOn(cache, "addConflictBackup").mockImplementation(async (b) => {
+      if (!parked) {
+        parked = true;
+        backupArrived();
+        await gate;
+      }
+      return realBackup(b);
+    });
+
+    const resolveP = adapter.useOtherDeviceCopy(UUID);
+    await arrived;
+    const settledOrder: string[] = [];
+    void resolveP.then(() => settledOrder.push("resolve"));
+    const clearP = adapter.clearWorkspace(UUID);
+    void clearP.then(() => settledOrder.push("discard"));
+    releaseBackup();
+    const [resolveResult, clearResult] = await Promise.all([resolveP, clearP]);
+
+    assert.deepEqual(
+      settledOrder,
+      ["resolve", "discard"],
+      "the discard waited for the resolve before it cleared",
+    );
+    assert.ok(!resolveResult.success, "the resolve answers discarded");
+    assert.match(resolveResult.error.message, /discarded/);
+    assert.ok(clearResult.success, "the discard succeeds");
+    const browser = await cache.loadWorkspace(UUID);
+    assert.ok(
+      browser.success && browser.value === null,
+      "the discard's clear came AFTER the resolve's writes",
+    );
+    const stamp = await cache.getLiftStamp(UUID);
+    assert.ok(
+      stamp === null || stamp.discarded,
+      "the stamp is absent or a discard marker",
+    );
+  });
+
+  it("the discard waits for a running resolve (parked at the overwrite): the clear comes after the writes", async () => {
+    const { adapter, cache, server } = await pendingConflict();
+    // The resolve parks inside stampVerified's first getLiftStamp: its cache
+    // overwrite is already written, its stamp is not.
+    const realStamp = cache.getLiftStamp.bind(cache);
+    let parked = false;
+    let stampArrived!: () => void;
+    const arrived = new Promise<void>((r) => {
+      stampArrived = r;
+    });
+    let releaseStamp!: () => void;
+    const gate = new Promise<void>((r) => {
+      releaseStamp = r;
+    });
+    vi.spyOn(cache, "getLiftStamp").mockImplementation(async (id) => {
+      if (!parked) {
+        parked = true;
+        stampArrived();
+        await gate;
+      }
+      return realStamp(id);
+    });
+
+    const resolveP = adapter.useOtherDeviceCopy(UUID);
+    await arrived;
+    const settledOrder: string[] = [];
+    void resolveP.then(() => settledOrder.push("resolve"));
+    const clearP = adapter.clearWorkspace(UUID);
+    void clearP.then(() => settledOrder.push("discard"));
+    // One fake tick: enough for an UNBLOCKED discard to finish its clear,
+    // never enough for the bounded 10 s wait to run out.
+    const discardRanFree = await Promise.race([
+      clearP.then(() => true),
+      vi.advanceTimersByTimeAsync(1).then(() => false),
+    ]);
+    assert.equal(discardRanFree, false, "the discard did not run free");
+    releaseStamp();
+    const [resolveResult, clearResult] = await Promise.all([resolveP, clearP]);
+
+    assert.deepEqual(
+      settledOrder,
+      ["resolve", "discard"],
+      "the discard waited for the resolve before it cleared",
+    );
+    assert.ok(clearResult.success, "the discard succeeds");
+    const browser = await cache.loadWorkspace(UUID);
+    assert.ok(
+      browser.success && browser.value === null,
+      "the discard's clear came AFTER the resolve's writes",
+    );
+    const stamp = await cache.getLiftStamp(UUID);
+    assert.ok(
+      stamp === null || stamp.discarded,
+      "the stamp is absent or a discard marker",
+    );
+    assert.ok(server.has(UUID) === false || server.get(UUID)!.rev === 9);
+  });
+
+  it("reload required: saves are refused with Conflict until a load ran; then one PUT with If-Match rev:9", async () => {
+    const { adapter, cache, fetchImpl, serverCopy } = await pendingConflict();
+    assert.ok((await adapter.useOtherDeviceCopy(UUID)).success);
+
+    const refused = await adapter.saveWorkspace(UUID, makeWorkspace(5000));
+    assert.ok(!refused.success, "save refused");
+    assert.equal(refused.error.kind, "Conflict");
+    await vi.advanceTimersByTimeAsync(2000);
+    assert.equal(putCallsOf(fetchImpl).length, 0, "no PUT after the debounce");
+    const browser = await cache.loadWorkspace(UUID);
+    assert.ok(browser.success && browser.value !== null);
+    assert.deepEqual(
+      browser.value,
+      serverCopy,
+      "cache still holds the server copy",
+    );
+
+    const loaded = await adapter.loadWorkspace(UUID);
+    assert.ok(loaded.success && loaded.value !== null);
+    assert.deepEqual(loaded.value, serverCopy, "load returns the server copy");
+
+    const accepted = await adapter.saveWorkspace(UUID, makeWorkspace(5000));
+    assert.ok(accepted.success, "the same save is accepted");
+    await vi.advanceTimersByTimeAsync(2000);
+    const puts = putCallsOf(fetchImpl);
+    assert.equal(puts.length, 1, "one PUT");
+    assert.equal(
+      new Headers(puts[0]![1]!.headers).get("If-Match"),
+      '"rev:9"',
+      "the PUT carries If-Match rev:9",
+    );
+  });
+
+  it("a load waits for a running resolve, then reads the resolved copy", async () => {
+    const { adapter, fetchImpl } = await pendingConflict();
+    const getsBefore = countGets(fetchImpl);
+    const { release, arrived } = parkFirstGet(fetchImpl);
+    const resolveP = adapter.keepThisDeviceCopy(UUID);
+    await arrived;
+
+    const loadP = adapter.loadWorkspace(UUID);
+    await vi.advanceTimersByTimeAsync(0);
+    assert.equal(
+      countGets(fetchImpl),
+      getsBefore + 1,
+      "no second GET while the resolve's GET is parked",
+    );
+
+    release();
+    const [resolveResult, loadResult] = await Promise.all([resolveP, loadP]);
+    assert.ok(resolveResult.success, "resolve succeeds");
+    assert.ok(loadResult.success && loadResult.value !== null);
+    assert.deepEqual(
+      loadResult.value,
+      makeWorkspace(3000),
+      "load returns the browser copy (kept)",
+    );
+    assert.equal(adapter.getPendingConflict(UUID), null, "pending cleared");
+    assert.equal(adapter.getSyncPause(UUID), null, "the id is not paused");
+
+    // Not paused: a following save arms a PUT with the new revision.
+    await adapter.saveWorkspace(UUID, makeWorkspace(3100));
+    await vi.advanceTimersByTimeAsync(REMOTE_DEBOUNCE_MS);
+    const puts = putCallsOf(fetchImpl);
+    assert.equal(puts.length, 2, "the resolve's PUT and the save's PUT");
+    assert.equal(
+      new Headers(puts[1]![1]!.headers).get("If-Match"),
+      '"rev:10"',
+      "the save arms a PUT with the new revision",
+    );
+  });
+
+  it("sync pause: deleted-elsewhere is visible with its reason and fires the listener", async () => {
+    const { adapter, cache } = makeAdapters();
+    await cache.saveWorkspace(UUID, makeWorkspace(1000));
+    await cache.setLiftStamp(UUID, {
+      ownerId: "user-1",
+      rev: 5,
+      syncedUpdatedAt: 1000,
+      confirmed: true,
+    });
+    // The server has no document: the GET answers 404.
+    let fires = 0;
+    adapter.subscribe(() => {
+      fires += 1;
+    });
+
+    await adapter.loadWorkspace(UUID);
+    assert.equal(
+      adapter.getPendingConflict(UUID),
+      null,
+      "no pending conflict for deleted-elsewhere",
+    );
+    assert.equal(
+      adapter.getSyncPause(UUID)?.reason,
+      "deleted-elsewhere",
+      "the pause is visible",
+    );
+    assert.ok(fires >= 1, "the subscribed listener fired");
+  });
+
+  it("sync pause: upload-failed after a failed lift; the next clean load clears it and fires the listener", async () => {
+    const { adapter, cache, server, fetchImpl } = makeAdapters();
+    await cache.saveWorkspace(UUID, makeWorkspace(1000));
+    // No stamp; the server has no document; the lift PUT answers 500.
+    const realFetch = fetchImpl.getMockImplementation()!;
+    fetchImpl.mockImplementation(
+      async (url: string | URL | Request, init?: RequestInit) => {
+        if ((init?.method ?? "GET").toUpperCase() === "PUT") {
+          return new Response("boom", { status: 500 });
+        }
+        return realFetch(url, init);
+      },
+    );
+    let fires = 0;
+    adapter.subscribe(() => {
+      fires += 1;
+    });
+
+    await adapter.loadWorkspace(UUID);
+    assert.equal(
+      adapter.getSyncPause(UUID)?.reason,
+      "upload-failed",
+      "the pause is visible",
+    );
+    assert.equal(fires, 1, "fired when the pause was noted");
+
+    // The server answers normally again.
+    fetchImpl.mockImplementation(realFetch);
+    server.set(UUID, {
+      payload: makeWorkspace(1000),
+      rev: 5,
+      updatedAt: 1000,
+      projectId: UUID,
+    });
+    const loaded = await adapter.loadWorkspace(UUID);
+    assert.ok(loaded.success && loaded.value !== null);
+    assert.deepEqual(loaded.value, makeWorkspace(1000));
+    assert.equal(adapter.getSyncPause(UUID), null, "cleared");
+    assert.equal(fires, 2, "fired on removal");
   });
 });

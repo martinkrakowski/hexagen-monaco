@@ -4,11 +4,15 @@ import type {
   PersistenceError,
   PersistedEditorWorkspace,
   Result,
+  WorkspaceConflictBackup,
 } from "@hexagen/shared";
 
 const WORKSPACE_KEY_PREFIX = "hexagen:workspace:";
 const LIFT_STAMP_KEY = "hexagen:workspace-lift";
 const CONFLICTS_KEY = "hexagen:workspace-conflicts";
+const CONFLICT_BACKUP_KEY_PREFIX = "hexagen:workspace-conflict-backup:";
+/** Backups kept per project; a fourth drops the oldest. */
+const MAX_CONFLICT_BACKUPS = 3;
 
 export type ConflictWhere =
   | "load"
@@ -213,5 +217,81 @@ export class IDBEditorWorkspaceAdapter implements EditorWorkspacePersistencePort
         // Conflict recording must never fail the editor.
       }
     });
+  }
+
+  /**
+   * Keeps the copy that lost a conflict choice (the newest three per id).
+   * Backups are the one per-id entry that a discard (`clearWorkspace`) does
+   * NOT delete: a discard is when a user may want one back. Nothing expires them.
+   * NOT best-effort: the caller overwrites the losing copy only after this
+   * has answered success.
+   */
+  async addConflictBackup(
+    backup: WorkspaceConflictBackup,
+  ): Promise<Result<void, PersistenceError>> {
+    return this.enqueueWrite(async () => {
+      try {
+        await update<WorkspaceConflictBackup[] | undefined>(
+          `${CONFLICT_BACKUP_KEY_PREFIX}${backup.sessionId}`,
+          (existing) => {
+            const list = existing ?? [];
+            const newest = list[list.length - 1];
+            // A repeated attempt on the same conflict backs up the same copy
+            // again: it replaces its twin instead of pushing out an older,
+            // different backup.
+            if (
+              newest !== undefined &&
+              newest.lost === backup.lost &&
+              newest.serverRev === backup.serverRev &&
+              JSON.stringify(newest.workspace) ===
+                JSON.stringify(backup.workspace)
+            ) {
+              return [...list.slice(0, -1), backup];
+            }
+            return [...list, backup].slice(-MAX_CONFLICT_BACKUPS);
+          },
+        );
+        return { success: true as const, value: undefined };
+      } catch (e) {
+        if (e instanceof DOMException && e.name === "QuotaExceededError") {
+          return {
+            success: false as const,
+            error: {
+              kind: "StorageQuotaExceeded" as const,
+              message: "IDB storage quota exceeded",
+            },
+          };
+        }
+        return {
+          success: false as const,
+          error: {
+            kind: "Unknown" as const,
+            message: "Failed to write the conflict backup to IDB",
+            cause: e,
+          },
+        };
+      }
+    });
+  }
+
+  /** The backups kept for an id, oldest first. */
+  async listConflictBackups(
+    sessionId: string,
+  ): Promise<Result<WorkspaceConflictBackup[], PersistenceError>> {
+    try {
+      const backups = await get<WorkspaceConflictBackup[]>(
+        `${CONFLICT_BACKUP_KEY_PREFIX}${sessionId}`,
+      );
+      return { success: true, value: backups ?? [] };
+    } catch (e) {
+      return {
+        success: false,
+        error: {
+          kind: "DeserializationFailed",
+          message: "Failed to read the conflict backups from IDB",
+          cause: e,
+        },
+      };
+    }
   }
 }

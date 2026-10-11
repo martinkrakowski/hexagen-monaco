@@ -50,6 +50,8 @@ export const PORT_NAMES = {
   WIZARD_PERSISTENCE: "WizardPersistencePort",
   /** Editor workspace layout persistence (localStorage) */
   EDITOR_WORKSPACE_PERSISTENCE: "EditorWorkspacePersistencePort",
+  /** Pending editor workspace conflicts and their resolution (cached adapter) */
+  EDITOR_WORKSPACE_CONFLICT: "EditorWorkspaceConflictPort",
   /** Canvas layout and viewport state persistence (localStorage) */
   CANVAS_LAYOUT_PERSISTENCE: "CanvasLayoutPersistencePort",
   /** Chat history and conversation storage (IndexedDB) */
