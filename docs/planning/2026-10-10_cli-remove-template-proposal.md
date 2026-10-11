@@ -1,12 +1,89 @@
 # Proposal: a CLI command that removes an installed template
 
 **Date:** 2026-10-10
-**Status:** Proposal, awaiting the owner's decision. No code written.
+**Status:** Decided by the owner on 2026-10-11. The contract is the section "The decided contract" below.
+Where the proposal's text further down disagrees with that section, the section wins; each such place
+is marked "Decided:". No code written yet.
 **Origin:** fleet inbox item `hx-cli-remove-command` (owner answer 2026-10-10: write a short proposal first).
 **Relates to:** `docs/planning/2026-09-29_orchestration-template.md` (add-ons are "upgraded by version bump").
 
 Every statement below that cites `path:line` was read in this checkout. A statement marked "not verified"
 was not confirmed in the code.
+
+## The decided contract (owner, 2026-10-11)
+
+The owner answered the ten questions at the end of this document, numbered as they are there. His
+words, as recorded in the fleet's `policy.md` (entry "2026-10-11 (early): the owner answers the ten
+questions of hexagen-monaco #816"):
+
+> 1. build recommended version / 2. yrs on all counts / 3. yes / 4. yes override / 5. fix clean up and
+>    garbage collect correctly / 6. yes / 7. yes / 8. ask to install deps / 9. yes / 10. recommended defaults
+
+Three answers were asked back the same turn (2, 5 and 8) and he settled them the same hour. They are
+recorded in the same entry in the fleet session's words, not as a quotation of his:
+
+> 2: one name, `hexagen remove`. 5: the command cleans up fully (everything the template owns,
+> including folders it leaves empty and stale registry records); files kept on purpose are listed; the
+> exit code is 0 whenever the removal itself worked, so there is NO exit code 2 in the contract. 8: when
+> another installed template requires the one being removed, the command refuses and names it; `--force`
+> overrides.
+
+**The contract.**
+
+| Part                 | Decided                                                                                                                                                                   | Question |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| Build it             | Yes: the smallest first version                                                                                                                                           | 1        |
+| Name                 | `hexagen remove <template>`. One name, no alias                                                                                                                           | 2        |
+| Deleting files       | It deletes a recorded file whose current hash still equals the recorded hash                                                                                              | 3        |
+| `--keep-files`       | Removes the registry entry only; deletes no file                                                                                                                          | 3        |
+| `--dry-run`          | Prints the plan and changes nothing                                                                                                                                       | 1        |
+| `--force`            | In the FIRST version. It means both: skip the prompt, AND override the refusals (another installed template requires this one; a file was changed, which is then deleted) | 4, 8     |
+| Shared files         | Kept and listed                                                                                                                                                           | 6        |
+| Changed files        | Kept and listed; never deleted without `--force`                                                                                                                          | 6        |
+| Clean-up             | Full: everything the template owns, including the folders the removal leaves empty and stale registry records. Files kept on purpose are listed                           | 5        |
+| Exit codes           | 0 whenever the removal itself worked (also when files were kept and listed). 1 on a refusal or an error. There is NO exit code 2                                          | 5        |
+| Dependents           | When another installed template requires the one being removed: refuse and name it, unless `--force`                                                                      | 8        |
+| Monorepo             | It acts on the single registry root only, and prints a note about other packages                                                                                          | 9        |
+| `AddTemplateUseCase` | A re-add merges the earlier file records instead of replacing them. Its own change, FIRST, because it changes what every consumer's registry holds                        | 7        |
+| Approval             | He approves the contract in this document before the command's second lane starts. The pull request that wrote this section is that approval point                        | 10       |
+
+**Where this differs from what the proposal recommended.**
+
+- **`--force` (question 4).** The proposal recommended leaving `--force` out of the first version and
+  later splitting it into `--yes` (the prompt) and `--force` (the overrides). The owner chose AGAINST
+  that: one flag, in the first version, with both meanings. There is no `--yes`.
+- **Exit code 2 (question 5).** The proposal recommended a code 2 for "removed, but files were left".
+  The owner chose 0 and 1 only.
+- **Clean-up (question 5).** The proposal's first version left empty folders and other clean-up to the
+  user as a printed list. The owner chose full clean-up by the command.
+- **One template per call (question 2).** The proposal's synopsis allowed several ids. The decided
+  form is `hexagen remove <template>`: one.
+
+**Read from the decision, and stated here so that the lanes do not guess.** These follow from his
+answers together with the proposal's text; he did not answer them one by one. Each is the careful
+reading (delete less, refuse more):
+
+- `--force` overrides the two refusals he named (dependents, changed files). A file that another
+  installed template also records is still kept and listed under `--force`: it belongs to that template too.
+- "Folders it leaves empty" are the folders that become empty because this removal deleted a file in
+  them, followed upward and stopping at the first folder that is not empty and always at the project
+  root. A folder that was already empty, or that holds a kept file, is not touched.
+- "Stale registry records" are the template's records of files that are already gone: they leave the
+  registry with the entry, and are reported as "already absent". After a removal that worked, nothing
+  of the template is left in the registry, whatever was kept on disk.
+- A recorded path that would leave the project root (an absolute path, or one with `..` that escapes) is
+  never touched, also under `--force`: the command refuses. `--keep-files`, which touches no file, is
+  the way to drop such an entry. The same holds for the registry file itself and for anything under `.git`.
+  A recorded path that is no longer a plain file (a folder, a symbolic link) is kept and listed.
+- `.hexagen-update.*` conflict copies are listed and not deleted, as the proposal's table has it. He
+  was not asked about them by name.
+- From the proposal, unchanged: a template that is not installed prints "not installed" and exits 0; a
+  dry run exits 0; a missing registry file, a missing project root, and a recorded path that leaves the
+  project root are refusals (exit 1); `package.json` is never edited and the template's checklist is
+  printed as the reminder.
+
+**One-way door.** The name, the flags and the exit codes become a public contract when a package
+version with the command is published. Publishing is the owner's step; nothing here publishes.
 
 ## Why
 
@@ -79,7 +156,9 @@ beyond the code paths cited below).
 
 ## The command's contract
 
-**Name and synopsis.** `hexagen remove <template> [<template> ...] [--dry-run] [--force] [--keep-files]`.
+**Decided:** `hexagen remove <template> [--dry-run] [--force] [--keep-files]`, one template, one name.
+
+**Name and synopsis (as proposed; the several-names form is superseded).** `hexagen remove <template> [<template> ...] [--dry-run] [--force] [--keep-files]`.
 Alternatives: `hexagen templates remove <id>` (groups it with `templates list|info`, avoids the clash with
 `arch remove`, but `add` is top-level so it is asymmetric); `hexagen uninstall <id>` (no clash, but a new verb).
 Recommended: `hexagen remove`, with the help text saying "add-on template", mirroring `add`.
@@ -89,10 +168,12 @@ Recommended: `hexagen remove`, with the help text saying "add-on template", mirr
 - `--dry-run`: print the plan and change nothing. A real run with no flag also prints the plan first and asks
   `confirm` (the helper `add` uses, `commands/add/index.ts:48-52`); `--dry-run` is the scripting form.
 - `--force`: do not prompt; also remove a template that has dependents, and delete changed files. Two meanings
-  in one flag is a risk; see question 4.
+  in one flag is a risk; see question 4. **Decided:** both meanings, in the first version.
 - `--keep-files`: remove only the registry entry; delete no file. This is the hand edit, done safely.
 
-**Exit codes.** 0 removed, or nothing to do, or a dry run. 1 refused (dependents, unreadable registry, no
+**Decided:** 0 and 1 only; a removal that worked exits 0 even when files were kept. No code 2.
+
+**Exit codes (as proposed; code 2 is superseded).** 0 removed, or nothing to do, or a dry run. 1 refused (dependents, unreadable registry, no
 project root) or a failure. 2 removed with files left for the user to deal with (changed files, conflict
 copies); a script can tell "clean" from "needs a look". The existing commands use only 0 and 1
 (`process.exit(1)` in `commands/add/index.ts`); a code 2 would be new (not verified against the other commands).
@@ -176,14 +257,21 @@ for importers is not verified as feasible without parsing). Recommended: print t
 
 ## Smallest first version
 
+**Decided:** this version is the one to build (nothing is built yet), with two changes to the list below. `--force` is in (item 4), and
+the clean-up of emptied folders is done by the command, not left on the printed list (item 5).
+`AddTemplateUseCase`'s merge on a re-add lands first, as its own pull request. The lane cut is made
+again from the decided contract; lane 3's "later fourth lane" no longer exists.
+
 One command, `hexagen remove <id>`, with:
 
 1. the registry entry removed (atomic save);
 2. recorded files whose current hash equals the recorded hash deleted, nothing else;
 3. `--dry-run` (listing what would happen) and `--keep-files`;
-4. the refusal when another installed template `requires` it, no `--force` yet;
+4. the refusal when another installed template `requires` it, no `--force` yet (superseded: `--force` is
+   in and overrides this refusal);
 5. everything else printed as a list for the user to do by hand: changed files, shared files, conflict
-   copies, the template's checklist, the empty-directory and `package.json` clean-up.
+   copies, the template's checklist, the empty-directory and `package.json` clean-up. (Superseded in part:
+   the command removes the folders it leaves empty itself; the rest stays a printed list.)
 
 Rough size: three lanes of about 45 minutes each.
 
@@ -193,8 +281,15 @@ Rough size: three lanes of about 45 minutes each.
   `cli.ts`, with `--dry-run`, `--keep-files`, exit codes, and the root-escape check; tests on a temp directory.
 - Lane 3: documentation (command help, a short section in the template docs, the CLI reference) and a
   review pass. `--force`, conflict-copy deletion and empty-directory pruning are a later fourth lane.
+  (Superseded: `--force` and the pruning of emptied folders are in the first version; conflict copies are
+  listed, not deleted.)
 
 ## Questions for the owner
+
+**All ten are answered** (2026-10-11); the answers are in "The decided contract" at the top. In short:
+1 build it; 2 `hexagen remove`, one name; 3 yes; 4 `--force` is in with both meanings (against the
+recommendation); 5 full clean-up, exit codes 0 and 1 only (against the recommendation); 6 yes; 7 yes;
+8 refuse and name the dependents unless `--force`; 9 yes; 10 the recommended default.
 
 1. Do we build it at all, or does removal stay a hand edit? Recommended: build the smallest first version;
    a real consumer needed it and the hand edit leaves files behind unrecorded.
