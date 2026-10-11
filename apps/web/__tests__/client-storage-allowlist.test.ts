@@ -47,6 +47,7 @@ const INVENTORY_KEYS = [
   "hexagen:workspace:",
   "hexagen:workspace-lift",
   "hexagen:workspace-conflicts",
+  "hexagen:workspace-conflict-backup:",
   "hexagen:generation:",
   "hexagen:chat-history",
   "hexagen:governance:",
@@ -243,6 +244,7 @@ export const PREFERENCE_KEYS = [
   "hexagen:saved-projects-owner", // IDB: cache bookkeeping (idb-saved-projects.adapter.ts)
   "hexagen:workspace-lift", // IDB: lift stamp bookkeeping (idb-editor-workspace.adapter.ts)
   "hexagen:workspace-conflicts", // IDB: conflict diagnostics, counts only (idb-editor-workspace.adapter.ts)
+  "hexagen:workspace-conflict-backup:", // IDB: the copy that lost a workspace conflict choice, newest three per project (idb-editor-workspace.adapter.ts)
   "hexagen:generation:", // IDB: generation-result cache (idb-generation-result.adapter.ts)
   "hexagen:chat-history", // IDB: chat history (idb-chat-persistence.adapter.ts)
   "hexagen:wizard-draft:", // IDB: wizard draft, legacy / scheduled for removal (idb-wizard-draft.adapter.ts)
@@ -264,7 +266,7 @@ export const PREFERENCE_KEYS = [
   "hexagen:persistence-domain:migrated:", // localStorage: migration flag prefix (persistence-domain-registry.ts)
   "monaco-session-", // localStorage: Monaco editor session state (local-storage-monaco.adapter.ts)
   "hexagen-saved-projects", // localStorage: legacy saved-projects migration source (saved-projects-migration-step.ts)
-  "hexagen-wizard-draft", // localStorage: legacy wizard-draft migration source (wizard-draft-migration-step.ts)
+  "hexagen-wizard-draft", // localStorage: key named by the deprecated local-storage-wizard-draft.adapter.ts; its migration step is deleted
   "hexagen-editor-workspace-", // localStorage: legacy editor-workspace migration source (editor-workspace-migration-step.ts)
   "byok:keys", // localStorage: removed keys deleted at start by remove-unused-secret-keys-step.ts
   "hexagen:vault:encrypted-payload", // localStorage: removed keys deleted at start by remove-unused-secret-keys-step.ts

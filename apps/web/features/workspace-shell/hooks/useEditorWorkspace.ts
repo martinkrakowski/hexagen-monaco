@@ -186,10 +186,23 @@ export function useEditorWorkspace() {
       clearTimeout(pendingWriteRef.current);
       pendingWriteRef.current = null;
     }
+    // Item 1: null the session id before the async clear so an edit that lands
+    // during the discard cannot arm the hook's own debounce (which would
+    // otherwise fire saveWorkspace after the discard and rewrite the cache).
+    sessionIdRef.current = null;
 
     const persistence = getEditorWorkspacePersistence();
     await persistence.clearWorkspace(sessionId);
-    sessionIdRef.current = null;
+    // If another session took over while the clear was in flight, this late
+    // discard must not cancel the new session's pending write or wipe its state.
+    if (sessionIdRef.current !== null) return;
+    // Item 1: cancel any pending write again right after the clear, in case a
+    // timer was armed between the clear above and now, so nothing fires after
+    // the discard and resurrects the discarded workspace.
+    if (pendingWriteRef.current) {
+      clearTimeout(pendingWriteRef.current);
+      pendingWriteRef.current = null;
+    }
     setState({ selectedFileId: null, files: new Map(), unpushed: false });
     setIsLoaded(true);
   }, []);
