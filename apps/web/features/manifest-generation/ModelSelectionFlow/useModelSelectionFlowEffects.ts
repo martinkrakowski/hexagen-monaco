@@ -13,6 +13,7 @@ import {
 } from "./modelPreferencesStorage";
 import type { ModelSelectionFlowState } from "./types";
 import type { GenerateWithAiErrorCode } from "../GenerateWithAi/GenerateWithAiError";
+import { GENERATE_WITH_AI_ERROR_MESSAGES } from "../GenerateWithAi/GenerateWithAiError";
 
 interface UseModelSelectionFlowEffectsOptions {
   flowState: ModelSelectionFlowState;
@@ -169,6 +170,15 @@ export function useModelSelectionFlowEffects({
       const lastModelId = preferences.current.lastModelId;
 
       if (preferences.current.rememberChoice && lastModelId) {
+        if (flowState.hardwareCapabilities?.isWebGPUSupported === false) {
+          setFlowState((prev) => ({
+            ...prev,
+            state: "unsupported",
+            errorCode: "webgpu_unavailable",
+            error: GENERATE_WITH_AI_ERROR_MESSAGES.webgpu_unavailable,
+          }));
+          return;
+        }
         setFlowState((prev) => ({
           ...prev,
           selectedModelId: lastModelId,
@@ -205,6 +215,7 @@ export function useModelSelectionFlowEffects({
             }));
 
             if (
+              flowState.hardwareCapabilities?.isWebGPUSupported !== false &&
               preferences.current.autoLoadEnabled &&
               engineState.status !== "ready"
             ) {
@@ -226,6 +237,7 @@ export function useModelSelectionFlowEffects({
   }, [
     engineState.loadedModelId,
     engineState.status,
+    flowState.hardwareCapabilities,
     hasAnyCachedModel,
     hasModelInCache,
     initializeModel,

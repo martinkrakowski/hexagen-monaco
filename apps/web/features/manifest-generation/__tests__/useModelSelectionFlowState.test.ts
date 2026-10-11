@@ -125,6 +125,7 @@ import {
   type LLMEngineState,
   DomainModelId,
 } from "@hexagen/local-llm";
+import { GENERATE_WITH_AI_ERROR_MESSAGES } from "../GenerateWithAi/GenerateWithAiError";
 
 describe("useModelSelectionFlowState", () => {
   let mockEngineState: LLMEngineState;
@@ -245,6 +246,31 @@ describe("useModelSelectionFlowState", () => {
     return view;
   }
 
+  /**
+   * Make the mocked collaborators resolve WebGPU detection to supported:true —
+   * the environment the local-download-path tests presuppose.
+   */
+  function stubWebGPUSupported() {
+    mockGpuDetector.detect.mockResolvedValue({
+      success: true,
+      value: { supported: true, maxTextureSize: 16384, supportsFP16: true },
+    });
+    mockHwProfiler.profile.mockResolvedValue({
+      success: true,
+      value: {
+        cpuCores: 8,
+        ramMB: null,
+        gpu: {
+          supported: true,
+          vendor: null,
+          architecture: null,
+          maxBufferMB: null,
+        },
+        deviceClass: "unknown",
+      },
+    });
+  }
+
   describe("Initial State", () => {
     it("should start in idle state", async () => {
       const { result } = await renderFlowState();
@@ -260,15 +286,77 @@ describe("useModelSelectionFlowState", () => {
       );
     });
 
-    it("leaves state idle and sets no error code when WebGPU is unavailable (see #766)", async () => {
+    it("leaves state idle and sets no error code when WebGPU is unavailable at mount (see #766)", async () => {
       const { result } = await renderFlowState();
       assert.strictEqual(result.current[0].state, "idle");
       assert.strictEqual(result.current[0].errorCode, undefined);
     });
+  });
 
-    it.todo(
-      "should transition to unsupported with errorCode webgpu_unavailable when WebGPU is unavailable (#766)",
-    );
+  describe("WebGPU unavailable guard on the local path (#766)", () => {
+    it("selectLocalModel goes to unsupported with errorCode webgpu_unavailable and does not initialize", async () => {
+      const { result } = await renderFlowState();
+      const { selectLocalModel } = result.current[1];
+
+      await act(async () => {
+        selectLocalModel(DomainModelId.QWEN3_8B, false);
+      });
+
+      assert.strictEqual(result.current[0].state, "unsupported");
+      assert.strictEqual(result.current[0].errorCode, "webgpu_unavailable");
+      assert.strictEqual(
+        result.current[0].error,
+        GENERATE_WITH_AI_ERROR_MESSAGES.webgpu_unavailable,
+      );
+      assert.strictEqual(mockInitializeModel.mock.calls.length, 0);
+      assert.strictEqual(mockSaveModelPreferences.mock.calls.length, 0);
+    });
+
+    it("selectLocalModel with WebGPU supported proceeds to model_downloading and initializes", async () => {
+      stubWebGPUSupported();
+      const { result } = await renderFlowState();
+      const { selectLocalModel } = result.current[1];
+
+      await act(async () => {
+        selectLocalModel(DomainModelId.QWEN3_8B, false);
+      });
+
+      assert.strictEqual(result.current[0].state, "model_downloading");
+      assert.ok(mockInitializeModel.mock.calls.length > 0);
+    });
+
+    it("repairModelDownload goes to unsupported with WebGPU unavailable and does not initialize", async () => {
+      const { result } = await renderFlowState();
+      const { setError, repairModelDownload } = result.current[1];
+
+      act(() => {
+        setError("Generation failed");
+      });
+      assert.strictEqual(result.current[0].state, "error");
+
+      await act(async () => {
+        repairModelDownload(DomainModelId.QWEN3_8B);
+      });
+
+      assert.strictEqual(result.current[0].state, "unsupported");
+      assert.strictEqual(result.current[0].errorCode, "webgpu_unavailable");
+      assert.strictEqual(mockInitializeModel.mock.calls.length, 0);
+    });
+
+    it("from unsupported, transitionTo('model_selection') returns to model_selection", async () => {
+      const { result } = await renderFlowState();
+      const { selectLocalModel, transitionTo } = result.current[1];
+
+      await act(async () => {
+        selectLocalModel(DomainModelId.QWEN3_8B, false);
+      });
+      assert.strictEqual(result.current[0].state, "unsupported");
+
+      act(() => {
+        transitionTo("model_selection");
+      });
+      assert.strictEqual(result.current[0].state, "model_selection");
+    });
   });
 
   describe("State Transitions", () => {
@@ -284,6 +372,7 @@ describe("useModelSelectionFlowState", () => {
     });
 
     it("selecting a model moves to model_downloading", async () => {
+      stubWebGPUSupported();
       const { result } = await renderFlowState();
       const { selectLocalModel } = result.current[1];
 
@@ -301,6 +390,7 @@ describe("useModelSelectionFlowState", () => {
     });
 
     it("should transition model_downloading → generating (model ready)", async () => {
+      stubWebGPUSupported();
       llmContext = {
         ...llmContext,
         engineState: createLLMEngineState("ready", 100, DomainModelId.QWEN3_8B),
@@ -319,6 +409,7 @@ describe("useModelSelectionFlowState", () => {
     });
 
     it("should transition model_downloading → error (download fails)", async () => {
+      stubWebGPUSupported();
       mockInitializeModel.mockRejectedValue(new Error("Download failed"));
       llmContext = { ...llmContext, initializeModel: mockInitializeModel };
       const { result } = await renderFlowState();
@@ -418,6 +509,7 @@ describe("useModelSelectionFlowState", () => {
     });
 
     it("should select local model with remember=true/false", async () => {
+      stubWebGPUSupported();
       const { result } = await renderFlowState();
       const { selectLocalModel } = result.current[1];
 

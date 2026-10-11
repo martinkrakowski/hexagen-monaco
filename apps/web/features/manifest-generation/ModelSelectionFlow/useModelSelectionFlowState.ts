@@ -61,6 +61,7 @@ export function useModelSelectionFlowState(
       initializeModel,
       cancelDownload,
       downloadIntentRef,
+      isWebGPUSupported: flowState.hardwareCapabilities?.isWebGPUSupported,
     });
 
   const {

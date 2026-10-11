@@ -8,12 +8,14 @@ import {
 } from "./modelPreferencesStorage";
 import type { ModelSelectionFlowState } from "./types";
 import { deriveStateFromEvent } from "./types";
+import { GENERATE_WITH_AI_ERROR_MESSAGES } from "../GenerateWithAi/GenerateWithAiError";
 
 interface UseModelDownloadActionsOptions {
   setFlowState: React.Dispatch<React.SetStateAction<ModelSelectionFlowState>>;
   initializeModel: (modelId: DomainModelId) => Promise<void>;
   cancelDownload: () => void;
   downloadIntentRef: RefObject<number>;
+  isWebGPUSupported: boolean | undefined;
 }
 
 export function useModelDownloadActions({
@@ -21,9 +23,21 @@ export function useModelDownloadActions({
   initializeModel,
   cancelDownload,
   downloadIntentRef,
+  isWebGPUSupported,
 }: UseModelDownloadActionsOptions) {
   const selectLocalModel = useCallback(
     (modelId: DomainModelId, remember: boolean) => {
+      if (isWebGPUSupported === false) {
+        setFlowState((prev) => ({
+          ...prev,
+          state: deriveStateFromEvent(prev.state, {
+            type: "WEBGPU_UNAVAILABLE",
+          }),
+          errorCode: "webgpu_unavailable",
+          error: GENERATE_WITH_AI_ERROR_MESSAGES.webgpu_unavailable,
+        }));
+        return;
+      }
       const intentId = ++downloadIntentRef.current;
       const nextState = deriveStateFromEvent("model_selection", {
         type: "SELECT_LOCAL_MODEL",
@@ -61,7 +75,7 @@ export function useModelDownloadActions({
         }
       });
     },
-    [initializeModel, setFlowState, downloadIntentRef],
+    [initializeModel, setFlowState, downloadIntentRef, isWebGPUSupported],
   );
 
   const cancelModelDownload = useCallback(() => {
@@ -84,6 +98,17 @@ export function useModelDownloadActions({
 
   const repairModelDownload = useCallback(
     (modelId: DomainModelId) => {
+      if (isWebGPUSupported === false) {
+        setFlowState((prev) => ({
+          ...prev,
+          state: deriveStateFromEvent(prev.state, {
+            type: "WEBGPU_UNAVAILABLE",
+          }),
+          errorCode: "webgpu_unavailable",
+          error: GENERATE_WITH_AI_ERROR_MESSAGES.webgpu_unavailable,
+        }));
+        return;
+      }
       clearModelCacheMetadata(modelId);
 
       const intentId = ++downloadIntentRef.current;
@@ -109,7 +134,7 @@ export function useModelDownloadActions({
         }));
       });
     },
-    [initializeModel, setFlowState, downloadIntentRef],
+    [initializeModel, setFlowState, downloadIntentRef, isWebGPUSupported],
   );
 
   return { selectLocalModel, cancelModelDownload, repairModelDownload };
