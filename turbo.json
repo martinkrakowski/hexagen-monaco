@@ -110,8 +110,36 @@
       "outputs": [],
       "cache": false
     },
+    "@hexagen/orchestration#test": {
+      "dependsOn": ["^build", "build"],
+      "inputs": [
+        "src/**/*.ts",
+        "src/**/*.tsx",
+        "__tests__/**/*.ts",
+        "__tests__/**/*.tsx",
+        "tests/**/*.ts",
+        "tsconfig*.json",
+        "package.json"
+      ],
+      "outputs": [],
+      "cache": false
+    },
     "typecheck:test": {
       "dependsOn": ["^build"],
+      "inputs": [
+        "src/**/*.ts",
+        "src/**/*.tsx",
+        "__tests__/**/*.ts",
+        "__tests__/**/*.tsx",
+        "tests/**/*.ts",
+        "tsconfig*.json",
+        "package.json"
+      ],
+      "outputs": [],
+      "cache": false
+    },
+    "@hexagen/sync#typecheck:test": {
+      "dependsOn": ["^build", "build"],
       "inputs": [
         "src/**/*.ts",
         "src/**/*.tsx",
@@ -130,6 +158,11 @@
     },
     "typecheck": {
       "dependsOn": ["^build"],
+      "outputs": [],
+      "cache": true
+    },
+    "web#typecheck": {
+      "dependsOn": ["^build", "build"],
       "outputs": [],
       "cache": true
     }
