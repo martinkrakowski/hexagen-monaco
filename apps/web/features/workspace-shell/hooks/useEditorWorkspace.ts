@@ -90,9 +90,28 @@ export function useEditorWorkspace() {
     unpushed: false,
   });
   const [isLoaded, setIsLoaded] = useState(false);
+  const [reloadEpoch, setReloadEpoch] = useState(0);
   const pendingWriteRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sessionIdRef = useRef<string | null>(null);
   const writesSuspendedRef = useRef(false);
+  const resumeWritesAtEpochRef = useRef<number | null>(null);
+
+  // An updater queued during a conflict reload runs when React flushes, not
+  // when the update was called; resuming writes synchronously after
+  // setState would let such an updater (running after the resume) arm a
+  // save of the copy that LOST the conflict. Resume only in the effect that
+  // runs after the commit that applied the loaded state: by then every
+  // updater queued before that commit has already run while writes were
+  // still suspended.
+  useEffect(() => {
+    if (
+      resumeWritesAtEpochRef.current !== null &&
+      resumeWritesAtEpochRef.current === reloadEpoch
+    ) {
+      resumeWritesAtEpochRef.current = null;
+      writesSuspendedRef.current = false;
+    }
+  }, [reloadEpoch]);
 
   const loadWorkspace = useCallback(async (sessionId: string) => {
     const persistence = getEditorWorkspacePersistence();
@@ -173,6 +192,7 @@ export function useEditorWorkspace() {
 
   const setSessionId = useCallback(
     async (sessionId: string) => {
+      resumeWritesAtEpochRef.current = null;
       writesSuspendedRef.current = false;
       if (pendingWriteRef.current) {
         clearTimeout(pendingWriteRef.current);
@@ -185,6 +205,7 @@ export function useEditorWorkspace() {
   );
 
   const clearSession = useCallback(async () => {
+    resumeWritesAtEpochRef.current = null;
     writesSuspendedRef.current = false;
     const sessionId = sessionIdRef.current;
     if (!sessionId) return;
@@ -309,7 +330,11 @@ export function useEditorWorkspace() {
       }
       setState(stateFromLoaded(result.value));
       setIsLoaded(true);
-      writesSuspendedRef.current = false;
+      setReloadEpoch((e) => {
+        const next = e + 1;
+        resumeWritesAtEpochRef.current = next;
+        return next;
+      });
       return true;
     },
     [],

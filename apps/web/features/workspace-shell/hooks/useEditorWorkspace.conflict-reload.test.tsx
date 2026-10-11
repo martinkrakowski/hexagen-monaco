@@ -111,7 +111,7 @@ describe("useEditorWorkspace reloadAfterConflict", () => {
       success: true,
       value: loadedWorkspace("loaded"),
     };
-    let reloadP: Promise<boolean>;
+    let reloadP!: Promise<boolean>;
     await act(async () => {
       reloadP = result.current.reloadAfterConflict("p1");
       await vi.advanceTimersByTimeAsync(100);
@@ -153,7 +153,7 @@ describe("useEditorWorkspace reloadAfterConflict", () => {
       success: true,
       value: loadedWorkspace("loaded"),
     };
-    let reloadP: Promise<boolean>;
+    let reloadP!: Promise<boolean>;
     await act(async () => {
       reloadP = result.current.reloadAfterConflict("p1");
       await vi.advanceTimersByTimeAsync(100);
@@ -304,5 +304,132 @@ describe("useEditorWorkspace reloadAfterConflict", () => {
 
     assert.equal(outcome, false, "a thrown load is treated as a failed load");
     assert.equal(harness.state.saveCalls, 0);
+  });
+
+  it("an update queued during the reload cannot save the copy that lost (markFileSaved)", async () => {
+    const result = await mountWithSession();
+    await act(async () => {
+      result.current.updateFile("a.ts", "loser");
+    });
+
+    harness.state.holdLoad = true;
+    harness.state.loadResult = {
+      success: true,
+      value: loadedWorkspace("fresh"),
+    };
+    let reloadP!: Promise<boolean>;
+    await act(async () => {
+      reloadP = result.current.reloadAfterConflict("p1");
+      await vi.advanceTimersByTimeAsync(100);
+    });
+
+    await act(async () => {
+      result.current.markFileSaved("a.ts");
+      harness.state.resolveLoad!();
+      await reloadP;
+    });
+
+    await act(async () => {
+      vi.advanceTimersByTime(1000);
+    });
+
+    assert.ok(
+      !harness.state.savedPayloads.some(
+        (p) =>
+          typeof p === "object" &&
+          p !== null &&
+          (p as { files?: Record<string, { content?: string }> }).files?.[
+            "a.ts"
+          ]?.content === "loser",
+      ),
+      "saveWorkspace was never called with the pre-reload content",
+    );
+    const file = result.current.state.files.get("a.ts");
+    assert.ok(file, "the state holds the loaded file");
+    assert.equal(file.content, "fresh");
+  });
+
+  it("an update queued during the reload cannot save the copy that lost (updateFile)", async () => {
+    const result = await mountWithSession();
+    await act(async () => {
+      result.current.updateFile("a.ts", "loser");
+    });
+
+    harness.state.holdLoad = true;
+    harness.state.loadResult = {
+      success: true,
+      value: loadedWorkspace("fresh"),
+    };
+    let reloadP!: Promise<boolean>;
+    await act(async () => {
+      reloadP = result.current.reloadAfterConflict("p1");
+      await vi.advanceTimersByTimeAsync(100);
+    });
+
+    await act(async () => {
+      result.current.updateFile("a.ts", "loser-2");
+      harness.state.resolveLoad!();
+      await reloadP;
+    });
+
+    await act(async () => {
+      vi.advanceTimersByTime(1000);
+    });
+
+    assert.ok(
+      !harness.state.savedPayloads.some(
+        (p) =>
+          typeof p === "object" &&
+          p !== null &&
+          (p as { files?: Record<string, { content?: string }> }).files?.[
+            "a.ts"
+          ]?.content === "loser-2",
+      ),
+      "saveWorkspace was never called with the pre-reload content",
+    );
+    const file = result.current.state.files.get("a.ts");
+    assert.ok(file, "the state holds the loaded file");
+    assert.equal(file.content, "fresh");
+  });
+
+  it("after the reload has committed, the next edit saves once, with the loaded copy plus the edit", async () => {
+    const result = await mountWithSession();
+    await act(async () => {
+      result.current.updateFile("a.ts", "edited");
+    });
+
+    harness.state.holdLoad = true;
+    harness.state.loadResult = {
+      success: true,
+      value: loadedWorkspace("loaded"),
+    };
+    let reloadP!: Promise<boolean>;
+    await act(async () => {
+      reloadP = result.current.reloadAfterConflict("p1");
+      await vi.advanceTimersByTimeAsync(100);
+    });
+
+    await act(async () => {
+      harness.state.resolveLoad!();
+      await reloadP;
+    });
+
+    harness.state.saveCalls = 0;
+    await act(async () => {
+      result.current.updateFile("a.ts", "loaded+edit");
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+
+    assert.equal(
+      harness.state.saveCalls,
+      1,
+      "the next edit saves exactly once",
+    );
+    const payload = harness.state.savedPayloads[0] as {
+      files: Record<string, { content: string }>;
+    };
+    assert.equal(payload.files["a.ts"].content, "loaded+edit");
   });
 });
