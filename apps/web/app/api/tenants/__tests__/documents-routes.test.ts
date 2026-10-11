@@ -195,6 +195,53 @@ describe("document routes", () => {
     assert.equal(body.payload.v, "second");
   });
 
+  it("a stale If-Match 409 carries the current ETag, on the refusal and on a follow-up GET", async () => {
+    signedInAs(OWNER);
+    const first = await DETAIL_PUT(
+      putReq(OWNER, KIND, DOC_ID, JSON.stringify({ payload: { v: "first" } })),
+      detailParams(OWNER, KIND, DOC_ID),
+    );
+    assert.equal(first.status, 200);
+    const rev1 = revOf(first);
+    // Advance to the next rev with the RIGHT If-Match.
+    const second = await DETAIL_PUT(
+      putReq(
+        OWNER,
+        KIND,
+        DOC_ID,
+        JSON.stringify({ payload: { v: "second" } }),
+        {
+          "If-Match": `"rev:${rev1}"`,
+        },
+      ),
+      detailParams(OWNER, KIND, DOC_ID),
+    );
+    assert.equal(second.status, 200);
+    const rev2 = revOf(second);
+    // Stale PUT pointing at the old rev.
+    const stale = await DETAIL_PUT(
+      putReq(OWNER, KIND, DOC_ID, JSON.stringify({ payload: { v: "stale" } }), {
+        "If-Match": `"rev:${rev1}"`,
+      }),
+      detailParams(OWNER, KIND, DOC_ID),
+    );
+    assert.equal(stale.status, 409);
+    const staleBody = (await stale.json()) as {
+      error: string;
+      statusCode: number;
+    };
+    assert.equal(staleBody.error, "Conflict");
+    assert.equal(staleBody.statusCode, 409);
+    // The ETag is the STORED revision, not the sent one.
+    assert.equal(stale.headers.get("ETag"), `"rev:${rev2}"`);
+    const fetched = await DETAIL_GET(
+      new NextRequest(detailUrl(OWNER, KIND, DOC_ID)),
+      detailParams(OWNER, KIND, DOC_ID),
+    );
+    assert.equal(fetched.status, 200);
+    assert.equal(fetched.headers.get("ETag"), `"rev:${rev2}"`);
+  });
+
   it("a matching If-Match returns 200 with the next rev in the ETag", async () => {
     signedInAs(OWNER);
     const first = await DETAIL_PUT(
