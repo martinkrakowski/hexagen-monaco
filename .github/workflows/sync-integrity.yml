@@ -595,7 +595,21 @@ jobs:
             sleep 15
           done
 
-      - name: "Run Scoped Test Suites"
+      # The two turbo tasks run ONE AFTER THE OTHER, not in one invocation.
+      # In one invocation turbo started sync's contract suite (which spawns
+      # the built CLI and does real git and filesystem work) beside the two
+      # unit suites, and on this runner the contract tests then ran into
+      # their 60 s limit in `check-drift.contract.test.ts` (8 of 26 first
+      # attempts on 2026-10-10/11; main went red on `844e7a75`). No limit is
+      # raised and no test is skipped: the same suites run, in sequence. The
+      # filters are the same in both steps, so a `test:contract` task added
+      # to arch-linter later is picked up without an edit here.
+      - name: "Run Scoped Test Suites (unit)"
         if: steps.scope.outputs.run_tests == 'true'
         shell: bash
-        run: yarn turbo run test test:contract --filter=@hexagen/sync --filter=@hexagen/arch-linter --output-logs=full --log-order=stream
+        run: yarn turbo run test --filter=@hexagen/sync --filter=@hexagen/arch-linter --output-logs=full --log-order=stream
+
+      - name: "Run Scoped Test Suites (contract, after the unit suites)"
+        if: steps.scope.outputs.run_tests == 'true'
+        shell: bash
+        run: yarn turbo run test:contract --filter=@hexagen/sync --filter=@hexagen/arch-linter --output-logs=full --log-order=stream
