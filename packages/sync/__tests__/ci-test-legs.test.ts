@@ -83,10 +83,64 @@ describe("scripts/ci/test-legs.mjs", () => {
     ]);
     assert.deepEqual(matrix, {
       include: [
-        { leg: "a", filters: "--filter=one --filter=two" },
-        { leg: "b", filters: "" },
+        { leg: "a", filters: "--filter=one --filter=two", args: "" },
+        { leg: "b", filters: "", args: "" },
       ],
     });
+  });
+
+  it("emits n shard entries for a sharded leg, in order, and keeps other legs single", () => {
+    const matrix = toMatrix(
+      [
+        { leg: "web", packages: ["web"] },
+        { leg: "sync", packages: ["@hexagen/sync"] },
+      ],
+      { web: 3 },
+    );
+    assert.deepEqual(matrix, {
+      include: [
+        { leg: "web 1/3", filters: "--filter=web", args: "-- --shard=1/3" },
+        { leg: "web 2/3", filters: "--filter=web", args: "-- --shard=2/3" },
+        { leg: "web 3/3", filters: "--filter=web", args: "-- --shard=3/3" },
+        { leg: "sync", filters: "--filter=@hexagen/sync", args: "" },
+      ],
+    });
+  });
+
+  it("uses shard indexes exactly 1..n, no gap, no duplicate", () => {
+    const matrix = toMatrix([{ leg: "web", packages: ["web"] }], { web: 5 });
+    const shardLegs = matrix.include.map((entry) => entry.leg);
+    const indexes = shardLegs.map((leg) =>
+      Number(leg.split(" ")[1].split("/")[0]),
+    );
+    assert.deepEqual(indexes, [1, 2, 3, 4, 5]);
+    assert.equal(new Set(indexes).size, 5);
+    assert.ok(indexes.every((i) => i >= 1 && i <= 5));
+  });
+
+  it("throws for a shard count that is not an integer >= 2", () => {
+    assert.throws(
+      () => toMatrix([{ leg: "web", packages: ["web"] }], { web: 1 }),
+      /integer >= 2/,
+    );
+    assert.throws(
+      () => toMatrix([{ leg: "web", packages: ["web"] }], { web: 2.5 }),
+      /integer >= 2/,
+    );
+  });
+
+  it("throws for a sharded key that names no leg", () => {
+    assert.throws(
+      () => toMatrix([{ leg: "web", packages: ["web"] }], { ghost: 3 }),
+      /"ghost" names no leg/,
+    );
+  });
+
+  it("throws for a sharded leg with more than one package", () => {
+    assert.throws(
+      () => toMatrix([{ leg: "web", packages: ["web", "web2"] }], { web: 3 }),
+      /more than one package/,
+    );
   });
 
   it("--check passes on the real repo", () => {

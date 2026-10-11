@@ -6,9 +6,13 @@ function ask(prompt: string): Promise<string> {
     output: process.stdout,
   });
   return new Promise((resolve) => {
+    // End of input (Ctrl-D, a closed pipe) closes the interface without
+    // calling the question's callback: answer "" so the caller's default
+    // applies, instead of a promise that never settles.
+    rl.once("close", () => resolve(""));
     rl.question(prompt, (answer) => {
-      rl.close();
       resolve(answer);
+      rl.close();
     });
   });
 }

@@ -13,6 +13,7 @@ import {
   templateInfoCommand,
 } from "./commands/templates/index.js";
 import { addTemplateCommand } from "./commands/add/index.js";
+import { removeTemplateCommand } from "./commands/remove/index.js";
 import { validateTemplatesCommand } from "./commands/add/validate.js";
 import { editCommander } from "./commands/arch/edit.js";
 import { refactorCommander } from "./commands/arch/refactor.js";
@@ -200,6 +201,28 @@ function buildProgram(): Command {
         await addTemplateCommand(ids, {
           force: options.force,
           withTests: options.withTests,
+        });
+      },
+    );
+
+  program
+    .command("remove <template>")
+    .description("Remove an installed add-on template from the current project")
+    .option("--dry-run", "Print what would be removed and change nothing")
+    .option("--keep-files", "Remove the registry entry only; delete no file")
+    .option(
+      "--force",
+      "Skip the prompt, remove although other templates require it, and delete files changed since install",
+    )
+    .action(
+      async (
+        template: string,
+        options: { dryRun?: boolean; keepFiles?: boolean; force?: boolean },
+      ) => {
+        await removeTemplateCommand(template, {
+          dryRun: options.dryRun,
+          keepFiles: options.keepFiles,
+          force: options.force,
         });
       },
     );
