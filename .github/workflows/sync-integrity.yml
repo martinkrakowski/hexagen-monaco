@@ -594,3 +594,5 @@ jobs:
         if: steps.scope.outputs.run_tests == 'true'
         shell: bash
         run: yarn turbo run test test:contract --filter=@hexagen/sync --filter=@hexagen/arch-linter --output-logs=full --log-order=stream
+
+# planted: no change to any check; the run is cancelled by hand
