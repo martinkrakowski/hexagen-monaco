@@ -4,7 +4,7 @@ import type {
   TemplateConfig,
   AnswerMap,
 } from "../../domain/index.js";
-import { isInstalled } from "../../domain/index.js";
+import { isInstalled, mergeGeneratedFiles } from "../../domain/index.js";
 import { resolveDependencies } from "../resolve-dependencies.js";
 import type { TemplateRegistryPort } from "../ports/template-registry.port.js";
 import type { QuestionEnginePort } from "../ports/question-engine.port.js";
@@ -76,11 +76,19 @@ export class AddTemplateUseCase {
 
       allWarnings.push(...warnings);
 
+      // Merge, not replace: a re-add must keep the file records the earlier
+      // install wrote (conflict-skipped or no-longer-emitted paths), so a
+      // future remove can list every file this template ever wrote.
       const record = {
         installedAt: new Date().toISOString(),
         version: manifest.version,
         answers,
-        generatedFiles,
+        generatedFiles: mergeGeneratedFiles(
+          Object.hasOwn(config.templates, id)
+            ? config.templates[id]?.generatedFiles
+            : undefined,
+          generatedFiles,
+        ),
       };
       config.templates[id] = record;
       applied.push(id);
