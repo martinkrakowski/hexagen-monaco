@@ -559,12 +559,14 @@ export class CachedEditorWorkspaceAdapter
     }
     loads.add(load);
     try {
-      return await load;
-    } finally {
+      const result = await load;
       // The caller has its answer: saves of this id are accepted again. (Not
       // earlier: a save of the old in-memory content while the load is still
-      // out would be uploaded over the copy that was taken.)
-      this.reloadRequired.delete(sessionId);
+      // out would be uploaded over the copy that was taken. And not after a
+      // load that failed: the caller then still holds the copy that lost.)
+      if (result.success) this.reloadRequired.delete(sessionId);
+      return result;
+    } finally {
       loads.delete(load);
       if (loads.size === 0 && this.loadsInFlight.get(sessionId) === loads) {
         this.loadsInFlight.delete(sessionId);
@@ -1348,6 +1350,20 @@ export class CachedEditorWorkspaceAdapter
         this.logger.warn(
           `workspace ${sessionId}: a discard overtook "keep this device's copy" and the other device's copy could not be put back on the server (${back.message}); it is kept in this browser's backups`,
         );
+        // The server still holds what this resolve uploaded: discarded
+        // content. Leave a discard marker at that revision, so the next load
+        // deletes it instead of taking it for another device's change. (When
+        // the server refused the put-back as a conflict, another device has
+        // written since and its copy stands.)
+        if (back.reason !== "conflict") {
+          await this.tryStamp(sessionId, {
+            ownerId: userId,
+            rev: uploadedRev,
+            syncedUpdatedAt: 0,
+            confirmed: false,
+            discarded: true,
+          });
+        }
       }
     };
 
@@ -1805,6 +1821,11 @@ export class CachedEditorWorkspaceAdapter
     if (this.discarding.has(sessionId)) return cacheResult;
     // A resolve may have begun, or ended, while this save was at the awaits
     // above: its content must not be armed for upload over the copy taken.
+    // This relies on the cache keeping the order of its operations (IndexedDB
+    // does): this save's cache write was issued before the resolve's read of
+    // the browser copy, so the resolve backed it up and replaced it. A cache
+    // without that order could leave this save's content under the resolve's
+    // stamp, and the next load would upload it.
     const refusedLate = this.saveRefusedByResolve(sessionId);
     if (refusedLate !== null) return refusedLate;
     this.armRemoteWrite(sessionId, workspace, userId, precondition);

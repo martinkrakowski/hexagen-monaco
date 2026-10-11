@@ -6824,7 +6824,8 @@ describe("workspace conflict resolves: backup, one at a time, discard", () => {
   });
 
   it("a discard during keep when the put-back fails: still discarded, warned, the copy kept in backups", async () => {
-    const { adapter, cache, fetchImpl, warns } = await pendingConflict();
+    const { adapter, cache, fetchImpl, warns, server } =
+      await pendingConflict();
     const realFetch = fetchImpl.getMockImplementation()!;
     let putCount = 0;
     fetchImpl.mockImplementation(
@@ -6860,6 +6861,18 @@ describe("workspace conflict resolves: backup, one at a time, discard", () => {
       makeWorkspace(2000),
       "the other device's copy is kept in the backups",
     );
+    // What the resolve uploaded (rev 10) is discarded content and is still on
+    // the server: a discard marker at THAT revision makes the next load
+    // delete it instead of adopting it as another device's change.
+    const marker = await cache.getLiftStamp(UUID);
+    assert.ok(marker, "a marker was left");
+    assert.equal(marker!.discarded, true, "it is a discard marker");
+    assert.equal(marker!.rev, 10, "at the uploaded revision");
+    fetchImpl.mockImplementation(realFetch);
+    const reloaded = await adapter.loadWorkspace(UUID);
+    assert.ok(reloaded.success);
+    assert.equal(reloaded.value, null, "the discarded content does not return");
+    assert.equal(server.has(UUID), false, "the next load deleted the upload");
   });
 
   it("a discard during keep (first GET parked): no PUT at all, the other device's copy survives", async () => {
