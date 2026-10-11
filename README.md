@@ -251,12 +251,12 @@ npx hexagen remove <id> --force      # skip the prompt and override the refusals
 - Another installed template requires this one — it names them; `--force` overrides.
 - An installed template that can no longer be read may require it — `--force` overrides.
 - The registry records a path outside the project — never overridden by `--force`; `--keep-files` drops the entry without touching a file.
-- There is no registry file in the project.
+- There is no registry file in the project (with `--force` this is answered as "not installed", exit code 0).
 - It is run without a terminal and without `--force` — it never waits for input.
 
 Exit codes: 0 when the removal worked (also when files were kept and listed, when the template was not installed, after a dry run, and when you answer "no" to the prompt); 1 on a refusal or an error. There is no other exit code.
 
-In a monorepo it acts on the registry of the project root only, and says so.
+It prints the project root it acts on before the plan. In a monorepo it acts on the registry of that root only, and says so.
 
 ### Catalog
 
