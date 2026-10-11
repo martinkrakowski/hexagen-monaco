@@ -123,11 +123,14 @@ function makeServerFetch(
           headers: { ETag: `"rev:${doc.rev}"` },
         });
       }
-      // Item 11: a 409 carries NO ETag (the real route's 409 has none).
+      // Item 11: a 409 carries the stored revision, as the real route does since #856.
       if (ifMatch !== null) {
         if (!doc) return new Response("not found", { status: 404 });
         if (ifMatch !== doc.rev) {
-          return new Response("conflict", { status: 409 });
+          return new Response("conflict", {
+            status: 409,
+            headers: { ETag: `"rev:${doc.rev}"` },
+          });
         }
         doc.payload = body.payload;
         doc.rev = nextRev();
@@ -642,6 +645,101 @@ describe("CachedEditorWorkspaceAdapter save + AM rules", () => {
       putCallsOf(fetchImpl).length,
       1,
       "no further PUT while paused",
+    );
+  });
+
+  it("a 409 on save carries the stored revision: it is logged and recorded", async () => {
+    const { adapter, cache, server, fetchImpl, warns } = makeAdapters();
+    const ws = makeWorkspace(2000);
+    await cache.saveWorkspace(UUID, ws);
+    await cache.setLiftStamp(UUID, {
+      ownerId: "user-1",
+      rev: 5,
+      syncedUpdatedAt: 2000,
+      confirmed: true,
+    });
+    server.set(UUID, { payload: ws, rev: 5, updatedAt: 2000, projectId: UUID });
+
+    await adapter.loadWorkspace(UUID);
+
+    server.get(UUID)!.rev = 9; // server moved
+    await adapter.saveWorkspace(UUID, makeWorkspace(3000));
+    await vi.advanceTimersByTimeAsync(REMOTE_DEBOUNCE_MS);
+
+    assert.equal(putCallsOf(fetchImpl).length, 1, "exactly one PUT");
+
+    const rec = await cache.getConflicts();
+    assert.ok(rec && rec.count === 1);
+    assert.equal(rec!.last[0]!.where, "save");
+    assert.equal(rec!.last[0]!.stampRev, 5);
+    assert.equal(rec!.last[0]!.serverRev, 9);
+
+    assert.ok(
+      warns.some((w) => /save conflict: one PUT, server rev=9/.test(w)),
+    );
+
+    await adapter.saveWorkspace(UUID, makeWorkspace(4000));
+    await vi.advanceTimersByTimeAsync(REMOTE_DEBOUNCE_MS);
+    assert.equal(
+      putCallsOf(fetchImpl).length,
+      1,
+      "no further PUT while paused",
+    );
+  });
+
+  it("a 409 on save with no ETag: the stored revision is unknown", async () => {
+    const { adapter, cache, server, fetchImpl, warns } = makeAdapters();
+    const ws = makeWorkspace(2000);
+    await cache.saveWorkspace(UUID, ws);
+    await cache.setLiftStamp(UUID, {
+      ownerId: "user-1",
+      rev: 5,
+      syncedUpdatedAt: 2000,
+      confirmed: true,
+    });
+    server.set(UUID, { payload: ws, rev: 5, updatedAt: 2000, projectId: UUID });
+
+    await adapter.loadWorkspace(UUID);
+
+    fetchImpl.mockImplementation(
+      async (url: string | URL | Request, init?: RequestInit) => {
+        const method = (init?.method ?? "GET").toUpperCase();
+        const match = /\/api\/tenants\/(.+)\/documents\/workspace\/(.+)/.exec(
+          String(url),
+        );
+        const id = match![2]!;
+        if (method === "GET") {
+          const doc = server.get(id);
+          if (!doc) return new Response(null, { status: 404 });
+          return new Response(
+            JSON.stringify({
+              kind: "workspace",
+              id,
+              projectId: doc.projectId,
+              payload: doc.payload,
+              updatedAt: doc.updatedAt,
+            }),
+            { status: 200, headers: { ETag: `"rev:${doc.rev}"` } },
+          );
+        }
+        if (method === "PUT") return new Response("conflict", { status: 409 });
+        return new Response("nope", { status: 500 });
+      },
+    );
+
+    await adapter.saveWorkspace(UUID, makeWorkspace(3000));
+    await vi.advanceTimersByTimeAsync(REMOTE_DEBOUNCE_MS);
+
+    assert.equal(putCallsOf(fetchImpl).length, 1, "exactly one PUT");
+
+    const rec = await cache.getConflicts();
+    assert.ok(rec && rec.count === 1);
+    assert.equal(rec!.last[0]!.where, "save");
+    assert.equal(rec!.last[0]!.stampRev, 5);
+    assert.equal(rec!.last[0]!.serverRev, null);
+
+    assert.ok(
+      warns.some((w) => /save conflict: one PUT, server rev=unknown/.test(w)),
     );
   });
 
