@@ -291,7 +291,7 @@ describe("IDBEditorWorkspaceAdapter conflict backups", () => {
         at,
         serverRev: 1,
         ownerId: "u1",
-        workspace: ws(other),
+        workspace: { ...ws(other), updatedAt: Number(at) * 10 },
       });
       assert.ok(result.success);
     }
@@ -302,7 +302,9 @@ describe("IDBEditorWorkspaceAdapter conflict backups", () => {
         at,
         serverRev: 2,
         ownerId: "u1",
-        workspace: ws(mine),
+        // A different workspace per backup: identical content would be
+        // REPLACED by addConflictBackup, not stacked.
+        workspace: { ...ws(mine), updatedAt: Number(at) * 10 },
       });
       assert.ok(result.success);
     }
@@ -321,6 +323,61 @@ describe("IDBEditorWorkspaceAdapter conflict backups", () => {
       untouched.value!.map((b) => b.at),
       ["1", "2"],
       "another id's backups are untouched",
+    );
+  });
+
+  it("addConflictBackup replaces the newest backup with the same lost, serverRev and workspace, and keeps another serverRev", async () => {
+    const adapter = new IDBEditorWorkspaceAdapter();
+    const mine = "33333333-3333-4333-8333-333333333333";
+
+    // One DIFFERENT earlier backup.
+    const first = await adapter.addConflictBackup({
+      sessionId: mine,
+      lost: "this-device",
+      at: "0",
+      serverRev: 1,
+      ownerId: "u1",
+      workspace: { ...ws(mine), updatedAt: 10 },
+    });
+    assert.ok(first.success);
+
+    // Three with the same lost, serverRev and workspace: only the last stays.
+    for (const at of ["1", "2", "3"]) {
+      const result = await adapter.addConflictBackup({
+        sessionId: mine,
+        lost: "other-device",
+        at,
+        serverRev: 2,
+        ownerId: "u1",
+        workspace: ws(mine),
+      });
+      assert.ok(result.success);
+    }
+
+    const listed = await adapter.listConflictBackups(mine);
+    assert.ok(listed.success);
+    assert.deepEqual(
+      listed.value!.map((b) => b.at),
+      ["0", "3"],
+      "the identical backups collapsed into the newest",
+    );
+
+    // Same content but another serverRev: added, not replaced.
+    const otherRev = await adapter.addConflictBackup({
+      sessionId: mine,
+      lost: "other-device",
+      at: "4",
+      serverRev: 3,
+      ownerId: "u1",
+      workspace: ws(mine),
+    });
+    assert.ok(otherRev.success);
+    const listed2 = await adapter.listConflictBackups(mine);
+    assert.ok(listed2.success);
+    assert.deepEqual(
+      listed2.value!.map((b) => b.at),
+      ["0", "3", "4"],
+      "the other-serverRev backup was added",
     );
   });
 });
