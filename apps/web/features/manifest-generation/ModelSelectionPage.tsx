@@ -142,7 +142,10 @@ export function ModelSelectionPage({ llmContext }: ModelSelectionPageProps) {
 
   const isModelLoading =
     engineStatus === "downloading" || engineStatus === "loading_vram";
-  const isModelError = engineStatus === "error";
+  // After a blocked Retry the error card would cover the notice, so the card
+  // steps aside while the notice is shown. The engine's state is not changed.
+  const isModelError =
+    engineStatus === "error" && !(showUnsupported && localUnsupported);
 
   const footer = (
     <>
@@ -256,7 +259,6 @@ export function ModelSelectionPage({ llmContext }: ModelSelectionPageProps) {
                 }}
                 onRetry={() => {
                   if (unsupportedRef.current) {
-                    llmRef.current.returnToModelSettings();
                     setShowUnsupported(true);
                     return;
                   }
