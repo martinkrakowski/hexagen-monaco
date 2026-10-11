@@ -20,14 +20,151 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  verify-sync:
-    name: "Verify Sync Engine & Hexagonal Structure"
+  # The legs run in PARALLEL on the committed tree. That is valid only
+  # because `leg-sync` proves the hardened sync rewrites nothing (decision
+  # F48): every other leg checks exactly the tree that was pushed, so no
+  # leg has to wait for the sync before starting.
+  #
+  # The aggregate `verify-sync` (decision F49) keeps the old monolithic
+  # job's name, so it is the only check whose name matches the merge
+  # script's `^Verify Sync Engine` pattern. It always runs and fails
+  # unless every needed job's result is `success` — so a failed, cancelled
+  # or SKIPPED leg, or an empty matrix, is red, never green by omission.
+  #
+  # The test legs are computed by `scripts/ci/test-legs.mjs` (decision F50):
+  # adding a job means adding it to the aggregate's `needs` AND to its
+  # `EXPECTED` list — the aggregate fails closed when the two disagree.
+  test-legs:
+    name: "Plan the test legs"
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - name: "Checkout Repository"
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      # Corepack must be enabled BEFORE setup-node: setup-node@v5's environment
+      # probe runs `yarn` (e.g. `yarn cache dir`), and the repo pins yarn@4 via
+      # packageManager — classic global yarn errors on that. Enabling Corepack
+      # first makes `yarn` resolve to the pinned yarn@4 shim during the probe.
+      - name: "Enable Corepack"
+        run: corepack enable
+
+      # No version literal: `corepack prepare --activate` with no spec reads
+      # `packageManager` from the root package.json, so a Yarn bump is a
+      # one-line change there and CI cannot drift from the declared pin.
+      - name: "Prepare Yarn"
+        run: corepack prepare --activate
+
+      - name: "Setup Node.js"
+        uses: actions/setup-node@v5
+        with:
+          node-version: "22.7"
+
+      # Yarn 4 default httpTimeout is 60s. Public-PR hardened mode makes
+      # resolution slower; a single TLS socket stall (YN0001 RequestError)
+      # fails the whole job. Timeout + retries, not a lockfile change.
+      - name: "Install Dependencies"
+        env:
+          YARN_HTTP_TIMEOUT: "120000"
+        run: |
+          for attempt in 1 2 3; do
+            yarn install --immutable && exit 0
+            echo "yarn install failed (attempt ${attempt}/3)"
+            if [ "$attempt" -eq 3 ]; then
+              exit 1
+            fi
+            sleep 15
+          done
+
+      - name: "Check leg membership (every package with tests is in exactly one leg)"
+        run: node scripts/ci/test-legs.mjs --check
+
+      - name: "Emit the matrix"
+        id: plan
+        run: |
+          matrix="$(node scripts/ci/test-legs.mjs --matrix)"
+          echo "matrix=${matrix}" >> "$GITHUB_OUTPUT"
+
+  leg-sync:
+    name: "Leg: hardened sync changes nothing, architecture"
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - name: "Checkout Repository"
         uses: actions/checkout@v5
         with:
           fetch-depth: 0 # Required for the engine's Git checks
+          persist-credentials: false
+
+      # Corepack must be enabled BEFORE setup-node: setup-node@v5's environment
+      # probe runs `yarn` (e.g. `yarn cache dir`), and the repo pins yarn@4 via
+      # packageManager — classic global yarn errors on that. Enabling Corepack
+      # first makes `yarn` resolve to the pinned yarn@4 shim during the probe.
+      - name: "Enable Corepack"
+        run: corepack enable
+
+      # No version literal: `corepack prepare --activate` with no spec reads
+      # `packageManager` from the root package.json, so a Yarn bump is a
+      # one-line change there and CI cannot drift from the declared pin.
+      - name: "Prepare Yarn"
+        run: corepack prepare --activate
+
+      - name: "Setup Node.js"
+        uses: actions/setup-node@v5
+        with:
+          node-version: "22.7"
+
+      # Yarn 4 default httpTimeout is 60s. Public-PR hardened mode makes
+      # resolution slower; a single TLS socket stall (YN0001 RequestError)
+      # fails the whole job. Timeout + retries, not a lockfile change.
+      - name: "Install Dependencies"
+        env:
+          YARN_HTTP_TIMEOUT: "120000"
+        run: |
+          for attempt in 1 2 3; do
+            yarn install --immutable && exit 0
+            echo "yarn install failed (attempt ${attempt}/3)"
+            if [ "$attempt" -eq 3 ]; then
+              exit 1
+            fi
+            sleep 15
+          done
+
+      # The sync CLI runs from packages/sync/dist and the arch-linter from
+      # its own dist; the sync's own preflight then runs the one full build
+      # of this leg, so the leg does not build twice.
+      - name: "Build what the sync executes"
+        run: yarn turbo run build --filter=@hexagen/sync --filter=@hexagen/arch-linter --output-logs=full --log-order=stream
+
+      - name: "Execute Hardened Sync"
+        run: yarn workspace @hexagen/sync run cli sync --force --allow-dirty
+
+      - name: "Assert the sync changed nothing (F48)"
+        run: bash scripts/ci/assert-sync-no-diff.sh
+
+      - name: "Verify Architecture (arch-linter, strict)"
+        # A REAL architecture gate. The previous `sync --dry-run` was toothless:
+        # under --dry-run the sync engine short-circuits the linter entirely
+        # ("[DRY-RUN] would run arch-linter"), so a boundary violation could
+        # never fail this step (AUD-010). `--strict` runs the linter for real
+        # and aborts on a violation — or on a timeout, which is treated as
+        # "could not verify", never a silent pass. The sync itself is a no-op
+        # here (the tree is proved converged by the step above, which asserted
+        # the sync changed nothing).
+        run: yarn workspace @hexagen/sync run cli sync --strict --allow-dirty
+
+  leg-build:
+    name: "Leg: constraints, from-scratch build"
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: "Checkout Repository"
+        uses: actions/checkout@v5
+        with:
           persist-credentials: false
 
       # Corepack must be enabled BEFORE setup-node: setup-node@v5's environment
@@ -75,16 +212,57 @@ jobs:
         # reads manifests only; no build required.
         run: yarn constraints
 
-      - name: "Build All Packages"
-        run: yarn turbo run build --output-logs=full --log-order=stream
-
-      - name: "Execute Hardened Sync"
-        run: yarn workspace @hexagen/sync run cli sync --force --allow-dirty
-
-      - name: "Verify Build After Sync"
+      # This is both the old "Build All Packages" and the old "Verify Build
+      # After Sync": under F48 the committed tree is the synced tree, so one
+      # forced build covers both.
+      - name: "Build All Packages (forced)"
         run: yarn turbo run build --output-logs=full --log-order=stream --force
 
-      - name: "Verify TypeCheck After Sync"
+  leg-typecheck:
+    name: "Leg: type checks, template-questions parity"
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: "Checkout Repository"
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      # Corepack must be enabled BEFORE setup-node: setup-node@v5's environment
+      # probe runs `yarn` (e.g. `yarn cache dir`), and the repo pins yarn@4 via
+      # packageManager — classic global yarn errors on that. Enabling Corepack
+      # first makes `yarn` resolve to the pinned yarn@4 shim during the probe.
+      - name: "Enable Corepack"
+        run: corepack enable
+
+      # No version literal: `corepack prepare --activate` with no spec reads
+      # `packageManager` from the root package.json, so a Yarn bump is a
+      # one-line change there and CI cannot drift from the declared pin.
+      - name: "Prepare Yarn"
+        run: corepack prepare --activate
+
+      - name: "Setup Node.js"
+        uses: actions/setup-node@v5
+        with:
+          node-version: "22.7"
+
+      # Yarn 4 default httpTimeout is 60s. Public-PR hardened mode makes
+      # resolution slower; a single TLS socket stall (YN0001 RequestError)
+      # fails the whole job. Timeout + retries, not a lockfile change.
+      - name: "Install Dependencies"
+        env:
+          YARN_HTTP_TIMEOUT: "120000"
+        run: |
+          for attempt in 1 2 3; do
+            yarn install --immutable && exit 0
+            echo "yarn install failed (attempt ${attempt}/3)"
+            if [ "$attempt" -eq 3 ]; then
+              exit 1
+            fi
+            sleep 15
+          done
+
+      - name: "Verify TypeCheck"
         run: yarn turbo run typecheck --output-logs=full --log-order=stream
 
       - name: "Verify TypeCheck (test sources)"
@@ -99,16 +277,6 @@ jobs:
         # be reported as a type error, not as a downstream runtime failure.
         # `--continue` so one package's errors do not hide the rest.
         run: yarn turbo run typecheck:test --continue --output-logs=full --log-order=stream
-
-      - name: "Verify Architecture (arch-linter, strict)"
-        # A REAL architecture gate. The previous `sync --dry-run` was toothless:
-        # under --dry-run the sync engine short-circuits the linter entirely
-        # ("[DRY-RUN] would run arch-linter"), so a boundary violation could
-        # never fail this step (AUD-010). `--strict` runs the linter for real
-        # and aborts on a violation — or on a timeout, which is treated as
-        # "could not verify", never a silent pass. The sync itself is a no-op
-        # here (the tree was already converged by "Execute Hardened Sync").
-        run: yarn workspace @hexagen/sync run cli sync --strict --allow-dirty
 
       - name: "Verify Template Questions Generator Parity"
         # Asserts the two generated wizard modules are in sync with the manifests
@@ -125,8 +293,89 @@ jobs:
         # template.
         run: yarn workspace web check:template-questions
 
-      - name: "Run Test Suite"
-        run: yarn turbo run test --output-logs=full --log-order=stream
+  leg-test:
+    name: "Leg: test (${{ matrix.leg }})"
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [test-legs]
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.test-legs.outputs.matrix) }}
+    steps:
+      - name: "Checkout Repository"
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      # Corepack must be enabled BEFORE setup-node: setup-node@v5's environment
+      # probe runs `yarn` (e.g. `yarn cache dir`), and the repo pins yarn@4 via
+      # packageManager — classic global yarn errors on that. Enabling Corepack
+      # first makes `yarn` resolve to the pinned yarn@4 shim during the probe.
+      - name: "Enable Corepack"
+        run: corepack enable
+
+      # No version literal: `corepack prepare --activate` with no spec reads
+      # `packageManager` from the root package.json, so a Yarn bump is a
+      # one-line change there and CI cannot drift from the declared pin.
+      - name: "Prepare Yarn"
+        run: corepack prepare --activate
+
+      - name: "Setup Node.js"
+        uses: actions/setup-node@v5
+        with:
+          node-version: "22.7"
+
+      # Yarn 4 default httpTimeout is 60s. Public-PR hardened mode makes
+      # resolution slower; a single TLS socket stall (YN0001 RequestError)
+      # fails the whole job. Timeout + retries, not a lockfile change.
+      - name: "Install Dependencies"
+        env:
+          YARN_HTTP_TIMEOUT: "120000"
+        run: |
+          for attempt in 1 2 3; do
+            yarn install --immutable && exit 0
+            echo "yarn install failed (attempt ${attempt}/3)"
+            if [ "$attempt" -eq 3 ]; then
+              exit 1
+            fi
+            sleep 15
+          done
+
+      # turbo adds each package's build dependencies (`^build`, and the
+      # per-package exceptions in turbo.json) itself; `fail-fast: false` so
+      # one red leg does not hide the others.
+      - name: "Run Test Suite (${{ matrix.leg }})"
+        run: yarn turbo run test ${{ matrix.filters }} --output-logs=full --log-order=stream
+
+  # Without `if: always()` this job would be SKIPPED when a leg fails, and
+  # the merge script counts a skipped check as not failed.
+  verify-sync:
+    name: "Verify Sync Engine & Hexagonal Structure"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [test-legs, leg-sync, leg-build, leg-typecheck, leg-test]
+    if: always()
+    steps:
+      - name: "Every leg succeeded"
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+          EXPECTED: "test-legs leg-sync leg-build leg-typecheck leg-test"
+        run: |
+          node -e '
+            needs=JSON.parse(process.env.NEEDS);
+            expected=process.env.EXPECTED.split(" ");
+            bad=0;
+            for (const job of expected) {
+              result=needs[job] ? needs[job].result : "MISSING from needs";
+              console.log(job + ": " + result);
+              if (result !== "success") bad++;
+            }
+            for (const job of Object.keys(needs)) {
+              if (!expected.includes(job)) { console.log(job + ": in needs but not in EXPECTED"); bad++; }
+            }
+            if (bad > 0) { console.log("::error::" + bad + " leg(s) did not succeed. A skipped or cancelled leg counts as a failure."); process.exit(1); }
+            console.log("all legs succeeded");
+          '
 
   verify-sync-contract:
     name: "Run Sync Contract Suite"
