@@ -13,6 +13,12 @@ env:
 permissions:
   contents: read
 
+# A superseded push to the same pull request does not need to finish. Pushes to
+# main and develop are never cancelled: every commit there keeps its own result.
+concurrency:
+  group: "sync-integrity-${{ github.workflow }}-${{ github.ref }}"
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   verify-sync:
     name: "Verify Sync Engine & Hexagonal Structure"
@@ -176,8 +182,9 @@ jobs:
   #
   # NOT a required check yet: D-6 makes it required only after it is green
   # and its wall-clock is recorded in the PR body (revisit D-1 with that
-  # number). This workflow has no `concurrency:` group, so this job cannot
-  # cancel the ubuntu leg (#610's failure mode does not apply).
+  # number). The workflow-level `concurrency:` group cancels only a
+  # superseded RUN of the same pull request, never a sibling job of the
+  # same run (#610's failure mode does not apply).
   #
   # Known skips on win32: 12 suites guard with `{ skip: SKIP_NON_POSIX }`
   # (6 in packages/sync — the published-layout contract suites — and 6
