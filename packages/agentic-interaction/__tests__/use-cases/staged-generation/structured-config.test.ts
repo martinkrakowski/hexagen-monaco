@@ -248,8 +248,8 @@ test("parseStructuredConfig: large input scales linearly", () => {
   // (B) bound, chosen from the seven-size measurements above: 1.35 sits
   // clearly above every slope the linear parser measured (highest 1.13) and
   // clearly below 2, where a quadratic parser lands. An n^1.5 mutant that
-  // still passes the 500 ms cap at 400k (about 60 ms of added cost) fits
-  // about 1.46 and fails this bound.
+  // still passes the 500 ms cap at 400k (347 ms there) fitted 1.47 and
+  // failed this bound.
   const BOUND = 1.35;
   const SAMPLES = 7;
   // One seam so a mutant check can re-point every warm-up and timed parse
