@@ -123,6 +123,28 @@ describe("ModelSelectionStateMachine", () => {
     it("should allow transition from error to model_selection", () => {
       assert.strictEqual(canTransition("error", "model_selection"), true);
     });
+
+    it("should allow transition from idle to unsupported (#766)", () => {
+      assert.strictEqual(canTransition("idle", "unsupported"), true);
+    });
+
+    it("should allow transition from model_selection to unsupported (#766)", () => {
+      assert.strictEqual(canTransition("model_selection", "unsupported"), true);
+    });
+
+    it("should allow transitions out of unsupported", () => {
+      assert.strictEqual(canTransition("unsupported", "idle"), true);
+      assert.strictEqual(canTransition("unsupported", "model_selection"), true);
+      assert.strictEqual(canTransition("unsupported", "key_validation"), true);
+      assert.strictEqual(canTransition("unsupported", "model_downloading"), false);
+    });
+
+    it("should transition to unsupported on WEBGPU_UNAVAILABLE (#766)", () => {
+      assert.strictEqual(
+        transitionState("model_selection", { type: "WEBGPU_UNAVAILABLE" }),
+        "unsupported",
+      );
+    });
   });
 
   describe("isTerminalState", () => {

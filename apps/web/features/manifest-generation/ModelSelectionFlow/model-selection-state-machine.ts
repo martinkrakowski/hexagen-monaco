@@ -39,16 +39,17 @@ export type ModelSelectionEvent =
       triggers: Array<{ type: string; contextName?: string; message: string }>;
     }
   | { type: "CONFIRM_AND_CONTINUE" }
-  | { type: "SET_ERROR"; message: string; errorCode?: string };
+  | { type: "SET_ERROR"; message: string; errorCode?: string }
+  | { type: "WEBGPU_UNAVAILABLE" };
 
 function getValidTransitions(
   state: GenerateWithAiScreenState,
 ): GenerateWithAiScreenState[] {
   switch (state) {
     case "idle":
-      return ["model_selection", "generating", "wizard_hydration"];
+      return ["model_selection", "generating", "wizard_hydration", "unsupported"];
     case "model_selection":
-      return ["model_downloading", "key_validation", "idle"];
+      return ["model_downloading", "key_validation", "idle", "unsupported"];
     case "model_downloading":
       return ["generating", "error", "interrupted"];
     case "key_validation":
@@ -126,6 +127,8 @@ export function transitionState(
       return "generating";
     case "SET_ERROR":
       return "error";
+    case "WEBGPU_UNAVAILABLE":
+      return "unsupported";
     default:
       return currentState;
   }
