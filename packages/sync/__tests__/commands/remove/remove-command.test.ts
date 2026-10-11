@@ -425,6 +425,35 @@ describe("remove command", () => {
     assert.deepEqual(await snapshotTree(world.projectRoot), treeBefore);
   });
 
+  it("--dry-run --keep-files deletes nothing, keeps the entry, and makes exactly one call with keepFiles: true", async () => {
+    const world = makeWorld([manifest("t", ["a.txt"])], {
+      "t/files/a.txt": "a-original\n",
+    });
+    await world.add().execute({
+      templateIds: ["t"],
+      projectRoot: world.projectRoot,
+    });
+    const treeBefore = await snapshotTree(world.projectRoot);
+    const useCase = world.remove();
+    const spy = vi.spyOn(useCase, "execute");
+
+    const code = await runRemoveTemplate(
+      "t",
+      { dryRun: true, keepFiles: true },
+      world.deps({ useCase }),
+    );
+
+    assert.equal(code, 0);
+    assert.equal(spy.mock.calls.length, 1);
+    assert.equal(spy.mock.calls[0][0].dryRun, true);
+    assert.equal(spy.mock.calls[0][0].keepFiles, true);
+    assert.equal(
+      world.logs.join("\n").includes("Kept: --keep-files:\n  a.txt"),
+      true,
+    );
+    assert.deepEqual(await snapshotTree(world.projectRoot), treeBefore);
+  });
+
   it("interactive with a yes confirmation removes the files, prunes the emptied folder, keeps the changed file listed, and leaves the other template's entry untouched", async () => {
     const world = makeWorld(
       [
@@ -818,6 +847,7 @@ describe("remove command", () => {
     const note =
       "Note: this acts on the registry at " +
       `${world.projectRoot} only; other packages (2) are not looked at.`;
+    assert.equal(world.logs[0], `Project root: ${world.projectRoot}`);
     const noteIndex = world.logs.indexOf(note);
     assert.equal(noteIndex >= 0, true);
     assert.equal(world.logs.filter((l) => l === note).length, 1);

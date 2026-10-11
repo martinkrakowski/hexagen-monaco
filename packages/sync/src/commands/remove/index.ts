@@ -252,6 +252,9 @@ export async function runRemoveTemplate(
     return removeFailed(new Error("internal error: unexpected result"), deps);
   }
 
+  // The root is found by walking up from the working directory: say which
+  // project this acts on before the plan, every time.
+  deps.log(`Project root: ${projectRoot}`);
   printMonorepoNote(deps);
   for (const line of formatRemovalPlan(plan)) {
     deps.log(line);
@@ -340,6 +343,7 @@ export async function removeTemplateCommand(
     otherPackages,
   });
   if (code === 1) {
-    process.exit(1);
+    // Not process.exit: a piped stderr must be flushed before the process ends.
+    process.exitCode = 1;
   }
 }
