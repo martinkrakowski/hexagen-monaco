@@ -3,9 +3,13 @@
 # Decision F48: the parallel CI legs run on the committed tree. That is only
 # valid if the hardened sync changes no source. This runs after
 # `sync --force --allow-dirty` and fails when `git status --porcelain` is not
-# empty, naming the files. NOT covered: gitignored files (build outputs,
-# SYNC-MIGRATION-REPORT.md) and changes to an ignored file that already
-# exists; those rest on the build being deterministic.
+# empty, naming the files. NOT covered, because git status does not show them:
+# - gitignored files: build outputs, SYNC-MIGRATION-REPORT.md, and anything
+#   matching the repository's ignore rules for packages/*/src/**/*.js and
+#   *.d.ts. No generator writes such a file today; build outputs rest on the
+#   build being deterministic;
+# - a change to an ignored file that already exists;
+# - an empty directory the sync creates or removes (git tracks no directories).
 
 set -euo pipefail
 

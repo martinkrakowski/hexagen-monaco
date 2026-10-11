@@ -117,6 +117,20 @@
       "outputs": [],
       "cache": false
     },
+    "@hexagen/mcp-server#test": {
+      "dependsOn": ["^build", "build"],
+      "inputs": [
+        "src/**/*.ts",
+        "src/**/*.tsx",
+        "__tests__/**/*.ts",
+        "__tests__/**/*.tsx",
+        "tests/**/*.ts",
+        "tsconfig*.json",
+        "package.json"
+      ],
+      "outputs": [],
+      "cache": false
+    },
     "@hexagen/orchestration#test": {
       "dependsOn": ["^build", "build"],
       "inputs": [

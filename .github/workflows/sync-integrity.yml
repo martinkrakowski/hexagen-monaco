@@ -13,10 +13,12 @@ env:
 permissions:
   contents: read
 
-# A superseded push to the same pull request does not need to finish. Pushes to
-# main and develop are never cancelled: every commit there keeps its own result.
+# A superseded push to the same pull request does not need to finish. A push to
+# main or develop gets a group of its own (its commit), so it is neither
+# cancelled nor left pending behind another push: with one group per branch
+# GitHub would keep one run and one pending run and drop a third.
 concurrency:
-  group: "sync-integrity-${{ github.workflow }}-${{ github.ref }}"
+  group: "sync-integrity-${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}"
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
