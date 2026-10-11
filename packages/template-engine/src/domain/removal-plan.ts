@@ -165,8 +165,46 @@ export function recordedPaths(
   return { safe, unsafe, malformed };
 }
 
-function sharedPathKey(path: string): string {
-  return path.normalize("NFC").toLowerCase();
+/**
+ * The key two recorded paths are compared on to decide that they are the
+ * same file. Deliberately lenient, because a match only ever KEEPS a file:
+ * backslashes count as separators, `.` and `..` are resolved, trailing dots
+ * and spaces and a `:stream` suffix are dropped from each segment (Windows
+ * reaches the same file under those spellings), and letter case and
+ * Unicode form are folded ("A.txt" and "a.txt" are one file on macOS and
+ * Windows). Null when nothing is left.
+ */
+function sharedPathKey(raw: string): string | null {
+  const stack: string[] = [];
+  for (const rawSegment of raw.replaceAll("\\", "/").split("/")) {
+    if (rawSegment === "" || rawSegment === ".") continue;
+    if (rawSegment === "..") {
+      stack.pop();
+      continue;
+    }
+    const segment = rawSegment.split(":")[0].replace(/[. ]+$/u, "");
+    if (segment !== "") stack.push(segment);
+  }
+  if (stack.length === 0) return null;
+  return stack.join("/").normalize("NFC").toLowerCase();
+}
+
+/** The keys of every path a template's record names, however malformed the record. */
+function claimedPathKeys(templates: object, templateId: string): string[] {
+  const record: unknown = (templates as Record<string, unknown>)[templateId];
+  const generatedFiles: unknown = (
+    record as { generatedFiles?: unknown } | null | undefined
+  )?.generatedFiles;
+  if (!Array.isArray(generatedFiles)) return [];
+  const keys: string[] = [];
+  for (const entry of generatedFiles) {
+    const path: unknown = (entry as { path?: unknown } | null | undefined)
+      ?.path;
+    if (typeof path !== "string") continue;
+    const key = sharedPathKey(path);
+    if (key !== null) keys.push(key);
+  }
+  return keys;
 }
 
 /**
@@ -225,15 +263,12 @@ export function planTemplateRemoval(input: RemovalPlanInput): RemovalPlan {
     return { kind: "refused", templateId, refusals };
   }
 
-  // Shared paths are matched on a folded key: "A.txt" and "a.txt", or two
-  // Unicode spellings of one name, are ONE file on a case-insensitive
-  // filesystem. On a case-sensitive one this only keeps more. A path the
-  // other template records in an unsafe spelling is not seen here.
+  // Another installed template's claim on a path does not depend on that
+  // record being well formed: every entry with a string `path` counts,
+  // with or without a hash, in whatever spelling (see sharedPathKey).
   const sharedPaths = new Set<string>();
   for (const id of otherIds) {
-    for (const recorded of recordedPaths(config, id).safe) {
-      sharedPaths.add(sharedPathKey(recorded.path));
-    }
+    for (const key of claimedPathKeys(templates, id)) sharedPaths.add(key);
   }
 
   const deleteFiles: string[] = [];
@@ -245,7 +280,8 @@ export function planTemplateRemoval(input: RemovalPlanInput): RemovalPlan {
   const alreadyAbsent: string[] = [];
 
   for (const { path, contentHashes } of safe) {
-    if (sharedPaths.has(sharedPathKey(path))) {
+    const key = sharedPathKey(path);
+    if (key !== null && sharedPaths.has(key)) {
       keptShared.push(path);
       continue;
     }

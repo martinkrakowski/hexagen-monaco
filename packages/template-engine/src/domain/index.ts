@@ -33,6 +33,7 @@ export {
   emptyConfig,
   isInstalled,
   configState,
+  mergeGeneratedFiles,
 } from "./template-config.js";
 
 // The findings read path (plan §3 G4): the query type, the composed matcher,
