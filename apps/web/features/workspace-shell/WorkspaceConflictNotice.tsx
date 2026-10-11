@@ -42,6 +42,7 @@ export function WorkspaceConflictNotice({
   );
   const [reloadFailedId, setReloadFailedId] = useState<string | null>(null);
   const [applied, setApplied] = useState(false);
+  const [returnFocus, setReturnFocus] = useState<"keep" | "use" | null>(null);
   const confirmButtonRef = useRef<HTMLButtonElement | null>(null);
   const openerButtonRef = useRef<HTMLButtonElement | null>(null);
 
@@ -57,17 +58,23 @@ export function WorkspaceConflictNotice({
     }
   }, [stage]);
 
-  const openConfirm = (choice: "keep" | "use", opener: HTMLButtonElement) => {
-    openerButtonRef.current = opener;
+  useEffect(() => {
+    if (stage.kind === "choices" && returnFocus !== null) {
+      openerButtonRef.current?.focus();
+      setReturnFocus(null);
+    }
+  }, [stage, returnFocus]);
+
+  const openConfirm = (choice: "keep" | "use") => {
     setPendingChoice(choice);
     setStage({ kind: "confirm", choice });
     setMessage({ kind: "none" });
   };
 
   const goBack = () => {
+    setReturnFocus(pendingChoice);
     setStage({ kind: "choices" });
     setPendingChoice(null);
-    openerButtonRef.current?.focus();
   };
 
   const confirmKeep = async () => {
@@ -117,11 +124,7 @@ export function WorkspaceConflictNotice({
     }
   };
 
-  if (
-    conflict === null &&
-    message.kind === "none" &&
-    reloadFailedId === null
-  ) {
+  if (conflict === null && message.kind === "none" && reloadFailedId === null) {
     return null;
   }
 
@@ -136,10 +139,10 @@ export function WorkspaceConflictNotice({
   ) => (
     <div className="flex flex-col gap-1">
       <Button
-        ref={choice === "keep" ? openerButtonRef : undefined}
+        ref={returnFocus === choice ? openerButtonRef : undefined}
         variant={variant}
         disabled={busy}
-        onClick={(event) => openConfirm(choice, event.currentTarget)}
+        onClick={() => openConfirm(choice)}
       >
         {busyChoice === choice ? BUSY_LABEL : label}
       </Button>
@@ -168,7 +171,10 @@ export function WorkspaceConflictNotice({
   } else if (stage.kind === "confirm" && pendingChoice === "keep") {
     content = (
       <Alert tone="warning" title="Replace the copy in your account?">
-        <p>The changes made on the other device will no longer be in this project.</p>
+        <p>
+          The changes made on the other device will no longer be in this
+          project.
+        </p>
         <div className="mt-2 flex flex-col gap-2 sm:flex-row">
           <Button
             ref={confirmButtonRef}
@@ -187,7 +193,9 @@ export function WorkspaceConflictNotice({
   } else if (stage.kind === "confirm" && pendingChoice === "use") {
     content = (
       <Alert tone="warning" title="Replace the copy on this device?">
-        <p>The changes made on this device will no longer be in this project.</p>
+        <p>
+          The changes made on this device will no longer be in this project.
+        </p>
         <div className="mt-2 flex flex-col gap-2 sm:flex-row">
           <Button
             ref={confirmButtonRef}
@@ -218,10 +226,7 @@ export function WorkspaceConflictNotice({
   return (
     <div aria-busy={busy ? "true" : undefined} onKeyDown={onKeyDown}>
       {content}
-      <div
-        className="sr-only"
-        aria-live="polite"
-      >
+      <div className="sr-only" aria-live="polite">
         {applied ? "Your choice was applied." : ""}
       </div>
     </div>

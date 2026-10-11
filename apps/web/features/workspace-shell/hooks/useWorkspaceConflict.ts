@@ -45,9 +45,8 @@ export function useWorkspaceConflict(
   const keepThisDevice = useCallback(async (): Promise<boolean> => {
     if (projectId === null) return false;
     try {
-      const result = await getEditorWorkspaceConflicts().keepThisDeviceCopy(
-        projectId,
-      );
+      const result =
+        await getEditorWorkspaceConflicts().keepThisDeviceCopy(projectId);
       return result.success;
     } catch {
       return false;
@@ -57,9 +56,8 @@ export function useWorkspaceConflict(
   const useOtherDevice = useCallback(async (): Promise<boolean> => {
     if (projectId === null) return false;
     try {
-      const result = await getEditorWorkspaceConflicts().useOtherDeviceCopy(
-        projectId,
-      );
+      const result =
+        await getEditorWorkspaceConflicts().useOtherDeviceCopy(projectId);
       return result.success;
     } catch {
       return false;

@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, it, vi } from "vitest";
 import assert from "node:assert/strict";
-import { act, cleanup, render, screen, fireEvent } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  render,
+  screen,
+  fireEvent,
+} from "@testing-library/react";
 import type {
   EditorWorkspaceConflictPort,
   PendingWorkspaceConflict,
@@ -134,5 +140,124 @@ describe("WorkspaceConflictNotice", () => {
     renderNotice("p1");
     assert.equal(screen.getByRole("status").getAttribute("role"), "status");
     assert.equal(document.activeElement, document.body);
+  });
+
+  it("(e) a choice opens the confirm step and makes no port call; Go back restores buttons and focus", () => {
+    state.conflicts.set("p1", conflictFor("p1"));
+    renderNotice("p1");
+    fireEvent.click(screen.getByRole("button", { name: KEEP_LABEL }));
+    assert.ok(screen.getByText("Replace the copy in your account?"));
+    assert.deepEqual(state.calls, []);
+    fireEvent.click(screen.getByRole("button", { name: "Go back" }));
+    assert.ok(screen.getByRole("button", { name: KEEP_LABEL }));
+    assert.equal(document.activeElement?.textContent, KEEP_LABEL);
+  });
+
+  it("(f) confirming keep calls keepThisDeviceCopy once and never reloads", async () => {
+    state.conflicts.set("p1", conflictFor("p1"));
+    const onReload = vi.fn(async () => true);
+    renderNotice("p1", onReload);
+    fireEvent.click(screen.getByRole("button", { name: KEEP_LABEL }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Replace account copy" }),
+    );
+    await act(async () => {});
+    assert.deepEqual(state.calls, ["keep:p1"]);
+    assert.equal(onReload.mock.calls.length, 0);
+  });
+
+  it("(g) confirming use gives the order [useOther, reload]", async () => {
+    state.conflicts.set("p1", conflictFor("p1"));
+    const onReload = vi.fn(async () => {
+      state.calls.push("reload");
+      return true;
+    });
+    renderNotice("p1", onReload);
+    fireEvent.click(screen.getByRole("button", { name: USE_LABEL }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Replace this device's copy" }),
+    );
+    await act(async () => {});
+    assert.deepEqual(state.calls, ["useOther:p1", "reload"]);
+  });
+
+  it("(h) a failed useOtherDeviceCopy still calls onReload once and shows the failure alert", async () => {
+    state.conflicts.set("p1", conflictFor("p1"));
+    state.setUseResult({
+      success: false,
+      error: { kind: "Conflict", message: "gone" },
+    });
+    const onReload = vi.fn(async () => true);
+    renderNotice("p1", onReload);
+    fireEvent.click(screen.getByRole("button", { name: USE_LABEL }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Replace this device's copy" }),
+    );
+    await act(async () => {});
+    assert.equal(onReload.mock.calls.length, 1);
+    assert.ok(screen.getByText("Your choice could not be applied"));
+  });
+
+  it("(i) a failed reload keeps the alert until a later reload succeeds", async () => {
+    state.conflicts.set("p1", conflictFor("p1"));
+    let resolveReload: ((value: boolean) => void) | null = null;
+    const onReload = vi.fn(
+      () =>
+        new Promise<boolean>((resolve) => {
+          resolveReload = resolve;
+        }),
+    );
+    renderNotice("p1", onReload);
+    fireEvent.click(screen.getByRole("button", { name: USE_LABEL }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Replace this device's copy" }),
+    );
+    await act(async () => {});
+    await act(async () => {
+      resolveReload?.(false);
+    });
+    act(() => {
+      state.conflicts.delete("p1");
+      state.listeners.forEach((listener) => listener());
+    });
+    assert.ok(screen.getByText("The project could not be reloaded"));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Reload project" }));
+      resolveReload?.(true);
+    });
+    assert.equal(onReload.mock.calls.length, 2);
+    assert.throws(() => screen.getByText("The project could not be reloaded"));
+  });
+
+  it("(j) while a call is held open all buttons are disabled and a second click starts no second call", async () => {
+    state.conflicts.set("p1", conflictFor("p1"));
+    state.setUseResult(new Promise<Result<void, PersistenceError>>(() => {}));
+    renderNotice("p1");
+    fireEvent.click(screen.getByRole("button", { name: USE_LABEL }));
+    const confirmButton = screen.getByRole("button", {
+      name: "Replace this device's copy",
+    });
+    fireEvent.click(confirmButton);
+    await act(async () => {});
+    const buttons = screen.getAllByRole("button");
+    assert.ok(buttons.length >= 2);
+    for (const button of buttons) {
+      assert.equal((button as HTMLButtonElement).disabled, true);
+    }
+    fireEvent.click(confirmButton);
+    assert.equal(
+      state.calls.filter((call) => call.startsWith("useOther:")).length,
+      1,
+    );
+  });
+
+  it("(k) Escape acts as Go back", () => {
+    state.conflicts.set("p1", conflictFor("p1"));
+    renderNotice("p1");
+    fireEvent.click(screen.getByRole("button", { name: USE_LABEL }));
+    assert.ok(screen.getByText("Replace the copy on this device?"));
+    fireEvent.keyDown(screen.getByRole("status"), { key: "Escape" });
+    assert.ok(screen.getByRole("button", { name: KEEP_LABEL }));
+    assert.equal(document.activeElement?.textContent, USE_LABEL);
   });
 });
