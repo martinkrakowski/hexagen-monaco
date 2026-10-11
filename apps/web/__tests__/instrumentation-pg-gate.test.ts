@@ -146,4 +146,36 @@ describe("register() Postgres gate", () => {
       },
     ),
   );
+
+  it(
+    "production with DATABASE_URL set: the database choice is checked before the migrations start",
+    withEnv(
+      async () => {
+        process.env.DATABASE_URL = "postgres://u@127.0.0.1:1/x";
+        delete process.env.PLATFORM_DB;
+        process.env.NEXT_RUNTIME = "nodejs";
+        vi.stubEnv("NODE_ENV", "production");
+        try {
+          const calls: string[] = [];
+          dbChoice.enforceProductionDatabaseChoice.mockImplementation(() => {
+            calls.push("enforce");
+          });
+          pg.startPlatformMigrations.mockImplementation(() => {
+            calls.push("migrations");
+          });
+          const register = await freshRegister();
+          await register();
+          expect(calls).toEqual(["enforce", "migrations"]);
+        } finally {
+          vi.unstubAllEnvs();
+        }
+      },
+      {
+        NODE_ENV: process.env.NODE_ENV,
+        PLATFORM_DB: process.env.PLATFORM_DB,
+        DATABASE_URL: process.env.DATABASE_URL,
+        NEXT_RUNTIME: process.env.NEXT_RUNTIME,
+      },
+    ),
+  );
 });
