@@ -228,58 +228,107 @@ test("parseStructuredConfig: large input scales linearly", () => {
     "project: large-test\nbounded_contexts:\n  - name: TestContext\n    type: core\n";
   const makeYaml = (chars: number): string =>
     baseYaml + " ".repeat(Math.max(0, chars - baseYaml.length));
-  // (A) an absolute cap on the small input, checked first: a quadratic parse
-  // fails here and never reaches the large input. (B) the growth exponent
-  // between the two sizes. Both use the minimum of 7 samples after a warm-up,
-  // on ONE input string per size built outside the timed region (the earlier
-  // test built a fresh 3.2 MB string inside it). Both sizes take milliseconds:
-  // with a 50,000-character baseline the small parse took 0.44 ms on a shared
-  // CI runner and timer resolution decided the ratio.
+  // Two purposes. (A) is an absolute WALL-time cap on the small input,
+  // checked FIRST: a quadratic parser is slow in wall time too and fails
+  // here fast, never reaching the growth measurement. (B) is the growth
+  // law: the least-squares slope of log(CPU-time minimum) against
+  // log(size) over five sizes (400k -> 6.4M, a 16x span). Shown on this
+  // machine, minimum of 7 samples per size: the parser is linear — CPU
+  // slopes of 0.966-1.060 over five runs with all 8 cores loaded by
+  // background spinners, and 0.972-1.166 over three unloaded runs.
+  // Why CPU time: the old two-point WALL-clock test read exponents of
+  // 1.74-1.98 inside the full test run. Loading the lane host with
+  // spinners did not reproduce that (wall and CPU slopes both stayed
+  // near 1). The full test run on the Mac verification host did: in one
+  // run the wall minima were 2.37, 4.68, 9.33, 32.42 and 149.87 ms for
+  // the five sizes while the CPU minima were 2.37, 4.67, 9.32, 18.95 and
+  // 38.05 ms (slope 1.003). The large parses never got an undisturbed
+  // wall-clock window in 7 samples; their CPU cost was exactly linear.
+  // If this test fails, its message carries BOTH clocks per size: a curve
+  // that bends in wall time only is the machine, one that bends in CPU
+  // time is the parser (or the collector).
   const ABS_SMALL = 400_000;
-  const ABS_LARGE = 3_200_000; // 8x
-  // Measured on this machine: linear small → 7.61 ms (large 66.56 ms,
-  // exponent 1.04); quadratic mutant (re-walk of the remaining input per step)
-  // small → 24,101 ms. The cap sits ~66x above the linear minimum and the
-  // mutant lands ~48x over it, so a quadratic implementation fails fast here.
   const CAP_SMALL_MS = 500;
-  const BOUND = 1.7;
-  const sample = (chars: number, stopAboveMs: number): number => {
+  const SIZES = [400_000, 800_000, 1_600_000, 3_200_000, 6_400_000]; // 16x span
+  // (B) bound, chosen from the measured CPU slopes: 1.35 sits clearly
+  // above the highest slope the linear parser showed (1.166, unloaded)
+  // and clearly below 1.5, where an n^1.5 term with a sizeable constant
+  // lands: an n^1.5 burn sized to ~300 ms at 400k (still under (A)'s cap)
+  // fitted 1.53 and failed this bound; one sized to ~30 ms fitted 1.42
+  // and also failed.
+  const BOUND = 1.35;
+  const SAMPLES = 7;
+  // One seam so a mutant check can re-point every warm-up and timed parse
+  // at a wrapped parser without touching the measurement below.
+  const measureParse = (input: string) => parseStructuredConfig(input);
+  const sample = (chars: number, stopAboveMs: number) => {
     const input = makeYaml(chars); // built ONCE outside the timed region
-    parseStructuredConfig(input); // warm-up, not measured
-    let best = Infinity;
-    for (let n = 1; n <= 7; ++n) {
+    measureParse(input); // warm-up, not measured
+    let bestWall = Infinity;
+    let bestCpu = Infinity;
+    for (let n = 1; n <= SAMPLES; ++n) {
       const t0 = performance.now();
-      parseStructuredConfig(input);
-      const ms = performance.now() - t0;
-      if (ms < best) best = ms;
-      // Stop early only when the MINIMUM so far is over the limit after at
-      // least two samples: one slow sample may be the scheduler or the collector.
-      if (n >= 2 && best > stopAboveMs) break;
+      const c0 = process.cpuUsage();
+      measureParse(input);
+      const d = process.cpuUsage(c0);
+      const wall = performance.now() - t0;
+      const cpu = (d.user + d.system) / 1000; // us -> ms
+      if (wall < bestWall) bestWall = wall;
+      if (cpu < bestCpu) bestCpu = cpu;
+      // Stop early only when the WALL minimum so far is over the limit
+      // after at least two samples: one slow sample may be the scheduler
+      // or the collector.
+      if (n >= 2 && bestWall > stopAboveMs) break;
     }
-    return best;
+    return { wall: bestWall, cpu: bestCpu };
   };
-  // Check SMALL FIRST and assert it before touching LARGE, so the mutant never runs LARGE.
-  const minSmall = sample(ABS_SMALL, CAP_SMALL_MS);
+  // (A) FIRST: assert the small input on WALL time before touching any
+  // larger size, so a quadratic implementation fails fast and never runs
+  // the growth law.
+  const small = sample(ABS_SMALL, CAP_SMALL_MS);
   assert.ok(
-    minSmall < CAP_SMALL_MS,
-    `small=${minSmall}ms >= cap ${CAP_SMALL_MS}ms`,
+    small.wall < CAP_SMALL_MS,
+    `small wall=${small.wall}ms >= cap ${CAP_SMALL_MS}ms`,
   );
-  // No early stop on LARGE: one slow sample on a loaded machine must not
-  // become the minimum. A quadratic implementation never gets here.
-  const minLarge = sample(ABS_LARGE, Number.POSITIVE_INFINITY);
-  const exponent = Math.log(minLarge / minSmall) / Math.log(8);
+  // (B) the growth law: per size the MINIMUM of 7 CPU-time samples, no
+  // early stop — one slow sample on a loaded machine must not become the
+  // minimum. 400k is NOT sampled twice: (A)'s run is reused, and its CPU
+  // minimum is (B)'s 400k value. Every size parses for at least several
+  // milliseconds, so the coarse resolution of process.cpuUsage() cannot
+  // dominate the fit.
+  const cpuMins = [small.cpu];
+  const wallMins = [small.wall];
+  for (const size of SIZES.slice(1)) {
+    const s = sample(size, Number.POSITIVE_INFINITY);
+    cpuMins.push(s.cpu);
+    wallMins.push(s.wall);
+  }
+  const xs = SIZES.map((s) => Math.log(s));
+  const ys = cpuMins.map((m) => Math.log(m));
+  const n = xs.length;
+  const sx = xs.reduce((a, b) => a + b, 0);
+  const sy = ys.reduce((a, b) => a + b, 0);
+  const sxy = xs.reduce((a, x, i) => a + x * ys[i], 0);
+  const sxx = xs.reduce((a, x) => a + x * x, 0);
+  const slope = (n * sxy - sx * sy) / (n * sxx - sx * sx);
+  const cpuText = cpuMins.map((m) => m.toFixed(2)).join(",");
+  const wallText = wallMins.map((m) => m.toFixed(2)).join(",");
   console.log(
-    `[PSC] small=${minSmall.toFixed(2)}ms large=${minLarge.toFixed(2)}ms exponent=${exponent.toFixed(3)}`,
+    `[PSC] sizes=${SIZES.join(",")} wallMins=${wallText}ms cpuMins=${cpuText}ms slope=${slope.toFixed(3)}`,
   );
   assert.ok(
-    exponent < BOUND,
-    `exponent ${exponent.toFixed(3)} >= ${BOUND} (small=${minSmall}ms, large=${minLarge}ms)`,
+    slope < BOUND,
+    `fitted exponent ${slope.toFixed(3)} >= ${BOUND} (sizes=${SIZES.join(",")} cpuMins=${cpuText}ms wallMins=${wallText}ms)`,
   );
-  // Correctness on the large input is preserved from the original assertion.
+  // Correctness on the 3.2M input is preserved from the original assertion.
   assert.strictEqual(
-    parseStructuredConfig(makeYaml(ABS_LARGE)).bounded_contexts.length,
+    measureParse(makeYaml(3_200_000)).bounded_contexts.length,
     1,
   );
+  // What this GIVES UP: a term with a small constant (n log n, or a small
+  // n^1.5 term) passes; the largest input is now 6.4M characters; and it
+  // asserts no absolute time on the large input — only the small-input
+  // cap (A) and the growth law (B).
 }, 30_000);
 
 // P18.3: buildDomainAnalysisFromConfig tests
