@@ -242,7 +242,14 @@ function mapStoreError(error: OwnerDocumentsError): NextResponse {
   if (error.kind === "Conflict") {
     return NextResponse.json(
       { error: "Conflict", message: error.message, statusCode: 409 },
-      { status: 409 },
+      {
+        status: 409,
+        // Same header form as preconditionFailed: a stale-rev refusal
+        // carries the STORED revision so the client can recover.
+        ...(error.currentRev !== undefined
+          ? { headers: { ETag: `"rev:${error.currentRev}"` } }
+          : {}),
+      },
     );
   }
   if (error.kind === "PreconditionFailed") {
@@ -366,8 +373,9 @@ export async function handleDocumentGet(
  * - `If-None-Match: *` — create-only: refuse with 412 if the document already
  *   exists, so a first upload never clobbers a copy another device wrote.
  * - `If-Match: "rev:<n>"` — optimistic concurrency: replace only if the stored
- *   rev equals `<n>`; a stale rev is 409 (existing behavior). `If-None-Match: *`
- *   cannot be combined with `If-Match`.
+ *   rev equals `<n>`; a stale rev is 409 (existing behavior), and the 409
+ *   carries the current ETag (the stored revision) so the client can retry.
+ *   `If-None-Match: *` cannot be combined with `If-Match`.
  *
  * The mutation gate authenticates first (401) then rate-limits / origin-checks,
  * so unsigned traffic cannot exhaust the IP-keyed write budget (same rationale
