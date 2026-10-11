@@ -75,6 +75,13 @@ reading (delete less, refuse more):
   never touched, also under `--force`: the command refuses. `--keep-files`, which touches no file, is
   the way to drop such an entry. The same holds for the registry file itself and for anything under `.git`.
   A recorded path that is no longer a plain file (a folder, a symbolic link) is kept and listed.
+- An installed template whose manifest cannot be loaded (it is no longer among the bundled templates)
+  may require the one being removed, and the command cannot know. It refuses and names such templates,
+  unless `--force`. This is stricter than his answer 8, which names only the templates known to
+  require it.
+- The protected names (`.git`, the registry file) are matched in any letter case, and a path with a
+  segment that ends in a dot or a space, or that holds a colon, is treated as unsafe: on Windows and
+  macOS those spellings reach the same files.
 - `.hexagen-update.*` conflict copies are listed and not deleted, as the proposal's table has it. He
   was not asked about them by name.
 - From the proposal, unchanged: a template that is not installed prints "not installed" and exits 0; a
