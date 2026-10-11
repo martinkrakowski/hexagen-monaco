@@ -52,5 +52,5 @@ export function enforceProductionDatabaseChoice(
     exit(1);
     return;
   }
-  if (result.warning) log.warn(result.warning);
+  if ("warning" in result) log.warn(result.warning);
 }

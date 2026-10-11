@@ -15,7 +15,9 @@ const dbChoice = vi.hoisted(() => ({
 }));
 
 vi.mock("../lib/platform/production-db-choice", () => {
-  return { enforceProductionDatabaseChoice: dbChoice.enforceProductionDatabaseChoice };
+  return {
+    enforceProductionDatabaseChoice: dbChoice.enforceProductionDatabaseChoice,
+  };
 });
 
 async function freshRegister(): Promise<() => Promise<void>> {
@@ -82,44 +84,66 @@ describe("register() Postgres gate", () => {
 
   it(
     "production with no DATABASE_URL and no PLATFORM_DB calls enforce first and would exit",
-    withEnv(async () => {
-      delete process.env.DATABASE_URL;
-      delete process.env.PLATFORM_DB;
-      process.env.NEXT_RUNTIME = "nodejs";
-      vi.stubEnv("NODE_ENV", "production");
-      try {
-        const calls: string[] = [];
-        dbChoice.enforceProductionDatabaseChoice.mockImplementation(() => {
-          calls.push("enforce");
-        });
-        pg.startPlatformMigrations.mockImplementation(() => {
-          calls.push("migrations");
-        });
-        const register = await freshRegister();
-        await register();
-        expect(dbChoice.enforceProductionDatabaseChoice).toHaveBeenCalledTimes(1);
-        expect(dbChoice.enforceProductionDatabaseChoice).toHaveBeenCalledWith(process.env);
-        expect(calls).toEqual(["enforce"]);
-      } finally {
-        vi.unstubAllEnvs();
-      }
-    }, { NODE_ENV: process.env.NODE_ENV, PLATFORM_DB: process.env.PLATFORM_DB, DATABASE_URL: process.env.DATABASE_URL, NEXT_RUNTIME: process.env.NEXT_RUNTIME }),
+    withEnv(
+      async () => {
+        delete process.env.DATABASE_URL;
+        delete process.env.PLATFORM_DB;
+        process.env.NEXT_RUNTIME = "nodejs";
+        vi.stubEnv("NODE_ENV", "production");
+        try {
+          const calls: string[] = [];
+          dbChoice.enforceProductionDatabaseChoice.mockImplementation(() => {
+            calls.push("enforce");
+          });
+          pg.startPlatformMigrations.mockImplementation(() => {
+            calls.push("migrations");
+          });
+          const register = await freshRegister();
+          await register();
+          expect(
+            dbChoice.enforceProductionDatabaseChoice,
+          ).toHaveBeenCalledTimes(1);
+          expect(dbChoice.enforceProductionDatabaseChoice).toHaveBeenCalledWith(
+            process.env,
+          );
+          expect(calls).toEqual(["enforce"]);
+        } finally {
+          vi.unstubAllEnvs();
+        }
+      },
+      {
+        NODE_ENV: process.env.NODE_ENV,
+        PLATFORM_DB: process.env.PLATFORM_DB,
+        DATABASE_URL: process.env.DATABASE_URL,
+        NEXT_RUNTIME: process.env.NEXT_RUNTIME,
+      },
+    ),
   );
 
   it(
     "enforce is not called when NEXT_RUNTIME is not nodejs",
-    withEnv(async () => {
-      delete process.env.DATABASE_URL;
-      delete process.env.PLATFORM_DB;
-      process.env.NEXT_RUNTIME = "edge";
-      vi.stubEnv("NODE_ENV", "production");
-      try {
-        const register = await freshRegister();
-        await register();
-        expect(dbChoice.enforceProductionDatabaseChoice).not.toHaveBeenCalled();
-      } finally {
-        vi.unstubAllEnvs();
-      }
-    }, { NODE_ENV: process.env.NODE_ENV, PLATFORM_DB: process.env.PLATFORM_DB, DATABASE_URL: process.env.DATABASE_URL, NEXT_RUNTIME: process.env.NEXT_RUNTIME }),
+    withEnv(
+      async () => {
+        delete process.env.DATABASE_URL;
+        delete process.env.PLATFORM_DB;
+        process.env.NEXT_RUNTIME = "edge";
+        vi.stubEnv("NODE_ENV", "production");
+        try {
+          const register = await freshRegister();
+          await register();
+          expect(
+            dbChoice.enforceProductionDatabaseChoice,
+          ).not.toHaveBeenCalled();
+        } finally {
+          vi.unstubAllEnvs();
+        }
+      },
+      {
+        NODE_ENV: process.env.NODE_ENV,
+        PLATFORM_DB: process.env.PLATFORM_DB,
+        DATABASE_URL: process.env.DATABASE_URL,
+        NEXT_RUNTIME: process.env.NEXT_RUNTIME,
+      },
+    ),
   );
 });
