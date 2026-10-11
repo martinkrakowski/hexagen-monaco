@@ -236,13 +236,14 @@ test("parseStructuredConfig: large input scales linearly", () => {
   // machine, minimum of 7 samples per size: the parser is linear — CPU
   // slopes of 0.966-1.060 over five runs with all 8 cores loaded by
   // background spinners, and 0.972-1.166 over three unloaded runs.
-  // NOT explained: the old two-point wall-clock test read exponents of
-  // 1.74-1.98 on three machines inside the full test run. That was not
-  // reproduced: side by side on the lane host, under the same load, the
-  // old two-point wall exponent read 0.82-1.09 and the five-point wall
-  // slope 0.89-1.16, no higher than the CPU slope. CPU time is used
-  // because it cannot grow when the scheduler takes the thread away, and
-  // five sizes because two points make an exponent out of one bad sample.
+  // Why CPU time: the old two-point WALL-clock test read exponents of
+  // 1.74-1.98 inside the full test run. Loading the lane host with
+  // spinners did not reproduce that (wall and CPU slopes both stayed
+  // near 1). The full test run on the Mac verification host did: in one
+  // run the wall minima were 2.37, 4.68, 9.33, 32.42 and 149.87 ms for
+  // the five sizes while the CPU minima were 2.37, 4.67, 9.32, 18.95 and
+  // 38.05 ms (slope 1.003). The large parses never got an undisturbed
+  // wall-clock window in 7 samples; their CPU cost was exactly linear.
   // If this test fails, its message carries BOTH clocks per size: a curve
   // that bends in wall time only is the machine, one that bends in CPU
   // time is the parser (or the collector).
