@@ -6,7 +6,8 @@
     "packages/*/.env.*",
     "tools/*/.env.*",
     "deploy/.env.*",
-    "tsconfig.base.json"
+    "tsconfig.base.json",
+    "vitest.shared.ts"
   ],
   "globalEnv": [
     "APP_VERSION",
@@ -63,113 +64,41 @@
     },
     "test": {
       "dependsOn": ["^build"],
-      "inputs": [
-        "src/**/*.ts",
-        "src/**/*.tsx",
-        "__tests__/**/*.ts",
-        "__tests__/**/*.tsx",
-        "tests/**/*.ts",
-        "tsconfig*.json",
-        "package.json"
-      ],
       "outputs": [],
       "cache": false
     },
     "@hexagen/arch-linter#test": {
       "dependsOn": ["^build", "build"],
-      "inputs": [
-        "src/**/*.ts",
-        "src/**/*.tsx",
-        "__tests__/**/*.ts",
-        "__tests__/**/*.tsx",
-        "tests/**/*.ts",
-        "tsconfig*.json",
-        "package.json"
-      ],
       "outputs": [],
       "cache": false
     },
     "@hexagen/sync#test": {
       "dependsOn": ["^build", "build", "@hexagen/arch-linter#build"],
-      "inputs": [
-        "src/**/*.ts",
-        "src/**/*.tsx",
-        "__tests__/**/*.ts",
-        "__tests__/**/*.tsx",
-        "tests/**/*.ts",
-        "tsconfig*.json",
-        "package.json"
-      ],
       "outputs": [],
       "cache": false
     },
     "@hexagen/sync#test:contract": {
       "dependsOn": ["^build", "build", "@hexagen/arch-linter#build"],
-      "inputs": [
-        "src/**/*.ts",
-        "src/**/*.tsx",
-        "__tests__/**/*.ts",
-        "__tests__/**/*.tsx",
-        "tests/**/*.ts",
-        "tsconfig*.json",
-        "package.json"
-      ],
       "outputs": [],
       "cache": false
     },
     "@hexagen/mcp-server#test": {
       "dependsOn": ["^build", "build"],
-      "inputs": [
-        "src/**/*.ts",
-        "src/**/*.tsx",
-        "__tests__/**/*.ts",
-        "__tests__/**/*.tsx",
-        "tests/**/*.ts",
-        "tsconfig*.json",
-        "package.json"
-      ],
       "outputs": [],
       "cache": false
     },
     "@hexagen/orchestration#test": {
       "dependsOn": ["^build", "build"],
-      "inputs": [
-        "src/**/*.ts",
-        "src/**/*.tsx",
-        "__tests__/**/*.ts",
-        "__tests__/**/*.tsx",
-        "tests/**/*.ts",
-        "tsconfig*.json",
-        "package.json"
-      ],
       "outputs": [],
       "cache": false
     },
     "typecheck:test": {
       "dependsOn": ["^build", "build"],
-      "inputs": [
-        "src/**/*.ts",
-        "src/**/*.tsx",
-        "__tests__/**/*.ts",
-        "__tests__/**/*.tsx",
-        "tests/**/*.ts",
-        "tsconfig*.json",
-        "package.json"
-      ],
       "outputs": [],
       "cache": false
     },
     "web#typecheck:test": {
       "dependsOn": ["^build"],
-      "inputs": [
-        "src/**/*.ts",
-        "src/**/*.tsx",
-        "__tests__/**/*.ts",
-        "__tests__/**/*.tsx",
-        "tests/**/*.ts",
-        "tsconfig*.json",
-        "package.json"
-      ],
       "outputs": [],
       "cache": false
     },
