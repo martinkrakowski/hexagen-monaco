@@ -215,8 +215,9 @@ describe("LocalModeView — one discriminant selects one card (REA-002)", () => 
         expect(container.textContent).toMatch(marker);
       }
       if (lifecycle.kind === "usable") {
-        // population-guard: the usable card is the settings card WITHOUT the
-        // requires-model warning (the stub used to print `warn:false`).
+        // The usable card is the settings card WITHOUT the requires-model
+        // warning (the stub used to print `warn:false`).
+        // population-guard: the marker above proved the card is not empty.
         expect(container.textContent).not.toMatch(/A model is required/);
       }
     });
@@ -255,9 +256,14 @@ describe("LocalModeView — one discriminant selects one card (REA-002)", () => 
       />,
     );
 
-    // The real card names both server models in its environment-LLM section.
-    expect(document.body.textContent).toContain("z-ai/glm-5.2");
-    expect(document.body.textContent).toContain("inception/mercury-2");
+    // The real card names each server model under its own label, so a swap
+    // of the two props fails here as it did against the stub.
+    expect(
+      screen.getByText("Manifest Generation").parentElement?.textContent,
+    ).toContain("inception/mercury-2");
+    expect(
+      screen.getByText("Assistant Q&A").parentElement?.textContent,
+    ).toContain("z-ai/glm-5.2");
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 });
