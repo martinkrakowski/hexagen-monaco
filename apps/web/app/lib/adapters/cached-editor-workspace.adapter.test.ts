@@ -7192,6 +7192,87 @@ describe("workspace conflict resolves: backup, one at a time, discard", () => {
     );
   });
 
+  it("the late save after the reload: a save that a replacement overtook is refused even when the reload has answered", async () => {
+    const { adapter, cache, fetchImpl, server } = await pendingConflict();
+    const realStamp = cache.getLiftStamp.bind(cache);
+    let parked = false;
+    let stampArrived!: () => void;
+    const arrived = new Promise<void>((r) => {
+      stampArrived = r;
+    });
+    let releaseStamp!: () => void;
+    const gate = new Promise<void>((r) => {
+      releaseStamp = r;
+    });
+    vi.spyOn(cache, "getLiftStamp").mockImplementation(async (id) => {
+      if (!parked) {
+        parked = true;
+        stampArrived();
+        await gate;
+      }
+      return realStamp(id);
+    });
+
+    const saveP = adapter.saveWorkspace(UUID, makeWorkspace(4000));
+    await arrived;
+
+    // The other device's copy is taken AND the interface has reloaded: the
+    // two guards are lifted again while the old save is still parked.
+    assert.ok((await adapter.useOtherDeviceCopy(UUID)).success);
+    const reloaded = await adapter.loadWorkspace(UUID);
+    assert.ok(reloaded.success);
+    assert.deepEqual(reloaded.value, makeWorkspace(2000));
+
+    releaseStamp();
+    const saveResult = await saveP;
+    assert.ok(!saveResult.success, "the overtaken save is refused");
+    assert.equal(saveResult.error.kind, "Conflict");
+    await vi.advanceTimersByTimeAsync(2000);
+    assert.equal(putCallsOf(fetchImpl).length, 0, "NO PUT was sent");
+    assert.deepEqual(
+      server.get(UUID)!.payload,
+      makeWorkspace(2000),
+      "the server still holds the copy that was taken",
+    );
+
+    // A save that begins after the reload is accepted.
+    const later = await adapter.saveWorkspace(UUID, makeWorkspace(5000));
+    assert.ok(later.success, "a save after the reload is accepted");
+  });
+
+  it("backups are listed for the signed-in user only", async () => {
+    const { adapter } = await pendingConflict();
+    assert.ok((await adapter.keepThisDeviceCopy(UUID)).success);
+    const mine = await adapter.listConflictBackups(UUID);
+    assert.ok(mine.success);
+    assert.equal(mine.value!.length, 1, "the owner sees the backup");
+
+    // Another account in the same browser (the same IndexedDB).
+    const other = makeAdapters({ userId: "user-2" });
+    const theirs = await other.adapter.listConflictBackups(UUID);
+    assert.ok(theirs.success);
+    assert.deepEqual(theirs.value, [], "another account sees none");
+    const signedOut = makeAdapters({ userId: null });
+    const none = await signedOut.adapter.listConflictBackups(UUID);
+    assert.ok(none.success);
+    assert.deepEqual(none.value, [], "signed out sees none");
+  });
+
+  it("a listener that throws does not end a resolve", async () => {
+    const { adapter, warns, server, browserCopy } = await pendingConflict();
+    adapter.subscribe(() => {
+      throw new Error("boom");
+    });
+    const result = await adapter.keepThisDeviceCopy(UUID);
+    assert.ok(result.success, "the resolve still succeeds");
+    assert.deepEqual(server.get(UUID)!.payload, browserCopy);
+    assert.equal(adapter.getPendingConflict(UUID), null);
+    assert.ok(
+      warns.some((w) => w.includes("listener threw")),
+      "the throw was logged",
+    );
+  });
+
   it("the discard waits for a running resolve: the resolve's writes come first, then are cleared", async () => {
     const { adapter, cache } = await pendingConflict();
     const realBackup = cache.addConflictBackup.bind(cache);

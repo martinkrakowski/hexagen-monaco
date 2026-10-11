@@ -464,6 +464,12 @@ export class CachedEditorWorkspaceAdapter
       promise: Promise<Result<void, PersistenceError>>;
     }
   >();
+  /**
+   * Counts, per id, the times "use the other device's copy" began to replace
+   * the browser copy. A save captures it on entry: a save that a replacement
+   * overtook is refused even after the reload has lifted the other guards.
+   */
+  private readonly replacements = new Map<string, number>();
   /** ids whose browser copy "use the other device's copy" is replacing now. */
   private readonly replacingBrowserCopy = new Set<string>();
   /**
@@ -1071,10 +1077,21 @@ export class CachedEditorWorkspaceAdapter
     return entry === undefined ? null : { ...entry };
   }
 
-  listConflictBackups(
+  /**
+   * Only the backups of the signed-in user: another account in the same
+   * browser, opening the same project id, is given none of them.
+   */
+  async listConflictBackups(
     sessionId: string,
   ): Promise<Result<WorkspaceConflictBackup[], PersistenceError>> {
-    return this.cache.listConflictBackups(sessionId);
+    const userId = await this.userIdSource();
+    if (userId === null) return { success: true, value: [] };
+    const all = await this.cache.listConflictBackups(sessionId);
+    if (!all.success) return all;
+    return {
+      success: true,
+      value: all.value.filter((backup) => backup.ownerId === userId),
+    };
   }
 
   subscribe(listener: () => void): () => void {
@@ -1086,7 +1103,15 @@ export class CachedEditorWorkspaceAdapter
 
   private notifyConflictListeners(): void {
     for (const listener of this.conflictListeners) {
-      listener();
+      // A listener comes from the interface and is called inside loads,
+      // discards and resolves: one that throws must not end any of them.
+      try {
+        listener();
+      } catch (cause) {
+        this.logger.warn(
+          `a workspace conflict listener threw: ${String(cause)}`,
+        );
+      }
     }
   }
 
@@ -1477,6 +1502,10 @@ export class CachedEditorWorkspaceAdapter
     // From here until the end, a save of this id writes nothing: the browser
     // copy is being replaced, and a save in between would be lost unseen.
     this.replacingBrowserCopy.add(sessionId);
+    this.replacements.set(
+      sessionId,
+      (this.replacements.get(sessionId) ?? 0) + 1,
+    );
     try {
       const previous = await this.cache.loadWorkspace(sessionId);
       if (gone()) return discarded;
@@ -1771,6 +1800,7 @@ export class CachedEditorWorkspaceAdapter
     // says so; it writes nothing.
     const refused = this.saveRefusedByResolve(sessionId);
     if (refused !== null) return refused;
+    const replacementsAtStart = this.replacements.get(sessionId) ?? 0;
     const cacheResult = await this.cache.saveWorkspace(sessionId, workspace);
     if (!cacheResult.success) return cacheResult;
 
@@ -1828,6 +1858,17 @@ export class CachedEditorWorkspaceAdapter
     // stamp, and the next load would upload it.
     const refusedLate = this.saveRefusedByResolve(sessionId);
     if (refusedLate !== null) return refusedLate;
+    // The same after the reload: a save that began before a replacement and
+    // is still here holds the copy that lost, whatever the guards say now.
+    if ((this.replacements.get(sessionId) ?? 0) !== replacementsAtStart) {
+      return {
+        success: false,
+        error: {
+          kind: "Conflict",
+          message: `workspace ${sessionId}: the other device's copy was taken while this save was under way; it was not sent`,
+        },
+      };
+    }
     this.armRemoteWrite(sessionId, workspace, userId, precondition);
 
     return cacheResult;
