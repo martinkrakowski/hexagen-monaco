@@ -6,11 +6,21 @@ Read against `origin/main` at `44b93b98` on 2026-10-11. Nothing changed, nothing
 
 **Summary**
 
-- #766 still present: the hook records `isWebGPUSupported` but no code path ever enters `unsupported`. One apps/web lane; one owner decision (when to transition).
+- #766 still present on the live page: `ModelSelectionPage.tsx` starts a local download without checking WebGPU. One apps/web lane on that page. The flow-hook path first planned here has no live caller (found in review of #868).
 - #521 still present, with a stopgap on top: `model-settings` floats `react` to 19.2.5 beside web's 19.2.4, and `react-dom` is pinned exactly to survive it. One lockfile lane, run alone.
 - #428 half fixed: the bin gap was closed by #455; the turbo `inputs` landmine remains and is a `turbo.json`-only change, or a comment-close.
 
 ## #766 Model selection never reaches `unsupported`
+
+**Correction (2026-10-11, after the review of #868).** The local-model choice a user can reach is `apps/web/features/manifest-generation/ModelSelectionPage.tsx` (`handleSelectModel`, which calls `ctx.switchModel` / `ctx.initializeModel`), on the route `/projects/new/ai/models`. `selectLocalModel` and `repairModelDownload` in `useModelDownloadActions.ts` are called only by `ModelSelectionContainer` / `SimpleModelSelection`, which no route renders. Guarding them fixes nothing, and the text below that names `SimpleModelSelection.tsx` as the place the user clicks is wrong.
+
+**Fix (the owner's decision, 2026-10-11).** In `ModelSelectionPage.tsx`: when WebGPU detection has resolved `false` (`useWebGPUDetection`, or the engine status `no_webgpu` / `unsupported_browser`), a local choice or Retry calls neither `initializeModel` nor `switchModel` and shows an inline `Alert` above the model list. A download already in flight is cancelled with `ctx.cancelDownload()`. Detection not finished proceeds as before. The page has no cloud-model choice, so there is no "Use a cloud model" button; the way out is the footer Back. The state machine, `StateView` and the flow hook are not touched.
+
+**Proof.** `__tests__/ModelSelectionPage.webgpu-unsupported.test.tsx` renders the page with detection `false`, not finished and `true`, clicks a model card, and asserts the call counts and the notice.
+
+**Follow-ups, not in that change.** Delete the two unused components and their actions. Guard the remembered-model auto-resume in `useModelSelectionFlowEffects.ts` (about lines 159-235), which is live on `/projects/new/ai`. Disable the local cards in `@hexagen/model-settings` when WebGPU is absent.
+
+**Superseded (kept for the record):**
 
 **1. Still present.** `apps/web/features/manifest-generation/ModelSelectionFlow/model-selection-state-machine.ts:13` declares `"unsupported"` and line 72 lists its exits, but no state lists it as an entry and no `ModelSelectionEvent` yields it. `useModelSelectionFlowEffects.ts` (around line 50) copies `gpuDetection.isWebGPUSupported` into `hardwareCapabilities` and stops. `useModelDownloadActions.ts` `selectLocalModel` (line 25) calls `initializeModel` unconditionally. `__tests__/useModelSelectionFlowState.test.ts:255-271` pins the gap ("leaves state idle ... see #766") and holds the `it.todo`. `StateView.tsx:132` and `GenerateWithAiError.ts:4,20` are dead code.
 
@@ -56,7 +66,7 @@ Read against `origin/main` at `44b93b98` on 2026-10-11. Nothing changed, nothing
 
 1. **#428** first and in parallel with anything: comment-close item 1; land item 2 in one tiny PR, or close outright if the owner rules caching out.
 2. **#766** in parallel with #428 (apps/web `features/manifest-generation` only).
-3. **#521** alone afterwards: lockfile churn gets its own wave. No file overlap with #766 (#766 edits `useModelSelectionFlowState.test.ts`; #521's stub cleanup edits four other tests), but the rule is about the lock. #521 unblocks real mounting in future web tests; nothing depends on #766.
+3. **#521** alone afterwards: lockfile churn gets its own wave. No file overlap with #766 (#766 edits `ModelSelectionPage.tsx` and adds one test file; #521's stub cleanup edits four other tests), but the rule is about the lock. #521 unblocks real mounting in future web tests; nothing depends on #766.
 
 Close instead of fix: only #428 item 1.
 
