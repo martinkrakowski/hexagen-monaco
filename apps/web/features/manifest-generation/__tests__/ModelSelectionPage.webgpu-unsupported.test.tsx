@@ -72,6 +72,7 @@ const makeLlmContext = (
     initializeModel: vi.fn(async () => {}),
     cancelDownload: vi.fn(),
     switchModel: vi.fn(async () => {}),
+    returnToModelSettings: vi.fn(),
   };
   const ctx = {
     engineState: {
@@ -81,6 +82,7 @@ const makeLlmContext = (
     },
     initializeModel: spies.initializeModel,
     cancelDownload: spies.cancelDownload,
+    returnToModelSettings: spies.returnToModelSettings,
     hasAnyCachedModel: vi.fn(async () => false),
     hasModelInCache: vi.fn(async () => false),
     switchModel: spies.switchModel,
@@ -239,7 +241,19 @@ describe("ModelSelectionPage — WebGPU-absent guard (#766)", () => {
       fireEvent.click(screen.getByLabelText("Retry download"));
     });
     assert.equal(spies.initializeModel.mock.calls.length, 0);
+    assert.equal(spies.returnToModelSettings.mock.calls.length, 1);
     screen.getByText("Local models cannot run in this browser");
+  });
+
+  it("h2. an unblocked Retry retries the model without returning to settings", async () => {
+    // expected colour today: GREEN (a pin)
+    gpu.current = { ...gpu.current, isLoading: false, isWebGPUSupported: true };
+    const { spies } = renderPage("error", { loadedModelId: "qwen3-8b" });
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText("Retry download"));
+    });
+    assert.equal(spies.initializeModel.mock.calls.length, 1);
+    assert.equal(spies.returnToModelSettings.mock.calls.length, 0);
   });
 
   it("i. cloud path untouched when a server key exists", async () => {

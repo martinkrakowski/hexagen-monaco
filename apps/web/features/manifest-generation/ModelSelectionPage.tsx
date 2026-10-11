@@ -42,14 +42,11 @@ export function ModelSelectionPage({ llmContext }: ModelSelectionPageProps) {
   const unsupportedRef = useRef(localUnsupported);
   unsupportedRef.current = localUnsupported;
   const [showUnsupported, setShowUnsupported] = useState(false);
-  const cancelledInFlightRef = useRef(false);
   useEffect(() => {
     if (
       localUnsupported &&
-      (engineStatus === "downloading" || engineStatus === "loading_vram") &&
-      !cancelledInFlightRef.current
+      (engineStatus === "downloading" || engineStatus === "loading_vram")
     ) {
-      cancelledInFlightRef.current = true;
       llmRef.current.cancelDownload();
       setShowUnsupported(true);
     }
@@ -189,7 +186,7 @@ export function ModelSelectionPage({ llmContext }: ModelSelectionPageProps) {
             >
               {hasServerApiKey
                 ? "This browser does not support WebGPU, which local models need. The cloud model shown below is active, so you can continue without a local model."
-                : "This browser does not support WebGPU, which local models need. Open this page in Chrome 113+ or Edge 113+, or go back."}
+                : "This browser does not support WebGPU, which local models need. Open this page in a browser that supports WebGPU, or go back."}
             </Alert>
           )}
 
@@ -259,6 +256,7 @@ export function ModelSelectionPage({ llmContext }: ModelSelectionPageProps) {
                 }}
                 onRetry={() => {
                   if (unsupportedRef.current) {
+                    llmRef.current.returnToModelSettings();
                     setShowUnsupported(true);
                     return;
                   }
