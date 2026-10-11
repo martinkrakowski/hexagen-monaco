@@ -3,6 +3,7 @@
 export * from "./environment-reader.port.js";
 export * from "./file-emitter.port.js";
 export * from "./project-file-presence.port.js";
+export * from "./project-removal-files.port.js";
 export * from "./question-engine.port.js";
 export * from "./template-config-store.port.js";
 export * from "./template-registry.port.js";
