@@ -3,7 +3,7 @@
 import { useCallback, useState, useEffect, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Button } from "@hexagen/ui";
+import { Alert, Button } from "@hexagen/ui";
 import { ModelSettingsView } from "@hexagen/model-settings";
 import { ArrowLeft } from "lucide-react";
 import { ProjectsShellWithFreeTier } from "@/ProjectsShellWithFreeTier";
@@ -17,6 +17,7 @@ import type { LLMEngineStatus, ModelMetadata } from "@hexagen/local-llm";
 import { hasServerLLMAccessKey } from "../../app/lib/wire";
 import { getCapabilities } from "@/lib/manifest-generation";
 import { useSuppressLLMLoadingModal } from "@/contexts/LLMLoadingModalContext";
+import { useWebGPUDetection } from "./ModelSelectionFlow/useWebGPUDetection";
 
 interface ModelSelectionPageProps {
   llmContext: LocalLLMContext;
@@ -30,6 +31,26 @@ export function ModelSelectionPage({ llmContext }: ModelSelectionPageProps) {
   const [mounted, setMounted] = useState(false);
   const llmRef = useRef(llmContext);
   llmRef.current = llmContext;
+
+  const gpu = useWebGPUDetection();
+  const webGpuSupported = gpu.isLoading ? undefined : gpu.isWebGPUSupported;
+  const engineStatus = llmContext.engineState.status;
+  const localUnsupported =
+    webGpuSupported === false ||
+    engineStatus === "no_webgpu" ||
+    engineStatus === "unsupported_browser";
+  const unsupportedRef = useRef(localUnsupported);
+  unsupportedRef.current = localUnsupported;
+  const [showUnsupported, setShowUnsupported] = useState(false);
+  useEffect(() => {
+    if (
+      localUnsupported &&
+      (engineStatus === "downloading" || engineStatus === "loading_vram")
+    ) {
+      llmRef.current.cancelDownload();
+      setShowUnsupported(true);
+    }
+  }, [localUnsupported, engineStatus]);
 
   const [serverModelName, setServerModelName] = useState<string>("gpt-4o-mini");
   const [generationModelName, setGenerationModelName] = useState<
@@ -95,6 +116,10 @@ export function ModelSelectionPage({ llmContext }: ModelSelectionPageProps) {
   ]);
 
   const handleSelectModel = useCallback(async (modelId: DomainModelId) => {
+    if (unsupportedRef.current) {
+      setShowUnsupported(true);
+      return;
+    }
     const ctx = llmRef.current;
     if (ctx.engineState.loadedModelId) {
       return ctx.switchModel(modelId);
@@ -115,10 +140,12 @@ export function ModelSelectionPage({ llmContext }: ModelSelectionPageProps) {
     llmContext.engineState.status === "downloading" ||
     llmContext.engineState.status === "loading_vram";
 
-  const engineStatus = llmContext.engineState.status;
   const isModelLoading =
     engineStatus === "downloading" || engineStatus === "loading_vram";
-  const isModelError = engineStatus === "error";
+  // After a blocked Retry the error card would cover the notice, so the card
+  // steps aside while the notice is shown. The engine's state is not changed.
+  const isModelError =
+    engineStatus === "error" && !(showUnsupported && localUnsupported);
 
   const footer = (
     <>
@@ -153,6 +180,18 @@ export function ModelSelectionPage({ llmContext }: ModelSelectionPageProps) {
               Configure your AI model for manifest generation
             </p>
           </div>
+
+          {showUnsupported && localUnsupported && (
+            <Alert
+              tone="warning"
+              title="Local models cannot run in this browser"
+              className="mx-auto mb-3 w-full max-w-2xl shrink-0"
+            >
+              {hasServerApiKey
+                ? "This browser does not support WebGPU, which local models need. The cloud model shown below is active, so you can continue without a local model."
+                : "This browser does not support WebGPU, which local models need. Open this page in a browser that supports WebGPU, or go back."}
+            </Alert>
+          )}
 
           <div
             className={`flex-1 min-h-0 overflow-hidden ${isModelLoading || isModelError ? "pointer-events-none opacity-50" : ""}`}
@@ -219,6 +258,10 @@ export function ModelSelectionPage({ llmContext }: ModelSelectionPageProps) {
                   router.push(returnUrl || genesisPath);
                 }}
                 onRetry={() => {
+                  if (unsupportedRef.current) {
+                    setShowUnsupported(true);
+                    return;
+                  }
                   const modelId = llmContext.engineState.loadedModelId;
                   if (modelId) llmContext.initializeModel(modelId);
                 }}
