@@ -225,6 +225,8 @@ function makeNoAnswerServer(
     applyPut: true,
     failGets: false,
     calls: [] as Array<{ method: string; ifMatch: string | null }>,
+    holdNextGet: false,
+    releaseGet: null as (() => void) | null,
   };
   const fetchImpl = vi.fn(async (_url: string | URL, init?: RequestInit) => {
     const method = (init?.method ?? "GET").toUpperCase();
@@ -233,6 +235,26 @@ function makeNoAnswerServer(
     );
     server.calls.push({ method, ifMatch: headers.get("If-Match") });
     if (method === "GET") {
+      if (server.holdNextGet) {
+        server.holdNextGet = false;
+        return new Promise<Response>((resolve) => {
+          server.releaseGet = () => {
+            if (server.failGets) {
+              resolve(fakeResponse(500));
+            } else if (server.doc === null) {
+              resolve(fakeResponse(404));
+            } else {
+              resolve(
+                fakeResponse(
+                  200,
+                  { payload: server.doc!.payload, updatedAt: 1 },
+                  server.doc!.rev,
+                ),
+              );
+            }
+          };
+        });
+      }
       if (server.failGets) return fakeResponse(500);
       if (server.doc === null) return fakeResponse(404);
       return fakeResponse(
@@ -420,6 +442,162 @@ describe("a write with no answer that a discard overtook", () => {
     assert.equal(server.doc, null, "the document is gone from the server");
     assert.ok(loadResult.success);
     assert.equal(loadResult.value, null, "the load answered null");
+  });
+
+  it("lift path: a copy a later load adopted after the discard ran out is not deleted", async () => {
+    const { server, fetch } = makeNoAnswerServer(null);
+    const { adapter, cache } = makeAdapters(fetch);
+    await cache.saveWorkspace(UUID, makeWorkspace(2000));
+
+    const l1 = adapter.loadWorkspace(UUID);
+    await vi.advanceTimersByTimeAsync(0);
+    assert.ok(server.doc, "the document was created");
+    assert.equal(server.doc.rev, 1, "the parked lift PUT was applied at rev 1");
+
+    server.holdNextGet = true;
+    const clear = adapter.clearWorkspace(UUID);
+    await vi.advanceTimersByTimeAsync(8_000);
+    assert.ok(server.releaseGet, "the confirming GET is parked");
+    await vi.advanceTimersByTimeAsync(2_000);
+    await clear;
+    assert.equal(
+      server.calls.some((c) => c.method === "DELETE"),
+      false,
+      "no DELETE while the confirming GET is parked",
+    );
+
+    const l2 = await adapter.loadWorkspace(UUID);
+    assert.ok(l2.success, "the load succeeded");
+    if (l2.success && l2.value !== null) {
+      assert.equal(
+        l2.value.updatedAt,
+        2000,
+        "the adopted copy is the 2000 one",
+      );
+    }
+    const stamp: LiftStamp | null = await cache.getLiftStamp(UUID);
+    assert.ok(stamp, "a lift stamp exists");
+    assert.equal(stamp!.rev, 1);
+    assert.notEqual(
+      stamp!.discarded,
+      true,
+      "the stamp is not a discard marker",
+    );
+
+    server.releaseGet!();
+    await vi.advanceTimersByTimeAsync(0);
+    const r1 = await l1;
+    assert.equal(
+      server.calls.some((c) => c.method === "DELETE"),
+      false,
+      "no DELETE after the confirming GET was released",
+    );
+    assert.ok(server.doc, "the document still exists");
+    assert.equal(server.doc!.rev, 1);
+    const stampAfter: LiftStamp | null = await cache.getLiftStamp(UUID);
+    assert.ok(stampAfter, "the lift stamp is still there");
+    assert.equal(stampAfter!.rev, 1);
+    const inCache = await cache.loadWorkspace(UUID);
+    assert.ok(inCache.success);
+    assert.ok(
+      inCache.success && inCache.value !== null,
+      "the cache still holds the workspace",
+    );
+    assert.equal(
+      inCache.success && inCache.value !== null
+        ? inCache.value.updatedAt
+        : null,
+      2000,
+    );
+    assert.ok(r1.success, "the first load resolved successfully");
+    assert.ok(
+      r1.success && r1.value === null,
+      `the first load answered a success with a null value (got ${JSON.stringify(r1)})`,
+    );
+  });
+
+  it("lift path: when no load adopted it, the check still deletes after the discard ran out", async () => {
+    const { server, fetch } = makeNoAnswerServer(null);
+    const { adapter, cache } = makeAdapters(fetch);
+    await cache.saveWorkspace(UUID, makeWorkspace(2000));
+
+    const l1 = adapter.loadWorkspace(UUID);
+    await vi.advanceTimersByTimeAsync(0);
+    assert.ok(server.doc, "the document was created");
+    assert.equal(server.doc.rev, 1);
+
+    server.holdNextGet = true;
+    const clear = adapter.clearWorkspace(UUID);
+    await vi.advanceTimersByTimeAsync(8_000);
+    assert.ok(server.releaseGet, "the confirming GET is parked");
+    await vi.advanceTimersByTimeAsync(2_000);
+    await clear;
+    assert.equal(
+      server.calls.some((c) => c.method === "DELETE"),
+      false,
+      "no DELETE while the confirming GET is parked",
+    );
+
+    server.releaseGet!();
+    await vi.advanceTimersByTimeAsync(0);
+    await l1;
+    assert.ok(
+      server.calls.some(
+        (c) => c.method === "DELETE" && c.ifMatch === '"rev:1"',
+      ),
+      "a DELETE with If-Match rev:1 was sent",
+    );
+    assert.equal(server.doc, null, "the document was deleted");
+  });
+
+  it("lift path: a later load still in flight keeps the copy", async () => {
+    const { server, fetch } = makeNoAnswerServer(null);
+    const { adapter, cache } = makeAdapters(fetch);
+    await cache.saveWorkspace(UUID, makeWorkspace(2000));
+
+    const l1 = adapter.loadWorkspace(UUID);
+    await vi.advanceTimersByTimeAsync(0);
+    assert.ok(server.doc, "the document was created");
+    assert.equal(server.doc.rev, 1);
+
+    server.holdNextGet = true;
+    const clear = adapter.clearWorkspace(UUID);
+    await vi.advanceTimersByTimeAsync(8_000);
+    assert.ok(server.releaseGet, "the confirming GET is parked");
+    await vi.advanceTimersByTimeAsync(2_000);
+    await clear;
+    assert.equal(
+      server.calls.some((c) => c.method === "DELETE"),
+      false,
+      "no DELETE while the confirming GET is parked",
+    );
+
+    const releaseFirst = server.releaseGet!;
+    server.holdNextGet = true;
+    const l2 = adapter.loadWorkspace(UUID);
+    await vi.advanceTimersByTimeAsync(0);
+    assert.ok(server.releaseGet, "the second GET is parked too");
+    assert.notEqual(
+      server.releaseGet,
+      releaseFirst,
+      "a second release function exists",
+    );
+
+    releaseFirst();
+    await vi.advanceTimersByTimeAsync(0);
+    await l1;
+    assert.equal(
+      server.calls.some((c) => c.method === "DELETE"),
+      false,
+      "no DELETE while a load is still in flight",
+    );
+
+    server.releaseGet!();
+    await vi.advanceTimersByTimeAsync(0);
+    const r2 = await l2;
+    assert.ok(r2.success, "the second load succeeded");
+    assert.ok(server.doc, "the document still exists");
+    assert.equal(server.doc!.rev, 1);
   });
 
   it("a confirming read that fails logs the limit: the write stays on the server", async () => {
