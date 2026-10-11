@@ -272,3 +272,55 @@ describe("IDBEditorWorkspaceAdapter recordConflict", () => {
     assert.equal(vi.mocked(set).mock.calls.length, 0, "no separate set() call");
   });
 });
+
+describe("IDBEditorWorkspaceAdapter conflict backups", () => {
+  beforeEach(() => {
+    idb.store.clear();
+    idb.getDelay = null;
+  });
+
+  it("keeps the newest three per id, oldest first, and leaves other ids alone", async () => {
+    const adapter = new IDBEditorWorkspaceAdapter();
+    const mine = "11111111-1111-4111-8111-111111111111";
+    const other = "22222222-2222-4222-8222-222222222222";
+
+    for (const at of ["1", "2"]) {
+      const result = await adapter.addConflictBackup({
+        sessionId: other,
+        lost: "this-device",
+        at,
+        serverRev: 1,
+        ownerId: "u1",
+        workspace: ws(other),
+      });
+      assert.ok(result.success);
+    }
+    for (const at of ["1", "2", "3", "4"]) {
+      const result = await adapter.addConflictBackup({
+        sessionId: mine,
+        lost: "other-device",
+        at,
+        serverRev: 2,
+        ownerId: "u1",
+        workspace: ws(mine),
+      });
+      assert.ok(result.success);
+    }
+
+    const listed = await adapter.listConflictBackups(mine);
+    assert.ok(listed.success);
+    assert.deepEqual(
+      listed.value!.map((b) => b.at),
+      ["2", "3", "4"],
+      "the fourth backup dropped the oldest",
+    );
+
+    const untouched = await adapter.listConflictBackups(other);
+    assert.ok(untouched.success);
+    assert.deepEqual(
+      untouched.value!.map((b) => b.at),
+      ["1", "2"],
+      "another id's backups are untouched",
+    );
+  });
+});
