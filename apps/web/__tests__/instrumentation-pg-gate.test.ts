@@ -83,7 +83,7 @@ describe("register() Postgres gate", () => {
   });
 
   it(
-    "production with no DATABASE_URL and no PLATFORM_DB calls enforce first and would exit",
+    "production with no DATABASE_URL and no PLATFORM_DB: the database choice is checked once and no migration starts",
     withEnv(
       async () => {
         delete process.env.DATABASE_URL;
