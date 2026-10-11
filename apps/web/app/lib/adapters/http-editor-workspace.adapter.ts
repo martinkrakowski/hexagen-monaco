@@ -191,11 +191,47 @@ export type DeleteResult =
       message: string;
     };
 
+/**
+ * Longest one request to the server may take, from sending it to the end
+ * of reading its answer. Shorter than DISCARD_LOAD_WAIT_MS, so that a load
+ * or a discard waiting for another one's request sees it end first.
+ */
+export const REMOTE_REQUEST_TIMEOUT_MS = 8_000;
+
 export class HttpEditorWorkspaceAdapter {
-  constructor(private readonly fetchImpl: typeof fetch = fetchWithCsrf) {}
+  constructor(
+    private readonly fetchImpl: typeof fetch = fetchWithCsrf,
+    private readonly timeoutMs: number = REMOTE_REQUEST_TIMEOUT_MS,
+  ) {}
 
   private documentUrlFor(ownerId: string, id: string): string {
     return `/api/tenants/${encodeURIComponent(ownerId)}/documents/workspace/${encodeURIComponent(id)}`;
+  }
+
+  /**
+   * Runs one request under the time limit. The signal aborts the request
+   * when the limit passes; the race also ends the wait when the request
+   * ignores the signal. A late answer is dropped.
+   */
+  private async withTimeout<T>(
+    run: (signal: AbortSignal) => Promise<T>,
+  ): Promise<T> {
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timedOut = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        controller.abort();
+        reject(new Error(`timed out after ${this.timeoutMs} ms`));
+      }, this.timeoutMs);
+    });
+    const request = run(controller.signal);
+    // The loser of the race must not become an unhandled rejection.
+    request.catch(() => {});
+    try {
+      return await Promise.race([request, timedOut]);
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
+    }
   }
 
   /**
@@ -205,58 +241,64 @@ export class HttpEditorWorkspaceAdapter {
    */
   async read(ownerId: string, id: string): Promise<ReadResult> {
     try {
-      const response = await this.fetchImpl(this.documentUrlFor(ownerId, id), {
-        headers: { "Content-Type": "application/json" },
+      return await this.withTimeout(async (signal) => {
+        const response = await this.fetchImpl(
+          this.documentUrlFor(ownerId, id),
+          {
+            headers: { "Content-Type": "application/json" },
+            signal,
+          },
+        );
+        if (response.status === 401 || response.status === 403) {
+          return {
+            ok: false,
+            reason: "unauthenticated",
+            message: "Sign in required",
+          };
+        }
+        if (response.status === 404) {
+          return {
+            ok: false,
+            reason: "not_found",
+            message: "Document not found",
+          };
+        }
+        if (response.status === 429) {
+          return {
+            ok: false,
+            reason: "rate_limited",
+            message: "Rate limited",
+          };
+        }
+        if (!response.ok) {
+          return {
+            ok: false,
+            reason: "error",
+            status: response.status,
+            message: `Request failed (${response.status})`,
+          };
+        }
+        const body = (await response.json()) as {
+          payload: unknown;
+          updatedAt: number;
+        };
+        const etag = response.headers.get("ETag");
+        const rev = revFromEtag(etag);
+        if (rev === null) {
+          return {
+            ok: false,
+            reason: "error",
+            status: response.status,
+            message: "missing ETag",
+          } as ReadResult;
+        }
+        return {
+          ok: true,
+          workspace: body.payload,
+          rev,
+          updatedAt: body.updatedAt,
+        };
       });
-      if (response.status === 401 || response.status === 403) {
-        return {
-          ok: false,
-          reason: "unauthenticated",
-          message: "Sign in required",
-        };
-      }
-      if (response.status === 404) {
-        return {
-          ok: false,
-          reason: "not_found",
-          message: "Document not found",
-        };
-      }
-      if (response.status === 429) {
-        return {
-          ok: false,
-          reason: "rate_limited",
-          message: "Rate limited",
-        };
-      }
-      if (!response.ok) {
-        return {
-          ok: false,
-          reason: "error",
-          status: response.status,
-          message: `Request failed (${response.status})`,
-        };
-      }
-      const body = (await response.json()) as {
-        payload: unknown;
-        updatedAt: number;
-      };
-      const etag = response.headers.get("ETag");
-      const rev = revFromEtag(etag);
-      if (rev === null) {
-        return {
-          ok: false,
-          reason: "error",
-          status: response.status,
-          message: "missing ETag",
-        } as ReadResult;
-      }
-      return {
-        ok: true,
-        workspace: body.payload,
-        rev,
-        updatedAt: body.updatedAt,
-      };
     } catch (cause) {
       return {
         ok: false,
@@ -289,67 +331,73 @@ export class HttpEditorWorkspaceAdapter {
       headers["If-Match"] = `"rev:${precondition.ifMatch}"`;
     }
     try {
-      const response = await this.fetchImpl(this.documentUrlFor(ownerId, id), {
-        method: "PUT",
-        headers,
-        body,
+      return await this.withTimeout(async (signal) => {
+        const response = await this.fetchImpl(
+          this.documentUrlFor(ownerId, id),
+          {
+            method: "PUT",
+            headers,
+            body,
+            signal,
+          },
+        );
+        if (response.status === 401 || response.status === 403) {
+          return {
+            ok: false,
+            reason: "unauthenticated",
+            message: "Sign in required",
+          };
+        }
+        if (response.status === 404 || response.status === 400) {
+          return {
+            ok: false,
+            reason: "not_found",
+            message: `Request failed (${response.status})`,
+            status: response.status,
+          };
+        }
+        if (response.status === 409 || response.status === 412) {
+          return {
+            ok: false,
+            reason: "conflict",
+            serverRev: revFromEtag(response.headers.get("ETag")) ?? undefined,
+            message: "Document was updated elsewhere",
+          };
+        }
+        if (response.status === 413) {
+          return {
+            ok: false,
+            reason: "too_large",
+            bodyLength: body.length,
+            message: `Payload exceeds ${MAX_PAYLOAD_LENGTH} characters`,
+          };
+        }
+        if (response.status === 429) {
+          return {
+            ok: false,
+            reason: "rate_limited",
+            message: "Rate limited",
+          };
+        }
+        if (!response.ok) {
+          return {
+            ok: false,
+            reason: "error",
+            status: response.status,
+            message: `Request failed (${response.status})`,
+          };
+        }
+        const newRev = revFromEtag(response.headers.get("ETag"));
+        if (newRev === null) {
+          return {
+            ok: false,
+            reason: "error",
+            status: response.status,
+            message: "missing ETag",
+          };
+        }
+        return { ok: true, rev: newRev };
       });
-      if (response.status === 401 || response.status === 403) {
-        return {
-          ok: false,
-          reason: "unauthenticated",
-          message: "Sign in required",
-        };
-      }
-      if (response.status === 404 || response.status === 400) {
-        return {
-          ok: false,
-          reason: "not_found",
-          message: `Request failed (${response.status})`,
-          status: response.status,
-        };
-      }
-      if (response.status === 409 || response.status === 412) {
-        return {
-          ok: false,
-          reason: "conflict",
-          serverRev: revFromEtag(response.headers.get("ETag")) ?? undefined,
-          message: "Document was updated elsewhere",
-        };
-      }
-      if (response.status === 413) {
-        return {
-          ok: false,
-          reason: "too_large",
-          bodyLength: body.length,
-          message: `Payload exceeds ${MAX_PAYLOAD_LENGTH} characters`,
-        };
-      }
-      if (response.status === 429) {
-        return {
-          ok: false,
-          reason: "rate_limited",
-          message: "Rate limited",
-        };
-      }
-      if (!response.ok) {
-        return {
-          ok: false,
-          reason: "error",
-          status: response.status,
-          message: `Request failed (${response.status})`,
-        };
-      }
-      const newRev = revFromEtag(response.headers.get("ETag"));
-      if (newRev === null) {
-        return {
-          ok: false,
-          reason: "error",
-          status: response.status,
-          message: "missing ETag",
-        };
-      }
-      return { ok: true, rev: newRev };
     } catch (cause) {
       return {
         ok: false,
@@ -371,44 +419,50 @@ export class HttpEditorWorkspaceAdapter {
     ifMatch: number,
   ): Promise<DeleteResult> {
     try {
-      const response = await this.fetchImpl(this.documentUrlFor(ownerId, id), {
-        method: "DELETE",
-        headers: { "If-Match": `"rev:${ifMatch}"` },
+      return await this.withTimeout(async (signal) => {
+        const response = await this.fetchImpl(
+          this.documentUrlFor(ownerId, id),
+          {
+            method: "DELETE",
+            headers: { "If-Match": `"rev:${ifMatch}"` },
+            signal,
+          },
+        );
+        if (response.status === 401 || response.status === 403) {
+          return {
+            ok: false,
+            reason: "unauthenticated",
+            message: "Sign in required",
+          };
+        }
+        if (response.status === 429) {
+          return {
+            ok: false,
+            reason: "rate_limited",
+            message: "Rate limited",
+          };
+        }
+        if (response.status === 404) {
+          return { ok: true, deleted: false };
+        }
+        if (response.status === 412) {
+          return {
+            ok: false,
+            reason: "conflict",
+            serverRev: revFromEtag(response.headers.get("ETag")) ?? undefined,
+            message: "Document was updated elsewhere",
+          };
+        }
+        if (!response.ok) {
+          return {
+            ok: false,
+            reason: "error",
+            status: response.status,
+            message: `Request failed (${response.status})`,
+          };
+        }
+        return { ok: true, deleted: response.status === 204 };
       });
-      if (response.status === 401 || response.status === 403) {
-        return {
-          ok: false,
-          reason: "unauthenticated",
-          message: "Sign in required",
-        };
-      }
-      if (response.status === 429) {
-        return {
-          ok: false,
-          reason: "rate_limited",
-          message: "Rate limited",
-        };
-      }
-      if (response.status === 404) {
-        return { ok: true, deleted: false };
-      }
-      if (response.status === 412) {
-        return {
-          ok: false,
-          reason: "conflict",
-          serverRev: revFromEtag(response.headers.get("ETag")) ?? undefined,
-          message: "Document was updated elsewhere",
-        };
-      }
-      if (!response.ok) {
-        return {
-          ok: false,
-          reason: "error",
-          status: response.status,
-          message: `Request failed (${response.status})`,
-        };
-      }
-      return { ok: true, deleted: response.status === 204 };
     } catch (cause) {
       return {
         ok: false,
@@ -426,7 +480,8 @@ const REMOTE_DEBOUNCE_MS = 1500;
 /**
  * Longest a discard waits for loads of the same id that are still running,
  * and longest a load waits for discards of the same id. The requests behind
- * them have no timeout of their own, so the wait is bounded here.
+ * them end after REMOTE_REQUEST_TIMEOUT_MS; this bound is the second line,
+ * for a wait on something else.
  */
 const DISCARD_LOAD_WAIT_MS = 10_000;
 

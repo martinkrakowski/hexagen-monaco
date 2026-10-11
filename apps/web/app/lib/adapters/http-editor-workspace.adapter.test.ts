@@ -2,6 +2,7 @@ import { describe, it, vi, beforeEach, afterEach } from "vitest";
 import type { MockedFunction } from "vitest";
 import assert from "node:assert/strict";
 import {
+  REMOTE_REQUEST_TIMEOUT_MS,
   HttpEditorWorkspaceAdapter,
   DOCUMENT_ID_PATTERN,
   defaultUserIdSource,
@@ -330,5 +331,170 @@ describe("defaultUserIdSource Item 2: signed-out caching", () => {
     const h = await defaultUserIdSource();
     assert.equal(h, null);
     assert.equal(fetchCount, 4, "null re-cached after reset");
+  });
+});
+
+describe("HttpEditorWorkspaceAdapter time limit", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  function neverSettlingFetch(signals: AbortSignal[]): typeof fetch {
+    return (async (_url: string | URL, init?: RequestInit) => {
+      if (init?.signal) signals.push(init.signal);
+      return new Promise<Response>(() => {});
+    }) as unknown as typeof fetch;
+  }
+
+  it("read times out after 8 s and aborts the request signal", async () => {
+    const signals: AbortSignal[] = [];
+    const adapter = new HttpEditorWorkspaceAdapter(neverSettlingFetch(signals));
+    let settled = false;
+    const pending = adapter.read("owner1", "ws1").then((r) => {
+      settled = true;
+      return r;
+    });
+    await vi.advanceTimersByTimeAsync(7_999);
+    assert.equal(settled, false, "still pending just before the limit");
+    await vi.advanceTimersByTimeAsync(1);
+    const result = await pending;
+    assert.equal(result.ok, false);
+    if (!result.ok) {
+      assert.equal(result.reason, "error");
+      assert.equal(result.status, 0);
+      assert.match(result.message, /timed out/);
+    }
+    assert.equal(signals.length, 1);
+    assert.equal(signals[0].aborted, true);
+  });
+
+  it("write times out after 8 s and aborts the request signal", async () => {
+    const signals: AbortSignal[] = [];
+    const adapter = new HttpEditorWorkspaceAdapter(neverSettlingFetch(signals));
+    let settled = false;
+    const pending = adapter
+      .write("owner1", "ws1", { files: {} }, "proj", { ifMatch: 1 })
+      .then((r) => {
+        settled = true;
+        return r;
+      });
+    await vi.advanceTimersByTimeAsync(7_999);
+    assert.equal(settled, false, "still pending just before the limit");
+    await vi.advanceTimersByTimeAsync(1);
+    const result = await pending;
+    assert.equal(result.ok, false);
+    if (!result.ok) {
+      assert.equal(result.reason, "error");
+      assert.equal(result.status, 0);
+      assert.match(result.message, /timed out/);
+    }
+    assert.equal(signals.length, 1);
+    assert.equal(signals[0].aborted, true);
+  });
+
+  it("delete times out after 8 s and aborts the request signal", async () => {
+    const signals: AbortSignal[] = [];
+    const adapter = new HttpEditorWorkspaceAdapter(neverSettlingFetch(signals));
+    let settled = false;
+    const pending = adapter.delete("owner1", "ws1", 1).then((r) => {
+      settled = true;
+      return r;
+    });
+    await vi.advanceTimersByTimeAsync(7_999);
+    assert.equal(settled, false, "still pending just before the limit");
+    await vi.advanceTimersByTimeAsync(1);
+    const result = await pending;
+    assert.equal(result.ok, false);
+    if (!result.ok) {
+      assert.equal(result.reason, "error");
+      assert.equal(result.status, 0);
+      assert.match(result.message, /timed out/);
+    }
+    assert.equal(signals.length, 1);
+    assert.equal(signals[0].aborted, true);
+  });
+
+  it("read times out when the answer's json() never settles", async () => {
+    const fetchImpl = (async () => {
+      return {
+        status: 200,
+        ok: true,
+        headers: { get: () => '"rev:1"' },
+        json: () => new Promise<unknown>(() => {}),
+      } as unknown as Response;
+    }) as unknown as typeof fetch;
+    const adapter = new HttpEditorWorkspaceAdapter(fetchImpl);
+    const pending = adapter.read("owner1", "ws1");
+    await vi.advanceTimersByTimeAsync(8_000);
+    const result = await pending;
+    assert.equal(result.ok, false);
+    if (!result.ok) {
+      assert.equal(result.reason, "error");
+      assert.equal(result.status, 0);
+      assert.match(result.message, /timed out/);
+    }
+  });
+
+  it("a fast answer clears the timer", async () => {
+    const fetchImpl = (async () =>
+      new Response(JSON.stringify({ payload: { files: {} }, updatedAt: 1 }), {
+        status: 200,
+        headers: { ETag: '"rev:1"' },
+      })) as unknown as typeof fetch;
+    const adapter = new HttpEditorWorkspaceAdapter(fetchImpl);
+    await adapter.read("owner1", "ws1");
+    assert.equal(vi.getTimerCount(), 0);
+  });
+
+  it("a custom limit is honoured", async () => {
+    const signals: AbortSignal[] = [];
+    const adapter = new HttpEditorWorkspaceAdapter(
+      neverSettlingFetch(signals),
+      50,
+    );
+    let settled = false;
+    const pending = adapter.read("owner1", "ws1").then((r) => {
+      settled = true;
+      return r;
+    });
+    await vi.advanceTimersByTimeAsync(49);
+    assert.equal(settled, false, "still pending at 49 ms");
+    await vi.advanceTimersByTimeAsync(1);
+    const result = await pending;
+    assert.equal(result.ok, false);
+    if (!result.ok) {
+      assert.equal(result.reason, "error");
+      assert.equal(result.status, 0);
+      assert.match(result.message, /timed out after 50 ms/);
+    }
+  });
+
+  it("a late answer is dropped without an unhandled rejection", async () => {
+    let resolveFetch: (r: Response) => void = () => {};
+    const fetchImpl = (async () =>
+      new Promise<Response>((resolve) => {
+        resolveFetch = resolve;
+      })) as unknown as typeof fetch;
+    const adapter = new HttpEditorWorkspaceAdapter(fetchImpl);
+    const pending = adapter.read("owner1", "ws1");
+    await vi.advanceTimersByTimeAsync(8_000);
+    const result = await pending;
+    assert.equal(result.ok, false);
+    if (!result.ok) {
+      assert.match(result.message, /timed out/);
+    }
+    resolveFetch(
+      new Response(JSON.stringify({ payload: {}, updatedAt: 1 }), {
+        status: 200,
+        headers: { ETag: '"rev:1"' },
+      }),
+    );
+  });
+
+  it("REMOTE_REQUEST_TIMEOUT_MS is below the discard/load wait", () => {
+    assert.ok(REMOTE_REQUEST_TIMEOUT_MS < 10_000);
   });
 });
