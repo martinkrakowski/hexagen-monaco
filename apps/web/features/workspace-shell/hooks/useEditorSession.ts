@@ -18,6 +18,8 @@ export interface UseEditorSessionReturn {
   // Editor actions
   setSessionId: (id: string) => void;
   clearSession: () => void;
+  /** Reloads the workspace from storage after a conflict choice; no save is scheduled until the load answers. */
+  reloadAfterConflict: (id: string) => Promise<boolean>;
   selectFile: (id: string | null) => void;
   updateFile: (id: string, content: string, isNew?: boolean) => void;
   markFileSaved: (id: string) => void;
@@ -42,6 +44,7 @@ export function useEditorSession(): UseEditorSessionReturn {
     state,
     setSessionId,
     clearSession,
+    reloadAfterConflict,
     selectFile,
     updateFile,
     markFileSaved,
@@ -79,6 +82,7 @@ export function useEditorSession(): UseEditorSessionReturn {
       unpushed: state.unpushed,
       setSessionId,
       clearSession,
+      reloadAfterConflict,
       selectFile,
       updateFile,
       markFileSaved,
@@ -93,6 +97,7 @@ export function useEditorSession(): UseEditorSessionReturn {
       state.unpushed,
       setSessionId,
       clearSession,
+      reloadAfterConflict,
       selectFile,
       updateFile,
       markFileSaved,

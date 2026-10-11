@@ -92,6 +92,7 @@ export function useEditorWorkspace() {
   const [isLoaded, setIsLoaded] = useState(false);
   const pendingWriteRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sessionIdRef = useRef<string | null>(null);
+  const writesSuspendedRef = useRef(false);
 
   const loadWorkspace = useCallback(async (sessionId: string) => {
     const persistence = getEditorWorkspacePersistence();
@@ -133,6 +134,7 @@ export function useEditorWorkspace() {
 
   const scheduleWrite = useCallback(
     (sessionId: string, nextState: EditorWorkspaceState) => {
+      if (writesSuspendedRef.current) return;
       if (pendingWriteRef.current) {
         clearTimeout(pendingWriteRef.current);
       }
@@ -171,6 +173,7 @@ export function useEditorWorkspace() {
 
   const setSessionId = useCallback(
     async (sessionId: string) => {
+      writesSuspendedRef.current = false;
       if (pendingWriteRef.current) {
         clearTimeout(pendingWriteRef.current);
         pendingWriteRef.current = null;
@@ -182,6 +185,7 @@ export function useEditorWorkspace() {
   );
 
   const clearSession = useCallback(async () => {
+    writesSuspendedRef.current = false;
     const sessionId = sessionIdRef.current;
     if (!sessionId) return;
 
@@ -279,11 +283,44 @@ export function useEditorWorkspace() {
     });
   }, [scheduleWrite]);
 
+  const reloadAfterConflict = useCallback(
+    async (sessionId: string): Promise<boolean> => {
+      if (sessionIdRef.current !== sessionId) return true;
+      if (pendingWriteRef.current) {
+        clearTimeout(pendingWriteRef.current);
+        pendingWriteRef.current = null;
+      }
+      writesSuspendedRef.current = true;
+      let result: Awaited<
+        ReturnType<
+          ReturnType<typeof getEditorWorkspacePersistence>["loadWorkspace"]
+        >
+      >;
+      try {
+        result = await getEditorWorkspacePersistence().loadWorkspace(sessionId);
+      } catch {
+        return false;
+      }
+      if (sessionIdRef.current !== sessionId) return true;
+      if (!result.success) return false;
+      if (pendingWriteRef.current) {
+        clearTimeout(pendingWriteRef.current);
+        pendingWriteRef.current = null;
+      }
+      setState(stateFromLoaded(result.value));
+      setIsLoaded(true);
+      writesSuspendedRef.current = false;
+      return true;
+    },
+    [],
+  );
+
   return {
     state,
     isLoaded,
     setSessionId,
     clearSession,
+    reloadAfterConflict,
     updateFile,
     selectFile,
     markFileSaved,
