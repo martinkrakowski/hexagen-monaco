@@ -214,6 +214,11 @@ describe("LocalModeView — one discriminant selects one card (REA-002)", () => 
       } else {
         expect(container.textContent).toMatch(marker);
       }
+      if (lifecycle.kind === "usable") {
+        // population-guard: the usable card is the settings card WITHOUT the
+        // requires-model warning (the stub used to print `warn:false`).
+        expect(container.textContent).not.toMatch(/A model is required/);
+      }
     });
   }
 

@@ -25,9 +25,15 @@ describe("ModelSettingsView — real mount from apps/web", () => {
         currentModelId={null}
         loadedModel={null}
         messagesLength={0}
-        onSwitchModel={vi.fn<() => Promise<void>>().mockResolvedValue(undefined)}
-        onDeleteModel={vi.fn<() => Promise<void>>().mockResolvedValue(undefined)}
-        hasModelInCache={vi.fn<() => Promise<boolean>>().mockResolvedValue(false)}
+        onSwitchModel={vi
+          .fn<() => Promise<void>>()
+          .mockResolvedValue(undefined)}
+        onDeleteModel={vi
+          .fn<() => Promise<void>>()
+          .mockResolvedValue(undefined)}
+        hasModelInCache={vi
+          .fn<() => Promise<boolean>>()
+          .mockResolvedValue(false)}
         isLoading={false}
       />,
     );
