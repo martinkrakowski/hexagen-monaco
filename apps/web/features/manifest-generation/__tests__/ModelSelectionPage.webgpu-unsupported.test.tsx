@@ -186,12 +186,7 @@ describe("ModelSelectionPage — WebGPU-absent guard (#766)", () => {
   it("e. engine status no_webgpu blocks a local choice", async () => {
     // expected colour today: RED
     const { spies } = renderPage("no_webgpu");
-    const downloads = screen.queryAllByRole("button", { name: "Download" });
-    if (downloads.length > 0) {
-      await act(async () => {
-        fireEvent.click(downloads[0]);
-      });
-    }
+    await clickFirstDownload();
     assert.equal(spies.initializeModel.mock.calls.length, 0);
     assert.equal(spies.switchModel.mock.calls.length, 0);
     screen.getByText("Local models cannot run in this browser");
