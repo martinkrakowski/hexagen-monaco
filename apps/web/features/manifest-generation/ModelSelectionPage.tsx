@@ -8,6 +8,11 @@ import { ModelSettingsView } from "@hexagen/model-settings";
 import { ArrowLeft } from "lucide-react";
 import { ProjectsShellWithFreeTier } from "@/ProjectsShellWithFreeTier";
 import { withCarriedName } from "./carriedName";
+import {
+  LOCAL_UNSUPPORTED_BODY,
+  LOCAL_UNSUPPORTED_BODY_WITH_CLOUD,
+  LOCAL_UNSUPPORTED_TITLE,
+} from "./localUnsupportedCopy";
 import { useModelSelectionIntent } from "./store/useModelSelectionIntent";
 import { usePreferredLLM } from "@/lib/free-tier/store/usePreferredLLM";
 import { ModelProgressCard } from "@/ModelProgressCard";
@@ -184,12 +189,12 @@ export function ModelSelectionPage({ llmContext }: ModelSelectionPageProps) {
           {showUnsupported && localUnsupported && (
             <Alert
               tone="warning"
-              title="Local models cannot run in this browser"
+              title={LOCAL_UNSUPPORTED_TITLE}
               className="mx-auto mb-3 w-full max-w-2xl shrink-0"
             >
               {hasServerApiKey
-                ? "This browser does not support WebGPU, which local models need. The cloud model shown below is active, so you can continue without a local model."
-                : "This browser does not support WebGPU, which local models need. Open this page in a browser that supports WebGPU, or go back."}
+                ? LOCAL_UNSUPPORTED_BODY_WITH_CLOUD
+                : LOCAL_UNSUPPORTED_BODY}
             </Alert>
           )}
 
