@@ -17,6 +17,10 @@ export async function register() {
       console.error("[unhandledRejection]", reason.message, reason.stack);
     });
 
+    const { enforceProductionDatabaseChoice } =
+      await import("./lib/platform/production-db-choice");
+    enforceProductionDatabaseChoice(process.env);
+
     if ((process.env.DATABASE_URL ?? "").trim()) {
       const { startPlatformMigrations } =
         await import("./lib/platform/pg-startup");
