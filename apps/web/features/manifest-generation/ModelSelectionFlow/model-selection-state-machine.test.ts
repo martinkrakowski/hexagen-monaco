@@ -12,8 +12,6 @@ import type {
   ModelSelectionEvent,
 } from "./model-selection-state-machine";
 
-import { DomainModelId } from "@hexagen/local-llm";
-
 describe("ModelSelectionStateMachine", () => {
   describe("getInitialState", () => {
     it("should return idle as initial state", () => {
@@ -28,16 +26,6 @@ describe("ModelSelectionStateMachine", () => {
       event: ModelSelectionEvent;
       to: GenerateWithAiScreenState;
     }> = [
-      {
-        name: "SELECT_LOCAL_MODEL",
-        from: "model_selection",
-        event: {
-          type: "SELECT_LOCAL_MODEL",
-          modelId: DomainModelId.QWEN_CODER_3B,
-          remember: false,
-        },
-        to: "model_downloading",
-      },
       {
         name: "SELECT_CLOUD_PROVIDER",
         from: "model_selection",

@@ -22,48 +22,6 @@ export function useModelDownloadActions({
   cancelDownload,
   downloadIntentRef,
 }: UseModelDownloadActionsOptions) {
-  const selectLocalModel = useCallback(
-    (modelId: DomainModelId, remember: boolean) => {
-      const intentId = ++downloadIntentRef.current;
-      const nextState = deriveStateFromEvent("model_selection", {
-        type: "SELECT_LOCAL_MODEL",
-        modelId,
-        remember,
-      });
-
-      setFlowState((prev) => ({
-        ...prev,
-        state: nextState,
-        selectedModelId: modelId,
-        rememberedChoice: remember,
-        generationProgress: 0,
-      }));
-
-      if (remember) {
-        saveModelPreferences({
-          lastModelId: modelId,
-          autoLoadEnabled: true,
-          hasEnabledLocalModels: true,
-          rememberChoice: true,
-        });
-      }
-
-      initializeModel(modelId).catch((error) => {
-        if (intentId !== downloadIntentRef.current) return;
-        setFlowState((prev) => ({
-          ...prev,
-          state: "error",
-          error: error?.message || "Failed to initialize model",
-        }));
-
-        if (remember) {
-          saveModelPreferences({ autoLoadEnabled: false });
-        }
-      });
-    },
-    [initializeModel, setFlowState, downloadIntentRef],
-  );
-
   const cancelModelDownload = useCallback(() => {
     cancelDownload();
 
@@ -112,5 +70,5 @@ export function useModelDownloadActions({
     [initializeModel, setFlowState, downloadIntentRef],
   );
 
-  return { selectLocalModel, cancelModelDownload, repairModelDownload };
+  return { cancelModelDownload, repairModelDownload };
 }

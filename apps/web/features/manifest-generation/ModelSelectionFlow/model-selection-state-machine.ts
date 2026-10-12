@@ -14,7 +14,6 @@ export type GenerateWithAiScreenState =
   | "wizard_hydration";
 
 export type ModelSelectionEvent =
-  | { type: "SELECT_LOCAL_MODEL"; modelId: DomainModelId; remember: boolean }
   | {
       type: "SELECT_CLOUD_PROVIDER";
       provider: string;
@@ -90,8 +89,6 @@ export function transitionState(
   event: ModelSelectionEvent,
 ): GenerateWithAiScreenState {
   switch (event.type) {
-    case "SELECT_LOCAL_MODEL":
-      return "model_downloading";
     case "SELECT_CLOUD_PROVIDER":
       return "key_validation";
     case "SKIP_AI_SETUP":

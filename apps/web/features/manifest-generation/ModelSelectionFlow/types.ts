@@ -36,7 +36,6 @@ export interface ModelSelectionFlowState {
 
 export interface ModelSelectionFlowActions {
   transitionTo: (state: GenerateWithAiScreenState) => void;
-  selectLocalModel: (modelId: DomainModelId, remember: boolean) => void;
   selectCloudProvider: (
     provider: string,
     apiKey: string,
