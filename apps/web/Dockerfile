@@ -4,6 +4,35 @@ FROM node:20-alpine AS base
 # Enable corepack and set Yarn version
 RUN corepack enable && corepack prepare yarn@4.12.0 --activate
 
+# ---------- manifests: only what `yarn install` reads ----------
+# This stage is rebuilt on every source change, but its OUTPUT (/manifests) only
+# changes when a manifest, the lockfile or a workspace's committed bin/ folder
+# changes, and BuildKit caches the builder's COPY --from=manifests by content, so
+# the install layer below is reused. The three groups are the root package.json's
+# `workspaces` (apps/*, packages/*, tools/*) — a new group must be added here.
+# A workspace's committed bin/ folder is copied so that a `bin` entry pointing
+# at a committed file exists at install time, as it did when the whole tree was
+# copied first (today no dependent links one: yarn drops a bin whose target is
+# missing without an error). The `test -f` lines fail the build if the loop
+# collected nothing.
+FROM base AS manifests
+WORKDIR /src
+COPY . .
+RUN mkdir -p /manifests \
+    && cp package.json yarn.lock /manifests/ \
+    && for group in apps packages tools; do \
+         for manifest in "$group"/*/package.json; do \
+           [ -f "$manifest" ] || continue; \
+           workspace="$(dirname "$manifest")"; \
+           mkdir -p "/manifests/$workspace" \
+           && cp "$manifest" "/manifests/$manifest" || exit 1; \
+           if [ -d "$workspace/bin" ]; then cp -R "$workspace/bin" "/manifests/$workspace/bin" || exit 1; fi; \
+         done; \
+       done \
+    && test -f /manifests/apps/web/package.json \
+    && test -f /manifests/packages/sync/package.json \
+    && test -f /manifests/tools/arch-linter/package.json
+
 FROM base AS builder
 WORKDIR /app
 
@@ -14,11 +43,20 @@ WORKDIR /app
 # caches independently of source changes.
 RUN apk add --no-cache python3 make g++
 
-# Copy the entire repository (respecting .dockerignore)
-COPY . .
-
-# Install all dependencies (including dev) – Yarn 2+ uses `yarn install`
+# Copy the manifests only (cached by content) and install from them. The install
+# runs with the SAME replaced .yarnrc.yml as before. Yarn 4 runs only
+# preinstall, install and postinstall for a workspace: the root `prepare`
+# script (husky) never ran in this install, before or after this change, so
+# the missing .git and .husky make no difference.
+COPY --from=manifests /manifests/ ./
 RUN echo 'nodeLinker: node-modules' > .yarnrc.yml && yarn install
+
+# Copy the sources AND the repository's own .yarnrc.yml, so the replacement is
+# repeated — the build below has always run with the replaced file. node_modules
+# is kept out of the context by .dockerignore, otherwise a developer's local
+# node_modules would overwrite the installed one here.
+COPY . .
+RUN echo 'nodeLinker: node-modules' > .yarnrc.yml
 
 # Declare ARG variables for build-time injection
 ARG NEXT_PUBLIC_LLM_AVAILABLE

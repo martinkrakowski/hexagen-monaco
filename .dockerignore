@@ -1,0 +1,8 @@
+# Keeps a local node_modules out of the build context: apps/web/Dockerfile installs
+# first and copies the sources second, so a copied node_modules would overwrite the
+# installed one. CI's checkout has none, so this changes nothing there.
+node_modules
+**/node_modules
+# The same for yarn's install state: gitignored, so absent in CI, present on a
+# developer's machine, where it would replace the one the install just wrote.
+.yarn/install-state.gz
