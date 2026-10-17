@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { requireJevReviewer } from "../reviewer-guard";
+import { requireJevReviewer, notFound } from "../reviewer-guard";
 import { getPlatformStore } from "../../../../lib/platform";
 import {
   isDecisionOwnerReview,
@@ -60,13 +60,6 @@ export async function POST(request: NextRequest) {
 function badRequest(): Response {
   return new Response(JSON.stringify({ error: "bad_request" }), {
     status: 400,
-    headers: { "Content-Type": "application/json" },
-  });
-}
-
-function notFound(): Response {
-  return new Response(JSON.stringify({ error: "not_found" }), {
-    status: 404,
     headers: { "Content-Type": "application/json" },
   });
 }

@@ -329,6 +329,7 @@ describe.each(BACKENDS)("decision receipts store (%s)", (kind) => {
       const report = await store.agreementReport({
         use: "context-type",
         mode: "shadow",
+        threshold: 0.8,
       });
       expect(report).toEqual({
         total: 5,
@@ -346,6 +347,10 @@ describe.each(BACKENDS)("decision receipts store (%s)", (kind) => {
         // call() defaults to reviewer: true, so every llm row is in the
         // reviewer cohort here.
         reviewerCohort: 3,
+        // Only one reviewed disagreement, and it is not llm_better.
+        reviewedDisagreements: 1,
+        llmBetter: 0,
+        llmBetterAtOrAboveThreshold: 0,
       });
 
       // Scoped to the use: template-select rows must not bleed into the
@@ -369,11 +374,13 @@ describe.each(BACKENDS)("decision receipts store (%s)", (kind) => {
       const scoped = await store.agreementReport({
         use: "context-type",
         mode: "shadow",
+        threshold: 0.8,
       });
       expect(scoped.total).toBe(5);
       const templateReport = await store.agreementReport({
         use: "template-select",
         mode: "shadow",
+        threshold: 0.8,
       });
       expect(templateReport).toEqual({
         total: 1,
@@ -389,6 +396,9 @@ describe.each(BACKENDS)("decision receipts store (%s)", (kind) => {
         },
         llmCohort: { total: 0, agreed: 0, disagreed: 0 },
         reviewerCohort: 0,
+        reviewedDisagreements: 0,
+        llmBetter: 0,
+        llmBetterAtOrAboveThreshold: 0,
       });
 
       // The reviewer cohort counts ONLY llm rows from reviewer calls: a
@@ -411,6 +421,7 @@ describe.each(BACKENDS)("decision receipts store (%s)", (kind) => {
       const floors = await store.agreementReport({
         use: "context-type",
         mode: "shadow",
+        threshold: 0.8,
       });
       expect(floors.todaySource.llm).toBe(4);
       expect(floors.llmCohort.disagreed).toBe(2);
@@ -425,8 +436,80 @@ describe.each(BACKENDS)("decision receipts store (%s)", (kind) => {
         }),
       ).rejects.toThrow(/mode/);
       await expect(
-        store.agreementReport({ use: "context-kind" as never, mode: "shadow" }),
+        store.agreementReport({
+          use: "context-kind" as never,
+          mode: "shadow",
+          threshold: 0.8,
+        }),
       ).rejects.toThrow(/use/);
+      await expect(
+        store.agreementReport({
+          use: "context-type",
+          mode: "shadow",
+          threshold: 1.5,
+        }),
+      ).rejects.toThrow(/threshold/);
+    } finally {
+      await backend.close();
+    }
+  });
+
+  it("agreementReport counts the reviewed disagreements and the llm_better rule inputs (exit rule, both dialects)", async ({}) => {
+    const { backend, store } = await openStore(kind);
+    try {
+      // One reviewer call: 1 agreed llm row (reviewed both_ok — a review on
+      // an agreed row must not enter the disagreement counts), then llm
+      // disagreements llm_better@0.9, llm_better@0.5, jev_better@0.5, and a
+      // heuristic disagreement reviewed llm_better (outside the llm cohort).
+      const reviewed = await store.recordCall(call({ now: MIDDAY }), [
+        answer({ questionIndex: 0 }),
+        answer({
+          questionIndex: 1,
+          todayAnswer: "supporting",
+          agreement: false,
+        }),
+        answer({
+          questionIndex: 2,
+          jevConfidence: 0.5,
+          todayAnswer: "supporting",
+          agreement: false,
+        }),
+        answer({
+          questionIndex: 3,
+          todayAnswer: "supporting",
+          agreement: false,
+        }),
+        answer({
+          questionIndex: 4,
+          todaySource: "heuristic",
+          todayAnswer: "supporting",
+          agreement: false,
+        }),
+      ]);
+      await store.setOwnerReview(reviewed.id, 0, "both_ok");
+      await store.setOwnerReview(reviewed.id, 1, "llm_better");
+      await store.setOwnerReview(reviewed.id, 2, "llm_better");
+      await store.setOwnerReview(reviewed.id, 3, "jev_better");
+      await store.setOwnerReview(reviewed.id, 4, "llm_better");
+
+      const report = await store.agreementReport({
+        use: "context-type",
+        mode: "shadow",
+        threshold: 0.8,
+      });
+      // Three reviewed llm disagreements, two of them llm_better, exactly
+      // one of those at or above the threshold.
+      expect(report.reviewedDisagreements).toBe(3);
+      expect(report.llmBetter).toBe(2);
+      expect(report.llmBetterAtOrAboveThreshold).toBe(1);
+
+      // A lower threshold puts both llm_better rows above it.
+      const low = await store.agreementReport({
+        use: "context-type",
+        mode: "shadow",
+        threshold: 0.5,
+      });
+      expect(low.llmBetterAtOrAboveThreshold).toBe(2);
     } finally {
       await backend.close();
     }
@@ -449,6 +532,7 @@ describe.each(BACKENDS)("decision receipts store (%s)", (kind) => {
       const report = await store.agreementReport({
         use: "context-type",
         mode: "shadow",
+        threshold: 0.8,
       });
       expect(report.total).toBe(0);
       // ... but its cost still counts against the ceiling: money was spent

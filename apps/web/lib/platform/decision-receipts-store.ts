@@ -292,6 +292,22 @@ export interface DecisionAgreementReport {
    * count, and neither do rows from non-reviewer calls.
    */
   readonly reviewerCohort: number;
+  /**
+   * The exit rule's denominator (plan, "Rule"): `llm`-cohort shadow rows with
+   * `agreement = false` and an owner review recorded. `owner_review` can only
+   * be set on reviewer-generation shadow rows (setOwnerReview refuses the
+   * rest), so this is exactly the set of disagreements the owner watched.
+   */
+  readonly reviewedDisagreements: number;
+  /** `reviewedDisagreements` rows reviewed `llm_better`. */
+  readonly llmBetter: number;
+  /**
+   * `llm_better` rows whose Jev confidence was at or above the exit rule's
+   * threshold — the plan's "no `llm_better` case had a Jev confidence at or
+   * above the threshold". The confidence column is the answer's
+   * `jev_confidence`, recorded at write time.
+   */
+  readonly llmBetterAtOrAboveThreshold: number;
 }
 
 interface DecisionAnswerRow {
@@ -398,6 +414,12 @@ export interface DecisionReceiptsStore {
     use: DecisionUse;
     /** Only shadow counts today; the type admits it and the runtime enforces it. */
     mode: "shadow";
+    /**
+     * The exit rule's confidence threshold (plan, "Rule"): `llm_better` rows
+     * at or above it are counted separately. A number in 0..1; anything else
+     * is rejected like any other closed-set value.
+     */
+    threshold: number;
   }): Promise<DecisionAgreementReport>;
 }
 
@@ -441,6 +463,27 @@ export function createDecisionReceiptsStore(
        AND c.use = @use
        AND a.mode = @mode
      GROUP BY a.today_source, a.agreement, a.owner_review, c.reviewer
+  `;
+
+  /**
+   * The exit rule's counts (plan, "Rule"), grouped so no dialect-specific
+   * boolean literal is needed: `agreement` comes back as a column (0/1 or
+   * true/false — `flag` reads both) and is filtered in the accumulator, and
+   * the threshold comparison is a grouped expression. Only reviewed,
+   * llm-baseline rows enter this read: `owner_review` can only be set on
+   * reviewer-generation shadow rows, so the reviewer flag needs no check.
+   */
+  const selectReviewedDisagreementGroups = `
+    SELECT a.owner_review AS owner_review, a.agreement AS agreement,
+           (a.jev_confidence >= @threshold) AS at_or_above, COUNT(*) AS n
+      FROM decision_answers a
+      JOIN decision_calls c ON c.id = a.call_id
+     WHERE c.schema_version = @schema_version
+       AND c.use = @use
+       AND a.mode = @mode
+       AND a.today_source = 'llm'
+       AND a.owner_review IS NOT NULL
+     GROUP BY a.owner_review, a.agreement, (a.jev_confidence >= @threshold)
   `;
 
   /**
@@ -636,6 +679,9 @@ export function createDecisionReceiptsStore(
       if (options?.mode !== "shadow") {
         rejected("mode", 'is not "shadow"');
       }
+      if (!isConfidence(options?.threshold)) {
+        rejected("threshold", "is not a number in 0..1");
+      }
       const rows = await db.all<{
         today_source: string;
         agreement: number | boolean;
@@ -646,6 +692,20 @@ export function createDecisionReceiptsStore(
         schema_version: DECISION_RECEIPTS_SCHEMA_VERSION,
         use: options.use,
         mode: options.mode,
+        // No `threshold` here: better-sqlite3 rejects a named parameter the
+        // statement does not contain, and only the reviewed-groups read
+        // compares confidences.
+      });
+      const reviewedRows = await db.all<{
+        owner_review: string | null;
+        agreement: number | boolean;
+        at_or_above: number | boolean;
+        n: number;
+      }>(selectReviewedDisagreementGroups, {
+        schema_version: DECISION_RECEIPTS_SCHEMA_VERSION,
+        use: options.use,
+        mode: options.mode,
+        threshold: options.threshold,
       });
 
       // A mutable accumulator: the returned type is the readonly
@@ -665,6 +725,9 @@ export function createDecisionReceiptsStore(
         },
         llmCohort: { total: 0, agreed: 0, disagreed: 0 },
         reviewerCohort: 0,
+        reviewedDisagreements: 0,
+        llmBetter: 0,
+        llmBetterAtOrAboveThreshold: 0,
       };
       for (const row of rows) {
         if (!isDecisionTodaySource(row.today_source)) continue;
@@ -694,6 +757,20 @@ export function createDecisionReceiptsStore(
           }
           if (flag(row.reviewer)) {
             report.reviewerCohort += n;
+          }
+        }
+      }
+      for (const row of reviewedRows) {
+        if (row.owner_review === null) continue;
+        if (!isDecisionOwnerReview(row.owner_review)) continue;
+        if (flag(row.agreement)) continue; // only disagreements are reviewed
+        const n = Number(row.n);
+        if (!Number.isFinite(n) || n <= 0) continue;
+        report.reviewedDisagreements += n;
+        if (row.owner_review === "llm_better") {
+          report.llmBetter += n;
+          if (flag(row.at_or_above)) {
+            report.llmBetterAtOrAboveThreshold += n;
           }
         }
       }

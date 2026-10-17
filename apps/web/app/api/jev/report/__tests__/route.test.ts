@@ -4,22 +4,22 @@
  *
  * The gate is exercised through the route with `next-auth/jwt` and
  * `wire.server` mocked exactly as spec/__tests__/route.jev.test.ts does (the
- * mock paths resolve to the modules the route actually imports). The store
- * underneath is the REAL decision-receipts store on the shared test backends,
- * seeded per case, so the report's shape is asserted against real counts.
+ * mock paths resolve to the modules the route actually imports; the shared
+ * registry and helpers live in ../harness). The store underneath is the REAL
+ * decision-receipts store on the shared test backends, seeded per case, so
+ * the report's shape — and the full exit rule applied to it — is asserted
+ * against real counts.
  */
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { NextRequest } from "next/server";
-import type { DecisionReceiptsStore } from "../../../../../lib/platform/decision-receipts-store";
-
-const tracker = vi.hoisted(() => {
-  return {
-    // Swapped per test: a fake store (gate cases) or the real seeded store.
-    getStore: vi.fn<() => { decisionReceipts: unknown }>(),
-    createJevDecisionAdvice: vi.fn<() => unknown>(),
-    getToken: vi.fn<() => Promise<{ sub?: string } | null>>(),
-  };
-});
+import {
+  tracker,
+  REVIEWER_SUB,
+  resetTracker,
+  seededStore,
+  closeOpenBackends,
+  authorize,
+} from "../../__tests__/harness";
 
 vi.mock("next-auth/jwt", () => ({
   getToken: (...args: unknown[]) => tracker.getToken(...(args as [])),
@@ -29,42 +29,25 @@ vi.mock("../../../../../lib/platform", () => ({
   getPlatformStore: () => tracker.getStore(),
 }));
 
+// The report route reads the jev config for the exit rule's threshold (and
+// nothing else): the mock resolves to the module the route actually imports.
 vi.mock("../../../../../app/lib/wire.server", () => ({
   createJevDecisionAdvice: () => tracker.createJevDecisionAdvice(),
 }));
 
 const { GET } = await import("../route");
 
-const REVIEWER_SUB = "reviewer-sub";
-
 function get(): Promise<Response> {
   const request = new NextRequest("http://localhost/api/jev/report");
   return GET(request);
 }
 
-/** The real store on a sqlite backend, seeded with a small shadow cohort. */
-async function seededStore(): Promise<{
-  store: DecisionReceiptsStore;
-  close: () => Promise<void>;
-}> {
-  const { openBackend } =
-    await import("../../../../../test-support/platform-backends");
-  const { createDecisionReceiptsStore } =
-    await import("../../../../../lib/platform/decision-receipts-store");
-  const backend = await openBackend("sqlite");
-  const store = createDecisionReceiptsStore(backend.db);
-  return { store, close: () => backend.close() };
-}
-
 beforeEach(() => {
-  tracker.createJevDecisionAdvice.mockReset().mockReturnValue(null);
-  tracker.getToken.mockReset().mockResolvedValue(null);
-  tracker.getStore.mockReset();
-  delete process.env.JEV_REVIEWER_SUB;
+  resetTracker();
 });
 
-afterEach(() => {
-  delete process.env.JEV_REVIEWER_SUB;
+afterEach(async () => {
+  await closeOpenBackends();
 });
 
 test("404 with no reviewerSub configured", async () => {
@@ -76,9 +59,7 @@ test("404 with no reviewerSub configured", async () => {
 });
 
 test("404 with a different sub", async () => {
-  tracker.createJevDecisionAdvice.mockReturnValue({
-    reviewerSub: REVIEWER_SUB,
-  });
+  process.env.JEV_REVIEWER_SUB = REVIEWER_SUB;
   tracker.getToken.mockResolvedValue({ sub: "someone-else" });
   const response = await get();
   expect(response.status).toBe(404);
@@ -87,9 +68,7 @@ test("404 with a different sub", async () => {
 });
 
 test("404 when getToken throws", async () => {
-  tracker.createJevDecisionAdvice.mockReturnValue({
-    reviewerSub: REVIEWER_SUB,
-  });
+  process.env.JEV_REVIEWER_SUB = REVIEWER_SUB;
   tracker.getToken.mockRejectedValue(new Error("bad token"));
   const response = await get();
   expect(response.status).toBe(404);
@@ -97,21 +76,16 @@ test("404 when getToken throws", async () => {
   expect(tracker.getStore).not.toHaveBeenCalled();
 });
 
-test("404 when the env fallback alone is set but the token differs", async () => {
-  // The config path (no JEV_API_KEY -> null) falls back to the env read,
-  // the way wire.server itself reads it.
+test("404 when the env sub is set but the token differs", async () => {
   process.env.JEV_REVIEWER_SUB = REVIEWER_SUB;
   tracker.getToken.mockResolvedValue({ sub: "someone-else" });
   expect((await get()).status).toBe(404);
 });
 
-test("the report's shape on a seeded sqlite store, floors met", async () => {
+test("200 when the env sub is set and the token matches (positive guard)", async () => {
   const { store, close } = await seededStore();
   try {
-    // 55 llm rows from a reviewer generation: 53 agreed, 2 disagreed; both
-    // disagreements reviewed. Floors: 55 >= 50 llm rows, 55 >= 20 reviewer
-    // contexts -> passed.
-    const reviewerCall = await store.recordCall(
+    await store.recordCall(
       {
         use: "context-type",
         status: "advised",
@@ -120,53 +94,246 @@ test("the report's shape on a seeded sqlite store, floors met", async () => {
         requestId: "req-1",
         generationId: "gen-1",
       },
-      Array.from({ length: 55 }, (_, i) => ({
-        questionIndex: i,
-        mode: "shadow" as const,
-        jevAnswer: "core",
-        jevConfidence: 0.9,
-        todayAnswer: "core",
-        todaySource: "llm" as const,
-        agreement: i < 53,
-      })),
+      [
+        {
+          questionIndex: 0,
+          mode: "shadow",
+          jevAnswer: "core",
+          jevConfidence: 0.9,
+          todayAnswer: "core",
+          todaySource: "llm",
+          agreement: true,
+        },
+      ],
     );
-    await store.setOwnerReview(reviewerCall.id, 53, "jev_better");
-    await store.setOwnerReview(reviewerCall.id, 54, "llm_better");
-
-    tracker.createJevDecisionAdvice.mockReturnValue({
-      reviewerSub: REVIEWER_SUB,
-    });
+    process.env.JEV_REVIEWER_SUB = REVIEWER_SUB;
     tracker.getToken.mockResolvedValue({ sub: REVIEWER_SUB });
     tracker.getStore.mockReturnValue({ decisionReceipts: store });
+
+    const response = await get();
+    expect(response.status).toBe(200);
+    expect(((await response.json()) as { total: number }).total).toBe(1);
+  } finally {
+    await close();
+  }
+});
+
+/** Seed one reviewer call of `total` llm-baseline shadow rows. */
+async function seedCohort(
+  store: Awaited<ReturnType<typeof seededStore>>["store"],
+  rows: Array<{
+    agreement: boolean;
+    jevConfidence: number;
+    review?: "llm_better" | "jev_better";
+  }>,
+): Promise<void> {
+  const reviewerCall = await store.recordCall(
+    {
+      use: "context-type",
+      status: "advised",
+      reviewer: true,
+      model: "typesafe/jev-1.14",
+      requestId: "req-1",
+      generationId: "gen-1",
+    },
+    rows.map((row, i) => ({
+      questionIndex: i,
+      mode: "shadow" as const,
+      jevAnswer: "core",
+      jevConfidence: row.jevConfidence,
+      todayAnswer: row.agreement ? "core" : "supporting",
+      todaySource: "llm" as const,
+      agreement: row.agreement,
+    })),
+  );
+  for (const [i, row] of rows.entries()) {
+    if (row.review) await store.setOwnerReview(reviewerCall.id, i, row.review);
+  }
+}
+
+function authorizedOn(
+  store: Awaited<ReturnType<typeof seededStore>>["store"],
+): void {
+  authorize();
+  tracker.getStore.mockReturnValue({ decisionReceipts: store });
+}
+
+interface ExitRule {
+  agreementRate: number | null;
+  agreementMet: boolean;
+  reviewedDisagreements: number;
+  llmBetter: number;
+  llmBetterAtOrAboveThreshold: number;
+  llmBetterOk: boolean;
+  confidenceOk: boolean;
+}
+
+interface ReportBody {
+  passed: boolean;
+  floorsMet: boolean;
+  llmCohort: { total: number; agreed: number; agreementRate: number | null };
+  exitRule: ExitRule;
+}
+
+test("the report's shape on a seeded sqlite store, every rule condition met", async () => {
+  const { store, close } = await seededStore();
+  try {
+    // 100 llm rows from a reviewer generation: 90 agreed, 10 disagreed, all
+    // reviewed, one of them llm_better below the 0.8 threshold. Floors:
+    // 100 >= 50 llm rows, 100 >= 20 reviewer contexts; agreement 90/100 is
+    // exactly 0.9; 1 llm_better in 10 reviewed is within 1 in 10; no
+    // llm_better at or above the threshold -> passed.
+    await seedCohort(store, [
+      ...Array.from({ length: 90 }, () => ({
+        agreement: true,
+        jevConfidence: 0.9,
+      })),
+      { agreement: false, jevConfidence: 0.5, review: "llm_better" as const },
+      ...Array.from({ length: 9 }, () => ({
+        agreement: false,
+        jevConfidence: 0.7,
+        review: "jev_better" as const,
+      })),
+    ]);
+    authorizedOn(store);
 
     const response = await get();
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({
       use: "context-type",
       mode: "shadow",
-      total: 55,
-      todaySource: { llm: 55, heuristic: 0, default: 0 },
-      agreed: 53,
-      disagreed: 2,
+      total: 100,
+      todaySource: { llm: 100, heuristic: 0, default: 0 },
+      agreed: 90,
+      disagreed: 10,
       llmCohort: {
-        total: 55,
-        agreed: 53,
-        disagreed: 2,
-        agreementRate: 53 / 55,
+        total: 100,
+        agreed: 90,
+        disagreed: 10,
+        agreementRate: 0.9,
       },
-      reviewerCohort: 55,
+      reviewerCohort: 100,
       ownerReview: {
-        jev_better: 1,
+        jev_better: 9,
         llm_better: 1,
         both_ok: 0,
         both_wrong: 0,
-        none: 53,
+        none: 90,
+      },
+      exitRule: {
+        threshold: 0.8,
+        agreementRate: 0.9,
+        agreementMet: true,
+        reviewedDisagreements: 10,
+        llmBetter: 1,
+        llmBetterAtOrAboveThreshold: 0,
+        llmBetterOk: true,
+        confidenceOk: true,
       },
       floors: {
-        llmRows: { required: 50, actual: 55, met: true },
-        reviewerContexts: { required: 20, actual: 55, met: true },
+        llmRows: { required: 50, actual: 100, met: true },
+        reviewerContexts: { required: 20, actual: 100, met: true },
       },
+      floorsMet: true,
       passed: true,
+    });
+  } finally {
+    await close();
+  }
+});
+
+test("floors met but llm agreement at 0.6 reports passed: false", async () => {
+  const { store, close } = await seededStore();
+  try {
+    // 55 llm rows, only 33 agreed (0.6): the floors hold, no disagreement is
+    // even reviewed, yet the 90% condition alone refuses `primary`.
+    await seedCohort(store, [
+      ...Array.from({ length: 33 }, () => ({
+        agreement: true,
+        jevConfidence: 0.9,
+      })),
+      ...Array.from({ length: 22 }, () => ({
+        agreement: false,
+        jevConfidence: 0.9,
+      })),
+    ]);
+    authorizedOn(store);
+
+    const body = (await (await get()).json()) as ReportBody;
+    expect(body.passed).toBe(false);
+    expect(body.floorsMet).toBe(true);
+    expect(body.llmCohort.agreementRate).toBeCloseTo(0.6);
+    expect(body.exitRule).toMatchObject({
+      agreementMet: false,
+      reviewedDisagreements: 0,
+      llmBetter: 0,
+      llmBetterAtOrAboveThreshold: 0,
+      llmBetterOk: true,
+      confidenceOk: true,
+    });
+  } finally {
+    await close();
+  }
+});
+
+test("too many llm_better reviews (more than 1 in 10) reports passed: false", async () => {
+  const { store, close } = await seededStore();
+  try {
+    // 55 llm rows, 53 agreed, both disagreements reviewed llm_better with
+    // sub-threshold confidence: 2 * 10 > 2 reviewed -> the rule refuses.
+    await seedCohort(store, [
+      ...Array.from({ length: 53 }, () => ({
+        agreement: true,
+        jevConfidence: 0.9,
+      })),
+      { agreement: false, jevConfidence: 0.5, review: "llm_better" as const },
+      { agreement: false, jevConfidence: 0.5, review: "llm_better" as const },
+    ]);
+    authorizedOn(store);
+
+    const body = (await (await get()).json()) as ReportBody;
+    expect(body.passed).toBe(false);
+    expect(body.exitRule).toMatchObject({
+      agreementMet: true,
+      reviewedDisagreements: 2,
+      llmBetter: 2,
+      llmBetterOk: false,
+      confidenceOk: true,
+    });
+  } finally {
+    await close();
+  }
+});
+
+test("one llm_better at or above the confidence threshold reports passed: false", async () => {
+  const { store, close } = await seededStore();
+  try {
+    // 100 llm rows, exactly 90 agreed (0.9), all 10 disagreements reviewed,
+    // one of them llm_better with confidence 0.9 (>= 0.8): 1 in 10 is within
+    // the rule, but the confidence condition alone refuses `primary`.
+    await seedCohort(store, [
+      ...Array.from({ length: 90 }, () => ({
+        agreement: true,
+        jevConfidence: 0.9,
+      })),
+      { agreement: false, jevConfidence: 0.9, review: "llm_better" as const },
+      ...Array.from({ length: 9 }, () => ({
+        agreement: false,
+        jevConfidence: 0.5,
+        review: "jev_better" as const,
+      })),
+    ]);
+    authorizedOn(store);
+
+    const body = (await (await get()).json()) as ReportBody;
+    expect(body.passed).toBe(false);
+    expect(body.exitRule).toMatchObject({
+      agreementMet: true,
+      reviewedDisagreements: 10,
+      llmBetter: 1,
+      llmBetterOk: true,
+      llmBetterAtOrAboveThreshold: 1,
+      confidenceOk: false,
     });
   } finally {
     await close();
@@ -229,22 +396,16 @@ test("an undersized cohort reports not passed, never zero failures", async () =>
     );
     await store.setOwnerReview(small.id, 1, "both_wrong");
 
-    tracker.createJevDecisionAdvice.mockReturnValue({
-      reviewerSub: REVIEWER_SUB,
-    });
-    tracker.getToken.mockResolvedValue({ sub: REVIEWER_SUB });
-    tracker.getStore.mockReturnValue({ decisionReceipts: store });
+    authorizedOn(store);
 
     const response = await get();
     expect(response.status).toBe(200);
-    const body = (await response.json()) as {
-      llmCohort: { total: number };
+    const body = (await response.json()) as ReportBody & {
       reviewerCohort: number;
       floors: {
         llmRows: { met: boolean };
         reviewerContexts: { met: boolean };
       };
-      passed: boolean;
       ownerReview: Record<string, number>;
     };
     expect(body.llmCohort.total).toBe(3);
@@ -254,6 +415,7 @@ test("an undersized cohort reports not passed, never zero failures", async () =>
       actual: 3,
       met: false,
     });
+    expect(body.floorsMet).toBe(false);
     expect(body.passed).toBe(false);
     expect(body.ownerReview).toMatchObject({ both_wrong: 1 });
   } finally {

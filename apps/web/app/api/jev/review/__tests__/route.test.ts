@@ -3,22 +3,23 @@
  * Jev J5b: /api/jev/review behind the reviewer gate.
  *
  * Gate mocks follow spec/__tests__/route.jev.test.ts (mock paths resolve to
- * the modules the route actually imports); the store underneath is the REAL
- * decision-receipts store on a sqlite backend, so the 404 cases include the
- * store's own refusals (unknown row, non-reviewer call) and the 200 case is
- * verified by re-reading through the store.
+ * the modules the route actually imports; the shared registry and helpers
+ * live in ../harness — the guard reads JEV_REVIEWER_SUB from the env
+ * directly, so no wire.server mock is needed here). The store underneath is
+ * the REAL decision-receipts store on a sqlite backend, so the 404 cases
+ * include the store's own refusals (unknown row, non-reviewer call) and the
+ * 200 case is verified by re-reading through the store.
  */
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { NextRequest } from "next/server";
+import {
+  tracker,
+  resetTracker,
+  seededStore,
+  closeOpenBackends,
+  authorize,
+} from "../../__tests__/harness";
 import type { DecisionReceiptsStore } from "../../../../../lib/platform/decision-receipts-store";
-
-const tracker = vi.hoisted(() => {
-  return {
-    getStore: vi.fn<() => { decisionReceipts: unknown }>(),
-    createJevDecisionAdvice: vi.fn<() => unknown>(),
-    getToken: vi.fn<() => Promise<{ sub?: string } | null>>(),
-  };
-});
 
 vi.mock("next-auth/jwt", () => ({
   getToken: (...args: unknown[]) => tracker.getToken(...(args as [])),
@@ -28,13 +29,7 @@ vi.mock("../../../../../lib/platform", () => ({
   getPlatformStore: () => tracker.getStore(),
 }));
 
-vi.mock("../../../../../app/lib/wire.server", () => ({
-  createJevDecisionAdvice: () => tracker.createJevDecisionAdvice(),
-}));
-
 const { POST } = await import("../route");
-
-const REVIEWER_SUB = "reviewer-sub";
 
 function post(body: unknown): Promise<Response> {
   const request = new NextRequest("http://localhost/api/jev/review", {
@@ -45,48 +40,18 @@ function post(body: unknown): Promise<Response> {
   return POST(request);
 }
 
-const openBackends: Array<() => Promise<void>> = [];
-
-async function seededStore(): Promise<{
-  store: DecisionReceiptsStore;
-  close: () => Promise<void>;
-}> {
-  const { openBackend } =
-    await import("../../../../../test-support/platform-backends");
-  const { createDecisionReceiptsStore } =
-    await import("../../../../../lib/platform/decision-receipts-store");
-  const backend = await openBackend("sqlite");
-  openBackends.push(() => backend.close());
-  return {
-    store: createDecisionReceiptsStore(backend.db),
-    close: () => backend.close(),
-  };
-}
-
 async function authorizedStore(): Promise<DecisionReceiptsStore> {
   const { store } = await seededStore();
   tracker.getStore.mockReturnValue({ decisionReceipts: store });
   return store;
 }
 
-function authorize(): void {
-  tracker.createJevDecisionAdvice.mockReturnValue({
-    reviewerSub: REVIEWER_SUB,
-  });
-  tracker.getToken.mockResolvedValue({ sub: REVIEWER_SUB });
-}
-
 beforeEach(() => {
-  tracker.createJevDecisionAdvice.mockReset().mockReturnValue(null);
-  tracker.getToken.mockReset().mockResolvedValue(null);
-  tracker.getStore.mockReset();
-  delete process.env.JEV_REVIEWER_SUB;
+  resetTracker();
 });
 
 afterEach(async () => {
-  while (openBackends.length > 0) {
-    await openBackends.pop()!();
-  }
+  await closeOpenBackends();
 });
 
 test("404 with no reviewerSub, before the body is even read", async () => {
@@ -101,9 +66,7 @@ test("404 with no reviewerSub, before the body is even read", async () => {
 });
 
 test("404 with a different sub, and the store is never touched", async () => {
-  tracker.createJevDecisionAdvice.mockReturnValue({
-    reviewerSub: REVIEWER_SUB,
-  });
+  process.env.JEV_REVIEWER_SUB = "reviewer-sub";
   tracker.getToken.mockResolvedValue({ sub: "someone-else" });
   const response = await post({
     callId: "x",
@@ -115,9 +78,7 @@ test("404 with a different sub, and the store is never touched", async () => {
 });
 
 test("404 when getToken throws", async () => {
-  tracker.createJevDecisionAdvice.mockReturnValue({
-    reviewerSub: REVIEWER_SUB,
-  });
+  process.env.JEV_REVIEWER_SUB = "reviewer-sub";
   tracker.getToken.mockRejectedValue(new Error("bad token"));
   expect(
     (await post({ callId: "x", questionIndex: 0, review: "both_ok" })).status,
