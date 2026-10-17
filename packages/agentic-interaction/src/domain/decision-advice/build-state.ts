@@ -27,10 +27,6 @@ const SECRET_PATTERNS: readonly RegExp[] = [
   /-----BEGIN [A-Z ]*PRIVATE KEY-----/, // PEM key material
   /(?<![A-Za-z0-9])xox[abprs]-[A-Za-z0-9-]{10,}/, // Slack app/bot/user/refresh token
   /[0-9a-fA-F]{32,}/, // long high-entropy hex
-  // Long high-entropy base64 — the run must hold at least four digits, an
-  // uppercase and a lowercase letter, so CamelCase names (even OAuth2…) and
-  // route paths pass untouched.
-  /(?=(?:[A-Za-z+/]*[0-9]){4})(?=[A-Za-z0-9+/]{0,39}[A-Z])(?=[A-Za-z0-9+/]{0,39}[a-z])[A-Za-z0-9+/]{40,}={0,2}/,
   /(?<![A-Za-z0-9])eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]+/, // JWT (header.payload.signature)
 ];
 
@@ -44,8 +40,25 @@ function byteLength(text: string): number {
   return encoder.encode(text).length;
 }
 
+/**
+ * Long high-entropy base64: a run of 40+ base64 characters holding at least
+ * four digits, an uppercase and a lowercase letter, so CamelCase names (even
+ * OAuth2…) and route paths pass untouched. A token scan, not a regex, so the
+ * check stays linear on any input.
+ */
+function hasBase64Secret(text: string): boolean {
+  return text.split(/[^A-Za-z0-9+/=]+/).some((run) => {
+    if (run.length < 40) return false;
+    const digits = run.replace(/\D/g, "").length;
+    return digits >= 4 && /[A-Z]/.test(run) && /[a-z]/.test(run);
+  });
+}
+
 function containsSecretShape(text: string): boolean {
-  return SECRET_PATTERNS.some((pattern) => pattern.test(text));
+  return (
+    SECRET_PATTERNS.some((pattern) => pattern.test(text)) ||
+    hasBase64Secret(text)
+  );
 }
 
 /**

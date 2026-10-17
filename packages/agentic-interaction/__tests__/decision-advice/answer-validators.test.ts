@@ -47,166 +47,86 @@ describe("parseChoiceAnswer against the committed fixture responses", () => {
   });
 });
 
+const CERTAIN_CORE = {
+  core: 1,
+  supporting: 0,
+  generic: 0,
+  "shared-kernel": 0,
+  driver: 0,
+};
+
+/** A well-formed `core` answer over the five types, with some fields changed. */
+function choiceWith(changes: Record<string, unknown>): Record<string, unknown> {
+  return {
+    type: "choice",
+    choice: "core",
+    probabilities: CERTAIN_CORE,
+    confidence: 1,
+    ...changes,
+  };
+}
+
+const SHAPE = { ok: false, reason: "shape" };
+
 describe("parseChoiceAnswer rejects bad shapes as unknown/shape", () => {
-  it("rejects an unknown key in probabilities", () => {
-    const raw = {
-      type: "choice",
-      choice: "core",
-      probabilities: { core: 1, extra: 0 },
-      confidence: 1,
-    };
-    expect(parseChoiceAnswer(raw, ["core"])).toEqual({
-      ok: false,
-      reason: "shape",
-    });
-  });
-
-  it("rejects a missing option in probabilities", () => {
-    const raw = {
-      type: "choice",
-      choice: "core",
-      probabilities: { core: 1, supporting: 0, generic: 0, "shared-kernel": 0 },
-      confidence: 1,
-    };
-    expect(parseChoiceAnswer(raw, FIVE_TYPES)).toEqual({
-      ok: false,
-      reason: "shape",
-    });
-  });
-
-  it("rejects a non-finite number", () => {
-    const raw = {
-      type: "choice",
-      choice: "core",
-      probabilities: {
-        core: Number.NaN,
-        supporting: 0,
-        generic: 0,
-        "shared-kernel": 0,
-        driver: 0,
-      },
-      confidence: 1,
-    };
-    expect(parseChoiceAnswer(raw, FIVE_TYPES)).toEqual({
-      ok: false,
-      reason: "shape",
-    });
-  });
-
-  it("rejects a number outside 0..1", () => {
-    const raw = {
-      type: "choice",
-      choice: "core",
-      probabilities: {
-        core: 1.5,
-        supporting: 0,
-        generic: 0,
-        "shared-kernel": 0,
-        driver: 0,
-      },
-      confidence: 1,
-    };
-    expect(parseChoiceAnswer(raw, FIVE_TYPES)).toEqual({
-      ok: false,
-      reason: "shape",
-    });
-  });
-
-  it("rejects a confidence outside 0..1", () => {
-    const raw = {
-      type: "choice",
-      choice: "core",
-      probabilities: {
-        core: 1,
-        supporting: 0,
-        generic: 0,
-        "shared-kernel": 0,
-        driver: 0,
-      },
-      confidence: -0.1,
-    };
-    expect(parseChoiceAnswer(raw, FIVE_TYPES)).toEqual({
-      ok: false,
-      reason: "shape",
-    });
-  });
-
-  it("rejects a choice that is not the argmax", () => {
-    const raw = {
-      type: "choice",
-      choice: "generic",
-      probabilities: {
-        core: 1,
-        supporting: 0,
-        generic: 0,
-        "shared-kernel": 0,
-        driver: 0,
-      },
-      confidence: 1,
-    };
-    expect(parseChoiceAnswer(raw, FIVE_TYPES)).toEqual({
-      ok: false,
-      reason: "shape",
-    });
-  });
-
-  it("rejects a choice that is not a declared option id", () => {
-    const raw = {
-      type: "choice",
-      choice: "edge",
-      probabilities: {
-        core: 1,
-        supporting: 0,
-        generic: 0,
-        "shared-kernel": 0,
-        driver: 0,
-      },
-      confidence: 1,
-    };
-    expect(parseChoiceAnswer(raw, FIVE_TYPES)).toEqual({
-      ok: false,
-      reason: "shape",
-    });
-  });
-
-  it("rejects a non-object, a wrong type tag and a non-string choice", () => {
-    expect(parseChoiceAnswer(null, FIVE_TYPES)).toEqual({
-      ok: false,
-      reason: "shape",
-    });
-    expect(parseChoiceAnswer([1], FIVE_TYPES)).toEqual({
-      ok: false,
-      reason: "shape",
-    });
-    expect(
-      parseChoiceAnswer({ type: "noul", probability: 0.5 }, FIVE_TYPES),
-    ).toEqual({
-      ok: false,
-      reason: "shape",
-    });
-    expect(
-      parseChoiceAnswer(
-        { type: "choice", choice: 1, probabilities: {}, confidence: 1 },
-        FIVE_TYPES,
-      ),
-    ).toEqual({ ok: false, reason: "shape" });
+  it.each<[string, unknown, readonly string[]]>([
+    [
+      "an unknown key in probabilities",
+      choiceWith({ probabilities: { core: 1, extra: 0 } }),
+      ["core"],
+    ],
+    [
+      "a missing option in probabilities",
+      choiceWith({
+        probabilities: {
+          core: 1,
+          supporting: 0,
+          generic: 0,
+          "shared-kernel": 0,
+        },
+      }),
+      FIVE_TYPES,
+    ],
+    [
+      "a non-finite number",
+      choiceWith({ probabilities: { ...CERTAIN_CORE, core: Number.NaN } }),
+      FIVE_TYPES,
+    ],
+    [
+      "a number outside 0..1",
+      choiceWith({ probabilities: { ...CERTAIN_CORE, core: 1.5 } }),
+      FIVE_TYPES,
+    ],
+    ["a confidence outside 0..1", choiceWith({ confidence: -0.1 }), FIVE_TYPES],
+    [
+      "a choice that is not the argmax",
+      choiceWith({ choice: "generic" }),
+      FIVE_TYPES,
+    ],
+    [
+      "a choice that is not a declared option id",
+      choiceWith({ choice: "edge" }),
+      FIVE_TYPES,
+    ],
+    ["a non-object", null, FIVE_TYPES],
+    ["an array", [1], FIVE_TYPES],
+    ["a wrong type tag", { type: "noul", probability: 0.5 }, FIVE_TYPES],
+    [
+      "a non-string choice",
+      choiceWith({ choice: 1, probabilities: {} }),
+      FIVE_TYPES,
+    ],
+  ])("rejects %s", (_label, raw, options) => {
+    expect(parseChoiceAnswer(raw, options)).toEqual(SHAPE);
   });
 });
 
 describe("parseChoiceAnswer tie handling", () => {
   it("rejects a tie for the maximum as unknown/tie", () => {
-    const raw = {
-      type: "choice",
-      choice: "core",
-      probabilities: {
-        core: 0.5,
-        supporting: 0.5,
-        generic: 0,
-        "shared-kernel": 0,
-        driver: 0,
-      },
+    const raw = choiceWith({
+      probabilities: { ...CERTAIN_CORE, core: 0.5, supporting: 0.5 },
       confidence: 0.5,
-    };
+    });
     expect(parseChoiceAnswer(raw, FIVE_TYPES)).toEqual({
       ok: false,
       reason: "tie",

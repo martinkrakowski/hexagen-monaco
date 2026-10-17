@@ -35,45 +35,17 @@ export function parseChoiceAnswer(
   raw: unknown,
   optionIds: readonly string[],
 ): AnswerParseResult<ChoiceAnswer> {
-  if (!isPlainObject(raw)) return { ok: false, reason: "shape" };
-  if (raw["type"] !== "choice") return { ok: false, reason: "shape" };
-  if (typeof raw["choice"] !== "string") return { ok: false, reason: "shape" };
-  if (!isPlainObject(raw["probabilities"]))
-    return { ok: false, reason: "shape" };
-  if (!isProbability(raw["confidence"])) return { ok: false, reason: "shape" };
-
-  const probabilities = raw["probabilities"];
-  const expected = new Set(optionIds);
-
-  // Unknown keys and missing options both reject: the distribution must cover
-  // exactly the question's option ids.
-  for (const key of Object.keys(probabilities)) {
-    if (!expected.has(key)) return { ok: false, reason: "shape" };
-  }
-  for (const id of optionIds) {
-    if (!(id in probabilities)) return { ok: false, reason: "shape" };
-    const p: unknown = probabilities[id];
-    if (!isProbability(p)) return { ok: false, reason: "shape" };
-  }
-
-  const choice = raw["choice"];
-  if (!expected.has(choice)) return { ok: false, reason: "shape" };
+  if (!isChoiceEnvelope(raw)) return SHAPE;
+  const { choice, probabilities, confidence } = raw;
+  if (!coversExactly(probabilities, optionIds)) return SHAPE;
+  if (!optionIds.includes(choice)) return SHAPE;
 
   // The choice must be the single argmax; a tie is its own unknown reason.
-  const values: number[] = optionIds.map((id) => probabilities[id] as number);
-  let max = -1;
-  let argmaxCount = 0;
-  for (const p of values) {
-    if (p > max) {
-      max = p;
-      argmaxCount = 1;
-    } else if (p === max) {
-      argmaxCount += 1;
-    }
-  }
-  if (argmaxCount > 1) return { ok: false, reason: "tie" };
-  if ((probabilities[choice] as number) !== max)
-    return { ok: false, reason: "shape" };
+  const values = optionIds.map((id) => probabilities[id] as number);
+  const max = Math.max(...values);
+  if (values.filter((p) => p === max).length > 1)
+    return { ok: false, reason: "tie" };
+  if (probabilities[choice] !== max) return SHAPE;
 
   return {
     ok: true,
@@ -84,9 +56,41 @@ export function parseChoiceAnswer(
       probabilities: Object.fromEntries(
         optionIds.map((id) => [id, probabilities[id] as number]),
       ),
-      confidence: raw["confidence"],
+      confidence,
     },
   };
+}
+
+const SHAPE = { ok: false, reason: "shape" } as const;
+
+type ChoiceEnvelope = {
+  type: "choice";
+  choice: string;
+  probabilities: Record<string, unknown>;
+  confidence: number;
+};
+
+function isChoiceEnvelope(raw: unknown): raw is ChoiceEnvelope {
+  return (
+    isPlainObject(raw) &&
+    raw["type"] === "choice" &&
+    typeof raw["choice"] === "string" &&
+    isPlainObject(raw["probabilities"]) &&
+    isProbability(raw["confidence"])
+  );
+}
+
+/** Unknown keys and missing options both fail: the distribution covers exactly the option ids. */
+function coversExactly(
+  probabilities: Record<string, unknown>,
+  optionIds: readonly string[],
+): boolean {
+  const keys = Object.keys(probabilities);
+  return (
+    keys.length === optionIds.length &&
+    keys.every((key) => optionIds.includes(key)) &&
+    optionIds.every((id) => isProbability(probabilities[id]))
+  );
 }
 
 /**

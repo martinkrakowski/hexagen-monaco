@@ -123,6 +123,7 @@ export type { ProviderCatalogPort } from "./application/ports/out/provider-catal
 export type { DecisionAdvicePort } from "./application/ports/out/decision-advice.port";
 export type {
   DecisionAdviceField,
+  DecisionAdviceRequest,
   DecisionAdviceResult,
   DecisionQuestion,
   DecisionQuestions,
