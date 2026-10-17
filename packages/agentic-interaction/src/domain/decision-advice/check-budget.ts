@@ -29,6 +29,22 @@ export type BudgetCheckResult =
  * still have room. A refused check means "no advice" (invariant 4).
  */
 export function checkBudget(input: BudgetCheckInput): BudgetCheckResult {
+  // Fail closed: any non-finite or negative number means the accounting
+  // itself is broken, so the call is not made (reason "budget").
+  const numericFields: readonly (keyof BudgetCheckInput)[] = [
+    "callsThisGeneration",
+    "maxCalls",
+    "spentTodayMicroUsd",
+    "reservedMicroUsd",
+    "ceilingMicroUsd",
+    "callMaxMicroUsd",
+  ];
+  for (const field of numericFields) {
+    const value = input[field];
+    if (!Number.isFinite(value) || value < 0) {
+      return { allowed: false, reason: "budget" };
+    }
+  }
   if (input.callsThisGeneration + 1 > input.maxCalls) {
     return { allowed: false, reason: "budget" };
   }

@@ -86,3 +86,28 @@ describe("checkBudget daily cost ceiling", () => {
     ).toEqual({ allowed: true });
   });
 });
+
+describe("checkBudget fails closed on non-finite or negative inputs", () => {
+  const fields = [
+    "callsThisGeneration",
+    "maxCalls",
+    "spentTodayMicroUsd",
+    "reservedMicroUsd",
+    "ceilingMicroUsd",
+    "callMaxMicroUsd",
+  ] as const;
+
+  it.each(fields)("refuses when %s is NaN", (field) => {
+    expect(checkBudget({ ...BASE, [field]: Number.NaN })).toEqual({
+      allowed: false,
+      reason: "budget",
+    });
+  });
+
+  it("refuses a negative callMaxMicroUsd", () => {
+    expect(checkBudget({ ...BASE, callMaxMicroUsd: -1 })).toEqual({
+      allowed: false,
+      reason: "budget",
+    });
+  });
+});

@@ -140,6 +140,12 @@ export {
   buildState,
   checkBudget,
 } from "./domain/decision-advice";
+export type {
+  AnswerParseResult,
+  BuildStateResult,
+  BudgetCheckInput,
+  BudgetCheckResult,
+} from "./domain/decision-advice";
 export { NullDecisionAdapter } from "./infrastructure/adapters/null-decision.adapter";
 export { GenerateSuggestionUseCase } from "./application/use-cases/generate-suggestion.use-case";
 export { HandleServerChatUseCase } from "./application/use-cases/index";

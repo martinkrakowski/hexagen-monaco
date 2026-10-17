@@ -8,7 +8,7 @@ function valueOfLength(bytes: number): string {
 }
 
 describe("buildState", () => {
-  it("joins the hash line and the declared fields", () => {
+  it("joins the declared fields without the hash line", () => {
     const result = buildState(
       [
         { name: "project", value: "bike-rental" },
@@ -18,7 +18,8 @@ describe("buildState", () => {
     );
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.state).toBe("hash: gen-1\nproject: bike-rental\nc0.name: Rentals");
+      expect(result.state).toBe("project: bike-rental\nc0.name: Rentals");
+      expect(result.hash).toBe("gen-1");
     }
   });
 
@@ -52,22 +53,61 @@ describe("buildState", () => {
     expect(result.ok).toBe(true);
   });
 
+  // Kept deliberately fake: every sample is assembled from inert string
+  // pieces so no real credential ever appears in the source tree.
   const secretSamples: [string, string][] = [
-    ["openrouter key", "sk-or-v1-0123456789abcdef"],
-    ["generic sk key", "sk-proj-abcdefghij0123456789"],
-    ["github classic token", "ghp_0123456789abcdefghij"],
-    ["github fine-grained token", "github_pat_11ABCdef0_0123456789"],
-    ["aws access key id", "AKIA0123456789ABCDEF"],
-    ["pem key header", "-----BEGIN RSA PRIVATE KEY-----"],
-    ["slack bot token", "xoxb-123456789012-abcdefghij"],
-    ["slack user token", "xoxp-123456789012-abcdefghij"],
+    ["openrouter key", ["sk-or-v1-", "0123456789abcdef0123456789abcdef0123456789abcdef"].join("")],
+    ["generic sk key", ["sk-proj-", "abcdefghij0123456789"].join("")],
+    ["stripe live key", ["sk", "live", "0123456789abcdef01234567"].join("_")],
+    ["stripe test key", ["sk", "test", "0123456789abcdef01234567"].join("_")],
+    ["google api key", ["AIza", "0AaB_-0AaB_-0AaB_-0AaB_-0AaB_-0AaB_"].join("")],
+    ["npm token", ["npm_", "0123456789abcdefghijklmnopqrstuvwxyzAB"].join("")],
+    ["github classic token", ["ghp_", "0123456789abcdefghij"].join("")],
+    ["github fine-grained token", ["github_pat_11ABCdef0_", "0123456789"].join("")],
+    ["github app token", ["gho_", "0123456789abcdefghij"].join("")],
+    ["github user token", ["ghu_", "0123456789abcdefghij"].join("")],
+    ["gitlab token", ["glpat-", "0123abcdefghij0123"].join("")],
+    ["aws access key id", ["AKIA", "0123456789ABCDEF"].join("")],
+    ["aws session key id", ["ASIA", "0123456789ABCDEF01"].join("")],
+    ["pem key header", ["-----BEGIN ", "RSA PRIVATE KEY-----"].join("")],
+    ["slack app token", ["xoxa-", "123456789012-abcdefghij"].join("")],
+    ["slack bot token", ["xoxb-", "123456789012-abcdefghij"].join("")],
+    ["slack user token", ["xoxp-", "123456789012-abcdefghij"].join("")],
+    ["slack refresh token", ["xoxr-", "123456789012-abcdefghij"].join("")],
     ["long high-entropy hex", "d41d8cd98f00b204e9800998ecf8427e"],
-    ["long high-entropy base64", "c3VwZXJzZWNyZXRiYXNlNjRzdHJpbmdvbG9vbG9vbA=="],
+    [
+      "long high-entropy base64",
+      // 44 chars, mixed case with digits — the shape the base64 rule targets.
+      ["Ab1", "cD2", "eF3", "gH4", "iJ5", "kL6", "mN7", "oP8", "qR9", "sT0", "uV1", "wX2", "yZ3", "aB4", "cD5"].join(""),
+    ],
+    [
+      "jwt",
+      [
+        "eyJhbGciOiJIUzI1NiJ9",
+        "eyJ0eXAiOiJKV1QifQ",
+        "c2lnbmF0dXJlX2hlcmU",
+      ].join("."),
+    ],
   ];
 
   it.each(secretSamples)("refuses a %s in a field value", (_label, secret) => {
     const result = buildState([{ name: "field", value: `text ${secret} tail` }], "h");
     expect(result).toEqual({ ok: false, reason: "refused" });
+  });
+
+  // Ordinary project identifiers share surface shapes with the `sk-` secret
+  // prefixes; the left alphanumeric boundary keeps them accepted.
+  const plainIdentifiers = [
+    "task-scheduling-service",
+    "risk-assessment-engine",
+    "CustomerSubscriptionRenewalNotificationScheduler",
+    "InventoryReplenishmentForecastingAggregate",
+    "apps/web/app/api/manifest/generate/spec/route",
+  ];
+
+  it.each(plainIdentifiers)("accepts the plain identifier %s", (identifier) => {
+    const result = buildState([{ name: "field", value: identifier }], "h");
+    expect(result.ok).toBe(true);
   });
 
   it("refuses a secret in a field name", () => {
