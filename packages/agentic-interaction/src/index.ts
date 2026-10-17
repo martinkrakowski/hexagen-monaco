@@ -117,6 +117,37 @@ export type {
 // both contracts reachable so neither can be bound by mistake.
 export type { ApiKeyVaultLifecyclePort } from "./application/ports/index";
 export type { ProviderCatalogPort } from "./application/ports/out/provider-catalog.port";
+// Jev decision advice (lane J1a): the port as a type, the pure domain
+// validators/rules, and the always-off Null adapter. The real `JevDecisionAdapter`
+// is exported only from the server subpath (J1b), never from this barrel.
+export type { DecisionAdvicePort } from "./application/ports/out/decision-advice.port";
+export type {
+  DecisionAdviceField,
+  DecisionAdviceRequest,
+  DecisionAdviceResult,
+  DecisionQuestion,
+  DecisionQuestions,
+  ChoiceQuestion,
+  NoulQuestion,
+  DecisionAnswer,
+  ChoiceAnswer,
+  NoulAnswer,
+  DecisionUnknownReason,
+  DecisionReceipt,
+} from "./domain/decision-advice";
+export {
+  parseChoiceAnswer,
+  parseNoulAnswer,
+  buildState,
+  checkBudget,
+} from "./domain/decision-advice";
+export type {
+  AnswerParseResult,
+  BuildStateResult,
+  BudgetCheckInput,
+  BudgetCheckResult,
+} from "./domain/decision-advice";
+export { NullDecisionAdapter } from "./infrastructure/adapters/null-decision.adapter";
 export { GenerateSuggestionUseCase } from "./application/use-cases/generate-suggestion.use-case";
 export { HandleServerChatUseCase } from "./application/use-cases/index";
 export { ModifyArchitectureUseCase } from "./application/use-cases/modify-architecture.use-case";

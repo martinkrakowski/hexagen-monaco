@@ -8,23 +8,36 @@ layers:
       - ConfidenceScore
       - CloudProviderEndpoint
       - ProviderFallbackChain
+      - DecisionAdviceRequest
+      - DecisionAdviceField
+      - DecisionAdviceResult
+      - DecisionQuestion
+      - DecisionQuestions
+      - ChoiceQuestion
+      - NoulQuestion
+      - DecisionAnswer
+      - ChoiceAnswer
+      - NoulAnswer
+      - DecisionUnknownReason
+      - DecisionReceipt
   application:
     use_cases:
-    - ModifyArchitectureUseCase
-    - GenerateSuggestionUseCase
-    - ExecuteLooseSpecConversionUseCase
-    - ClassifyContextTypeUseCase
-    - ExecuteFullStagedGenerationUseCase
-    - ExecuteManifestRepairUseCase
+      - ModifyArchitectureUseCase
+      - GenerateSuggestionUseCase
+      - ExecuteLooseSpecConversionUseCase
+      - ClassifyContextTypeUseCase
+      - ExecuteFullStagedGenerationUseCase
+      - ExecuteManifestRepairUseCase
     ports:
       in:
-      - ArchitectureModificationPort
-      - ClassifyContextTypePort
+        - ArchitectureModificationPort
+        - ClassifyContextTypePort
       out:
         - LLMProviderPort
         - SuggestionEnginePort
         - CloudLLMProviderPort
         - SecretVaultPort
+        - DecisionAdvicePort
   infrastructure:
     adapters:
       - OpenAICompatibleAdapter
@@ -35,6 +48,8 @@ layers:
       - InMemoryReconciliationAdapter
       - InMemoryManifestMutationAdapter
       - InMemoryLintValidationAdapter
+      - StaticProviderCatalogAdapter
+      - NullDecisionAdapter
 depends_on:
   - local-llm
   - ai-pipeline

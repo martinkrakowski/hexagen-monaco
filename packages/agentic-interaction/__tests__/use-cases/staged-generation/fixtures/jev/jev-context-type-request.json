@@ -1,0 +1,28 @@
+{
+  "model": "typesafe/jev-1.14",
+  "state": "project: bike-rental\n[c0] name: Rentals; responsibility: book bikes for a time slot and price the rental; aggregates: Rental, Booking; value objects: TimeSlot, Price\n[c1] name: Notifications; responsibility: send email and SMS messages to customers; aggregates: Message; value objects: Channel, Recipient",
+  "questions": {
+    "c0": {
+      "type": "choice",
+      "instructions": "Classify bounded context c0 as one DDD context type.",
+      "criteria": {
+        "core": "Central business capability, primary revenue driver",
+        "supporting": "Augments a core context but is not the primary business",
+        "generic": "General-purpose capability usable across any domain (e.g., identity, billing)",
+        "shared-kernel": "Shared data contract or event vocabulary between contexts",
+        "driver": "Outer-ring context integrating an external system or delivery channel (UI, API, CLI, storage) by implementing ports owned by other contexts"
+      }
+    },
+    "c1": {
+      "type": "choice",
+      "instructions": "Classify bounded context c1 as one DDD context type.",
+      "criteria": {
+        "core": "Central business capability, primary revenue driver",
+        "supporting": "Augments a core context but is not the primary business",
+        "generic": "General-purpose capability usable across any domain (e.g., identity, billing)",
+        "shared-kernel": "Shared data contract or event vocabulary between contexts",
+        "driver": "Outer-ring context integrating an external system or delivery channel (UI, API, CLI, storage) by implementing ports owned by other contexts"
+      }
+    }
+  }
+}
