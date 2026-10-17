@@ -1,6 +1,9 @@
 import { NextRequest } from "next/server";
+import { getToken } from "next-auth/jwt";
 import { checkRateLimit } from "../../../../../lib/rate-limiter";
 import { enforceDailyQuota } from "../../../../../lib/enforce-quota";
+import { markDecisionCallRecorded } from "../../../../../lib/decision-advice/budgeted-decision-advice";
+import { getPlatformStore } from "../../../../../lib/platform";
 import {
   ExecuteStructuredConfigGenerationUseCase,
   ClassifyContextTypeUseCase,
@@ -10,6 +13,7 @@ import {
 } from "@hexagen/agentic-interaction";
 import {
   createGenerationTransactionManager,
+  createJevDecisionAdvice,
   createLLMProviderSelector,
   createStage6ReviewerConfig,
   createStage6ValidatorConfig,
@@ -262,6 +266,25 @@ export async function POST(request: NextRequest) {
         // unless STAGE6_VALIDATOR_API_KEY is set — review then stays on the main
         // pipeline model at 800, unchanged.
         const stage6Reviewer = createStage6ValidatorConfig();
+
+        // Jev decision advice (lane J5a2): constructed PER REQUEST inside
+        // the handler — never at module scope — because the budgeted
+        // wrapper's per-generation call cap must count per run (review
+        // note A). Null (no JEV_API_KEY) passes no options and today's
+        // behaviour stands byte-for-byte.
+        const jev = createJevDecisionAdvice();
+        let jevReviewer = false;
+        if (jev) {
+          // The reviewer's identity is reduced to a boolean HERE, and only
+          // the boolean reaches a receipt row; the sub is never stored
+          // (decision-receipts-store retention contract).
+          const token = await getToken({
+            req: request,
+            secret: process.env.NEXTAUTH_SECRET,
+          });
+          jevReviewer =
+            jev.reviewerSub !== "" && token?.sub === jev.reviewerSub;
+        }
         const useCase = new ExecuteStructuredConfigGenerationUseCase(
           llmAdapter,
           transactionManager,
@@ -269,6 +292,58 @@ export async function POST(request: NextRequest) {
           escalationModel,
           reviewerPort ?? undefined,
           stage6Reviewer ?? undefined,
+          jev
+            ? {
+                decisionAdvice: jev.port,
+                contextTypeMode: jev.contextTypeMode,
+                minConfidence: jev.minConfidence,
+                receiptSink: (receipt) => {
+                  // One durable call row plus one answer row per reviewed
+                  // context. Fire-and-forget: a receipt failure never fails
+                  // the generation (invariant 4) — the use case catches a
+                  // synchronous throw, the .catch below swallows the async
+                  // ones. The ledger entry is removed only after the write
+                  // resolves: a cost whose row never lands keeps counting
+                  // against the ceiling (fail closed).
+                  //
+                  // "off" never dispatches advice, so a receipt arriving
+                  // here is always shadow or primary; the narrowing only
+                  // satisfies the store's closed set.
+                  const mode =
+                    receipt.mode === "primary" ? "primary" : "shadow";
+                  void getPlatformStore()
+                    .decisionReceipts.recordCall(
+                      {
+                        use: "context-type",
+                        status: receipt.receipt.status,
+                        reviewer: jevReviewer,
+                        model: receipt.receipt.model,
+                        requestId: receipt.receipt.requestId,
+                        generationId: receipt.generationId,
+                        costMicroUsd: receipt.receipt.costMicroUsd,
+                        latencyMs: receipt.receipt.latencyMs,
+                      },
+                      receipt.answers.map((answer) => ({
+                        questionIndex: answer.questionIndex,
+                        mode,
+                        jevAnswer: answer.jevAnswer,
+                        jevConfidence: answer.jevConfidence,
+                        todayAnswer: answer.todayAnswer,
+                        todaySource: answer.todaySource,
+                        agreement: answer.agreement,
+                      })),
+                    )
+                    .then(() => {
+                      markDecisionCallRecorded(receipt.receipt.requestId);
+                    })
+                    .catch(() => {
+                      // Swallowed by contract: the generation's outcome is
+                      // already decided, and the unrecorded cost stays
+                      // counted through the budget ledger.
+                    });
+                },
+              }
+            : undefined,
         );
 
         const result = await useCase.execute(body.config, callbacks);

@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { describe, it, expect } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import type {
   DecisionAdvicePort,
   DecisionAdviceRequest,
@@ -7,6 +7,7 @@ import type {
 } from "@hexagen/agentic-interaction";
 import {
   createBudgetedDecisionAdvice,
+  markDecisionCallRecorded,
   type DecisionSpendStore,
 } from "../budgeted-decision-advice";
 
@@ -16,8 +17,14 @@ import {
  * refuses; concurrent asks cannot both pass the last slot; a store error
  * refuses — plus the callMaxMicroUsd default (1000).
  *
+ * Jev J5a2 (review note B): the unrecorded-cost ledger — a sequential second
+ * ask sees the first call's cost while its receipt is unrecorded, and after
+ * markDecisionCallRecorded the cost is counted only through the store.
+ *
  * The wrapper's module-level reservation total is back to zero after every
- * test here, because each ask settles its reservation before the test ends.
+ * test here, because each ask settles its reservation before the test ends;
+ * the unrecorded ledger is emptied by the afterEach below, because every
+ * advised result parks its cost.
  */
 
 const REQUEST: DecisionAdviceRequest = {
@@ -51,6 +58,23 @@ const BUDGET_REFUSAL: DecisionAdviceResult = {
   reason: "budget",
 };
 
+/** An advised result whose cost (25) parks in the ledger under `requestId`. */
+function advisedWithCost(requestId: string): DecisionAdviceResult {
+  return {
+    status: "advised",
+    answers: {},
+    receipt: {
+      use: "context-type",
+      model: "typesafe/jev-1.14",
+      requestId,
+      generationId: "",
+      status: "advised",
+      costMicroUsd: 25,
+      latencyMs: 200,
+    },
+  };
+}
+
 function fakePort(): {
   port: DecisionAdvicePort;
   calls: DecisionAdviceRequest[];
@@ -79,6 +103,15 @@ function failingStore(): DecisionSpendStore {
       Promise.reject(new Error("ceiling ledger unreadable")),
   };
 }
+
+// Every parked ledger entry is removed after its test: a leftover would
+// inflate the ceiling arithmetic of later tests (the ledger is exactly what
+// the J5a2 tests below exercise, so it must start empty for each of them).
+afterEach(() => {
+  markDecisionCallRecorded("req-1");
+  markDecisionCallRecorded("req-ledger-a");
+  markDecisionCallRecorded("req-ledger-b");
+});
 
 describe("createBudgetedDecisionAdvice", () => {
   it("under both caps the inner port is called and its result passes through unchanged", async () => {
@@ -192,5 +225,72 @@ describe("createBudgetedDecisionAdvice", () => {
     await expect(atTheDefault.ask(REQUEST)).resolves.toEqual(ADVISED);
     await expect(underTheDefault.ask(REQUEST)).resolves.toEqual(BUDGET_REFUSAL);
     expect(calls).toHaveLength(1);
+  });
+
+  it("a sequential second ask sees the first call's cost while its receipt is unrecorded (J5a2)", async () => {
+    // The store reads 0 (the receipt row has not landed) and the ceiling
+    // holds exactly one callMax. The first ask settles with cost 25 parked
+    // under "req-ledger-a"; without the ledger the second ask would project
+    // 0 + 1000 ≤ 1000 and pass — with it, the parked 25 makes 1025 > 1000.
+    const calls: DecisionAdviceRequest[] = [];
+    const port: DecisionAdvicePort = {
+      ask(request) {
+        calls.push(request);
+        return Promise.resolve(advisedWithCost("req-ledger-a"));
+      },
+    };
+    const wrapper = createBudgetedDecisionAdvice({
+      port,
+      store: fakeStore(0),
+      maxCalls: 20,
+      ceilingMicroUsd: 1000,
+      callMaxMicroUsd: 1000,
+    });
+
+    await expect(wrapper.ask(REQUEST)).resolves.toEqual(
+      advisedWithCost("req-ledger-a"),
+    );
+    await expect(wrapper.ask(REQUEST)).resolves.toEqual(BUDGET_REFUSAL);
+    expect(calls).toHaveLength(1);
+  });
+
+  it("after markDecisionCallRecorded the cost is counted only through the store (J5a2)", async () => {
+    // First ask settles with cost 25 parked under "req-ledger-b"; a second
+    // ask is refused while the cost sits in the ledger. Once the (simulated)
+    // durable write lands — the store reads 25 and the entry is removed — a
+    // fresh wrapper at a 1030 ceiling passes: 25 + 1000 = 1025 ≤ 1030. Had
+    // the entry still counted, 25 + 25 + 1000 = 1050 would refuse: the cost
+    // is counted exactly once, through the store read alone.
+    const calls: DecisionAdviceRequest[] = [];
+    const port: DecisionAdvicePort = {
+      ask(request) {
+        calls.push(request);
+        return Promise.resolve(advisedWithCost("req-ledger-b"));
+      },
+    };
+    const before = createBudgetedDecisionAdvice({
+      port,
+      store: fakeStore(0),
+      maxCalls: 20,
+      ceilingMicroUsd: 1000,
+      callMaxMicroUsd: 1000,
+    });
+    await expect(before.ask(REQUEST)).resolves.toEqual(
+      advisedWithCost("req-ledger-b"),
+    );
+    await expect(before.ask(REQUEST)).resolves.toEqual(BUDGET_REFUSAL);
+
+    markDecisionCallRecorded("req-ledger-b");
+    const after = createBudgetedDecisionAdvice({
+      port,
+      store: fakeStore(25),
+      maxCalls: 20,
+      ceilingMicroUsd: 1030,
+      callMaxMicroUsd: 1000,
+    });
+    await expect(after.ask(REQUEST)).resolves.toEqual(
+      advisedWithCost("req-ledger-b"),
+    );
+    expect(calls).toHaveLength(2);
   });
 });
