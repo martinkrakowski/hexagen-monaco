@@ -48,7 +48,8 @@ export function checkBudget(input: BudgetCheckInput): BudgetCheckResult {
   if (input.callsThisGeneration + 1 > input.maxCalls) {
     return { allowed: false, reason: "budget" };
   }
-  const projected = input.spentTodayMicroUsd + input.reservedMicroUsd + input.callMaxMicroUsd;
+  const projected =
+    input.spentTodayMicroUsd + input.reservedMicroUsd + input.callMaxMicroUsd;
   if (projected > input.ceilingMicroUsd) {
     return { allowed: false, reason: "budget" };
   }

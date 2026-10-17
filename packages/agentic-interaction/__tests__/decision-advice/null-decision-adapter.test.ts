@@ -23,8 +23,13 @@ describe("NullDecisionAdapter", () => {
 
   it("always returns unknown/disabled, for any request", async () => {
     const adapter = new NullDecisionAdapter();
-    await expect(adapter.ask(request)).resolves.toEqual({ status: "unknown", reason: "disabled" });
-    await expect(adapter.ask({ ...request, use: "template-select" })).resolves.toEqual({
+    await expect(adapter.ask(request)).resolves.toEqual({
+      status: "unknown",
+      reason: "disabled",
+    });
+    await expect(
+      adapter.ask({ ...request, use: "template-select" }),
+    ).resolves.toEqual({
       status: "unknown",
       reason: "disabled",
     });

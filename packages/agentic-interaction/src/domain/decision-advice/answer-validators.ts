@@ -16,7 +16,12 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 }
 
 function isProbability(value: unknown): value is number {
-  return typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 1;
+  return (
+    typeof value === "number" &&
+    Number.isFinite(value) &&
+    value >= 0 &&
+    value <= 1
+  );
 }
 
 /**
@@ -33,7 +38,8 @@ export function parseChoiceAnswer(
   if (!isPlainObject(raw)) return { ok: false, reason: "shape" };
   if (raw["type"] !== "choice") return { ok: false, reason: "shape" };
   if (typeof raw["choice"] !== "string") return { ok: false, reason: "shape" };
-  if (!isPlainObject(raw["probabilities"])) return { ok: false, reason: "shape" };
+  if (!isPlainObject(raw["probabilities"]))
+    return { ok: false, reason: "shape" };
   if (!isProbability(raw["confidence"])) return { ok: false, reason: "shape" };
 
   const probabilities = raw["probabilities"];
@@ -66,7 +72,8 @@ export function parseChoiceAnswer(
     }
   }
   if (argmaxCount > 1) return { ok: false, reason: "tie" };
-  if ((probabilities[choice] as number) !== max) return { ok: false, reason: "shape" };
+  if ((probabilities[choice] as number) !== max)
+    return { ok: false, reason: "shape" };
 
   return {
     ok: true,

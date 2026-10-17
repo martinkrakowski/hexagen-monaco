@@ -61,22 +61,24 @@ export function buildState(
   hash: string,
 ): BuildStateResult {
   const lines: string[] = [];
+  let total = 0;
 
   for (const field of fields) {
-    if (containsSecretShape(field.name) || containsSecretShape(field.value)) {
+    const line = `${field.name}: ${field.value}`;
+    const bytes = byteLength(line);
+    // Caps first, counted as the state grows (the joining newline included),
+    // so an oversized input is refused before it is scanned or joined.
+    total += bytes + (lines.length > 0 ? 1 : 0);
+    if (bytes > PER_FIELD_BYTE_CAP || total > TOTAL_BYTE_CAP) {
       return { ok: false, reason: "refused" };
     }
-    const line = `${field.name}: ${field.value}`;
-    if (byteLength(line) > PER_FIELD_BYTE_CAP) {
+    if (containsSecretShape(field.name) || containsSecretShape(field.value)) {
       return { ok: false, reason: "refused" };
     }
     lines.push(line);
   }
 
   const state = lines.join("\n");
-  if (byteLength(state) > TOTAL_BYTE_CAP) {
-    return { ok: false, reason: "refused" };
-  }
   // The generation hash is metadata, not state: it rides beside the state so
   // it is never sent to the model as part of the prompt text.
   return { ok: true, state, hash };

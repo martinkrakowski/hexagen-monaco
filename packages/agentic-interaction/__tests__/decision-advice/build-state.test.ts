@@ -24,12 +24,18 @@ describe("buildState", () => {
   });
 
   it("accepts a field just under the 8 KiB per-field cap", () => {
-    const result = buildState([{ name: "f", value: valueOfLength(8 * 1024 - 4) }], "h");
+    const result = buildState(
+      [{ name: "f", value: valueOfLength(8 * 1024 - 4) }],
+      "h",
+    );
     expect(result.ok).toBe(true);
   });
 
   it("refuses a field over the 8 KiB per-field cap", () => {
-    const result = buildState([{ name: "f", value: valueOfLength(8 * 1024) }], "h");
+    const result = buildState(
+      [{ name: "f", value: valueOfLength(8 * 1024) }],
+      "h",
+    );
     expect(result).toEqual({ ok: false, reason: "refused" });
   });
 
@@ -56,14 +62,25 @@ describe("buildState", () => {
   // Kept deliberately fake: every sample is assembled from inert string
   // pieces so no real credential ever appears in the source tree.
   const secretSamples: [string, string][] = [
-    ["openrouter key", ["sk-or-v1-", "0123456789abcdef0123456789abcdef0123456789abcdef"].join("")],
+    [
+      "openrouter key",
+      ["sk-or-v1-", "0123456789abcdef0123456789abcdef0123456789abcdef"].join(
+        "",
+      ),
+    ],
     ["generic sk key", ["sk-proj-", "abcdefghij0123456789"].join("")],
     ["stripe live key", ["sk", "live", "0123456789abcdef01234567"].join("_")],
     ["stripe test key", ["sk", "test", "0123456789abcdef01234567"].join("_")],
-    ["google api key", ["AIza", "0AaB_-0AaB_-0AaB_-0AaB_-0AaB_-0AaB_"].join("")],
+    [
+      "google api key",
+      ["AIza", "0AaB_-0AaB_-0AaB_-0AaB_-0AaB_-0AaB_"].join(""),
+    ],
     ["npm token", ["npm_", "0123456789abcdefghijklmnopqrstuvwxyzAB"].join("")],
     ["github classic token", ["ghp_", "0123456789abcdefghij"].join("")],
-    ["github fine-grained token", ["github_pat_11ABCdef0_", "0123456789"].join("")],
+    [
+      "github fine-grained token",
+      ["github_pat_11ABCdef0_", "0123456789"].join(""),
+    ],
     ["github app token", ["gho_", "0123456789abcdefghij"].join("")],
     ["github user token", ["ghu_", "0123456789abcdefghij"].join("")],
     ["gitlab token", ["glpat-", "0123abcdefghij0123"].join("")],
@@ -78,7 +95,23 @@ describe("buildState", () => {
     [
       "long high-entropy base64",
       // 44 chars, mixed case with digits — the shape the base64 rule targets.
-      ["Ab1", "cD2", "eF3", "gH4", "iJ5", "kL6", "mN7", "oP8", "qR9", "sT0", "uV1", "wX2", "yZ3", "aB4", "cD5"].join(""),
+      [
+        "Ab1",
+        "cD2",
+        "eF3",
+        "gH4",
+        "iJ5",
+        "kL6",
+        "mN7",
+        "oP8",
+        "qR9",
+        "sT0",
+        "uV1",
+        "wX2",
+        "yZ3",
+        "aB4",
+        "cD5",
+      ].join(""),
     ],
     [
       "jwt",
@@ -91,7 +124,10 @@ describe("buildState", () => {
   ];
 
   it.each(secretSamples)("refuses a %s in a field value", (_label, secret) => {
-    const result = buildState([{ name: "field", value: `text ${secret} tail` }], "h");
+    const result = buildState(
+      [{ name: "field", value: `text ${secret} tail` }],
+      "h",
+    );
     expect(result).toEqual({ ok: false, reason: "refused" });
   });
 
@@ -112,7 +148,10 @@ describe("buildState", () => {
   });
 
   it("refuses a secret in a field name", () => {
-    const result = buildState([{ name: ["ghp_", "0123456789", "abcdefghij"].join(""), value: "x" }], "h");
+    const result = buildState(
+      [{ name: ["ghp_", "0123456789", "abcdefghij"].join(""), value: "x" }],
+      "h",
+    );
     expect(result).toEqual({ ok: false, reason: "refused" });
   });
 

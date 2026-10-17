@@ -1,5 +1,8 @@
 import type { DecisionAdvicePort } from "../../application/ports/out/decision-advice.port";
-import type { DecisionAdviceRequest, DecisionAdviceResult } from "../../domain/decision-advice";
+import type {
+  DecisionAdviceRequest,
+  DecisionAdviceResult,
+} from "../../domain/decision-advice";
 
 /**
  * The always-off adapter. Jev is off by default (invariant 1): with no

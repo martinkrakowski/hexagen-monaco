@@ -12,7 +12,9 @@ const BASE = {
 
 describe("checkBudget call cap", () => {
   it("allows when under the call cap", () => {
-    expect(checkBudget({ ...BASE, callsThisGeneration: 19 })).toEqual({ allowed: true });
+    expect(checkBudget({ ...BASE, callsThisGeneration: 19 })).toEqual({
+      allowed: true,
+    });
   });
 
   it("refuses at the call cap boundary (the 21st call)", () => {
