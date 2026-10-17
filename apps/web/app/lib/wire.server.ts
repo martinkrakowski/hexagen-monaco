@@ -657,8 +657,9 @@ export const createJevDecisionAdvice = (): JevDecisionAdviceConfig | null => {
  *
  * A receipt is recorded per ask the same way as U-A (use "template-select",
  * mode "shadow", `todayAnswer` the default option's index — the callback
- * receives no question default, and index 0 IS the engine's fallback default
- * — with `todaySource` "default"); the write is awaited so
+ * receives `defaultIndex` (`options.indexOf(question.default ?? options[0])`),
+ * since a manifest may declare a non-first default — with `todaySource`
+ * "default"); the write is awaited so
  * {@link markDecisionCallRecorded} lands deterministically before the caller
  * moves on, and every failure is swallowed: a receipt failure never fails a
  * suggestion (invariant 4). The engine's own 3 s deadline bounds the wait.
@@ -666,7 +667,7 @@ export const createJevDecisionAdvice = (): JevDecisionAdviceConfig | null => {
 function createTemplateSelectSuggestion(
   config: JevDecisionAdviceConfig,
 ): SelectSuggestion {
-  return async ({ projectName, prompt, options }) => {
+  return async ({ projectName, prompt, options, defaultIndex }) => {
     const result = await config.port
       .ask({
         use: "template-select",
@@ -715,9 +716,9 @@ function createTemplateSelectSuggestion(
                   mode: "shadow",
                   jevAnswer: answer.choice,
                   jevConfidence: answer.confidence,
-                  todayAnswer: "0",
+                  todayAnswer: String(defaultIndex),
                   todaySource: "default",
-                  agreement: answer.choice === "0",
+                  agreement: answer.choice === String(defaultIndex),
                 },
               ]
             : [],

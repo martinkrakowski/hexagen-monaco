@@ -118,6 +118,11 @@ export function createBudgetedDecisionAdvice(
       // Check-and-reserve under the one mutex: the durable read, the pure
       // checkBudget rule and the reservation update are one atomic section.
       const reserved = await runSerialized(async (): Promise<boolean> => {
+        // Snapshot the in-memory ledger sides BEFORE the durable read: the
+        // store read is awaited, so a receipt write landing during the await
+        // would otherwise move unrecorded/reserved under checkBudget's feet.
+        const parked = unrecordedTotalMicroUsd();
+        const reservedSnapshot = reservedTotalMicroUsd;
         let spentTodayMicroUsd: number;
         try {
           spentTodayMicroUsd = await options.store.spentSinceUtcMidnight(now);
@@ -130,8 +135,8 @@ export function createBudgetedDecisionAdvice(
           // Invariant 6's total: durable spend, plus the unrecorded ledger
           // (settled calls whose receipt row has not landed yet), plus the
           // in-flight reservations — checked as one sum.
-          spentTodayMicroUsd: spentTodayMicroUsd + unrecordedTotalMicroUsd(),
-          reservedMicroUsd: reservedTotalMicroUsd,
+          spentTodayMicroUsd: spentTodayMicroUsd + parked,
+          reservedMicroUsd: reservedSnapshot,
           ceilingMicroUsd: options.ceilingMicroUsd,
           callMaxMicroUsd,
         });

@@ -26,6 +26,7 @@ const JEV_ENV_VARS = [
 
 const tracker = vi.hoisted(() => ({
   asks: [] as unknown[],
+  choice: "2",
   recordCall: vi.fn<(call: unknown, answers: unknown[]) => Promise<unknown>>(),
 }));
 
@@ -38,7 +39,7 @@ vi.mock("@hexagen/agentic-interaction/server", () => ({
         answers: {
           q0: {
             type: "choice",
-            choice: "2",
+            choice: tracker.choice,
             probabilities: { "0": 0.05, "1": 0.08, "2": 0.87 },
             confidence: 0.867,
           },
@@ -85,6 +86,7 @@ beforeEach(() => {
     delete process.env[name];
   }
   tracker.asks.length = 0;
+  tracker.choice = "2";
   tracker.recordCall.mockReset().mockResolvedValue({});
   // The unrecorded ledger starts (and stays) empty across tests.
   markDecisionCallRecorded("req-uc-1");
@@ -211,4 +213,56 @@ test("with templateSuggest on a receipt is recorded per suggestion (shadow, toda
     callMaxMicroUsd: 1000,
   });
   await expect(wrapper.ask(ASK)).resolves.toMatchObject({ status: "advised" });
+});
+
+test("with templateSuggest on a non-first default records todayAnswer = its real index (docker.node_version default '22' = index 1)", async () => {
+  process.env.JEV_API_KEY = "set";
+  process.env.JEV_TEMPLATE_SUGGEST = "on";
+  await getAddOnMaterializer().materialize(
+    { docker: {} },
+    { projectName: "demo-app" },
+  );
+
+  // docker's first defaulted select is node_version (options 20/22/23,
+  // default "22" — index 1). The receipt's today side is that real index.
+  expect(tracker.asks.length).toBeGreaterThan(0);
+  const [, answers] = tracker.recordCall.mock.calls[0] as [
+    Record<string, unknown>,
+    Record<string, unknown>[],
+  ];
+  expect(answers).toEqual([
+    {
+      questionIndex: 0,
+      mode: "shadow",
+      jevAnswer: "2",
+      jevConfidence: 0.867,
+      todayAnswer: "1",
+      todaySource: "default",
+      agreement: false, // choice "2" ≠ default index 1
+    },
+  ]);
+
+  // Agreement is true only when the choice IS the default index.
+  tracker.asks.length = 0;
+  tracker.choice = "1";
+  const callsBefore = tracker.recordCall.mock.calls.length;
+  await getAddOnMaterializer().materialize(
+    { docker: {} },
+    { projectName: "demo-app" },
+  );
+  const [, answers2] = tracker.recordCall.mock.calls[callsBefore] as [
+    Record<string, unknown>,
+    Record<string, unknown>[],
+  ];
+  expect(answers2).toEqual([
+    {
+      questionIndex: 0,
+      mode: "shadow",
+      jevAnswer: "1",
+      jevConfidence: 0.867,
+      todayAnswer: "1",
+      todaySource: "default",
+      agreement: true,
+    },
+  ]);
 });
