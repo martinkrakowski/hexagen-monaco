@@ -142,6 +142,25 @@ describe("createInMemoryMaterializer({ suggest })", () => {
     },
   );
 
+  it("handles a rejection that arrives after the deadline", async () => {
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => unhandled.push(reason);
+    process.on("unhandledRejection", onUnhandled);
+    try {
+      await expectToday(
+        () =>
+          new Promise((_resolve, reject) =>
+            setTimeout(() => reject(new Error("late")), 40),
+          ),
+        10,
+      );
+      await new Promise((resolve) => setTimeout(resolve, 80));
+      assert.deepStrictEqual(unhandled, []);
+    } finally {
+      process.off("unhandledRejection", onUnhandled);
+    }
+  });
+
   it("does not hang on a callback that never settles", async () => {
     await expectToday(() => new Promise(() => undefined), 20);
   });

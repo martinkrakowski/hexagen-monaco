@@ -82,19 +82,19 @@ export class DefaultingQuestionEngine implements QuestionEnginePort {
     const deadline = new Promise<undefined>((resolve) => {
       timer = setTimeout(() => resolve(undefined), this.suggestTimeoutMs);
     });
+    // The callback's own promise carries its catch, so a rejection that lands
+    // after the deadline has already won is handled, never unhandled.
+    const advice = Promise.resolve()
+      .then(() =>
+        this.suggest?.({
+          projectName: this.reservedVars.projectName ?? "",
+          prompt: question.prompt,
+          options: question.options,
+        }),
+      )
+      .catch(() => undefined);
     try {
-      return await Promise.race([
-        Promise.resolve().then(() =>
-          this.suggest?.({
-            projectName: this.reservedVars.projectName ?? "",
-            prompt: question.prompt,
-            options: question.options,
-          }),
-        ),
-        deadline,
-      ]);
-    } catch {
-      return undefined;
+      return await Promise.race([advice, deadline]);
     } finally {
       clearTimeout(timer);
     }
