@@ -433,6 +433,7 @@ describe.each(BACKENDS)("decision receipts store (%s)", (kind) => {
         store.agreementReport({
           use: "context-type",
           mode: "primary" as never,
+          threshold: 0.8,
         }),
       ).rejects.toThrow(/mode/);
       await expect(

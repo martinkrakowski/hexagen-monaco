@@ -126,6 +126,23 @@ test("404 for an unknown row", async () => {
   expect(await response.json()).toEqual({ error: "not_found" });
 });
 
+test("a database failure is not a refusal: it surfaces instead of a 404", async () => {
+  authorize();
+  tracker.getStore.mockReturnValue({
+    decisionReceipts: {
+      setOwnerReview: () => Promise.reject(new Error("connection refused")),
+    },
+  });
+
+  await expect(
+    post({
+      callId: "99999999-9999-4999-8999-999999999999",
+      questionIndex: 0,
+      review: "both_ok",
+    }),
+  ).rejects.toThrow("connection refused");
+});
+
 test("404 for a call that is not reviewer=true", async () => {
   authorize();
   const store = await authorizedStore();

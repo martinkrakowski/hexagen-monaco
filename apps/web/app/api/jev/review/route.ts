@@ -48,11 +48,18 @@ export async function POST(request: NextRequest) {
       questionIndex,
       review as DecisionOwnerReview,
     );
-  } catch {
+  } catch (error) {
     // Unknown row, or the store's refusal of a non-reviewer / non-shadow
     // row: both are "no such reviewable row", and neither may echo the
-    // rejected input (the store's messages already name no values).
-    return notFound();
+    // rejected input (the store's messages already name no values). Any
+    // other failure (the database itself) is not a refusal and stays a 500.
+    if (
+      error instanceof Error &&
+      error.message.startsWith("decision receipt rejected:")
+    ) {
+      return notFound();
+    }
+    throw error;
   }
   return Response.json({ ok: true });
 }
