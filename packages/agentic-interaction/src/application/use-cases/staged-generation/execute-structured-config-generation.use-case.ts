@@ -2141,6 +2141,24 @@ export class ExecuteStructuredConfigGenerationUseCase {
    * refuse inside the adapter, which resolves as `unknown` — the result is
    * then simply "unknown", never redacted.
    */
+  /**
+   * Start the advice request now (before the classifier loop) with its
+   * rejection handler attached at once: a port that rejects, or throws
+   * synchronously, is "no advice", never an unhandled rejection.
+   */
+  private dispatchContextTypeAdvice(
+    config: StructuredConfig,
+    flagged: AcceptedContext[],
+  ): Promise<DecisionAdviceResult | null> {
+    try {
+      return this.decisionAdvice
+        .ask(this.buildContextTypeAdviceRequest(config, flagged))
+        .catch(() => null);
+    } catch {
+      return Promise.resolve(null);
+    }
+  }
+
   private buildContextTypeAdviceRequest(
     config: StructuredConfig,
     flagged: readonly AcceptedContext[],
@@ -2323,11 +2341,12 @@ export class ExecuteStructuredConfigGenerationUseCase {
       number,
       { type: string; source: ContextTypeTodaySource }
     >();
+    // The rejection handler is attached at dispatch, so a port that rejects
+    // (or throws synchronously) while the classifier loop is still awaiting
+    // is "no advice" at once, never an unhandled rejection.
     const advicePromise =
       this.contextTypeMode !== "off" && flagged.length > 0
-        ? this.decisionAdvice.ask(
-            this.buildContextTypeAdviceRequest(config, flagged),
-          )
+        ? this.dispatchContextTypeAdvice(config, flagged)
         : null;
 
     if (this.classifyUseCase) {
@@ -2335,6 +2354,7 @@ export class ExecuteStructuredConfigGenerationUseCase {
       for (const ctx of classification.accepted) {
         if (!ctx.needsTypeReview) continue;
         const todayType = ctx.type;
+        let source: ContextTypeTodaySource = "heuristic";
         try {
           const sourceCtx = config.bounded_contexts.find(
             (c) => c.name === ctx.name,
@@ -2351,37 +2371,21 @@ export class ExecuteStructuredConfigGenerationUseCase {
           if (classifyResult.success) {
             ctx.type = classifyResult.type;
             ctx.reasoning = classifyResult.reasoning;
-            todayByIndex.set(flaggedIndex, {
-              type: classifyResult.type,
-              source: "llm",
-            });
-          } else {
-            todayByIndex.set(flaggedIndex, {
-              type: todayType,
-              source: "heuristic",
-            });
+            source = "llm";
           }
         } catch {
           // Silently keep heuristic type on classifier failure
-          todayByIndex.set(flaggedIndex, {
-            type: todayType,
-            source: "heuristic",
-          });
         }
+        todayByIndex.set(flaggedIndex, {
+          type: source === "llm" ? ctx.type : todayType,
+          source,
+        });
         ctx.needsTypeReview = false;
         flaggedIndex += 1;
       }
     }
 
-    let adviceResult: DecisionAdviceResult | null = null;
-    if (advicePromise) {
-      try {
-        adviceResult = await advicePromise;
-      } catch {
-        // A port that throws is treated as "no advice" — today's types stand.
-        adviceResult = null;
-      }
-    }
+    const adviceResult = advicePromise ? await advicePromise : null;
     if (adviceResult) {
       this.applyContextTypeAdvice(
         adviceResult,

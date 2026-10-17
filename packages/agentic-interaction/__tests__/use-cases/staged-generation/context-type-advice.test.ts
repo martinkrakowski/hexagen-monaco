@@ -470,4 +470,33 @@ describe("context-type advice (U-A, lane J2)", () => {
     assert.equal(receipts.length, 1);
     assert.equal(receipts[0]!.generationId, FIXED_GENERATION_ID);
   });
+
+  test("a port that rejects while the classifier is still awaiting is no advice, never an unhandled rejection", async () => {
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => unhandled.push(reason);
+    process.on("unhandledRejection", onUnhandled);
+    try {
+      const rejecting: DecisionAdvicePort = {
+        ask: () => Promise.reject(new Error("advice down")),
+      };
+      const slow = createFakeClassifier();
+      const slowClassifier = {
+        execute: async (...args: Parameters<typeof slow.execute>) => {
+          await new Promise((resolve) => setTimeout(resolve, 20));
+          return slow.execute(...args);
+        },
+      } as unknown as ClassifyContextTypeUseCase;
+      const useCase = createUseCase({
+        decisionAdvice: rejecting,
+        contextTypeMode: "shadow",
+        classifier: slowClassifier,
+      });
+      const result = await useCase.execute(CONFIG);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      assert.equal(result.success, true);
+      assert.deepStrictEqual(unhandled, []);
+    } finally {
+      process.off("unhandledRejection", onUnhandled);
+    }
+  });
 });
