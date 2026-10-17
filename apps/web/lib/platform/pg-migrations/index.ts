@@ -1,6 +1,7 @@
 import initial from "./0001_initial.sql?raw";
 import revsAndDetail from "./0002_owner_document_revs_and_audit_detail.sql?raw";
 import byok from "./0003_byok.sql?raw";
+import decisionReceipts from "./0004_decision_receipts.sql?raw";
 
 export interface PgMigration {
   version: number;
@@ -22,4 +23,9 @@ export const PG_MIGRATIONS: readonly PgMigration[] = [
     sql: revsAndDetail,
   },
   { version: 3, name: "byok", sql: byok },
+  {
+    version: 4,
+    name: "decision_receipts",
+    sql: decisionReceipts,
+  },
 ];
