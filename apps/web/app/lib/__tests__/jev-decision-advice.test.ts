@@ -136,7 +136,7 @@ test.each([
   ["0", 0],
   ["1", 1],
   ["1.7", 1], // clamped up to 1
-  ["-0.4", 0], // clamped down to 0
+  ["-0.4", 0.8], // negative is malformed → default, never 0
   ["abc", 0.8], // malformed → default, never NaN
   ["NaN", 0.8], // the literal NaN string → default
   ["", 0.8], // deploy.yml writes unset vars as empty

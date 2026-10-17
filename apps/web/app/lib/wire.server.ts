@@ -580,13 +580,13 @@ export const createJevDecisionAdvice = (): JevDecisionAdviceConfig | null => {
   const contextTypeMode: JevContextTypeMode =
     rawMode === "shadow" || rawMode === "primary" ? rawMode : "off";
 
-  const minConfidence = Math.min(
-    1,
-    Math.max(
-      0,
-      parseJevNumber(process.env.JEV_CONTEXT_TYPE_MIN_CONFIDENCE, 0.8),
-    ),
+  // A negative value is treated as malformed (default 0.8), never as 0,
+  // which would apply every primary answer; above 1 clamps to 1.
+  const rawConfidence = parseJevNumber(
+    process.env.JEV_CONTEXT_TYPE_MIN_CONFIDENCE,
+    0.8,
   );
+  const minConfidence = rawConfidence < 0 ? 0.8 : Math.min(1, rawConfidence);
 
   const maxCalls = parseJevNumber(process.env.JEV_MAX_CALLS_PER_GENERATION, 20);
 

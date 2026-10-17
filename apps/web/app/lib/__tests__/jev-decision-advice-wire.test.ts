@@ -86,7 +86,7 @@ describe("createJevDecisionAdvice (invariant 1)", () => {
       JEV_API_KEY: "test-only-key",
       JEV_CONTEXT_TYPE_MIN_CONFIDENCE: "-2",
     });
-    expect(createJevDecisionAdvice()?.minConfidence).toBe(0);
+    expect(createJevDecisionAdvice()?.minConfidence).toBe(0.8); // negative is malformed, never 0
   });
 
   it.each([
@@ -99,21 +99,6 @@ describe("createJevDecisionAdvice (invariant 1)", () => {
       JEV_CONTEXT_TYPE_MIN_CONFIDENCE: raw,
     });
     expect(createJevDecisionAdvice()?.minConfidence).toBe(expected);
-  });
-
-  it.each([
-    ["", 20],
-    ["abc", 20], // malformed → default, never NaN
-    ["5", 5],
-  ])("JEV_MAX_CALLS_PER_GENERATION=%p parses to %p", (raw, expected) => {
-    withEnv({
-      JEV_API_KEY: "test-only-key",
-      JEV_MAX_CALLS_PER_GENERATION: raw,
-    });
-    // The cap is consumed by the port, not the config; assert through the
-    // wrapper's behaviour below instead of a private field.
-    expect(createJevDecisionAdvice()?.port).toBeDefined();
-    void expected;
   });
 
   it("JEV_TEMPLATE_SUGGEST is on only for the literal 'on'", () => {
@@ -141,19 +126,19 @@ describe("createJevDecisionAdvice (invariant 1)", () => {
     const config = createJevDecisionAdvice();
     const request = {
       use: "context-type",
-      fields: [],
+      // A secret-shaped field makes buildState refuse before any fetch, so
+      // the first ask resolves locally (unknown/refused): no network here.
+      fields: [
+        { name: "f", value: ["sk-or-", "v1-", "0123456789abcdef"].join("") },
+      ],
       questions: {
         c0: { type: "choice", instructions: "", criteria: { core: "c" } },
       },
     } as const;
     const first = await config?.port.ask(request);
-    // The adapter is the real server-only JevDecisionAdapter with a real
-    // vault — the key above does not resolve to a working endpoint, so the
-    // call resolves as an unknown reason, never a throw. What matters here
-    // is that the SECOND ask is refused by the budget, before any dispatch.
-    expect(first?.status === "advised" || first?.status === "unknown").toBe(
-      true,
-    );
+    // The first ask passes the budget and is refused by the state builder;
+    // the SECOND is refused by the budget, before any dispatch.
+    expect(first).toMatchObject({ status: "unknown", reason: "refused" });
     const second = await config?.port.ask(request);
     expect(second).toEqual({ status: "unknown", reason: "budget" });
   });
