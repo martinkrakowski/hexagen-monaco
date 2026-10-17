@@ -34,6 +34,8 @@ const EXPECTED_TABLES = [
   "repair_attempts",
   "byok_key_metadata",
   "byok_revocations",
+  "decision_calls",
+  "decision_answers",
 ];
 
 describe("pg-migrate", () => {
@@ -52,19 +54,23 @@ describe("pg-migrate", () => {
 
   it("a fresh database gets all migrations and all tables", async () => {
     const { applied } = await runPgMigrations(pool);
-    expect(applied).toEqual([1, 2, 3]);
+    expect(applied).toEqual([1, 2, 3, 4]);
 
     const m = await pool.query<{
       version: number;
       name: string;
     }>("SELECT version, name FROM schema_migrations ORDER BY version");
-    expect(m.rows).toHaveLength(3);
+    expect(m.rows).toHaveLength(4);
     expect(m.rows[0]).toMatchObject({ version: 1, name: "initial" });
     expect(m.rows[1]).toMatchObject({
       version: 2,
       name: "owner_document_revs_and_audit_detail",
     });
     expect(m.rows[2]).toMatchObject({ version: 3, name: "byok" });
+    expect(m.rows[3]).toMatchObject({
+      version: 4,
+      name: "decision_receipts",
+    });
 
     const tables = await pool.query<{ tablename: string }>(
       "SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename != 'schema_migrations'",
@@ -89,7 +95,7 @@ describe("pg-migrate", () => {
     // Running the full list now applies 0002, which creates the counter table
     // and backfills last_rev = MAX(rev) per author.
     const second = await runPgMigrations(pool);
-    expect(second.applied).toEqual([2, 3]);
+    expect(second.applied).toEqual([2, 3, 4]);
 
     const row = await pool.query<{ last_rev: number }>(
       "SELECT last_rev FROM owner_document_revs WHERE owner_id = $1 AND user_id = $2",

@@ -419,6 +419,57 @@ export function openPlatformDb(dbPath: string): Database.Database {
     -- The eval read is "group every attempt by class", so the class leads.
     CREATE INDEX IF NOT EXISTS idx_repair_attempts_class
       ON repair_attempts (owner_id, violation_class, schema_version);
+
+    --
+    -- decision_calls — one row per Jev decision-advice HTTP call (Jev J1c).
+    --
+    -- Same retention contract as repair_runs above, restated in
+    -- decision-receipts-store.ts: closed-set, numeric or opaque-identifier
+    -- columns ONLY -- never state text, context names, project text, the key
+    -- or any user id. The reviewer's identity is reduced to a boolean before
+    -- the write (reviewer = sub === JEV_REVIEWER_SUB), so no user id can ride
+    -- in. There is deliberately NO owner_id column: the daily-spend ceiling
+    -- and the agreement report are deployment-wide measurements, not
+    -- per-owner data, and an owner column here would be a user id by another
+    -- name. The only correlation keys are opaque ids the store validates on
+    -- write.
+    --
+    CREATE TABLE IF NOT EXISTS decision_calls (
+      id TEXT NOT NULL PRIMARY KEY,
+      schema_version INTEGER NOT NULL,
+      created_at INTEGER NOT NULL,
+      use TEXT NOT NULL,
+      model TEXT NOT NULL,
+      request_id TEXT NOT NULL,
+      generation_id TEXT NOT NULL,
+      reviewer INTEGER NOT NULL,
+      cost_micro_usd INTEGER,
+      latency_ms INTEGER,
+      status TEXT NOT NULL
+    );
+    -- The daily-ceiling read is "sum cost since midnight UTC" (invariant 6),
+    -- so created_at leads the only index this table needs.
+    CREATE INDEX IF NOT EXISTS idx_decision_calls_created
+      ON decision_calls (created_at);
+
+    -- One row per question in a call, keyed (call_id, question_index). Answers
+    -- are a context type (U-A) or an option INDEX (U-C), never question text,
+    -- option text or any other free text; the closed sets live in
+    -- decision-receipts-store.ts, which validates them at the boundary.
+    -- owner_review is the one nullable enum: it is written later, by the
+    -- owner-review route (J5b), and starts empty.
+    CREATE TABLE IF NOT EXISTS decision_answers (
+      call_id TEXT NOT NULL,
+      question_index INTEGER NOT NULL,
+      mode TEXT NOT NULL,
+      jev_answer TEXT NOT NULL,
+      jev_confidence REAL NOT NULL,
+      today_answer TEXT NOT NULL,
+      today_source TEXT NOT NULL,
+      agreement INTEGER NOT NULL,
+      owner_review TEXT,
+      PRIMARY KEY (call_id, question_index)
+    );
   `);
   migrateOrgInvitesExpiry(db);
   migrateAuditLogDetail(db);
