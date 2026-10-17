@@ -46,6 +46,20 @@ import {
 import { ExecuteManifestRepairUseCase } from "./execute-manifest-repair.use-case";
 import type { PromptVariables } from "../../../domain/prompts/generate-manifest.prompt";
 import type { StageTelemetry } from "../../../domain/value-objects/stage-telemetry";
+import { stageSummary } from "../../../domain/value-objects/stage-telemetry";
+import { CONTEXT_TYPE_CRITERIA } from "../../../domain/prompts/classify-context-type.prompt";
+import type { DecisionAdvicePort } from "../../ports/out/decision-advice.port";
+import type {
+  ContextTypeAdviceMode,
+  ContextTypeAnswerRecord,
+  ContextTypeReceipt,
+  ContextTypeTodaySource,
+  DecisionAdviceField,
+  DecisionAdviceRequest,
+  DecisionAdviceResult,
+  DecisionQuestions,
+  DecisionReceipt,
+} from "../../../domain/decision-advice";
 import type { TransactionManagerPort } from "@hexagen/transaction-system";
 import type { ClassifyContextTypeUseCase } from "./classify-context-type.use-case";
 import { STAGE3_ESCALATION_CONFIG } from "./retry-with-escalation";
@@ -2040,6 +2054,33 @@ export function rekeyDomainAnalysisToManifest(
   };
 }
 
+/**
+ * U-A advice options (lane J2). All optional; existing positional callers are
+ * unaffected. The advice port is injected from the composition root — the
+ * application layer may not import infrastructure (layer-rules.yaml), so the
+ * `NullDecisionAdapter` default is expressed here as a module-private port
+ * with byte-identical behaviour (always `unknown/disabled`, never calls out).
+ */
+export interface ContextTypeAdviceOptions {
+  /** Outbound advice port; defaults to the always-off adapter. */
+  decisionAdvice?: DecisionAdvicePort;
+  /** `JEV_CONTEXT_TYPE_MODE`. `off` (the default) never calls advice. */
+  contextTypeMode?: ContextTypeAdviceMode;
+  /** Minimum Jev confidence for `primary` to apply; default 0.8. */
+  minConfidence?: number;
+  /** Injected sink; receives one {@link ContextTypeReceipt} per advice call.
+   * A sink that throws is caught and ignored. */
+  receiptSink?: (receipt: ContextTypeReceipt) => void;
+  /** Generation-id mint; defaults to the global `crypto.randomUUID`. */
+  newGenerationId?: () => string;
+}
+
+const ALWAYS_OFF_DECISION_ADVICE: DecisionAdvicePort = {
+  ask(): Promise<DecisionAdviceResult> {
+    return Promise.resolve({ status: "unknown", reason: "disabled" });
+  },
+};
+
 export class ExecuteStructuredConfigGenerationUseCase {
   private readonly stage3: ExecutePortMappingUseCase;
   private readonly stage4: ExecuteAdapterAssignmentUseCase;
@@ -2051,6 +2092,11 @@ export class ExecuteStructuredConfigGenerationUseCase {
   private readonly stage7?: ExecuteManifestRepairUseCase;
   private readonly transactionManager: TransactionManagerPort;
   private readonly classifyUseCase?: ClassifyContextTypeUseCase;
+  private readonly decisionAdvice: DecisionAdvicePort;
+  private readonly contextTypeMode: ContextTypeAdviceMode;
+  private readonly minConfidence: number;
+  private readonly receiptSink?: (receipt: ContextTypeReceipt) => void;
+  private readonly newGenerationId: () => string;
 
   constructor(
     llmPort: SendStructuredRequestPort,
@@ -2059,6 +2105,7 @@ export class ExecuteStructuredConfigGenerationUseCase {
     escalationModel?: string,
     reviewerPort?: SendStructuredRequestPort,
     stage6Reviewer?: Stage6ReviewerConfig,
+    options?: ContextTypeAdviceOptions,
   ) {
     const stage3Config = escalationModel
       ? { ...STAGE3_ESCALATION_CONFIG, escalationModel }
@@ -2077,6 +2124,150 @@ export class ExecuteStructuredConfigGenerationUseCase {
       : undefined;
     this.transactionManager = transactionManager;
     this.classifyUseCase = classifyUseCase;
+    this.decisionAdvice = options?.decisionAdvice ?? ALWAYS_OFF_DECISION_ADVICE;
+    this.contextTypeMode = options?.contextTypeMode ?? "off";
+    this.minConfidence = options?.minConfidence ?? 0.8;
+    this.receiptSink = options?.receiptSink;
+    this.newGenerationId =
+      options?.newGenerationId ?? (() => crypto.randomUUID());
+  }
+
+  /**
+   * One batched advice request covering every flagged context (U-A): keys
+   * `c0…cn`, one `choice` question per context over the five DDD context
+   * types, and one field per context (`name; responsibility; aggregates;
+   * value objects`) after the project identifier. Only declared fields are
+   * sent; a 32 KiB overflow or secret-shape hit makes {@link buildState}
+   * refuse inside the adapter, which resolves as `unknown` — the result is
+   * then simply "unknown", never redacted.
+   */
+  /**
+   * Start the advice request now (before the classifier loop) with its
+   * rejection handler attached at once: a port that rejects, or throws
+   * synchronously, is "no advice", never an unhandled rejection.
+   */
+  private dispatchContextTypeAdvice(
+    config: StructuredConfig,
+    flagged: AcceptedContext[],
+  ): Promise<DecisionAdviceResult | null> {
+    try {
+      return this.decisionAdvice
+        .ask(this.buildContextTypeAdviceRequest(config, flagged))
+        .catch(() => null);
+    } catch {
+      return Promise.resolve(null);
+    }
+  }
+
+  private buildContextTypeAdviceRequest(
+    config: StructuredConfig,
+    flagged: readonly AcceptedContext[],
+  ): DecisionAdviceRequest {
+    const fields: DecisionAdviceField[] = [
+      { name: "project", value: config.project ?? "" },
+    ];
+    const questions: DecisionQuestions = {};
+    flagged.forEach((ctx, index) => {
+      const key = `c${index}`;
+      const sourceCtx = config.bounded_contexts.find(
+        (c) => c.name === ctx.name,
+      );
+      fields.push({
+        name: key,
+        value: [
+          ctx.name,
+          ctx.responsibility ?? "",
+          `aggregates: ${(sourceCtx?.aggregates ?? [])
+            .map((a) => a.name)
+            .join(", ")}`,
+          `value objects: ${(sourceCtx?.value_objects ?? [])
+            .map((v) => v.name)
+            .join(", ")}`,
+        ].join("; "),
+      });
+      questions[key] = {
+        type: "choice",
+        instructions: `Classify bounded context c${index} as one DDD context type.`,
+        criteria: CONTEXT_TYPE_CRITERIA,
+      };
+    });
+    return { use: "context-type", fields, questions };
+  }
+
+  /**
+   * Apply one advice result by mode (U-A): `"shadow"` changes nothing;
+   * `"primary"` overrides today's type only where Jev's confidence reaches
+   * `minConfidence`. Contexts that did not need review are never touched.
+   * Emits exactly one {@link ContextTypeReceipt} through the injected sink;
+   * a throwing sink is caught and ignored.
+   */
+  private applyContextTypeAdvice(
+    advice: DecisionAdviceResult,
+    flagged: readonly AcceptedContext[],
+    todayByIndex: ReadonlyMap<
+      number,
+      { type: string; source: ContextTypeTodaySource }
+    >,
+    generationId: string,
+  ): void {
+    const answers = advice.status === "advised" ? advice.answers : {};
+
+    if (this.contextTypeMode === "primary") {
+      flagged.forEach((ctx, index) => {
+        const answer = answers[`c${index}`];
+        if (
+          answer &&
+          answer.type === "choice" &&
+          answer.confidence >= this.minConfidence
+        ) {
+          ctx.type = answer.choice as AcceptedContext["type"];
+        }
+      });
+    }
+
+    if (!this.receiptSink) return;
+
+    const portReceipt: DecisionReceipt =
+      advice.status === "advised"
+        ? advice.receipt
+        : (advice.receipt ?? {
+            use: "context-type",
+            model: "",
+            requestId: "",
+            generationId: "",
+            status: advice.reason,
+            costMicroUsd: null,
+            latencyMs: null,
+          });
+
+    const records: ContextTypeAnswerRecord[] = [];
+    flagged.forEach((ctx, index) => {
+      const answer = answers[`c${index}`];
+      if (!answer || answer.type !== "choice") return;
+      const today = todayByIndex.get(index) ?? {
+        type: ctx.type,
+        source: "heuristic" as const,
+      };
+      records.push({
+        questionIndex: index,
+        jevAnswer: answer.choice,
+        jevConfidence: answer.confidence,
+        todayAnswer: today.type,
+        todaySource: today.source,
+        agreement: answer.choice === today.type,
+      });
+    });
+
+    try {
+      this.receiptSink({
+        generationId,
+        mode: this.contextTypeMode,
+        receipt: portReceipt,
+        answers: records,
+      });
+    } catch {
+      // A sink failure must never break the generation (invariant 4).
+    }
   }
 
   async execute(
@@ -2093,6 +2284,9 @@ export class ExecuteStructuredConfigGenerationUseCase {
     | { success: false; error: unknown }
   > {
     // Stage 0: Parse config + build NormalizedPrompt (synchronous, deterministic)
+    // Minted once per run (lane J2): shared by the Stage-2 telemetry and every
+    // decision-advice receipt this run emits.
+    const generationId = this.newGenerationId();
     const s0Start = Date.now();
     callbacks?.onProgress?.(0, 0);
     let config: StructuredConfig;
@@ -2141,9 +2335,31 @@ export class ExecuteStructuredConfigGenerationUseCase {
     const contextMappings = buildContextMappingsFromConfig(config);
 
     // LLM-enhanced classification: review low-confidence contexts
+    // concurrently with the batched Jev advice request (lane J2, use U-A):
+    const flagged = classification.accepted.filter((c) => c.needsTypeReview);
+    const todayByIndex = new Map<
+      number,
+      { type: string; source: ContextTypeTodaySource }
+    >();
+    // Today's answer per flagged context, taken before anything can change
+    // it: the heuristic's, overwritten below only by a classifier success.
+    flagged.forEach((ctx, index) => {
+      todayByIndex.set(index, { type: ctx.type, source: "heuristic" });
+    });
+    // The rejection handler is attached at dispatch, so a port that rejects
+    // (or throws synchronously) while the classifier loop is still awaiting
+    // is "no advice" at once, never an unhandled rejection.
+    const advicePromise =
+      this.contextTypeMode !== "off" && flagged.length > 0
+        ? this.dispatchContextTypeAdvice(config, flagged)
+        : null;
+
     if (this.classifyUseCase) {
+      let flaggedIndex = 0;
       for (const ctx of classification.accepted) {
         if (!ctx.needsTypeReview) continue;
+        const todayType = ctx.type;
+        let source: ContextTypeTodaySource = "heuristic";
         try {
           const sourceCtx = config.bounded_contexts.find(
             (c) => c.name === ctx.name,
@@ -2160,13 +2376,45 @@ export class ExecuteStructuredConfigGenerationUseCase {
           if (classifyResult.success) {
             ctx.type = classifyResult.type;
             ctx.reasoning = classifyResult.reasoning;
+            source = "llm";
           }
         } catch {
           // Silently keep heuristic type on classifier failure
         }
+        todayByIndex.set(flaggedIndex, {
+          type: source === "llm" ? ctx.type : todayType,
+          source,
+        });
         ctx.needsTypeReview = false;
+        flaggedIndex += 1;
       }
     }
+
+    const adviceResult = advicePromise ? await advicePromise : null;
+    if (adviceResult) {
+      this.applyContextTypeAdvice(
+        adviceResult,
+        flagged,
+        todayByIndex,
+        generationId,
+      );
+    }
+
+    // Stage 2 telemetry: emitted once per run (Stage 2 emitted none before
+    // lane J2) so the streaming route can surface the generationId the
+    // decision receipts are recorded under.
+    callbacks?.onStageTelemetry?.({
+      stage: 2,
+      label: "Context Classification",
+      durationMs: Date.now() - s2Start,
+      usedLLM: this.classifyUseCase !== undefined,
+      retryCount: 0,
+      inputTokensEstimate: 0,
+      outputTokensActual: 0,
+      servedFromCache: false,
+      summary: stageSummary`Classified ${classification.accepted.length} accepted contexts, ${flagged.length} flagged for type review`,
+      generationId,
+    });
 
     callbacks?.onProgress?.(2, Date.now() - s2Start);
 

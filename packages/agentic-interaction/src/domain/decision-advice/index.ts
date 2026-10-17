@@ -11,6 +11,10 @@ export type {
   DecisionUnknownReason,
   DecisionReceipt,
   DecisionAdviceResult,
+  ContextTypeAdviceMode,
+  ContextTypeTodaySource,
+  ContextTypeAnswerRecord,
+  ContextTypeReceipt,
 } from "./decision-advice.types";
 export { parseChoiceAnswer, parseNoulAnswer } from "./answer-validators";
 export type { AnswerParseResult } from "./answer-validators";

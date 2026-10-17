@@ -102,6 +102,10 @@ export interface StageTelemetry {
   /** Second model in a draft→refine cascade when one was dispatched
    * (stage 1's mercury→gpt-4o cascade today), e.g. "gpt-4o". */
   refinerModelName?: string;
+  /** Caller-minted generation id (lane J2), minted once per staged
+   * generation run and shared with the decision-advice receipts so the
+   * reviewer can match what he saw on the stream to the recorded rows. */
+  generationId?: string;
 }
 
 /** Normalize a served model id to a stable display alias so the SAME model

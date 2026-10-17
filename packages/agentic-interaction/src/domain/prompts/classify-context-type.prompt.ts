@@ -12,6 +12,21 @@ Definitions:
 Output JSON only: {"type": "core|supporting|generic|shared-kernel|driver", "reasoning": "brief explanation"}
 `;
 
+/**
+ * The five context types with their one-line definitions, lifted verbatim from
+ * {@link CLASSIFY_CONTEXT_TYPE_SYSTEM_PROMPT} so the Jev decision request
+ * (lane J2) offers exactly the same closed set the classifier prompt does.
+ */
+export const CONTEXT_TYPE_CRITERIA: Record<string, string> = {
+  core: "Central business capability, primary revenue driver",
+  supporting: "Augments a core context but is not the primary business",
+  generic:
+    "General-purpose capability usable across any domain (e.g., identity, billing)",
+  "shared-kernel": "Shared data contract or event vocabulary between contexts",
+  driver:
+    "Outer-ring context integrating an external system or delivery channel (UI, API, CLI, storage) by implementing ports owned by other contexts",
+};
+
 export function compileClassifyContextTypePrompt(
   context: {
     name: string;
