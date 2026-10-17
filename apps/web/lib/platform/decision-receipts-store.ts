@@ -274,20 +274,6 @@ export interface DecisionAgreementReport {
   readonly ownerReview: Record<DecisionOwnerReview | "none", number>;
 }
 
-interface DecisionCallRow {
-  id: string;
-  schema_version: number;
-  created_at: number;
-  use: string;
-  model: string;
-  request_id: string;
-  generation_id: string;
-  reviewer: number | boolean;
-  cost_micro_usd: number | null;
-  latency_ms: number | null;
-  status: string;
-}
-
 interface DecisionAnswerRow {
   call_id: string;
   question_index: number;
@@ -299,11 +285,6 @@ interface DecisionAnswerRow {
   agreement: number | boolean;
   owner_review: string | null;
 }
-
-const CALL_COLUMNS = `
-  id, schema_version, hx_ms(created_at) AS created_at, use, model, request_id,
-  generation_id, reviewer, cost_micro_usd, latency_ms, status
-`;
 
 const ANSWER_COLUMNS = `
   call_id, question_index, mode, jev_answer, jev_confidence, today_answer,
@@ -324,23 +305,6 @@ function rejected(field: string, reason: string): never {
 
 function flag(value: number | boolean): boolean {
   return value === 1 || value === true;
-}
-
-function callRowToRecord(row: DecisionCallRow): DecisionCallRecord | null {
-  if (!isDecisionUse(row.use)) return null;
-  if (!isDecisionStatus(row.status)) return null;
-  return {
-    id: row.id,
-    use: row.use,
-    model: row.model,
-    requestId: row.request_id,
-    generationId: row.generation_id,
-    reviewer: flag(row.reviewer),
-    costMicroUsd: row.cost_micro_usd,
-    latencyMs: row.latency_ms,
-    status: row.status,
-    createdAt: Number(row.created_at),
-  };
 }
 
 function answerRowToRecord(
@@ -434,9 +398,11 @@ export function createDecisionReceiptsStore(
   `;
 
   const selectAnswers = `
-    SELECT ${ANSWER_COLUMNS} FROM decision_answers
-     WHERE call_id = @call_id
-     ORDER BY question_index ASC
+    SELECT ${ANSWER_COLUMNS} FROM decision_answers a
+      JOIN decision_calls c ON c.id = a.call_id
+     WHERE a.call_id = @call_id
+       AND c.schema_version = @schema_version
+     ORDER BY a.question_index ASC
   `;
 
   const selectAgreementGroups = `
@@ -584,6 +550,7 @@ export function createDecisionReceiptsStore(
       }
       const rows = (await db.all<DecisionAnswerRow>(selectAnswers, {
         call_id: callId,
+        schema_version: DECISION_RECEIPTS_SCHEMA_VERSION,
       })) as DecisionAnswerRow[];
       const records: DecisionAnswerRecord[] = [];
       for (const row of rows) {
