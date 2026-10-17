@@ -278,10 +278,12 @@ export async function POST(request: NextRequest) {
           // The reviewer's identity is reduced to a boolean HERE, and only
           // the boolean reaches a receipt row; the sub is never stored
           // (decision-receipts-store retention contract).
+          // A token that cannot be read is "not the reviewer", never a
+          // failed generation.
           const token = await getToken({
             req: request,
             secret: process.env.NEXTAUTH_SECRET,
-          });
+          }).catch(() => null);
           jevReviewer =
             jev.reviewerSub !== "" && token?.sub === jev.reviewerSub;
         }

@@ -274,54 +274,45 @@ test("with the key and mode shadow the advice options are passed and the sink wr
   markDecisionCallRecorded("req-jev-1");
 });
 
-test("reviewer is true only when the token sub equals JEV_REVIEWER_SUB", async () => {
+async function recordedReviewer(): Promise<boolean> {
+  const response = await post();
+  await response.text();
+  const options = tracker.constructorArgs[0][6] as {
+    receiptSink: (receipt: unknown) => void;
+  };
+  options.receiptSink(contextTypeReceipt("req-jev-1"));
+  await vi.waitFor(() => expect(tracker.recordCall).toHaveBeenCalledTimes(1));
+  return (tracker.recordCall.mock.calls[0][0] as { reviewer: boolean })
+    .reviewer;
+}
+
+test.each([
+  [
+    "the token sub equals JEV_REVIEWER_SUB",
+    "reviewer-sub",
+    "reviewer-sub",
+    true,
+  ],
+  ["JEV_REVIEWER_SUB is empty", "", "reviewer-sub", false],
+  [
+    "the token sub differs from JEV_REVIEWER_SUB",
+    "reviewer-sub",
+    "not-the-reviewer",
+    false,
+  ],
+] as const)(
+  "reviewer flag when %s",
+  async (_case, reviewerSub, sub, expected) => {
+    tracker.createJevDecisionAdvice.mockReturnValue(jevConfig({ reviewerSub }));
+    tracker.getToken.mockResolvedValue({ sub });
+    expect(await recordedReviewer()).toBe(expected);
+  },
+);
+
+test("a getToken that throws records reviewer false and never fails the generation", async () => {
   tracker.createJevDecisionAdvice.mockReturnValue(jevConfig());
-  tracker.getToken.mockResolvedValue({ sub: "reviewer-sub" });
-
-  const response = await post();
-  await response.text();
-  const options = tracker.constructorArgs[0][6] as {
-    receiptSink: (receipt: unknown) => void;
-  };
-  options.receiptSink(contextTypeReceipt("req-jev-1"));
-  await vi.waitFor(() => expect(tracker.recordCall).toHaveBeenCalledTimes(1));
-  expect(
-    (tracker.recordCall.mock.calls[0][0] as { reviewer: boolean }).reviewer,
-  ).toBe(true);
-});
-
-test("a sub that differs (or a reviewerSub that is empty) records reviewer false", async () => {
-  tracker.createJevDecisionAdvice.mockReturnValue(
-    jevConfig({ reviewerSub: "" }),
-  );
-  tracker.getToken.mockResolvedValue({ sub: "reviewer-sub" });
-
-  const response = await post();
-  await response.text();
-  const options = tracker.constructorArgs[0][6] as {
-    receiptSink: (receipt: unknown) => void;
-  };
-  options.receiptSink(contextTypeReceipt("req-jev-1"));
-  await vi.waitFor(() => expect(tracker.recordCall).toHaveBeenCalledTimes(1));
-  expect(
-    (tracker.recordCall.mock.calls[0][0] as { reviewer: boolean }).reviewer,
-  ).toBe(false);
-});
-
-test("a sub that differs from JEV_REVIEWER_SUB records reviewer false", async () => {
-  tracker.createJevDecisionAdvice.mockReturnValue(jevConfig());
-  tracker.getToken.mockResolvedValue({ sub: "not-the-reviewer" });
-
-  const response = await post();
-  await response.text();
-  const options = tracker.constructorArgs[0][6] as {
-    receiptSink: (receipt: unknown) => void;
-  };
-  options.receiptSink(contextTypeReceipt("req-jev-1"));
-  await vi.waitFor(() => expect(tracker.recordCall).toHaveBeenCalledTimes(1));
-  expect(
-    (tracker.recordCall.mock.calls[0][0] as { reviewer: boolean }).reviewer,
-  ).toBe(false);
+  tracker.getToken.mockRejectedValue(new Error("bad token"));
+  expect(await recordedReviewer()).toBe(false);
 });
 
 test("a throwing store never fails the generation", async () => {
