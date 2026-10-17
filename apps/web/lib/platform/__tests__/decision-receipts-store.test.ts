@@ -200,7 +200,9 @@ describe.each(BACKENDS)("decision receipts store (%s)", (kind) => {
         store.setOwnerReview(notReviewer.id, 0, "llm_better"),
       ).rejects.toThrow(/not a reviewer call/);
       // ... and the refusal leaves the row untouched.
-      expect((await store.getAnswers(notReviewer.id))[0].ownerReview).toBeNull();
+      expect(
+        (await store.getAnswers(notReviewer.id))[0].ownerReview,
+      ).toBeNull();
 
       // Primary rows are not evidence for the shadow exit criterion, so a
       // verdict must not be written into the primary cohort either.
