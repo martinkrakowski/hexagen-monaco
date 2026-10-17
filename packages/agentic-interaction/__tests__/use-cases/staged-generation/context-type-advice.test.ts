@@ -56,77 +56,56 @@ const CONFIG = JSON.stringify({
   context_mappings: [],
 });
 
+/** The two Catalog ports every stage-3 call answers with, as NDJSON lines. */
+const CATALOG_PORT_LINES = [
+  {
+    direction: "in",
+    name: "ListItemsPort",
+    portType: "command",
+    description: "List items",
+  },
+  {
+    direction: "out",
+    name: "CatalogRepository",
+    portType: "repository",
+    description: "Persist items",
+  },
+].map((port) => JSON.stringify({ contextName: "Catalog", ...port }));
+const RESULT_LINE = JSON.stringify({ type: "result", passed: true });
+
+/** An LLM port that answers stages 3-6 for the Catalog context; stage 2 never calls it. */
 function createMockLLMPort(): SendStructuredRequestPort {
   let callCount = 0;
+  const contentFor = (call: number): string => {
+    if (call <= 2) return CATALOG_PORT_LINES.join("\n");
+    if (call <= 4) {
+      return JSON.stringify({
+        contextName: "Catalog",
+        adapterName: "InMemoryCatalogRepoAdapter",
+        adapterType: "Repository",
+        implements: "CatalogRepository",
+      });
+    }
+    return RESULT_LINE;
+  };
   return {
     sendRequest: async () => {
       callCount++;
-      let content = "";
-      if (callCount <= 2) {
-        content = [
-          JSON.stringify({
-            contextName: "Catalog",
-            direction: "in",
-            name: "ListItemsPort",
-            portType: "command",
-            description: "List items",
-          }),
-          JSON.stringify({
-            contextName: "Catalog",
-            direction: "out",
-            name: "CatalogRepository",
-            portType: "repository",
-            description: "Persist items",
-          }),
-        ].join("\n");
-      } else if (callCount <= 4) {
-        content = JSON.stringify({
-          contextName: "Catalog",
-          adapterName: "InMemoryCatalogRepoAdapter",
-          adapterType: "Repository",
-          implements: "CatalogRepository",
-        });
-      } else {
-        content = JSON.stringify({ type: "result", passed: true });
-      }
       return {
         success: true as const,
         value: {
           id: `test-${callCount}`,
           modelId: "gpt-4o-mini" as never,
-          content,
+          content: contentFor(callCount),
           finishReason: "stop" as const,
           timestamp: Date.now(),
         },
       };
     },
     streamStructuredRequest: async function* () {
-      yield {
-        success: true as const,
-        value:
-          JSON.stringify({
-            contextName: "Catalog",
-            direction: "in",
-            name: "ListItemsPort",
-            portType: "command",
-            description: "List items",
-          }) + "\n",
-      };
-      yield {
-        success: true as const,
-        value:
-          JSON.stringify({
-            contextName: "Catalog",
-            direction: "out",
-            name: "CatalogRepository",
-            portType: "repository",
-            description: "Persist items",
-          }) + "\n",
-      };
-      yield {
-        success: true as const,
-        value: JSON.stringify({ type: "result", passed: true }) + "\n",
-      };
+      for (const line of [...CATALOG_PORT_LINES, RESULT_LINE]) {
+        yield { success: true as const, value: `${line}\n` };
+      }
     },
   } as unknown as SendStructuredRequestPort;
 }
