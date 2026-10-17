@@ -142,7 +142,10 @@ function isDecisionTodaySource(value: unknown): value is DecisionTodaySource {
   );
 }
 
-function isDecisionOwnerReview(value: unknown): value is DecisionOwnerReview {
+/** Exported for the J5b review route's request validation. */
+export function isDecisionOwnerReview(
+  value: unknown,
+): value is DecisionOwnerReview {
   return (
     typeof value === "string" &&
     (DECISION_OWNER_REVIEWS as readonly string[]).includes(value)
@@ -272,6 +275,23 @@ export interface DecisionAgreementReport {
   readonly disagreed: number;
   /** Owner reviews so far; `none` counts rows still awaiting review. */
   readonly ownerReview: Record<DecisionOwnerReview | "none", number>;
+  /**
+   * The `llm` cohort on its own: the exit criterion's agreement percentage is
+   * counted from `today_source = llm` rows only; heuristic / default rows are
+   * reported separately and do not count (plan, "Exit criterion").
+   */
+  readonly llmCohort: {
+    readonly total: number;
+    readonly agreed: number;
+    readonly disagreed: number;
+  };
+  /**
+   * `llm`-cohort rows whose CALL was written by a reviewer generation
+   * (`reviewer = true`): the plan's floor of "at least 20 contexts from
+   * reviewer = true generations". Heuristic / default rows never enter this
+   * count, and neither do rows from non-reviewer calls.
+   */
+  readonly reviewerCohort: number;
 }
 
 interface DecisionAnswerRow {
@@ -353,6 +373,13 @@ export interface DecisionReceiptsStore {
    * closed-set values; throws on anything else and on a row that does not
    * exist (a review written to no row would silently disappear from the
    * report, which is worse than a loud failure).
+   *
+   * The row is also refused unless its CALL is a reviewer call
+   * (`reviewer = true`) AND the answer's mode is `shadow`: the owner-review
+   * route (J5b) records verdicts only on disagreements the reviewer watched
+   * live in the NDJSON stream, and those exist only in the shadow cohort of
+   * reviewer generations. A write outside that set would put a verdict into
+   * a cohort the exit criterion never counts.
    */
   setOwnerReview(
     callId: string,
@@ -407,13 +434,30 @@ export function createDecisionReceiptsStore(
 
   const selectAgreementGroups = `
     SELECT a.today_source AS today_source, a.agreement AS agreement,
-           a.owner_review AS owner_review, COUNT(*) AS n
+           a.owner_review AS owner_review, c.reviewer AS reviewer, COUNT(*) AS n
       FROM decision_answers a
       JOIN decision_calls c ON c.id = a.call_id
      WHERE c.schema_version = @schema_version
        AND c.use = @use
        AND a.mode = @mode
-     GROUP BY a.today_source, a.agreement, a.owner_review
+     GROUP BY a.today_source, a.agreement, a.owner_review, c.reviewer
+  `;
+
+  /**
+   * The owner-review pre-read (J5b): the row's mode and its call's reviewer
+   * flag, read BEFORE the UPDATE so a non-reviewer / non-shadow row is
+   * refused without dialect-specific UPDATE ... FROM syntax. Not atomic with
+   * the UPDATE, but the rows are immutable receipts: mode and reviewer never
+   * change after the call is written, so the only race is against the write
+   * itself, which the UPDATE's changes check below still catches.
+   */
+  const selectOwnerReviewRow = `
+    SELECT a.mode AS mode, c.reviewer AS reviewer
+      FROM decision_answers a
+      JOIN decision_calls c ON c.id = a.call_id
+     WHERE a.call_id = @call_id
+       AND a.question_index = @question_index
+       AND c.schema_version = @schema_version
   `;
 
   const updateOwnerReview = `
@@ -533,6 +577,31 @@ export function createDecisionReceiptsStore(
       if (!isDecisionOwnerReview(review)) {
         rejected("review", "is not one of the four owner-review values");
       }
+      const rows = (await db.all<{
+        mode: string;
+        reviewer: number | boolean;
+      }>(selectOwnerReviewRow, {
+        call_id: callId,
+        question_index: questionIndex,
+        schema_version: DECISION_RECEIPTS_SCHEMA_VERSION,
+      })) as Array<{ mode: string; reviewer: number | boolean }>;
+      if (rows.length === 0) {
+        // Deliberately does not echo callId -- see `rejected`.
+        throw new Error("decision receipt rejected: no such answer row");
+      }
+      const row = rows[0];
+      if (!flag(row.reviewer)) {
+        // The owner only reviews disagreements he watched live in the
+        // reviewer's own NDJSON stream (plan, "Disagreements").
+        throw new Error(
+          "decision receipt rejected: call is not a reviewer call",
+        );
+      }
+      if (row.mode !== "shadow") {
+        throw new Error(
+          "decision receipt rejected: answer row is not in the shadow cohort",
+        );
+      }
       const result = await db.run(updateOwnerReview, {
         call_id: callId,
         question_index: questionIndex,
@@ -571,6 +640,7 @@ export function createDecisionReceiptsStore(
         today_source: string;
         agreement: number | boolean;
         owner_review: string | null;
+        reviewer: number | boolean;
         n: number;
       }>(selectAgreementGroups, {
         schema_version: DECISION_RECEIPTS_SCHEMA_VERSION,
@@ -593,6 +663,8 @@ export function createDecisionReceiptsStore(
           both_wrong: 0,
           none: 0,
         },
+        llmCohort: { total: 0, agreed: 0, disagreed: 0 },
+        reviewerCohort: 0,
       };
       for (const row of rows) {
         if (!isDecisionTodaySource(row.today_source)) continue;
@@ -606,12 +678,24 @@ export function createDecisionReceiptsStore(
         if (!Number.isFinite(n) || n <= 0) continue;
         report.total += n;
         report.todaySource[row.today_source] += n;
-        if (flag(row.agreement)) {
+        const agreed = flag(row.agreement);
+        if (agreed) {
           report.agreed += n;
         } else {
           report.disagreed += n;
         }
         report.ownerReview[row.owner_review ?? "none"] += n;
+        if (row.today_source === "llm") {
+          report.llmCohort.total += n;
+          if (agreed) {
+            report.llmCohort.agreed += n;
+          } else {
+            report.llmCohort.disagreed += n;
+          }
+          if (flag(row.reviewer)) {
+            report.reviewerCohort += n;
+          }
+        }
       }
       return report;
     },

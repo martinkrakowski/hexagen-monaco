@@ -187,6 +187,44 @@ describe.each(BACKENDS)("decision receipts store (%s)", (kind) => {
     }
   });
 
+  it("setOwnerReview refuses a non-reviewer call and a non-shadow answer row (J5b)", async ({}) => {
+    const { backend, store } = await openStore(kind);
+    try {
+      // A non-reviewer generation's rows are invisible to the owner: he did
+      // not watch that stream, so no verdict of his may land there.
+      const notReviewer = await store.recordCall(
+        call({ now: MIDDAY, reviewer: false }),
+        [answer({ questionIndex: 0, agreement: false })],
+      );
+      await expect(
+        store.setOwnerReview(notReviewer.id, 0, "llm_better"),
+      ).rejects.toThrow(/not a reviewer call/);
+      // ... and the refusal leaves the row untouched.
+      expect((await store.getAnswers(notReviewer.id))[0].ownerReview).toBeNull();
+
+      // Primary rows are not evidence for the shadow exit criterion, so a
+      // verdict must not be written into the primary cohort either.
+      const primary = await store.recordCall(call({ now: MIDDAY }), [
+        answer({ questionIndex: 0, mode: "primary", agreement: false }),
+      ]);
+      await expect(
+        store.setOwnerReview(primary.id, 0, "llm_better"),
+      ).rejects.toThrow(/not in the shadow cohort/);
+      expect((await store.getAnswers(primary.id))[0].ownerReview).toBeNull();
+
+      // The same review value on a reviewer + shadow row still writes.
+      const reviewer = await store.recordCall(call({ now: MIDDAY }), [
+        answer({ questionIndex: 0, agreement: false }),
+      ]);
+      await store.setOwnerReview(reviewer.id, 0, "llm_better");
+      expect((await store.getAnswers(reviewer.id))[0].ownerReview).toBe(
+        "llm_better",
+      );
+    } finally {
+      await backend.close();
+    }
+  });
+
   it("throws on any closed-set value outside its set, naming the field only", async ({}) => {
     const { backend, store } = await openStore(kind);
     try {
@@ -302,6 +340,10 @@ describe.each(BACKENDS)("decision receipts store (%s)", (kind) => {
           both_wrong: 0,
           none: 4,
         },
+        llmCohort: { total: 3, agreed: 2, disagreed: 1 },
+        // call() defaults to reviewer: true, so every llm row is in the
+        // reviewer cohort here.
+        reviewerCohort: 3,
       });
 
       // Scoped to the use: template-select rows must not bleed into the
@@ -343,7 +385,34 @@ describe.each(BACKENDS)("decision receipts store (%s)", (kind) => {
           both_wrong: 0,
           none: 1,
         },
+        llmCohort: { total: 0, agreed: 0, disagreed: 0 },
+        reviewerCohort: 0,
       });
+
+      // The reviewer cohort counts ONLY llm rows from reviewer calls: a
+      // non-reviewer call's llm rows count toward the llm total but not the
+      // reviewer floor, and heuristic rows never count either way.
+      await store.recordCall(
+        call({ now: MIDDAY, reviewer: false, generationId: "gen-5" }),
+        [answer({ questionIndex: 0, agreement: false })],
+      );
+      await store.recordCall(
+        call({ now: MIDDAY, reviewer: false, generationId: "gen-6" }),
+        [
+          answer({
+            questionIndex: 0,
+            todaySource: "heuristic",
+            agreement: false,
+          }),
+        ],
+      );
+      const floors = await store.agreementReport({
+        use: "context-type",
+        mode: "shadow",
+      });
+      expect(floors.todaySource.llm).toBe(4);
+      expect(floors.llmCohort.disagreed).toBe(2);
+      expect(floors.reviewerCohort).toBe(3);
 
       // The report reads only this schema version's rows, and only shadow:
       // primary rows are not evidence for the shadow exit criterion.
