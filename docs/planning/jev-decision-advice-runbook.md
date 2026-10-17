@@ -70,6 +70,18 @@ refiner and Stage 6 reviewer already send when their keys are set. This is
 
 ## Shadow review (U-A context type)
 
+**Authentication for every command below.** curl does not inherit the
+browser session. Middleware answers 401 without the NextAuth session cookie,
+and 403 for a cookie-authenticated POST without the CSRF header. Copy the
+reviewer's `__Secure-next-auth.session-token` (`next-auth.session-token` on
+plain http) and the `hexagen-csrf` cookie from the signed-in browser's
+devtools, and send the CSRF value back as the `x-hexagen-csrf` header on the
+POST. If `hexagen-csrf` is absent, a `GET /api/csrf` in the signed-in browser
+issues it. Never paste these values into a ticket, a log or a chat; they are
+the reviewer's session. Simpler: run the same request as a `fetch` from the
+devtools console of the signed-in tab, where the cookies come along by
+themselves (the POST still needs the `x-hexagen-csrf` header).
+
 The owner works through it as the reviewer, generating projects himself:
 
 1. **Generate as the reviewer.** Run a spec generation from the UI while
@@ -82,7 +94,8 @@ The owner works through it as the reviewer, generating projects himself:
 
    ```sh
    # from a signed-in session as the reviewer:
-   curl -s https://<host>/api/jev/report
+   curl -s https://<host>/api/jev/report \
+     -b '__Secure-next-auth.session-token=<session-cookie>'
    ```
 
    Both `/api/jev/report` and `/api/jev/review` answer **404 to anyone who is
@@ -109,6 +122,8 @@ The owner works through it as the reviewer, generating projects himself:
 
    ```sh
    curl -s -X POST https://<host>/api/jev/review \
+     -b '__Secure-next-auth.session-token=<session-cookie>; hexagen-csrf=<csrf-token>' \
+     -H 'x-hexagen-csrf: <csrf-token>' \
      -H 'Content-Type: application/json' \
      -d '{"callId":"<call-id>","questionIndex":0,"review":"jev_better"}'
    ```
