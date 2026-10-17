@@ -154,13 +154,18 @@ gh workflow run deploy.yml --ref main
 ## Kill switch
 
 ```sh
-gh variable set JEV_CONTEXT_TYPE_MODE --body "off"   # and/or unset the key in the vault
+# Full stop: remove the key from the vault (nothing Jev is constructed).
+# Partial stop: both use switches off.
+gh variable set JEV_CONTEXT_TYPE_MODE --body "off"
+gh variable set JEV_TEMPLATE_SUGGEST --body "off"
 gh workflow run deploy.yml --ref main
 ```
 
-(Unsetting `JEV_API_KEY` is the harder off: with no key nothing is
-constructed at all, regardless of the mode variables. The mode alone at
-`off` also stops every dispatch.)
+Unsetting `JEV_API_KEY` is the only single switch that stops everything: with
+no key nothing is constructed, whatever the use variables say. The two use
+switches are independent: `JEV_CONTEXT_TYPE_MODE=off` stops context-type
+advice (U-A) only, and template suggestions (U-C) keep calling Jev until
+`JEV_TEMPLATE_SUGGEST` is also `off`.
 
 - **Stops at once:** all Jev HTTP calls (U-A advice and U-C suggestions —
   no key, no port); new receipt rows; spend against the ceiling.
