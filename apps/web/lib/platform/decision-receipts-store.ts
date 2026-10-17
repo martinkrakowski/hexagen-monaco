@@ -142,7 +142,10 @@ function isDecisionTodaySource(value: unknown): value is DecisionTodaySource {
   );
 }
 
-function isDecisionOwnerReview(value: unknown): value is DecisionOwnerReview {
+/** Exported for the J5b review route's request validation. */
+export function isDecisionOwnerReview(
+  value: unknown,
+): value is DecisionOwnerReview {
   return (
     typeof value === "string" &&
     (DECISION_OWNER_REVIEWS as readonly string[]).includes(value)
@@ -272,6 +275,39 @@ export interface DecisionAgreementReport {
   readonly disagreed: number;
   /** Owner reviews so far; `none` counts rows still awaiting review. */
   readonly ownerReview: Record<DecisionOwnerReview | "none", number>;
+  /**
+   * The `llm` cohort on its own: the exit criterion's agreement percentage is
+   * counted from `today_source = llm` rows only; heuristic / default rows are
+   * reported separately and do not count (plan, "Exit criterion").
+   */
+  readonly llmCohort: {
+    readonly total: number;
+    readonly agreed: number;
+    readonly disagreed: number;
+  };
+  /**
+   * `llm`-cohort rows whose CALL was written by a reviewer generation
+   * (`reviewer = true`): the plan's floor of "at least 20 contexts from
+   * reviewer = true generations". Heuristic / default rows never enter this
+   * count, and neither do rows from non-reviewer calls.
+   */
+  readonly reviewerCohort: number;
+  /**
+   * The exit rule's denominator (plan, "Rule"): `llm`-cohort shadow rows with
+   * `agreement = false` and an owner review recorded. `owner_review` can only
+   * be set on reviewer-generation shadow rows (setOwnerReview refuses the
+   * rest), so this is exactly the set of disagreements the owner watched.
+   */
+  readonly reviewedDisagreements: number;
+  /** `reviewedDisagreements` rows reviewed `llm_better`. */
+  readonly llmBetter: number;
+  /**
+   * `llm_better` rows whose Jev confidence was at or above the exit rule's
+   * threshold — the plan's "no `llm_better` case had a Jev confidence at or
+   * above the threshold". The confidence column is the answer's
+   * `jev_confidence`, recorded at write time.
+   */
+  readonly llmBetterAtOrAboveThreshold: number;
 }
 
 interface DecisionAnswerRow {
@@ -353,6 +389,13 @@ export interface DecisionReceiptsStore {
    * closed-set values; throws on anything else and on a row that does not
    * exist (a review written to no row would silently disappear from the
    * report, which is worse than a loud failure).
+   *
+   * The row is also refused unless its CALL is a reviewer call
+   * (`reviewer = true`) AND the answer's mode is `shadow`: the owner-review
+   * route (J5b) records verdicts only on disagreements the reviewer watched
+   * live in the NDJSON stream, and those exist only in the shadow cohort of
+   * reviewer generations. A write outside that set would put a verdict into
+   * a cohort the exit criterion never counts.
    */
   setOwnerReview(
     callId: string,
@@ -371,6 +414,12 @@ export interface DecisionReceiptsStore {
     use: DecisionUse;
     /** Only shadow counts today; the type admits it and the runtime enforces it. */
     mode: "shadow";
+    /**
+     * The exit rule's confidence threshold (plan, "Rule"): `llm_better` rows
+     * at or above it are counted separately. A number in 0..1; anything else
+     * is rejected like any other closed-set value.
+     */
+    threshold: number;
   }): Promise<DecisionAgreementReport>;
 }
 
@@ -407,13 +456,51 @@ export function createDecisionReceiptsStore(
 
   const selectAgreementGroups = `
     SELECT a.today_source AS today_source, a.agreement AS agreement,
-           a.owner_review AS owner_review, COUNT(*) AS n
+           a.owner_review AS owner_review, c.reviewer AS reviewer, COUNT(*) AS n
       FROM decision_answers a
       JOIN decision_calls c ON c.id = a.call_id
      WHERE c.schema_version = @schema_version
        AND c.use = @use
        AND a.mode = @mode
-     GROUP BY a.today_source, a.agreement, a.owner_review
+     GROUP BY a.today_source, a.agreement, a.owner_review, c.reviewer
+  `;
+
+  /**
+   * The exit rule's counts (plan, "Rule"), grouped so no dialect-specific
+   * boolean literal is needed: `agreement` comes back as a column (0/1 or
+   * true/false — `flag` reads both) and is filtered in the accumulator, and
+   * the threshold comparison is a grouped expression. Only reviewed,
+   * llm-baseline rows enter this read: `owner_review` can only be set on
+   * reviewer-generation shadow rows, so the reviewer flag needs no check.
+   */
+  const selectReviewedDisagreementGroups = `
+    SELECT a.owner_review AS owner_review, a.agreement AS agreement,
+           (a.jev_confidence >= @threshold) AS at_or_above, COUNT(*) AS n
+      FROM decision_answers a
+      JOIN decision_calls c ON c.id = a.call_id
+     WHERE c.schema_version = @schema_version
+       AND c.use = @use
+       AND a.mode = @mode
+       AND a.today_source = 'llm'
+       AND a.owner_review IS NOT NULL
+     GROUP BY a.owner_review, a.agreement, (a.jev_confidence >= @threshold)
+  `;
+
+  /**
+   * The owner-review pre-read (J5b): the row's mode and its call's reviewer
+   * flag, read BEFORE the UPDATE so a non-reviewer / non-shadow row is
+   * refused without dialect-specific UPDATE ... FROM syntax. Not atomic with
+   * the UPDATE, but the rows are immutable receipts: mode and reviewer never
+   * change after the call is written, so the only race is against the write
+   * itself, which the UPDATE's changes check below still catches.
+   */
+  const selectOwnerReviewRow = `
+    SELECT a.mode AS mode, c.reviewer AS reviewer
+      FROM decision_answers a
+      JOIN decision_calls c ON c.id = a.call_id
+     WHERE a.call_id = @call_id
+       AND a.question_index = @question_index
+       AND c.schema_version = @schema_version
   `;
 
   const updateOwnerReview = `
@@ -533,6 +620,31 @@ export function createDecisionReceiptsStore(
       if (!isDecisionOwnerReview(review)) {
         rejected("review", "is not one of the four owner-review values");
       }
+      const rows = (await db.all<{
+        mode: string;
+        reviewer: number | boolean;
+      }>(selectOwnerReviewRow, {
+        call_id: callId,
+        question_index: questionIndex,
+        schema_version: DECISION_RECEIPTS_SCHEMA_VERSION,
+      })) as Array<{ mode: string; reviewer: number | boolean }>;
+      if (rows.length === 0) {
+        // Deliberately does not echo callId -- see `rejected`.
+        throw new Error("decision receipt rejected: no such answer row");
+      }
+      const row = rows[0];
+      if (!flag(row.reviewer)) {
+        // The owner only reviews disagreements he watched live in the
+        // reviewer's own NDJSON stream (plan, "Disagreements").
+        throw new Error(
+          "decision receipt rejected: call is not a reviewer call",
+        );
+      }
+      if (row.mode !== "shadow") {
+        throw new Error(
+          "decision receipt rejected: answer row is not in the shadow cohort",
+        );
+      }
       const result = await db.run(updateOwnerReview, {
         call_id: callId,
         question_index: questionIndex,
@@ -567,15 +679,33 @@ export function createDecisionReceiptsStore(
       if (options?.mode !== "shadow") {
         rejected("mode", 'is not "shadow"');
       }
+      if (!isConfidence(options?.threshold)) {
+        rejected("threshold", "is not a number in 0..1");
+      }
       const rows = await db.all<{
         today_source: string;
         agreement: number | boolean;
         owner_review: string | null;
+        reviewer: number | boolean;
         n: number;
       }>(selectAgreementGroups, {
         schema_version: DECISION_RECEIPTS_SCHEMA_VERSION,
         use: options.use,
         mode: options.mode,
+        // No `threshold` here: better-sqlite3 rejects a named parameter the
+        // statement does not contain, and only the reviewed-groups read
+        // compares confidences.
+      });
+      const reviewedRows = await db.all<{
+        owner_review: string | null;
+        agreement: number | boolean;
+        at_or_above: number | boolean;
+        n: number;
+      }>(selectReviewedDisagreementGroups, {
+        schema_version: DECISION_RECEIPTS_SCHEMA_VERSION,
+        use: options.use,
+        mode: options.mode,
+        threshold: options.threshold,
       });
 
       // A mutable accumulator: the returned type is the readonly
@@ -593,6 +723,11 @@ export function createDecisionReceiptsStore(
           both_wrong: 0,
           none: 0,
         },
+        llmCohort: { total: 0, agreed: 0, disagreed: 0 },
+        reviewerCohort: 0,
+        reviewedDisagreements: 0,
+        llmBetter: 0,
+        llmBetterAtOrAboveThreshold: 0,
       };
       for (const row of rows) {
         if (!isDecisionTodaySource(row.today_source)) continue;
@@ -606,12 +741,38 @@ export function createDecisionReceiptsStore(
         if (!Number.isFinite(n) || n <= 0) continue;
         report.total += n;
         report.todaySource[row.today_source] += n;
-        if (flag(row.agreement)) {
+        const agreed = flag(row.agreement);
+        if (agreed) {
           report.agreed += n;
         } else {
           report.disagreed += n;
         }
         report.ownerReview[row.owner_review ?? "none"] += n;
+        if (row.today_source === "llm") {
+          report.llmCohort.total += n;
+          if (agreed) {
+            report.llmCohort.agreed += n;
+          } else {
+            report.llmCohort.disagreed += n;
+          }
+          if (flag(row.reviewer)) {
+            report.reviewerCohort += n;
+          }
+        }
+      }
+      for (const row of reviewedRows) {
+        if (row.owner_review === null) continue;
+        if (!isDecisionOwnerReview(row.owner_review)) continue;
+        if (flag(row.agreement)) continue; // only disagreements are reviewed
+        const n = Number(row.n);
+        if (!Number.isFinite(n) || n <= 0) continue;
+        report.reviewedDisagreements += n;
+        if (row.owner_review === "llm_better") {
+          report.llmBetter += n;
+          if (flag(row.at_or_above)) {
+            report.llmBetterAtOrAboveThreshold += n;
+          }
+        }
       }
       return report;
     },
