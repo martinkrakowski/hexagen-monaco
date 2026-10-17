@@ -15,7 +15,7 @@ import {
  * requests (a fresh emitter/config/question-engine is created per materialize()).
  */
 export function createInMemoryMaterializer(
-  options: { suggest?: SelectSuggestion } = {},
+  options: { suggest?: SelectSuggestion; suggestTimeoutMs?: number } = {},
 ): InMemoryAddOnMaterializer {
   const registry: TemplateRegistryPort = {
     loadAll: async () => TEMPLATE_MANIFESTS,
@@ -24,5 +24,10 @@ export function createInMemoryMaterializer(
   const loadFile: TemplateFileLoader = async (templateId, relPath) =>
     TEMPLATE_FILES[`${templateId}/${relPath}`] ?? null;
 
-  return new InMemoryAddOnMaterializer(registry, loadFile, options.suggest);
+  return new InMemoryAddOnMaterializer(
+    registry,
+    loadFile,
+    options.suggest,
+    options.suggestTimeoutMs,
+  );
 }

@@ -52,6 +52,7 @@ export class InMemoryAddOnMaterializer {
     private readonly loadTemplateFile: TemplateFileLoader,
     /** Optional advice for defaulted `select` questions (never applied). */
     private readonly suggest?: SelectSuggestion,
+    private readonly suggestTimeoutMs?: number,
   ) {}
 
   async materialize(
@@ -75,6 +76,7 @@ export class InMemoryAddOnMaterializer {
     const questionEngine = new DefaultingQuestionEngine(
       reservedVars,
       this.suggest,
+      this.suggestTimeoutMs,
     );
     const useCase = new AddTemplateUseCase(
       this.registry,
