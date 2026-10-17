@@ -124,7 +124,10 @@ describe("createJevDecisionAdvice (invariant 1)", () => {
       JEV_MAX_CALLS_PER_GENERATION: "1",
     });
     const config = createJevDecisionAdvice();
-    const request = {
+    type AskRequest = Parameters<
+      NonNullable<ReturnType<typeof createJevDecisionAdvice>>["port"]["ask"]
+    >[0];
+    const request: AskRequest = {
       use: "context-type",
       // A secret-shaped field makes buildState refuse before any fetch, so
       // the first ask resolves locally (unknown/refused): no network here.
@@ -134,7 +137,7 @@ describe("createJevDecisionAdvice (invariant 1)", () => {
       questions: {
         c0: { type: "choice", instructions: "", criteria: { core: "c" } },
       },
-    } as const;
+    };
     const first = await config?.port.ask(request);
     // The first ask passes the budget and is refused by the state builder;
     // the SECOND is refused by the budget, before any dispatch.

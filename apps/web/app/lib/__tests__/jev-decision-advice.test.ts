@@ -113,7 +113,10 @@ test("with the key set: default knobs, the budgeted wrapper around the one adapt
   expect(wrapperOptions.maxCalls).toBe(20);
   expect(wrapperOptions.ceilingMicroUsd).toBe(500_000);
 
-  // Never print or log the key: it must not ride on the returned config.
+  // Never print or log the key: it must not ride on the returned config. The
+  // positive guard first proves the serialization is non-empty, so the
+  // negative assertion cannot pass vacuously (hexagen-ui/population-guard).
+  expect(JSON.stringify(config).length).toBeGreaterThan(0);
   expect(JSON.stringify(config)).not.toContain("sk-jev-test-sentinel");
 });
 
