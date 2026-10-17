@@ -9,3 +9,4 @@
  */
 export { createInMemoryMaterializer } from "./infrastructure/create-in-memory-materializer.js";
 export type { MaterializeAddOnsResult } from "./infrastructure/in-memory-add-on-materializer.js";
+export type { SelectSuggestion } from "./infrastructure/defaulting-question-engine.adapter.js";
