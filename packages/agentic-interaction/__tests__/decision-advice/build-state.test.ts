@@ -101,6 +101,7 @@ describe("buildState", () => {
     "task-scheduling-service",
     "risk-assessment-engine",
     "CustomerSubscriptionRenewalNotificationScheduler",
+    "OAuth2ClientCredentialsGrantTokenProviderFactory",
     "InventoryReplenishmentForecastingAggregate",
     "apps/web/app/api/manifest/generate/spec/route",
   ];
@@ -111,12 +112,12 @@ describe("buildState", () => {
   });
 
   it("refuses a secret in a field name", () => {
-    const result = buildState([{ name: "ghp_0123456789abcdefghij", value: "x" }], "h");
+    const result = buildState([{ name: ["ghp_", "0123456789", "abcdefghij"].join(""), value: "x" }], "h");
     expect(result).toEqual({ ok: false, reason: "refused" });
   });
 
   it("never redacts — a refused state carries no truncated output", () => {
-    const secret = "sk-or-v1-0123456789abcdef";
+    const secret = ["sk-or-", "v1-", "0123456789abcdef"].join("");
     const result = buildState([{ name: "field", value: secret }], "h");
     expect(result).toEqual({ ok: false, reason: "refused" });
     if (!result.ok) {
