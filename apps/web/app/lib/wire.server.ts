@@ -588,10 +588,7 @@ export const createJevDecisionAdvice = (): JevDecisionAdviceConfig | null => {
     ),
   );
 
-  const maxCalls = parseJevNumber(
-    process.env.JEV_MAX_CALLS_PER_GENERATION,
-    20,
-  );
+  const maxCalls = parseJevNumber(process.env.JEV_MAX_CALLS_PER_GENERATION, 20);
 
   const ceilingMicroUsd = Math.round(
     parseJevNumber(process.env.JEV_DAILY_COST_CEILING_USD, 0.5) * 1_000_000,

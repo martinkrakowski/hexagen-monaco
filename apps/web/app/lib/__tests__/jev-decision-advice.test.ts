@@ -154,19 +154,19 @@ test.each([
   ["NaN", 20],
   ["", 20],
   [undefined, 20],
-])("JEV_MAX_CALLS_PER_GENERATION %p → wrapper maxCalls %p", async (
-  raw,
-  expected,
-) => {
-  process.env.JEV_API_KEY = "set";
-  if (raw !== undefined) process.env.JEV_MAX_CALLS_PER_GENERATION = raw;
-  const createJevDecisionAdvice = await loadFactory();
-  createJevDecisionAdvice();
-  expect(tracker.wrapperOptions).toHaveLength(1);
-  expect(
-    (tracker.wrapperOptions[0] as { maxCalls: number }).maxCalls,
-  ).toBe(expected);
-});
+])(
+  "JEV_MAX_CALLS_PER_GENERATION %p → wrapper maxCalls %p",
+  async (raw, expected) => {
+    process.env.JEV_API_KEY = "set";
+    if (raw !== undefined) process.env.JEV_MAX_CALLS_PER_GENERATION = raw;
+    const createJevDecisionAdvice = await loadFactory();
+    createJevDecisionAdvice();
+    expect(tracker.wrapperOptions).toHaveLength(1);
+    expect((tracker.wrapperOptions[0] as { maxCalls: number }).maxCalls).toBe(
+      expected,
+    );
+  },
+);
 
 test.each([
   ["2", 2_000_000],
@@ -174,19 +174,20 @@ test.each([
   ["abc", 500_000],
   ["", 500_000],
   [undefined, 500_000],
-])("JEV_DAILY_COST_CEILING_USD %p → wrapper ceilingMicroUsd %p", async (
-  raw,
-  expected,
-) => {
-  process.env.JEV_API_KEY = "set";
-  if (raw !== undefined) process.env.JEV_DAILY_COST_CEILING_USD = raw;
-  const createJevDecisionAdvice = await loadFactory();
-  createJevDecisionAdvice();
-  expect(tracker.wrapperOptions).toHaveLength(1);
-  expect(
-    (tracker.wrapperOptions[0] as { ceilingMicroUsd: number }).ceilingMicroUsd,
-  ).toBe(expected);
-});
+])(
+  "JEV_DAILY_COST_CEILING_USD %p → wrapper ceilingMicroUsd %p",
+  async (raw, expected) => {
+    process.env.JEV_API_KEY = "set";
+    if (raw !== undefined) process.env.JEV_DAILY_COST_CEILING_USD = raw;
+    const createJevDecisionAdvice = await loadFactory();
+    createJevDecisionAdvice();
+    expect(tracker.wrapperOptions).toHaveLength(1);
+    expect(
+      (tracker.wrapperOptions[0] as { ceilingMicroUsd: number })
+        .ceilingMicroUsd,
+    ).toBe(expected);
+  },
+);
 
 test.each([
   ["on", true],
@@ -205,12 +206,12 @@ test.each([
   ["auth0|12345", "auth0|12345"],
   ["", ""],
   [undefined, ""],
-])("JEV_REVIEWER_SUB %p → %p (a string, may be empty)", async (
-  raw,
-  expected,
-) => {
-  process.env.JEV_API_KEY = "set";
-  if (raw !== undefined) process.env.JEV_REVIEWER_SUB = raw;
-  const createJevDecisionAdvice = await loadFactory();
-  expect(createJevDecisionAdvice()?.reviewerSub).toBe(expected);
-});
+])(
+  "JEV_REVIEWER_SUB %p → %p (a string, may be empty)",
+  async (raw, expected) => {
+    process.env.JEV_API_KEY = "set";
+    if (raw !== undefined) process.env.JEV_REVIEWER_SUB = raw;
+    const createJevDecisionAdvice = await loadFactory();
+    expect(createJevDecisionAdvice()?.reviewerSub).toBe(expected);
+  },
+);
