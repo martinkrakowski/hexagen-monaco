@@ -26,8 +26,8 @@ import type {
  *
  * Per-generation state: the composition root constructs one wrapper per
  * generation run, so the call count is instance state and resets per
- * generation; the reservation total and the mutex are module state and
- * survive across generations.
+ * generation; the reservation total, the mutex and the unrecorded-cost
+ * ledger are module state and survive across generations.
  *
  * Fail closed (invariant 4): a refused check — or ANY error from the spend
  * store, because an unreadable ledger must read as "ceiling unknown" —
@@ -63,6 +63,35 @@ let reservedTotalMicroUsd = 0;
 let mutexTail: Promise<unknown> = Promise.resolve();
 
 /**
+ * Costs that have settled but are not yet durable (review note B, lane J5a2).
+ * The receipt sink writes each call's row asynchronously, so between the ask
+ * settling and that write landing, the store's since-midnight read cannot see
+ * the money — the budget check would hand the same ceiling room to a later
+ * call. Entries are parked here (keyed by requestId) before the reservation
+ * releases and removed by {@link markDecisionCallRecorded} once the row
+ * exists. A write that never lands leaves its entry in place for the
+ * process's lifetime: the conservative direction for a ceiling.
+ */
+const unrecordedCostMicroUsd = new Map<string, number>();
+
+/** The ledger's total, folded into the daily-ceiling check. */
+function unrecordedTotalMicroUsd(): number {
+  let total = 0;
+  for (const cost of unrecordedCostMicroUsd.values()) total += cost;
+  return total;
+}
+
+/**
+ * Remove one settled call's cost from the unrecorded ledger. The receipt
+ * sink calls this AFTER the durable write resolves, so the cost is counted
+ * through the store read alone — never twice. A no-op for an id that was
+ * never parked (e.g. `""`, when no provider call was made).
+ */
+export function markDecisionCallRecorded(requestId: string): void {
+  unrecordedCostMicroUsd.delete(requestId);
+}
+
+/**
  * Run `critical` after every previously queued one — a simple promise-chain
  * mutex. The tail swallows rejections so a failed section cannot wedge the
  * chain; `critical` itself never rejects (every failure path returns).
@@ -89,6 +118,11 @@ export function createBudgetedDecisionAdvice(
       // Check-and-reserve under the one mutex: the durable read, the pure
       // checkBudget rule and the reservation update are one atomic section.
       const reserved = await runSerialized(async (): Promise<boolean> => {
+        // Snapshot the in-memory ledger sides BEFORE the durable read: the
+        // store read is awaited, so a receipt write landing during the await
+        // would otherwise move unrecorded/reserved under checkBudget's feet.
+        const parked = unrecordedTotalMicroUsd();
+        const reservedSnapshot = reservedTotalMicroUsd;
         let spentTodayMicroUsd: number;
         try {
           spentTodayMicroUsd = await options.store.spentSinceUtcMidnight(now);
@@ -98,8 +132,11 @@ export function createBudgetedDecisionAdvice(
         const check = checkBudget({
           callsThisGeneration,
           maxCalls: options.maxCalls,
-          spentTodayMicroUsd,
-          reservedMicroUsd: reservedTotalMicroUsd,
+          // Invariant 6's total: durable spend, plus the unrecorded ledger
+          // (settled calls whose receipt row has not landed yet), plus the
+          // in-flight reservations — checked as one sum.
+          spentTodayMicroUsd: spentTodayMicroUsd + parked,
+          reservedMicroUsd: reservedSnapshot,
           ceilingMicroUsd: options.ceilingMicroUsd,
           callMaxMicroUsd,
         });
@@ -116,16 +153,31 @@ export function createBudgetedDecisionAdvice(
       }
 
       try {
-        return await options.port.ask(request);
+        const result = await options.port.ask(request);
+        // Park the settled cost BEFORE the reservation releases (the finally
+        // below): the caller's receipt sink writes the durable row
+        // asynchronously, so until that write lands the store read alone
+        // undercounts the day. `receipt` is optional only on the unknown
+        // variant; a result with no requestId made no provider call, so there
+        // is nothing to park and nothing to later mark recorded.
+        const receipt = result.receipt;
+        if (receipt && receipt.requestId !== "") {
+          unrecordedCostMicroUsd.set(
+            receipt.requestId,
+            receipt.costMicroUsd ?? callMaxMicroUsd,
+          );
+        }
+        return result;
       } catch {
         // The port's own contract: never throw for an expected failure. The
         // wrapper keeps that promise even for a misbehaving inner port.
         return { status: "unknown", reason: "error" };
       } finally {
         // Settle the reservation: the call is no longer in flight, and its
-        // actual cost is the durable row's business (the receipt sink), read
-        // by the next ask. Synchronous, so it cannot interleave with another
-        // section's await points.
+        // actual cost is now either durable (the receipt sink wrote it) or
+        // parked in the unrecorded ledger — either way the next ask counts
+        // it. Synchronous, so it cannot interleave with another section's
+        // await points.
         reservedTotalMicroUsd -= callMaxMicroUsd;
       }
     },

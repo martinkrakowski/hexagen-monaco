@@ -8,6 +8,10 @@ import {
   ArchiveExporterAdapter,
 } from "@hexagen/project-generation";
 import type { AddOnMaterializerPort } from "@hexagen/project-generation";
+// Type-only: erased at compile time, so the ~0.7 MB generated template bundle
+// stays behind the lazy `import()` in addOnMaterializer below and out of this
+// module's static graph (the runtime import stays dynamic).
+import type { SelectSuggestion } from "@hexagen/template-engine/in-memory";
 import {
   GitHubExporterAdapter,
   GitHubRepositoryWriterAdapter,
@@ -33,7 +37,10 @@ import {
 // barrel the client bundle imports. Same convention as transaction-system's
 // server subpath above.
 import { JevDecisionAdapter } from "@hexagen/agentic-interaction/server";
-import { createBudgetedDecisionAdvice } from "../../lib/decision-advice/budgeted-decision-advice";
+import {
+  createBudgetedDecisionAdvice,
+  markDecisionCallRecorded,
+} from "../../lib/decision-advice/budgeted-decision-advice";
 import { getPlatformStore } from "../../lib/platform";
 import {
   ReconcileUseCase,
@@ -50,7 +57,9 @@ import type {
   ProviderFallbackChain,
   Stage1RefinementConfig,
   DecisionAdvicePort,
+  DecisionReceipt,
 } from "@hexagen/agentic-interaction";
+
 import type { LocalLLMProviderPort } from "@hexagen/local-llm";
 import type { SendStructuredRequestPort } from "@hexagen/local-llm";
 import type { ArchitectureGraphLike } from "@hexagen/prompt-compiler";
@@ -89,7 +98,9 @@ const emptyLinterReport: LinterReportLike = {
 // Project Generation Wiring
 // ============================================================================
 
-let _materializerLoad: Promise<AddOnMaterializerPort> | null = null;
+let _materializerLoad: Promise<
+  typeof import("@hexagen/template-engine/in-memory")
+> | null = null;
 
 /**
  * Add-on template materializer, loaded lazily. The ~0.7 MB generated bundle is
@@ -101,19 +112,35 @@ let _materializerLoad: Promise<AddOnMaterializerPort> | null = null;
  * first-uses share a single import; a failed load is cleared so a transient
  * import/parse error (e.g. a blip during a rolling restart) doesn't poison every
  * later call with the same rejected promise.
+ *
+ * Jev J5a2: the MEMOISED value is the module, not a configured instance — the
+ * factory is re-run per `materialize()` call so the U-C `suggest` callback
+ * (JEV_TEMPLATE_SUGGEST) closes over a per-call Jev config. The per-call
+ * construction is what keeps the budgeted wrapper's per-generation call count
+ * per materialisation (review note A), exactly as in the spec route.
  */
 const addOnMaterializer: AddOnMaterializerPort = {
   async materialize(addOnsAnswers, options) {
-    _materializerLoad ??= import("@hexagen/template-engine/in-memory")
-      .then(({ createInMemoryMaterializer }) => createInMemoryMaterializer())
-      .catch((error: unknown) => {
+    _materializerLoad ??= import("@hexagen/template-engine/in-memory").catch(
+      (error: unknown) => {
         _materializerLoad = null;
         throw error;
-      });
-    const materializer = await _materializerLoad;
+      },
+    );
+    const { createInMemoryMaterializer } = await _materializerLoad;
+    const jevAdvice = createJevDecisionAdvice();
+    const materializer = createInMemoryMaterializer(
+      jevAdvice?.templateSuggest
+        ? { suggest: createTemplateSelectSuggestion(jevAdvice) }
+        : {},
+    );
     return materializer.materialize(addOnsAnswers, options);
   },
 };
+
+/** Composition-root accessor for the add-on materializer (see the object above). */
+export const getAddOnMaterializer = (): AddOnMaterializerPort =>
+  addOnMaterializer;
 
 export const getGenerateProject = (
   destination: "archive" | "github" = "archive",
@@ -614,6 +641,105 @@ export const createJevDecisionAdvice = (): JevDecisionAdviceConfig | null => {
     reviewerSub,
   };
 };
+
+// ============================================================================
+// Jev U-C materializer composition (lane J5a2, step 3)
+// ============================================================================
+
+/**
+ * The U-C `suggest` callback (J5a2, step 3): asks the advice port with use
+ * "template-select" — one `choice` question `q0` whose criteria are the option
+ * INDEXES ("0", "1", …) mapped to the option texts, and whose declared fields
+ * are `project` (projectName), `prompt` and `options`. Returns
+ * `{ index, confidence }` from an advised answer and `undefined` otherwise —
+ * the defaulting engine never applies a suggestion, it only annotates its
+ * warning.
+ *
+ * A receipt is recorded per ask the same way as U-A (use "template-select",
+ * mode "shadow", `todayAnswer` the default option's index — the callback
+ * receives `defaultIndex` (`options.indexOf(question.default ?? options[0])`),
+ * since a manifest may declare a non-first default — with `todaySource`
+ * "default"); the write is awaited so
+ * {@link markDecisionCallRecorded} lands deterministically before the caller
+ * moves on, and every failure is swallowed: a receipt failure never fails a
+ * suggestion (invariant 4). The engine's own 3 s deadline bounds the wait.
+ */
+function createTemplateSelectSuggestion(
+  config: JevDecisionAdviceConfig,
+): SelectSuggestion {
+  return async ({ projectName, prompt, options, defaultIndex }) => {
+    const result = await config.port
+      .ask({
+        use: "template-select",
+        fields: [
+          { name: "project", value: projectName },
+          { name: "prompt", value: prompt },
+          { name: "options", value: options.join("\n") },
+        ],
+        questions: {
+          q0: {
+            type: "choice",
+            instructions:
+              "Which option should this defaulted select question use? Answer with the option's index.",
+            criteria: Object.fromEntries(
+              options.map((option, index) => [String(index), option]),
+            ),
+          },
+        },
+      })
+      .catch(() => undefined);
+
+    if (!result) return undefined;
+    const receipt: DecisionReceipt | null =
+      result.status === "advised" ? result.receipt : (result.receipt ?? null);
+    const answer = result.status === "advised" ? result.answers.q0 : undefined;
+
+    try {
+      if (receipt) {
+        await getPlatformStore().decisionReceipts.recordCall(
+          {
+            use: "template-select",
+            status: receipt.status,
+            model: receipt.model,
+            requestId: receipt.requestId,
+            generationId: receipt.generationId,
+            // No JWT reaches materialization (it is not a route), so a
+            // template-select receipt is never a reviewer's own generation.
+            reviewer: false,
+            costMicroUsd: receipt.costMicroUsd,
+            latencyMs: receipt.latencyMs,
+          },
+          answer && answer.type === "choice"
+            ? [
+                {
+                  questionIndex: 0,
+                  mode: "shadow",
+                  jevAnswer: answer.choice,
+                  jevConfidence: answer.confidence,
+                  todayAnswer: String(defaultIndex),
+                  todaySource: "default",
+                  agreement: answer.choice === String(defaultIndex),
+                },
+              ]
+            : [],
+        );
+        markDecisionCallRecorded(receipt.requestId);
+      }
+    } catch {
+      // A receipt failure never fails a suggestion (invariant 4).
+    }
+
+    if (result.status !== "advised") return undefined;
+    if (!answer || answer.type !== "choice") return undefined;
+    // The choice ids ARE the option indexes; an out-of-range pick is no
+    // suggestion (the engine rejects it too) — today's default stands.
+    const index = Number(answer.choice);
+    if (!Number.isInteger(index) || index < 0 || index >= options.length) {
+      return undefined;
+    }
+    return { index, confidence: answer.confidence };
+  };
+}
 
 let warnedInvalidStage6MaxTokens = false;
 /** Loud once: a SET-but-unparseable STAGE6_VALIDATOR_MAX_TOKENS silently reverts

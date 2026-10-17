@@ -44,6 +44,8 @@ vi.mock("../../../../lib/wire.server", () => ({
   createStage6ReviewerConfig: wire.createStage6ReviewerConfig,
   createStage6ValidatorConfig: wire.createStage6ValidatorConfig,
   createWebLLMAdapter: wire.createWebLLMAdapter,
+  // Jev advice is off here (no JEV_API_KEY): the route builds no advice.
+  createJevDecisionAdvice: () => null,
 }));
 
 // The quota gate is a stateful sqlite-backed store; stub it open. The per-IP

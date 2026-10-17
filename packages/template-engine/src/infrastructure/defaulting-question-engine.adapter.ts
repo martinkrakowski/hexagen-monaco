@@ -13,6 +13,8 @@ export type SelectSuggestion = (input: {
   projectName: string;
   prompt: string;
   options: readonly string[];
+  /** Index of the default that applies (`options.indexOf(question.default ?? options[0])`). */
+  defaultIndex: number;
 }) => Promise<{ index: number; confidence: number } | undefined>;
 
 /**
@@ -90,6 +92,9 @@ export class DefaultingQuestionEngine implements QuestionEnginePort {
           projectName: this.reservedVars.projectName ?? "",
           prompt: question.prompt,
           options: question.options,
+          defaultIndex: question.options.indexOf(
+            question.default ?? question.options[0] ?? "",
+          ),
         }),
       )
       .catch(() => undefined);
