@@ -9,6 +9,7 @@ import type { AnswerMap } from "../domain/index.js";
 import { InMemoryFileEmitter } from "./in-memory-file-emitter.adapter.js";
 import type { TemplateFileLoader } from "./in-memory-file-emitter.adapter.js";
 import { DefaultingQuestionEngine } from "./defaulting-question-engine.adapter.js";
+import type { SelectSuggestion } from "./defaulting-question-engine.adapter.js";
 import { InMemoryTemplateConfigStore } from "./in-memory-template-config-store.adapter.js";
 
 // The in-memory adapters ignore the project root (no disk); this is a label only.
@@ -49,6 +50,9 @@ export class InMemoryAddOnMaterializer {
   constructor(
     private readonly registry: TemplateRegistryPort,
     private readonly loadTemplateFile: TemplateFileLoader,
+    /** Optional advice for defaulted `select` questions (never applied). */
+    private readonly suggest?: SelectSuggestion,
+    private readonly suggestTimeoutMs?: number,
   ) {}
 
   async materialize(
@@ -69,7 +73,11 @@ export class InMemoryAddOnMaterializer {
       reservedVars,
       withTests: options.withTests ?? false,
     });
-    const questionEngine = new DefaultingQuestionEngine(reservedVars);
+    const questionEngine = new DefaultingQuestionEngine(
+      reservedVars,
+      this.suggest,
+      this.suggestTimeoutMs,
+    );
     const useCase = new AddTemplateUseCase(
       this.registry,
       questionEngine,
