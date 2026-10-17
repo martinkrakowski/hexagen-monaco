@@ -325,15 +325,17 @@ describe("JevDecisionAdapter", () => {
       expectNoKey(result);
     }
   });
-
 });
 
 describe("JevDecisionAdapter hardening (review of #881)", () => {
   it("ends at the deadline when the body stream never delivers and ignores the signal", async () => {
-    const stalled = new ReadableStream<Uint8Array>({ pull: () => new Promise(() => undefined) });
+    const stalled = new ReadableStream<Uint8Array>({
+      pull: () => new Promise(() => undefined),
+    });
     const adapter = new JevDecisionAdapter({
       secretVault: { getSecret: () => "test-key" } as never,
-      fetch: (async () => new Response(stalled, { status: 200 })) as typeof fetch,
+      fetch: (async () =>
+        new Response(stalled, { status: 200 })) as typeof fetch,
       timeoutMs: 30,
     });
     const result = await adapter.ask(contextTypeRequest);
