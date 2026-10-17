@@ -22,6 +22,11 @@
       "types": "./dist/domain/utils/manifest-dialect.d.ts",
       "source": "./src/domain/utils/manifest-dialect.ts",
       "default": "./dist/domain/utils/manifest-dialect.js"
+    },
+    "./server": {
+      "types": "./dist/server.d.ts",
+      "source": "./src/server.ts",
+      "default": "./dist/server.js"
     }
   },
   "scripts": {
