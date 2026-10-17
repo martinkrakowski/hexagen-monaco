@@ -75,7 +75,7 @@ vi.mock("../../../../../lib/wire.server", () => ({
   createStage6ValidatorConfig: () => null,
 }));
 
-vi.mock("../../../../../../lib/request-guards", () => ({
+vi.mock("../../../../../lib/request-guards", () => ({
   isSameOrigin: () => true,
 }));
 
