@@ -177,10 +177,10 @@ function isDecisionAnswer(use: DecisionUse, value: unknown): boolean {
  * a bounded identifier with no whitespace or control characters. `"acme/
  * billing"` and `"typesafe/jev-1.14"` both pass; a pasted sentence does not.
  */
-const IDENTIFIER = /^(?:|[A-Za-z0-9][A-Za-z0-9._:/-]{0,127})$/;
+const IDENTIFIER = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$/;
 
 function isIdentifier(value: unknown): boolean {
-  return typeof value === "string" && IDENTIFIER.test(value);
+  return typeof value === "string" && (value === "" || IDENTIFIER.test(value));
 }
 
 /** A non-negative, finite integer; anything else means the accounting is broken. */
@@ -463,68 +463,24 @@ export function createDecisionReceiptsStore(
 
   return {
     async recordCall(call, answers) {
-      if (!isDecisionUse(call?.use)) {
-        rejected("use", "is not a known decision-advice use");
-      }
-      if (!isDecisionStatus(call?.status)) {
-        rejected("status", "is not advised or a known unknown reason");
-      }
-      if (typeof call?.reviewer !== "boolean") {
-        rejected("reviewer", "is not a boolean");
-      }
-      if (!isIdentifier(call?.model)) {
-        rejected("model", "is empty or not a bounded identifier");
-      }
-      if (!isIdentifier(call?.requestId)) {
-        rejected("requestId", "is empty or not a bounded identifier");
-      }
-      if (!isIdentifier(call?.generationId)) {
-        rejected("generationId", "is empty or not a bounded identifier");
-      }
-      if (!isOptionalCount(call?.costMicroUsd)) {
-        rejected("costMicroUsd", "is not null or a non-negative integer");
-      }
-      if (!isOptionalCount(call?.latencyMs)) {
-        rejected("latencyMs", "is not null or a non-negative integer");
-      }
+      validateCall(call);
 
-      const list = Array.isArray(answers) ? answers : [];
+      if (!Array.isArray(answers)) {
+        rejected("answers", "is not an array");
+      }
+      const list = answers;
       if (list.length > MAX_DECISION_ANSWERS_PER_CALL) {
         rejected("answers", `exceed ${MAX_DECISION_ANSWERS_PER_CALL} per call`);
       }
 
       const now = call.now ?? Date.now();
+      if (!isCount(now)) {
+        rejected("now", "is not a non-negative integer of epoch milliseconds");
+      }
       const seen = new Set<number>();
       const answerParams: Array<Record<string, string | number | null>> = [];
       for (const answer of list) {
-        if (!isDecisionMode(answer?.mode)) {
-          rejected("answer mode", "is not shadow or primary");
-        }
-        if (!isCount(answer?.questionIndex)) {
-          rejected("answer questionIndex", "is not a non-negative integer");
-        }
-        if (seen.has(answer.questionIndex)) {
-          rejected("answers", "contain a duplicate questionIndex");
-        }
-        seen.add(answer.questionIndex);
-        if (!isDecisionAnswer(call.use, answer.jevAnswer)) {
-          rejected("answer jevAnswer", "is outside the closed set for the use");
-        }
-        if (!isConfidence(answer?.jevConfidence)) {
-          rejected("answer jevConfidence", "is not a number in 0..1");
-        }
-        if (!isDecisionAnswer(call.use, answer.todayAnswer)) {
-          rejected(
-            "answer todayAnswer",
-            "is outside the closed set for the use",
-          );
-        }
-        if (!isDecisionTodaySource(answer?.todaySource)) {
-          rejected("answer todaySource", "is not llm, heuristic or default");
-        }
-        if (typeof answer?.agreement !== "boolean") {
-          rejected("answer agreement", "is not a boolean");
-        }
+        validateAnswer(call.use, answer, seen);
         answerParams.push({
           call_id: null, // replaced inside the transaction with the call id
           question_index: answer.questionIndex,
@@ -693,4 +649,65 @@ export function createDecisionReceiptsStore(
       return report;
     },
   };
+}
+
+/** Every field of a call row, checked before anything is written. */
+function validateCall(call: RecordDecisionCallInput): void {
+  if (!isDecisionUse(call?.use)) {
+    rejected("use", "is not a known decision-advice use");
+  }
+  if (!isDecisionStatus(call?.status)) {
+    rejected("status", "is not advised or a known unknown reason");
+  }
+  if (typeof call?.reviewer !== "boolean") {
+    rejected("reviewer", "is not a boolean");
+  }
+  if (!isIdentifier(call?.model)) {
+    rejected("model", "is empty or not a bounded identifier");
+  }
+  if (!isIdentifier(call?.requestId)) {
+    rejected("requestId", "is empty or not a bounded identifier");
+  }
+  if (!isIdentifier(call?.generationId)) {
+    rejected("generationId", "is empty or not a bounded identifier");
+  }
+  if (!isOptionalCount(call?.costMicroUsd)) {
+    rejected("costMicroUsd", "is not null or a non-negative integer");
+  }
+  if (!isOptionalCount(call?.latencyMs)) {
+    rejected("latencyMs", "is not null or a non-negative integer");
+  }
+}
+
+/** Every field of one answer row, checked before anything is written. */
+function validateAnswer(
+  use: DecisionUse,
+  answer: RecordDecisionAnswerInput,
+  seen: Set<number>,
+): void {
+  if (!isDecisionMode(answer?.mode)) {
+    rejected("answer mode", "is not shadow or primary");
+  }
+  if (!isCount(answer?.questionIndex)) {
+    rejected("answer questionIndex", "is not a non-negative integer");
+  }
+  if (seen.has(answer.questionIndex)) {
+    rejected("answers", "contain a duplicate questionIndex");
+  }
+  seen.add(answer.questionIndex);
+  if (!isDecisionAnswer(use, answer.jevAnswer)) {
+    rejected("answer jevAnswer", "is outside the closed set for the use");
+  }
+  if (!isConfidence(answer?.jevConfidence)) {
+    rejected("answer jevConfidence", "is not a number in 0..1");
+  }
+  if (!isDecisionAnswer(use, answer.todayAnswer)) {
+    rejected("answer todayAnswer", "is outside the closed set for the use");
+  }
+  if (!isDecisionTodaySource(answer?.todaySource)) {
+    rejected("answer todaySource", "is not llm, heuristic or default");
+  }
+  if (typeof answer?.agreement !== "boolean") {
+    rejected("answer agreement", "is not a boolean");
+  }
 }

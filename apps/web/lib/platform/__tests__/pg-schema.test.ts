@@ -93,7 +93,7 @@ describe("pg-schema", () => {
   it("every SQLite table and column exists in Postgres, with matching nullability and type", async () => {
     // A discovery query that returned nothing would make every loop below pass
     // without asserting anything.
-    expect(sqliteTables.length).toBe(23);
+    expect(sqliteTables).toHaveLength(23);
     for (const table of sqliteTables) {
       expect(sqliteColumns(table.name).length).toBeGreaterThan(0);
       for (const col of sqliteColumns(table.name)) {
