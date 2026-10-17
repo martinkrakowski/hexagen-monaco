@@ -2341,6 +2341,11 @@ export class ExecuteStructuredConfigGenerationUseCase {
       number,
       { type: string; source: ContextTypeTodaySource }
     >();
+    // Today's answer per flagged context, taken before anything can change
+    // it: the heuristic's, overwritten below only by a classifier success.
+    flagged.forEach((ctx, index) => {
+      todayByIndex.set(index, { type: ctx.type, source: "heuristic" });
+    });
     // The rejection handler is attached at dispatch, so a port that rejects
     // (or throws synchronously) while the classifier loop is still awaiting
     // is "no advice" at once, never an unhandled rejection.

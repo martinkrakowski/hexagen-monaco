@@ -364,6 +364,35 @@ describe("context-type advice (U-A, lane J2)", () => {
     assert.equal(typesThrowing.warehouse, "supporting");
   });
 
+  test("without a classifier, the receipt keeps the heuristic answer even when primary applies advice", async () => {
+    const receipts: ContextTypeReceipt[] = [];
+    const { port } = createFakeAdvice(advisedFromFixture());
+    const useCase = new ExecuteStructuredConfigGenerationUseCase(
+      createMockLLMPort(),
+      createMockTransactionManager(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {
+        decisionAdvice: port,
+        contextTypeMode: "primary",
+        receiptSink: (receipt) => receipts.push(receipt),
+        newGenerationId: () => FIXED_GENERATION_ID,
+      },
+    );
+    await useCase.execute(CONFIG);
+    assert.equal(receipts.length, 1);
+    for (const answer of receipts[0]!.answers) {
+      assert.equal(answer.todaySource, "heuristic");
+      assert.equal(answer.agreement, answer.jevAnswer === answer.todayAnswer);
+    }
+    assert.ok(
+      receipts[0]!.answers.some((a) => a.todayAnswer !== a.jevAnswer),
+      "the fixture disagrees with the heuristic on at least one context",
+    );
+  });
+
   test("a sink that throws is ignored", async () => {
     const { port } = createFakeAdvice(advisedFromFixture());
     const useCase = createUseCase({
