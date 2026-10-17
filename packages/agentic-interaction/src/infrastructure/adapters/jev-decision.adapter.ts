@@ -126,6 +126,8 @@ export class JevDecisionAdapter implements DecisionAdvicePort {
         return this.unknownReceipt(request, "http", startedAt);
       }
       if (!response.ok) {
+        // Release the connection: an unread body holds the socket until GC.
+        response.body?.cancel().catch(() => undefined);
         return this.unknownReceipt(request, "http", startedAt);
       }
 
