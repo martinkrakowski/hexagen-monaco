@@ -14,10 +14,12 @@ import {
 } from "../decision-receipts-store";
 import type { PlatformDb } from "../db";
 
-// Same convention as repair-telemetry-store.test.ts: the store is not yet
-// reachable from createPlatformStore (wiring it in is a later lane's call
-// site), so suites open the backend directly via platform-backends.ts, which
-// exercises both the SQLite and the Postgres dialect against one store.
+// Same convention as repair-telemetry-store.test.ts: suites open the backend
+// directly via platform-backends.ts, which exercises both the SQLite and the
+// Postgres dialect against one store. (Since J5a1 the store is also reachable
+// from the platform store — platform-backends.test.ts covers that wiring —
+// but these suites keep the direct open so a wiring regression cannot mask a
+// store bug.)
 async function openStore(kind: BackendKind): Promise<{
   backend: Awaited<ReturnType<typeof openBackend>>;
   db: PlatformDb;

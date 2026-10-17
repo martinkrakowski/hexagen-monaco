@@ -27,6 +27,17 @@ describe.each(BACKENDS)("platform-backends (%s)", (kind) => {
     assert.equal(free.status, "none");
   });
 
+  it("decisionReceipts is wired on the platform store (J5a1)", async () => {
+    backend = await openBackend(kind);
+    // The daily-ceiling read is the receipts store's own first query: it must
+    // find the decision_calls table on BOTH dialects through the platform
+    // store's wiring, not through a direct createDecisionReceiptsStore call.
+    const spent = await backend.store.decisionReceipts.spentSinceUtcMidnight(
+      Date.now(),
+    );
+    assert.equal(spent, 0);
+  });
+
   it("two backends of one kind do not see each other's rows", async () => {
     const a = await openBackend(kind);
     try {

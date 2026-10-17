@@ -40,6 +40,10 @@ import {
   type OwnerDocumentsStore,
   listDocumentsAuthoredBy,
 } from "./owner-documents-store";
+import {
+  createDecisionReceiptsStore,
+  type DecisionReceiptsStore,
+} from "./decision-receipts-store";
 
 export interface PlatformStore {
   readonly auth: AuthRepository;
@@ -52,6 +56,12 @@ export interface PlatformStore {
   readonly audit: AuditLogRepository;
   /** P-A3: grants beside ownership, never instead of it. */
   readonly shares: ProjectSharesRepository;
+  /**
+   * Jev decision receipts (J1c store, wired here in J5a1): durable, closed-set
+   * advice telemetry for both dialects. Deployment-wide — the daily-spend
+   * ceiling and the agreement report are not per-owner data.
+   */
+  readonly decisionReceipts: DecisionReceiptsStore;
   projectsFor(ownerId: string): SavedProjectsStore;
   runsFor(ownerId: string): RunHistoryRepository;
   scansFor(ownerId: string): ScanRecordsStore;
@@ -91,6 +101,7 @@ export function createPlatformStoreOn(
     teams: createTeamsRepository(platformDb),
     audit: createAuditLogRepository(platformDb),
     shares: createProjectSharesRepository(platformDb),
+    decisionReceipts: createDecisionReceiptsStore(platformDb),
     projectsFor(ownerId) {
       return createSavedProjectsStore(platformDb, ownerId);
     },
