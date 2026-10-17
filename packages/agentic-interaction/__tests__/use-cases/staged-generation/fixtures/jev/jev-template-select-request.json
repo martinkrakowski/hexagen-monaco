@@ -1,0 +1,15 @@
+{
+  "model": "typesafe/jev-1.14",
+  "state": "project: bike-rental\nquestion: Which dotenv loader should the env setup use?\noptions: 0 = dotenv, 1 = dotenv-flow, 2 = none",
+  "questions": {
+    "q0": {
+      "type": "choice",
+      "instructions": "Pick the option that best fits this project.",
+      "criteria": {
+        "0": "dotenv",
+        "1": "dotenv-flow",
+        "2": "none"
+      }
+    }
+  }
+}
