@@ -50,6 +50,7 @@ layers:
       - InMemoryLintValidationAdapter
       - StaticProviderCatalogAdapter
       - NullDecisionAdapter
+      - JevDecisionAdapter
 depends_on:
   - local-llm
   - ai-pipeline
