@@ -325,4 +325,31 @@ describe("JevDecisionAdapter", () => {
       expectNoKey(result);
     }
   });
+
+});
+
+describe("JevDecisionAdapter hardening (review of #881)", () => {
+  it("ends at the deadline when the body stream never delivers and ignores the signal", async () => {
+    const stalled = new ReadableStream<Uint8Array>({ pull: () => new Promise(() => undefined) });
+    const adapter = new JevDecisionAdapter({
+      secretVault: { getSecret: () => "test-key" } as never,
+      fetch: (async () => new Response(stalled, { status: 200 })) as typeof fetch,
+      timeoutMs: 30,
+    });
+    const result = await adapter.ask(contextTypeRequest);
+    expect(result).toMatchObject({ status: "unknown", reason: "timeout" });
+  });
+
+  it("never throws when the injected fetch throws synchronously", async () => {
+    const adapter = new JevDecisionAdapter({
+      secretVault: { getSecret: () => "test-key" } as never,
+      fetch: (() => {
+        throw new Error("sync boom test-key");
+      }) as unknown as typeof fetch,
+      timeoutMs: 30,
+    });
+    const result = await adapter.ask(contextTypeRequest);
+    expect(result).toEqual({ status: "unknown", reason: "error" });
+    expect(JSON.stringify(result)).not.toContain("test-key");
+  });
 });

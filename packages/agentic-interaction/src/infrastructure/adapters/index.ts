@@ -8,6 +8,7 @@ export * from "./cloud-llm-temperature.js";
 export * from "./cloud-llm-types.js";
 export * from "./environment-secret-vault.adapter.js";
 export * from "./in-memory-pipeline-ports.adapter.js";
+export * from "./jev-decision.adapter.js";
 export * from "./llm-provider-selector.adapter.js";
 export * from "./null-decision.adapter.js";
 export * from "./openai-compatible.adapter.js";

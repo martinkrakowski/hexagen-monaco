@@ -54,6 +54,19 @@ export class JevDecisionAdapter implements DecisionAdvicePort {
   }
 
   async ask(request: DecisionAdviceRequest): Promise<DecisionAdviceResult> {
+    try {
+      return await this.askOnce(request);
+    } catch {
+      // Never throws: anything unexpected (a synchronous throw from an
+      // injected fetch, the vault, serialisation) is "no advice". The error
+      // object is discarded so nothing from it can carry the key onward.
+      return { status: "unknown", reason: "error" };
+    }
+  }
+
+  private async askOnce(
+    request: DecisionAdviceRequest,
+  ): Promise<DecisionAdviceResult> {
     const key = this.secretVault.getSecret(JEV_API_KEY_NAME);
     if (key === null) {
       return { status: "unknown", reason: "disabled" };
@@ -151,12 +164,25 @@ export class JevDecisionAdapter implements DecisionAdvicePort {
     if (stream === null) return "cap";
 
     const reader = stream.getReader();
+    // The same deadline races every read, so a body stream that ignores the
+    // signal still ends the call at the deadline (its reader is cancelled).
+    const aborted = new Promise<"timeout">((resolve) => {
+      if (controller.signal.aborted) resolve("timeout");
+      controller.signal.addEventListener("abort", () => resolve("timeout"), {
+        once: true,
+      });
+    });
     const decoder = new TextDecoder();
     let total = 0;
     let text = "";
     try {
       for (;;) {
-        const { done, value } = await reader.read();
+        const next = await Promise.race([reader.read(), aborted]);
+        if (next === "timeout") {
+          reader.cancel().catch(() => undefined);
+          return "timeout";
+        }
+        const { done, value } = next;
         if (done) break;
         total += value.byteLength;
         if (total > BODY_CAP_BYTES) {
