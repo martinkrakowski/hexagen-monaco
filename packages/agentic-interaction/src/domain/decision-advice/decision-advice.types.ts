@@ -110,3 +110,45 @@ export type DecisionAdviceResult =
       reason: DecisionUnknownReason;
       receipt?: DecisionReceipt;
     };
+
+/** U-A's mode (`JEV_CONTEXT_TYPE_MODE`): `off` is the default. */
+export type ContextTypeAdviceMode = "off" | "shadow" | "primary";
+
+/** Where today's (pre-advice) answer for one reviewed context came from. */
+export type ContextTypeTodaySource = "llm" | "heuristic";
+
+/**
+ * One reviewed context's answer row. Closed values only: the answers are the
+ * five context-type ids, never a context name or free text (invariant 5) —
+ * a receipt store can persist one row per answer without seeing state.
+ */
+export interface ContextTypeAnswerRecord {
+  /** Index into the request's `c0…cn` keys. */
+  questionIndex: number;
+  /** Jev's choice, one of the five context-type ids. */
+  jevAnswer: string;
+  /** 0..1. */
+  jevConfidence: number;
+  /** Today's type, one of the five context-type ids. */
+  todayAnswer: string;
+  /** `"llm"` when the classifier succeeded for this context, else `"heuristic"`. */
+  todaySource: ContextTypeTodaySource;
+  /** `jevAnswer === todayAnswer`. */
+  agreement: boolean;
+}
+
+/**
+ * One U-A advice call's receipt (lane J2). Emitted through the injected
+ * `receiptSink` once per advice call, per generation, beside the
+ * {@link DecisionReceipt} the store persists.
+ */
+export interface ContextTypeReceipt {
+  /** Caller-minted generation id, minted once per `execute()` run. */
+  generationId: string;
+  /** The active mode at call time. */
+  mode: ContextTypeAdviceMode;
+  /** The port's own closed-set receipt. */
+  receipt: DecisionReceipt;
+  /** One row per reviewed context with a choice answer. */
+  answers: ContextTypeAnswerRecord[];
+}
