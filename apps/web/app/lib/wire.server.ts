@@ -29,6 +29,12 @@ import {
   SyncDelegatingManifestMutationAdapter,
   CliLintValidationAdapter,
 } from "@hexagen/transaction-system/server";
+// Server subpath only (invariant 1): the real Jev adapter never enters the `.`
+// barrel the client bundle imports. Same convention as transaction-system's
+// server subpath above.
+import { JevDecisionAdapter } from "@hexagen/agentic-interaction/server";
+import { createBudgetedDecisionAdvice } from "../../lib/decision-advice/budgeted-decision-advice";
+import { getPlatformStore } from "../../lib/platform";
 import {
   ReconcileUseCase,
   StructuredDiffReconciliationAdapter,
@@ -43,6 +49,7 @@ import type {
   ProviderCatalogPort,
   ProviderFallbackChain,
   Stage1RefinementConfig,
+  DecisionAdvicePort,
 } from "@hexagen/agentic-interaction";
 import type { LocalLLMProviderPort } from "@hexagen/local-llm";
 import type { SendStructuredRequestPort } from "@hexagen/local-llm";
@@ -501,6 +508,112 @@ export const createStage6ReviewerConfig =
       secretVault: vault,
     });
   };
+
+/**
+ * Mirrors `ContextTypeAdviceMode` from @hexagen/agentic-interaction's decision
+ * domain, which the package barrel does not export (checked at J5a1). A local
+ * union keeps this lane inside apps/web; keep the two in step when the domain
+ * union changes.
+ */
+type JevContextTypeMode = "off" | "shadow" | "primary";
+
+/** The shape J5a hands to the U-A / U-C composition (see the factory below). */
+export interface JevDecisionAdviceConfig {
+  /** The budgeted wrapper around `new JevDecisionAdapter({ secretVault })`. */
+  readonly port: DecisionAdvicePort;
+  /** U-A's mode (`JEV_CONTEXT_TYPE_MODE`); `off` (the default) never asks. */
+  readonly contextTypeMode: JevContextTypeMode;
+  /** Minimum Jev confidence for a `primary` U-A answer to be applied. */
+  readonly minConfidence: number;
+  /** Whether U-C adds `suggested:` text to defaulted select questions. */
+  readonly templateSuggest: boolean;
+  /**
+   * `JEV_REVIEWER_SUB`, for the J5a receipt sink: receipts record only the
+   * boolean `reviewer = (session sub === JEV_REVIEWER_SUB)`, never an id.
+   */
+  readonly reviewerSub: string;
+}
+
+/**
+ * A Jev numeric knob: unset OR blank falls back to the default, and so does a
+ * malformed value — never NaN. The blank case matters: deploy.yml writes
+ * unset vars as empty strings, and `Number("")` is 0, which would silently
+ * turn "unset" into a real (and wrong) cap.
+ */
+function parseJevNumber(raw: string | undefined, fallback: number): number {
+  if (raw === undefined || raw.trim() === "") return fallback;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+/**
+ * Jev decision advice (U-A context types / U-C template suggests — lane J5a1;
+ * plan: docs/planning/2026-10-16-jev-decision-advice.md). Same dedicated-key
+ * gate as the Stage-1 refiner: Jev is off unless the DEDICATED `JEV_API_KEY`
+ * is set (invariant 1), and nothing about the main fallback chain changes.
+ * Returns null (advice off, today's behaviour byte-identical) when unset.
+ *
+ * The returned `port` is the invariant-6 budgeted wrapper around the real
+ * adapter: calls are capped per generation and against the daily ceiling read
+ * from the durable receipts store, and every refusal — budget, store error,
+ * adapter failure — resolves as an `unknown` reason, never a throw.
+ *
+ * Constructed per generation run by the caller (like the Stage-1/Stage-6
+ * factories), which is what makes the wrapper's call count per-generation.
+ *
+ * Env (see also deploy/.env.example):
+ * - JEV_API_KEY                    — required to activate; never logged
+ * - JEV_CONTEXT_TYPE_MODE          — off (default) | shadow | primary
+ * - JEV_CONTEXT_TYPE_MIN_CONFIDENCE — default 0.8, clamped to 0..1
+ * - JEV_MAX_CALLS_PER_GENERATION   — default 20
+ * - JEV_DAILY_COST_CEILING_USD     — default 0.50, converted to micro-USD
+ * - JEV_TEMPLATE_SUGGEST           — on | off (default off)
+ * - JEV_REVIEWER_SUB               — string, may be empty
+ */
+export const createJevDecisionAdvice = (): JevDecisionAdviceConfig | null => {
+  const vault = getEnvironmentVault();
+  // Invariant 1: the dedicated key is the only gate. Its value is never
+  // logged, echoed or carried on the returned config.
+  if (!vault.getSecret("JEV_API_KEY")) return null;
+
+  const rawMode = process.env.JEV_CONTEXT_TYPE_MODE;
+  const contextTypeMode: JevContextTypeMode =
+    rawMode === "shadow" || rawMode === "primary" ? rawMode : "off";
+
+  // A negative value is treated as malformed (default 0.8), never as 0,
+  // which would apply every primary answer; above 1 clamps to 1.
+  const rawConfidence = parseJevNumber(
+    process.env.JEV_CONTEXT_TYPE_MIN_CONFIDENCE,
+    0.8,
+  );
+  const minConfidence = rawConfidence < 0 ? 0.8 : Math.min(1, rawConfidence);
+
+  const maxCalls = parseJevNumber(process.env.JEV_MAX_CALLS_PER_GENERATION, 20);
+
+  const ceilingMicroUsd = Math.round(
+    parseJevNumber(process.env.JEV_DAILY_COST_CEILING_USD, 0.5) * 1_000_000,
+  );
+
+  const templateSuggest = process.env.JEV_TEMPLATE_SUGGEST === "on";
+
+  const reviewerSub = process.env.JEV_REVIEWER_SUB ?? "";
+
+  const adapter = new JevDecisionAdapter({ secretVault: vault });
+  const port = createBudgetedDecisionAdvice({
+    port: adapter,
+    store: getPlatformStore().decisionReceipts,
+    maxCalls,
+    ceilingMicroUsd,
+  });
+
+  return {
+    port,
+    contextTypeMode,
+    minConfidence,
+    templateSuggest,
+    reviewerSub,
+  };
+};
 
 let warnedInvalidStage6MaxTokens = false;
 /** Loud once: a SET-but-unparseable STAGE6_VALIDATOR_MAX_TOKENS silently reverts

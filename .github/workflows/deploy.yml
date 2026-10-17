@@ -124,11 +124,23 @@ jobs:
           STAGE6_VALIDATOR_BASE_URL: ${{ secrets.STAGE6_VALIDATOR_BASE_URL || vars.STAGE6_VALIDATOR_BASE_URL }}
           STAGE6_VALIDATOR_MODEL: ${{ secrets.STAGE6_VALIDATOR_MODEL || vars.STAGE6_VALIDATOR_MODEL }}
           STAGE6_VALIDATOR_MAX_TOKENS: ${{ secrets.STAGE6_VALIDATOR_MAX_TOKENS || vars.STAGE6_VALIDATOR_MAX_TOKENS }}
+          # Jev decision advice (Jev J5a1). The API key is the gate (a repo
+          # SECRET): Jev is off unless it is set. Every knob is a repo
+          # VARIABLE with a code default (off / 0.8 / 20 / 0.50 / off / ""),
+          # so an empty value is never a behaviour change. The key is never
+          # logged; see docs/planning/2026-10-16-jev-decision-advice.md.
+          JEV_API_KEY: ${{ secrets.JEV_API_KEY }}
+          JEV_CONTEXT_TYPE_MODE: ${{ vars.JEV_CONTEXT_TYPE_MODE }}
+          JEV_CONTEXT_TYPE_MIN_CONFIDENCE: ${{ vars.JEV_CONTEXT_TYPE_MIN_CONFIDENCE }}
+          JEV_MAX_CALLS_PER_GENERATION: ${{ vars.JEV_MAX_CALLS_PER_GENERATION }}
+          JEV_DAILY_COST_CEILING_USD: ${{ vars.JEV_DAILY_COST_CEILING_USD }}
+          JEV_TEMPLATE_SUGGEST: ${{ vars.JEV_TEMPLATE_SUGGEST }}
+          JEV_REVIEWER_SUB: ${{ vars.JEV_REVIEWER_SUB }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USERNAME }}
           key: ${{ secrets.VPS_SSH_KEY }}
-          envs: AUTH_SECRET, NEXTAUTH_URL, GH_OAUTH_ID, GH_OAUTH_SECRET, LLM_API_KEY, LLM_BASE_URL, LLM_MODEL, WEB_LLM_API_KEY, INCEPTION_API_KEY, INCEPTION_MODEL, LLM_REASONING, STAGE1_REFINER_API_KEY, STAGE1_REFINER_BASE_URL, STAGE1_REFINER_MODEL, STAGE1_REFINER_MODE, STAGE6_REVIEWER_API_KEY, STAGE6_REVIEWER_BASE_URL, STAGE6_REVIEWER_MODEL, STAGE6_VALIDATOR_API_KEY, STAGE6_VALIDATOR_BASE_URL, STAGE6_VALIDATOR_MODEL, STAGE6_VALIDATOR_MAX_TOKENS
+          envs: AUTH_SECRET, NEXTAUTH_URL, GH_OAUTH_ID, GH_OAUTH_SECRET, LLM_API_KEY, LLM_BASE_URL, LLM_MODEL, WEB_LLM_API_KEY, INCEPTION_API_KEY, INCEPTION_MODEL, LLM_REASONING, STAGE1_REFINER_API_KEY, STAGE1_REFINER_BASE_URL, STAGE1_REFINER_MODEL, STAGE1_REFINER_MODE, STAGE6_REVIEWER_API_KEY, STAGE6_REVIEWER_BASE_URL, STAGE6_REVIEWER_MODEL, STAGE6_VALIDATOR_API_KEY, STAGE6_VALIDATOR_BASE_URL, STAGE6_VALIDATOR_MODEL, STAGE6_VALIDATOR_MAX_TOKENS, JEV_API_KEY, JEV_CONTEXT_TYPE_MODE, JEV_CONTEXT_TYPE_MIN_CONFIDENCE, JEV_MAX_CALLS_PER_GENERATION, JEV_DAILY_COST_CEILING_USD, JEV_TEMPLATE_SUGGEST, JEV_REVIEWER_SUB
           # set -eu (POSIX-safe; appleboy/ssh-action has no `set -e` by default)
           # so a failed `docker load` aborts instead of silently leaving the old
           # container up. pipefail is omitted intentionally — the remote /bin/sh
@@ -181,9 +193,16 @@ jobs:
             STAGE6_VALIDATOR_BASE_URL=\"$STAGE6_VALIDATOR_BASE_URL\"\n\
             STAGE6_VALIDATOR_MODEL=\"$STAGE6_VALIDATOR_MODEL\"\n\
             STAGE6_VALIDATOR_MAX_TOKENS=\"$STAGE6_VALIDATOR_MAX_TOKENS\"\n\
+            JEV_API_KEY=\"$JEV_API_KEY\"\n\
+            JEV_CONTEXT_TYPE_MODE=\"$JEV_CONTEXT_TYPE_MODE\"\n\
+            JEV_CONTEXT_TYPE_MIN_CONFIDENCE=\"$JEV_CONTEXT_TYPE_MIN_CONFIDENCE\"\n\
+            JEV_MAX_CALLS_PER_GENERATION=\"$JEV_MAX_CALLS_PER_GENERATION\"\n\
+            JEV_DAILY_COST_CEILING_USD=\"$JEV_DAILY_COST_CEILING_USD\"\n\
+            JEV_TEMPLATE_SUGGEST=\"$JEV_TEMPLATE_SUGGEST\"\n\
+            JEV_REVIEWER_SUB=\"$JEV_REVIEWER_SUB\"\n\
             EOF\n\
             chmod 600 .env\n\
-            [ \"$(wc -l < .env)\" -eq 23 ] || { echo 'FATAL: .env line count != 23 — keep this in sync with the heredoc keys above (embedded newline in a secret?)' >&2; exit 1; }\n\
+            [ \"$(wc -l < .env)\" -eq 30 ] || { echo 'FATAL: .env line count != 30 — keep this in sync with the heredoc keys above (embedded newline in a secret?)' >&2; exit 1; }\n\
             docker load < hexagen-web.tar.gz\n\
             docker image inspect hexagen-monaco-web:prod >/dev/null\n\
             docker compose -f docker-compose.prod.yml up -d --force-recreate --wait --wait-timeout 90\n\

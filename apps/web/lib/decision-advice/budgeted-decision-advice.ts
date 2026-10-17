@@ -1,0 +1,133 @@
+import { checkBudget } from "@hexagen/agentic-interaction";
+import type {
+  DecisionAdvicePort,
+  DecisionAdviceRequest,
+  DecisionAdviceResult,
+} from "@hexagen/agentic-interaction";
+
+/**
+ * Budgeted decision advice (Jev J5a1): a {@link DecisionAdvicePort} wrapper
+ * that refuses a call BEFORE it is made when either invariant-6 cap is
+ * exhausted (docs/planning/2026-10-16-jev-decision-advice.md):
+ *
+ * - the per-generation call count (`JEV_MAX_CALLS_PER_GENERATION`, default 20,
+ *   parsed in wire.server);
+ * - the daily cost ceiling (`JEV_DAILY_COST_CEILING_USD` in micro-USD), read
+ *   from the DURABLE receipts store since midnight UTC, so a redeploy does not
+ *   reset it.
+ *
+ * Concurrency: the web app is a single process (ADR-0064/0065), so one
+ * module-level in-process reservation total, serialised by one async mutex (a
+ * simple promise chain), covers every in-flight call: the check-and-reserve
+ * adds this call's maximum cost before dispatch and settles it after the
+ * call. Two concurrent asks therefore cannot both pass the last slot under
+ * the ceiling. If a second instance is ever added, the ceiling becomes
+ * best-effort, overshooting by at most one call per instance (runbook).
+ *
+ * Per-generation state: the composition root constructs one wrapper per
+ * generation run, so the call count is instance state and resets per
+ * generation; the reservation total and the mutex are module state and
+ * survive across generations.
+ *
+ * Fail closed (invariant 4): a refused check — or ANY error from the spend
+ * store, because an unreadable ledger must read as "ceiling unknown" —
+ * resolves as `unknown/budget`, never calls the inner port, and today's
+ * behaviour stands.
+ */
+
+/** The invariant-6 ceiling read; `DecisionReceiptsStore` satisfies this. */
+export interface DecisionSpendStore {
+  /** Sum of `decision_calls.cost_micro_usd` since midnight UTC of `now`. */
+  spentSinceUtcMidnight(now: number): Promise<number>;
+}
+
+export interface BudgetedDecisionAdviceOptions {
+  /** The wrapped port; called only when the budget check passes. */
+  readonly port: DecisionAdvicePort;
+  /** Durable spend read for the daily ceiling (the platform receipts store). */
+  readonly store: DecisionSpendStore;
+  /** `JEV_MAX_CALLS_PER_GENERATION` (default 20, parsed in wire.server). */
+  readonly maxCalls: number;
+  /** `JEV_DAILY_COST_CEILING_USD` in micro-USD (default 500_000 upstream). */
+  readonly ceilingMicroUsd: number;
+  /** This call's maximum possible cost in micro-USD; default 1000. */
+  readonly callMaxMicroUsd?: number;
+}
+
+/** Measured Jev calls cost $0.00002–0.00003; 1000 µUSD is a generous maximum. */
+const DEFAULT_CALL_MAX_MICRO_USD = 1000;
+
+// Module-level in-process reservation state (see the header): the web app is
+// one process, so these two module bindings are the process-wide ledger.
+let reservedTotalMicroUsd = 0;
+let mutexTail: Promise<unknown> = Promise.resolve();
+
+/**
+ * Run `critical` after every previously queued one — a simple promise-chain
+ * mutex. The tail swallows rejections so a failed section cannot wedge the
+ * chain; `critical` itself never rejects (every failure path returns).
+ */
+function runSerialized<T>(critical: () => Promise<T>): Promise<T> {
+  const result = mutexTail.then(critical);
+  mutexTail = result.then(
+    () => undefined,
+    () => undefined,
+  );
+  return result;
+}
+
+export function createBudgetedDecisionAdvice(
+  options: BudgetedDecisionAdviceOptions,
+): DecisionAdvicePort {
+  const callMaxMicroUsd = options.callMaxMicroUsd ?? DEFAULT_CALL_MAX_MICRO_USD;
+  // Per-generation (per-instance): one wrapper is built per generation run.
+  let callsThisGeneration = 0;
+
+  return {
+    async ask(request: DecisionAdviceRequest): Promise<DecisionAdviceResult> {
+      const now = Date.now();
+      // Check-and-reserve under the one mutex: the durable read, the pure
+      // checkBudget rule and the reservation update are one atomic section.
+      const reserved = await runSerialized(async (): Promise<boolean> => {
+        let spentTodayMicroUsd: number;
+        try {
+          spentTodayMicroUsd = await options.store.spentSinceUtcMidnight(now);
+        } catch {
+          return false;
+        }
+        const check = checkBudget({
+          callsThisGeneration,
+          maxCalls: options.maxCalls,
+          spentTodayMicroUsd,
+          reservedMicroUsd: reservedTotalMicroUsd,
+          ceilingMicroUsd: options.ceilingMicroUsd,
+          callMaxMicroUsd,
+        });
+        if (!check.allowed) return false;
+        callsThisGeneration += 1;
+        reservedTotalMicroUsd += callMaxMicroUsd;
+        return true;
+      });
+
+      if (!reserved) {
+        // Invariant 4: a refused budget is "no advice"; the inner port is
+        // never called and today's behaviour stands.
+        return { status: "unknown", reason: "budget" };
+      }
+
+      try {
+        return await options.port.ask(request);
+      } catch {
+        // The port's own contract: never throw for an expected failure. The
+        // wrapper keeps that promise even for a misbehaving inner port.
+        return { status: "unknown", reason: "error" };
+      } finally {
+        // Settle the reservation: the call is no longer in flight, and its
+        // actual cost is the durable row's business (the receipt sink), read
+        // by the next ask. Synchronous, so it cannot interleave with another
+        // section's await points.
+        reservedTotalMicroUsd -= callMaxMicroUsd;
+      }
+    },
+  };
+}
