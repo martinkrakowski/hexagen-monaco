@@ -377,6 +377,8 @@ describe("context-type advice (U-A, lane J2)", () => {
       {
         decisionAdvice: port,
         contextTypeMode: "primary",
+        // Every advised answer is applied, so ctx.type does change.
+        minConfidence: 0,
         receiptSink: (receipt) => receipts.push(receipt),
         newGenerationId: () => FIXED_GENERATION_ID,
       },
