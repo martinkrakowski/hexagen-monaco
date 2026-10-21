@@ -3,8 +3,8 @@
 `yarn deploy:staging` builds the web app image from the tracked files at `HEAD`,
 pushes it to Harbor, and updates `deployment/hexagen-web` in namespace
 `webapps`, served at `https://hexagen.midnight.lan`. It is separate from the
-production deploy (the manually started `deploy.yml` workflow), which it never
-calls.
+production deploy (Flux from martinkrakowski/platform), which it never
+touches.
 
 ## What the script does
 
