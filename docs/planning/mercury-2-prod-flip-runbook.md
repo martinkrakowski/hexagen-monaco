@@ -1,7 +1,8 @@
 # Mercury-2 Prod Flip Runbook
 
-**Status:** Active runbook. Every mutating command below is gated on explicit
-operator sign-off — nothing here is run autonomously.
+**Status:** Archived (2026-10-21). It describes the retired droplet deployment: production
+now runs on the OCI k3s cluster, deployed by Flux from `martinkrakowski/platform`. Do not run
+its `deploy.yml` or `docker-compose.prod.yml` steps; both files were removed.
 **Date:** 2026-06-10
 **Parent:** [mercury-2-swap-investigation.md](./mercury-2-swap-investigation.md)
 (evidence + decisions). Prereq PRs: #293–#300 (provider/cascade arc), #301

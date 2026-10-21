@@ -1,7 +1,8 @@
 # Jev Decision-Advice Runbook
 
-**Status:** Active runbook. Every mutating command below is gated on explicit
-operator sign-off — nothing here is run autonomously.
+**Status:** Archived (2026-10-21). It describes the retired droplet deployment: production
+now runs on the OCI k3s cluster, deployed by Flux from `martinkrakowski/platform`. Do not run
+its `deploy.yml` or `docker-compose.prod.yml` steps; both files were removed.
 **Date:** 2026-10-17
 **Parent:** [2026-10-16-jev-decision-advice.md](./2026-10-16-jev-decision-advice.md)
 (the plan: invariants, uses, lanes). Follows the structure of the
