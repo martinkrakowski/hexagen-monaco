@@ -1,0 +1,107 @@
+# Build, scan, sign and publish the hexagen-web image (platform templates/build-image.yml,
+# single-image form). The file name is part of the signing identity Kyverno accepts.
+# - Only main publishes; its images deploy to Kubernetes (amd64 staging, arm64 production).
+# - Pull requests build both platforms and scan, with read-only permissions: no push, no signature.
+# - Runs on solstice's ephemeral runners: a fresh container per job, deleted afterwards.
+name: build-image
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: build-image-${{ github.ref }}
+  # Never cancel main: a cancel between push and sign would leave an unsigned image in GHCR.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+defaults:
+  run:
+    shell: bash
+env:
+  IMAGE: ghcr.io/martinkrakowski/hexagen-web
+  CONTEXT: .
+  DOCKERFILE: apps/web/Dockerfile
+  # The three public build args, as deploy.yml computes them; passed quoted from env, never inlined.
+  LLM_AVAILABLE: ${{ secrets.WEB_LLM_API_KEY != '' || secrets.LLM_API_KEY != '' }}
+  LLM_MODEL: ${{ secrets.LLM_MODEL }}
+  FREE_TIER_MODEL: ${{ secrets.NEXT_PUBLIC_FREE_TIER_MODEL }}
+jobs:
+  check:
+    if: github.event_name == 'pull_request'
+    runs-on: [self-hosted, solstice, builder]
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build both platforms (no push)
+        run: |
+          docker buildx build --platform linux/amd64,linux/arm64 \
+            --build-arg NEXT_PUBLIC_LLM_AVAILABLE="$LLM_AVAILABLE" \
+            --build-arg NEXT_PUBLIC_LLM_MODEL="$LLM_MODEL" \
+            --build-arg NEXT_PUBLIC_FREE_TIER_MODEL="$FREE_TIER_MODEL" \
+            -f "$DOCKERFILE" "$CONTEXT"
+      - name: Scan the amd64 image
+        run: |
+          docker buildx build --platform linux/amd64 --load -t "scan-$GITHUB_RUN_ID" \
+            --build-arg NEXT_PUBLIC_LLM_AVAILABLE="$LLM_AVAILABLE" \
+            --build-arg NEXT_PUBLIC_LLM_MODEL="$LLM_MODEL" \
+            --build-arg NEXT_PUBLIC_FREE_TIER_MODEL="$FREE_TIER_MODEL" \
+            -f "$DOCKERFILE" "$CONTEXT"
+          trivy image --exit-code 1 --severity CRITICAL --ignore-unfixed --no-progress "scan-$GITHUB_RUN_ID"
+      - name: Clean up
+        if: always()
+        run: |
+          docker image rm "scan-$GITHUB_RUN_ID" 2>/dev/null || true
+          docker builder prune -af --filter until=24h >/dev/null 2>&1 || true
+
+  publish:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, solstice, builder]
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Keep the registry login inside this job's temp directory
+        run: echo "DOCKER_CONFIG=$RUNNER_TEMP/docker" >> "$GITHUB_ENV"
+      - name: Log in to GHCR with this job's own token
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: printf '%s' "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+      - name: Build and push both platforms
+        run: |
+          docker buildx build --platform linux/amd64,linux/arm64 --push --provenance=mode=max \
+            --label "org.opencontainers.image.source=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
+            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+            --build-arg NEXT_PUBLIC_LLM_AVAILABLE="$LLM_AVAILABLE" \
+            --build-arg NEXT_PUBLIC_LLM_MODEL="$LLM_MODEL" \
+            --build-arg NEXT_PUBLIC_FREE_TIER_MODEL="$FREE_TIER_MODEL" \
+            -t "$IMAGE:sha-${GITHUB_SHA::12}" --metadata-file "$RUNNER_TEMP/meta.json" \
+            -f "$DOCKERFILE" "$CONTEXT"
+          echo "DIGEST=$(jq -r '."containerimage.digest"' "$RUNNER_TEMP/meta.json")" >> "$GITHUB_ENV"
+      - name: Scan the pushed image, both platforms
+        run: |
+          for p in linux/amd64 linux/arm64; do
+            trivy image --platform "$p" --exit-code 1 --severity CRITICAL --ignore-unfixed --no-progress "$IMAGE@$DIGEST"
+          done
+      - name: SBOM, signature and SBOM attestation (keyless, this workflow's identity)
+        run: |
+          syft "$IMAGE@$DIGEST" -o spdx-json > "$RUNNER_TEMP/sbom.spdx.json"
+          # Classic signature format until Kyverno 1.19's verification of cosign 3 bundles is proved.
+          cosign sign --yes --new-bundle-format=false --use-signing-config=false "$IMAGE@$DIGEST"
+          cosign attest --yes --new-bundle-format=false --use-signing-config=false --type spdxjson \
+            --predicate "$RUNNER_TEMP/sbom.spdx.json" "$IMAGE@$DIGEST"
+      - name: Record the digest for the promotion pull request
+        run: |
+          echo "Promote with a platform pull request: \`$IMAGE@$DIGEST\`" >> "$GITHUB_STEP_SUMMARY"
+      - name: Log out and clean up
+        if: always()
+        run: |
+          docker logout ghcr.io >/dev/null 2>&1 || true
+          rm -rf "$DOCKER_CONFIG"
+          docker builder prune -af --filter until=24h >/dev/null 2>&1 || true

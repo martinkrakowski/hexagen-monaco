@@ -93,6 +93,11 @@ const NOT_A_PACKAGE_BIN = new Set([
   "docker",
   "git",
   "python3",
+  // Image supply-chain tools on the solstice builder runner, pinned by checksum there
+  // (fleet scripts/solstice-builder.sh); build-image.yml calls them like docker.
+  "trivy",
+  "syft",
+  "cosign",
   // Shell grammar — not binaries. Needed once this guard reads .sh / workflow
   // `run:` lines rather than only package.json script strings.
   "if",

@@ -1,5 +1,5 @@
 # ---------- 1️⃣  Build stage ----------
-FROM node:20-alpine AS base
+FROM node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293 AS base
 
 # Enable corepack and set Yarn version
 RUN corepack enable && corepack prepare yarn@4.12.0 --activate
@@ -89,14 +89,15 @@ RUN cd apps/web && \
     fi
 
 # ---------- 2️⃣  Runtime stage ----------
-FROM node:20-alpine AS runner
+FROM node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293 AS runner
 WORKDIR /app
 
 # Enable corepack for Yarn 4
 RUN corepack enable && corepack prepare yarn@4.12.0 --activate
 # The runtime runs `node apps/web/server.js` only. npm (and the tar it bundles, CVE-2026-59873)
 # is never called here, so it does not ship.
-RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx \
+ && ! command -v npm && ! command -v npx
 
 # Only need production deps + the built output
 RUN addgroup -g 1001 -S nodejs
