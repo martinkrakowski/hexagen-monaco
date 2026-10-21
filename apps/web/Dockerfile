@@ -96,7 +96,8 @@ WORKDIR /app
 RUN corepack enable && corepack prepare yarn@4.12.0 --activate
 # The runtime runs `node apps/web/server.js` only. npm (and the tar it bundles, CVE-2026-59873)
 # is never called here, so it does not ship.
-RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx \
+ && ! command -v npm && ! command -v npx
 
 # Only need production deps + the built output
 RUN addgroup -g 1001 -S nodejs
