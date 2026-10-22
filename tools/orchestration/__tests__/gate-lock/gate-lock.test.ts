@@ -969,6 +969,85 @@ describe("the gate lock: run <lane> -- <command>", () => {
   }, 30_000);
 
   /**
+   * A second signal landing inside run_cleanup itself — not in forward_signal —
+   * must not kill the shell before it releases the lock. The park file makes
+   * that deterministic: run_cleanup parks in its test seam until the file is
+   * removed, so the second signal arrives while it is parked there.
+   */
+  async function cleanupSignalRun(
+    shell: string,
+    signal: "SIGINT" | "SIGTERM",
+    expectedStatus: number,
+  ): Promise<void> {
+    const dir = scratch();
+    const park = join(dir, "cleanup.park");
+    // The park file exists from the start: run_cleanup pauses in its seam
+    // while it exists, and the test removes it to let the cleanup finish.
+    writeFileSync(park, "");
+    const commandPidFile = join(dir, "command.pid");
+    const { child, done, stdout } = startLockIn(
+      dir,
+      [
+        "run",
+        "lane-a",
+        "--",
+        "sh",
+        "-c",
+        `exec >/dev/null 2>&1; printf '%s\\n' "$$" > "${commandPidFile}"; exec sleep 30 >/dev/null 2>&1`,
+      ],
+      {
+        HEXAGEN_GATE_HEARTBEAT_SECONDS: "1",
+        GATE_LOCK_TEST_CLEANUP_PARK: park,
+      },
+      shell,
+    );
+    await waitForContent(commandPidFile);
+    await waitForHeartbeatLine(stdout);
+    expect(lockFile(dir, "pid").trim()).toBe(String(child.pid));
+
+    // First signal: starts the cleanup, which parks in the seam.
+    process.kill(Number(lockFile(dir, "pid").trim()), signal);
+    await waitForFile(`${park}.entered`);
+
+    // Second signal: lands inside run_cleanup, deterministically. It must be
+    // ignored — an unignored one would kill the shell mid-cleanup, before the
+    // release, and the caller would see a signal death instead of status
+    // 130/143 with the lock left on disk.
+    // Nothing may skip it: cleanup must still be parked (the shell alive, the
+    // park file present) and the signal must be delivered, or the test would
+    // pass on the first signal alone.
+    expect(child.exitCode).toBeNull();
+    expect(existsSync(park)).toBe(true);
+    process.kill(child.pid as number, signal);
+
+    // Release the park: cleanup proceeds past the seam.
+    rmSync(park);
+
+    const result = await done;
+    expect({ shell, signal, status: result.status }).toEqual({
+      shell,
+      signal,
+      status: expectedStatus,
+    });
+    expect(result.stdout).toContain("released by lane-a");
+    expect(existsSync(lockDir(dir))).toBe(false);
+    await waitForDead(heartbeatPidOf(result.stdout));
+    await waitForDead(Number(readFileSync(commandPidFile, "utf8").trim()));
+  }
+
+  test("INT during cleanup still exits 130, releases the lock, and reaps the heartbeat", async () => {
+    for (const shell of SIGNAL_SHELLS) {
+      await cleanupSignalRun(shell, "SIGINT", 130);
+    }
+  }, 30_000);
+
+  test("TERM during cleanup still exits 143, releases the lock, and reaps the heartbeat", async () => {
+    for (const shell of SIGNAL_SHELLS) {
+      await cleanupSignalRun(shell, "SIGTERM", 143);
+    }
+  }, 30_000);
+
+  /**
    * The same two signals again against a command that is still ALIVE when the
    * second one lands, which is where the two shells parted company: bash
    * deferred the second TERM and re-entered forward_signal at exit, after the

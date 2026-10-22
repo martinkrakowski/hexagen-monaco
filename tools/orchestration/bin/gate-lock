@@ -727,7 +727,18 @@ forward_signal() {
 # nobody can prove was dropped is not a run that succeeded.
 run_cleanup() {
   status=$?
-  trap - INT TERM EXIT
+  # A second signal during cleanup must not kill the shell before the lock is
+  # released: INT and TERM stay ignored for the rest of the
+  # cleanup; EXIT is cleared so the final `exit` does not re-enter.
+  trap - EXIT
+  trap '' INT TERM
+  # Test seam (gate-lock.test.ts): park here until the test removes the
+  # file, at most 10 s.
+  if [ -n "${GATE_LOCK_TEST_CLEANUP_PARK:-}" ]; then
+    : > "$GATE_LOCK_TEST_CLEANUP_PARK.entered"
+    n=0
+    while [ -e "$GATE_LOCK_TEST_CLEANUP_PARK" ] && [ "$n" -lt 100 ]; do sleep 0.1; n=$((n + 1)); done
+  fi
   if [ -n "$run_hb_pid" ]; then
     # Kill the heartbeat loop and reap it, so nothing outlives `run` by even
     # a moment. Its stdio was detached when it started, so the `sleep` it is
