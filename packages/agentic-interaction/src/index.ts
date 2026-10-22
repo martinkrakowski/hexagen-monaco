@@ -225,6 +225,11 @@ export {
 } from "./infrastructure/adapters/llm-provider-selector.adapter";
 export { EnvironmentSecretVaultAdapter } from "./infrastructure/adapters/environment-secret-vault.adapter";
 export { StaticProviderCatalogAdapter } from "./infrastructure/adapters/static-provider-catalog.adapter";
+export {
+  withLlmSpan,
+  recordLlmUsage,
+  type LlmUsage,
+} from "./infrastructure/telemetry/llm-span";
 
 // Manifest inspection helpers (from domain)
 export { generateSuggestions, detectWarnings } from "./domain/index";
