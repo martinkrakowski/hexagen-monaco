@@ -46,6 +46,7 @@ export async function* streamStructuredRequest(
     },
   });
   const usageHolder: UsageHolder = {};
+  let sawFailure = false;
   try {
     for await (const result of streamStructuredRequestInner(
       config,
@@ -53,9 +54,21 @@ export async function* streamStructuredRequest(
       request,
       usageHolder,
     )) {
+      if (!result.success) {
+        // The inner generator signals provider failure by yielding an
+        // error value, not by throwing — mark the span ERROR here, with
+        // the error's class name only.
+        sawFailure = true;
+        span.setStatus({
+          code: SpanStatusCode.ERROR,
+          message: result.error instanceof Error ? result.error.name : "Error",
+        });
+      }
       yield result;
     }
-    span.setStatus({ code: SpanStatusCode.OK });
+    if (!sawFailure) {
+      span.setStatus({ code: SpanStatusCode.OK });
+    }
   } catch (error) {
     span.setStatus({
       code: SpanStatusCode.ERROR,

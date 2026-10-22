@@ -28,6 +28,9 @@ export interface LlmUsage {
  * - `openinference.span.kind` is always `LLM`; remaining attributes come from
  *   `attrs` (model, provider, system, operation name, …).
  * - On success the span ends with status OK.
+ * - When `failed` is given, a resolved value it reports as a failure marks
+ *   the span ERROR — call sites whose `fn` returns a `Result` use this so
+ *   failures returned as values are not recorded as OK.
  * - On any throw the span ends with status ERROR and `message` set to the
  *   error's class name only (never its message body — provider payloads must
  *   not leak into telemetry). The error is rethrown.
@@ -40,6 +43,7 @@ export function withLlmSpan<T>(
   name: string,
   attrs: Attributes,
   fn: (span: Span) => T | Promise<T>,
+  failed?: (result: T) => { name: string } | undefined,
 ): Promise<T> {
   const tracer = trace.getTracer("hexagen");
   return tracer.startActiveSpan(
@@ -53,7 +57,17 @@ export function withLlmSpan<T>(
     async (span) => {
       try {
         const result = await fn(span);
-        span.setStatus({ code: SpanStatusCode.OK });
+        const failure = failed?.(result);
+        if (failure) {
+          // A failure returned as a value (a Result error side) marks the
+          // span ERROR; the message is the failure's class name only.
+          span.setStatus({
+            code: SpanStatusCode.ERROR,
+            message: typeof failure.name === "string" ? failure.name : "Error",
+          });
+        } else {
+          span.setStatus({ code: SpanStatusCode.OK });
+        }
         return result;
       } catch (error) {
         span.setStatus({

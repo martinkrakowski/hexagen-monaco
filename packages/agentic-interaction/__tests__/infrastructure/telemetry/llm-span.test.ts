@@ -5,6 +5,7 @@ import {
   InMemorySpanExporter,
   SimpleSpanProcessor,
 } from "@opentelemetry/sdk-trace-base";
+import { err, ok } from "@hexagen/shared";
 import {
   recordLlmUsage,
   withLlmSpan,
@@ -78,6 +79,57 @@ describe("llm-span helper", () => {
     expect(span.endTime).toBeDefined();
     // The provider body must never leak into the span.
     expect(span.status.message).not.toContain("tokens exceeded");
+  });
+
+  it("marks the span ERROR (class name only) when failed() reports a returned failure", async () => {
+    await withLlmSpan(
+      "llm.chat",
+      {},
+      async () => err(new RangeError("quota exhausted")),
+      (result) =>
+        result.success
+          ? undefined
+          : result.error instanceof Error
+            ? result.error
+            : { name: "Error" },
+    );
+
+    const [span] = exporter.getFinishedSpans();
+    expect(span).toBeDefined();
+    expect(span.status.code).toBe(SpanStatusCode.ERROR);
+    expect(span.status.message).toBe("RangeError");
+    // The message body must never leak into the span status.
+    expect(span.status.message).not.toContain("quota exhausted");
+  });
+
+  it("stays OK when failed() is given but reports the value as a success", async () => {
+    await withLlmSpan(
+      "llm.chat",
+      {},
+      async () => ok("fine"),
+      (result) =>
+        result.success
+          ? undefined
+          : result.error instanceof Error
+            ? result.error
+            : { name: "Error" },
+    );
+
+    const [span] = exporter.getFinishedSpans();
+    expect(span).toBeDefined();
+    expect(span.status.code).toBe(SpanStatusCode.OK);
+  });
+
+  it("leaves a resolved failure value OK when no failed callback is given", async () => {
+    // Unchanged behaviour: without the callback the helper cannot know a
+    // resolved value is a failure, so the span stays OK.
+    await withLlmSpan("llm.chat", {}, async () =>
+      err(new RangeError("quota exhausted")),
+    );
+
+    const [span] = exporter.getFinishedSpans();
+    expect(span).toBeDefined();
+    expect(span.status.code).toBe(SpanStatusCode.OK);
   });
 
   it("records token counts when present and skips missing fields", async () => {

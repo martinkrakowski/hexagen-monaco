@@ -81,6 +81,14 @@ export class CloudLLMPipelineAdapter implements SendStructuredRequestPort {
           error: lastError ?? new Error("All cloud LLM providers failed"),
         };
       },
+      // A failure returned as a value (every provider failed, or the single
+      // response was an error Result) must mark the span ERROR, not OK.
+      (result) =>
+        result.success
+          ? undefined
+          : result.error instanceof Error
+            ? result.error
+            : { name: "Error" },
     );
   }
 

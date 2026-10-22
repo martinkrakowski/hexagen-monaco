@@ -6,7 +6,7 @@ import type {
 import { ok, err } from "@hexagen/shared";
 import type { Attributes } from "@opentelemetry/api";
 import { SpanStatusCode, trace } from "@opentelemetry/api";
-import { withLlmSpan } from "../telemetry/llm-span";
+import { LLM_SPAN_KIND, withLlmSpan } from "../telemetry/llm-span";
 
 export class ServerLLMAdapter implements LLMProviderPort {
   constructor(
@@ -31,6 +31,9 @@ export class ServerLLMAdapter implements LLMProviderPort {
   private llmAttrs(operation: string, model: string): Attributes {
     const system = this.systemLabel();
     return {
+      // Every span built from these attributes is an LLM span — including
+      // the manually-managed streaming span, which has no helper to add it.
+      "openinference.span.kind": LLM_SPAN_KIND,
       "llm.provider": system,
       "llm.system": system,
       "llm.model_name": model,
@@ -45,33 +48,45 @@ export class ServerLLMAdapter implements LLMProviderPort {
   ): Promise<import("@hexagen/shared").Result<LLMCompletionResponse>> {
     const model = request.model || this.defaultModel;
 
-    return withLlmSpan("llm.chat", this.llmAttrs("chat", model), async () => {
-      try {
-        const response = await fetch(`${this.baseUrl}/chat/completions`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${this.apiKey}`,
-          },
-          body: JSON.stringify({
-            model,
-            messages: request.messages,
-            temperature: request.temperature ?? 0.7,
-            max_tokens: request.maxTokens ?? 2048,
-          }),
-        });
+    return withLlmSpan(
+      "llm.chat",
+      this.llmAttrs("chat", model),
+      async () => {
+        try {
+          const response = await fetch(`${this.baseUrl}/chat/completions`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${this.apiKey}`,
+            },
+            body: JSON.stringify({
+              model,
+              messages: request.messages,
+              temperature: request.temperature ?? 0.7,
+              max_tokens: request.maxTokens ?? 2048,
+            }),
+          });
 
-        if (!response.ok) {
-          const errorText = await response.text();
-          return err(new Error(`LLM API error: ${response.status} ${errorText}`));
+          if (!response.ok) {
+            const errorText = await response.text();
+            return err(new Error(`LLM API error: ${response.status} ${errorText}`));
+          }
+
+          const data = (await response.json()) as LLMCompletionResponse;
+          return ok(data);
+        } catch (error) {
+          return err(error instanceof Error ? error : new Error(String(error)));
         }
-
-        const data = (await response.json()) as LLMCompletionResponse;
-        return ok(data);
-      } catch (error) {
-        return err(error instanceof Error ? error : new Error(String(error)));
-      }
-    });
+      },
+      // A provider failure returned as an error Result must mark the span
+      // ERROR, not OK.
+      (result) =>
+        result.success
+          ? undefined
+          : result.error instanceof Error
+            ? result.error
+            : { name: "Error" },
+    );
   }
 
   async *streamComplete(
@@ -100,12 +115,24 @@ export class ServerLLMAdapter implements LLMProviderPort {
 
       if (!response.ok) {
         const errorText = await response.text();
-        yield err(new Error(`LLM API error: ${response.status} ${errorText}`));
+        const error = new Error(`LLM API error: ${response.status} ${errorText}`);
+        // The failure is returned as a value, not thrown — mark the span
+        // ERROR here, with the error's class name only.
+        span.setStatus({
+          code: SpanStatusCode.ERROR,
+          message: error.name,
+        });
+        yield err(error);
         return;
       }
 
       if (!response.body) {
-        yield err(new Error("No response body"));
+        const error = new Error("No response body");
+        span.setStatus({
+          code: SpanStatusCode.ERROR,
+          message: error.name,
+        });
+        yield err(error);
         return;
       }
 

@@ -121,4 +121,48 @@ describe("cloud-llm-streaming telemetry", () => {
     expect(span.status.code).toBe(SpanStatusCode.OK);
     expect(span.endTime).toBeDefined();
   });
+
+  it("marks the span ERROR (class name only) when the stream yields a failure value", async () => {
+    const fetchMock = (async () => {
+      return {
+        ok: false,
+        status: 500,
+        text: async () => "upstream exploded",
+      } as Response;
+    }) as unknown as typeof fetch;
+
+    const config: CloudLLMPipelineAdapterConfig = {
+      fallbackChain: testChain,
+      secretVault: envVault(),
+      fetchFn: fetchMock,
+    };
+
+    const outcomes: boolean[] = [];
+    for await (const r of streamStructuredRequest(
+      config,
+      fetchMock,
+      makeRequest(),
+    )) {
+      outcomes.push(r.success);
+    }
+    expect(outcomes).toEqual([false]);
+
+    const spans = exporter.getFinishedSpans();
+    expect(spans).toHaveLength(1);
+    const span = spans[0];
+    expect(span.name).toBe("llm.chat.stream");
+    expect(span.attributes["openinference.span.kind"]).toBe("LLM");
+    expect(span.status.code).toBe(SpanStatusCode.ERROR);
+    // The error's class name only — never its message body.
+    expect(span.status.message).toBe("Error");
+    // No attribute or status carries the request's message text or the
+    // provider's response body.
+    for (const [, value] of Object.entries(span.attributes)) {
+      const text = String(value);
+      expect(text).not.toContain("stream content");
+      expect(text).not.toContain("upstream exploded");
+    }
+    expect(String(span.status.message)).not.toContain("stream content");
+    expect(String(span.status.message)).not.toContain("upstream exploded");
+  });
 });

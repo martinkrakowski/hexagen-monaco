@@ -76,6 +76,7 @@ describe("CloudLLMPipelineAdapter telemetry", () => {
 
   afterEach(() => {
     delete process.env.TEST_OPENAI_API_KEY;
+    delete process.env.TEST_MISTRAL_API_KEY;
     trace.disable();
   });
 
@@ -140,5 +141,65 @@ describe("CloudLLMPipelineAdapter telemetry", () => {
       expect(text).not.toContain("You are an assistant.");
       expect(text).not.toContain("Test prompt");
     }
+  });
+
+  it("marks the span ERROR with the error class name when every provider fails", async () => {
+    let calls = 0;
+    const fetchMock = (async () => {
+      calls++;
+      return {
+        ok: false,
+        status: 500,
+        text: async () => "upstream exploded",
+        json: async () => ({}),
+      } as Response;
+    }) as unknown as typeof fetch;
+
+    process.env.TEST_MISTRAL_API_KEY = "sk-test-key-mistral";
+    const failingChain: ProviderFallbackChain = {
+      primary: testChain.primary,
+      fallbacks: [
+        {
+          providerId: "mistral",
+          baseUrl: "https://api.mistral.ai/v1",
+          model: "mistral-large-latest",
+          apiKeyEnvVar: "TEST_MISTRAL_API_KEY",
+          temperature: 0.4,
+          maxTokens: 4096,
+          timeoutMs: 60000,
+        },
+      ],
+    };
+
+    const config: CloudLLMPipelineAdapterConfig = {
+      fallbackChain: failingChain,
+      secretVault: envVault(),
+      fetchFn: fetchMock,
+    };
+
+    const result: Result<unknown> = await new CloudLLMPipelineAdapter(
+      config,
+    ).sendRequest(makeRequest());
+    expect(result.success).toBe(false);
+    expect(calls).toBe(2);
+
+    const spans = exporter.getFinishedSpans();
+    expect(spans).toHaveLength(1);
+    const span = spans[0];
+    expect(span.name).toBe("llm.chat");
+    expect(span.status.code).toBe(SpanStatusCode.ERROR);
+    // The error's class name only — never its message body.
+    expect(span.status.message).toBe("Error");
+    // No attribute or status carries the request's message text or the
+    // provider's response body.
+    for (const [, value] of Object.entries(span.attributes)) {
+      const text = String(value);
+      expect(text).not.toContain("You are an assistant.");
+      expect(text).not.toContain("Test prompt");
+      expect(text).not.toContain("upstream exploded");
+    }
+    expect(String(span.status.message)).not.toContain("You are an assistant.");
+    expect(String(span.status.message)).not.toContain("Test prompt");
+    expect(String(span.status.message)).not.toContain("upstream exploded");
   });
 });
