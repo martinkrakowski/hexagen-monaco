@@ -9,6 +9,7 @@ import type {
   DecisionAdviceResult,
   DecisionAnswer,
   DecisionReceipt,
+  DecisionUnknownReason,
 } from "../../domain/decision-advice";
 import type { SecretVaultPort } from "../../domain/provider-config";
 import { withLlmSpan } from "../telemetry/llm-span";
@@ -33,6 +34,38 @@ const JEV_MODEL = "typesafe/jev-1.14";
 const JEV_API_KEY_NAME = "JEV_API_KEY";
 const DEFAULT_TIMEOUT_MS = 3000;
 const BODY_CAP_BYTES = 64 * 1024; // 64 KiB
+
+/**
+ * Fixed class-like tokens for `unknown` receipt reasons, so the
+ * `jev.decision` span is marked ERROR with a closed-set token only — never
+ * the receipt's message, the state or any question text.
+ */
+const RECEIPT_ERROR_TOKENS: Record<DecisionUnknownReason, string> = {
+  disabled: "JevDisabled",
+  refused: "JevRefused",
+  budget: "JevBudget",
+  timeout: "JevTimeout",
+  http: "JevHttp",
+  shape: "JevShape",
+  tie: "JevTie",
+  error: "JevError",
+};
+
+/**
+ * `withLlmSpan`'s `failed` callback: an `unknown` receipt fails the span.
+ * Only a receipt counts — `unknown` without one (disabled, error) made no
+ * call and carries nothing to report, so those spans stay OK.
+ */
+function unknownReceiptToken(
+  result: DecisionAdviceResult,
+): { name: string } | undefined {
+  if (result.status !== "unknown") return undefined;
+  const receiptStatus = result.receipt?.status;
+  if (receiptStatus === undefined || receiptStatus === "advised") {
+    return undefined;
+  }
+  return { name: RECEIPT_ERROR_TOKENS[receiptStatus] };
+}
 
 export interface JevDecisionAdapterOptions {
   /** Secrets vault; the key is looked up per call as `JEV_API_KEY`. */
@@ -167,6 +200,7 @@ export class JevDecisionAdapter implements DecisionAdvicePort {
           clearTimeout(timer);
         }
       },
+      unknownReceiptToken,
     );
   }
 

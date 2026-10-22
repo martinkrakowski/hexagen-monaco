@@ -7,6 +7,7 @@ import { resourceFromAttributes } from "@opentelemetry/resources";
 import { BatchSpanProcessor } from "@opentelemetry/sdk-trace-base";
 import { NodeTracerProvider } from "@opentelemetry/sdk-trace-node";
 import { ATTR_SERVICE_NAME } from "@opentelemetry/semantic-conventions";
+import { installSigtermFlush } from "./sigterm-flush";
 
 /**
  * Registers a NodeTracerProvider exporting OTLP traces to
@@ -37,8 +38,9 @@ export function registerOtlpTelemetry(): void {
 
   provider.register();
 
-  // Flush pending spans on shutdown so the last request's trace is exported.
-  process.once("SIGTERM", () => {
-    void provider.shutdown();
-  });
+  // Flush pending spans on shutdown so the last request's trace is
+  // exported. The handler itself keeps the exit semantics: registering a
+  // SIGTERM listener disables Node's default exit, so it exits 143 only
+  // when no other listener (e.g. Next.js's own) owns the process exit.
+  installSigtermFlush(process, () => provider.shutdown());
 }
