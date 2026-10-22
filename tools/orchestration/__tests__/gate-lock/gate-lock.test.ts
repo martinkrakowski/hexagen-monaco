@@ -1013,12 +1013,12 @@ describe("the gate lock: run <lane> -- <command>", () => {
     // ignored — an unignored one would kill the shell mid-cleanup, before the
     // release, and the caller would see a signal death instead of status
     // 130/143 with the lock left on disk.
-    try {
-      if (child.exitCode === null)
-        process.kill(Number(lockFile(dir, "pid").trim()), signal);
-    } catch {
-      // Already gone — nothing left to signal.
-    }
+    // Nothing may skip it: cleanup must still be parked (the shell alive, the
+    // park file present) and the signal must be delivered, or the test would
+    // pass on the first signal alone.
+    expect(child.exitCode).toBeNull();
+    expect(existsSync(park)).toBe(true);
+    process.kill(child.pid as number, signal);
 
     // Release the park: cleanup proceeds past the seam.
     rmSync(park);
