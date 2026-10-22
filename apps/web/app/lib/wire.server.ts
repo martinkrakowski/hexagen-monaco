@@ -563,8 +563,8 @@ export interface JevDecisionAdviceConfig {
 
 /**
  * A Jev numeric knob: unset OR blank falls back to the default, and so does a
- * malformed value — never NaN. The blank case matters: deploy.yml writes
- * unset vars as empty strings, and `Number("")` is 0, which would silently
+ * malformed value — never NaN. The blank case matters: a deploy can write
+ * unset vars as empty strings (the old droplet deploy.yml did), and `Number("")` is 0, which would silently
  * turn "unset" into a real (and wrong) cap.
  */
 function parseJevNumber(raw: string | undefined, fallback: number): number {

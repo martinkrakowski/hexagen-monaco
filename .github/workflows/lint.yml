@@ -358,8 +358,8 @@ jobs:
   # (`fromMonorepoRoot: () => ({ scanZip })`), so the one line that fails in
   # production never executes. monorepo-root.test.ts writes its own fixture
   # manifest, so it proves the WALK works and can never notice a missing tree.
-  # The only job that builds an image is deploy.yml, which is
-  # workflow_dispatch-only and ships rather than validates.
+  # The only other job that builds an image is build-image.yml, which
+  # publishes rather than validates.
   #
   # So this job asserts the packaged artifact, not the source: build standalone,
   # then run a real scan out of it and require collected findings. It fails on
@@ -457,7 +457,7 @@ jobs:
   # probe is the deploy healthcheck's contract (any HTTP status < 500 =
   # up-and-routing) against the same route, driven by
   # scripts/verify-container-scan.mjs. HOSTNAME=0.0.0.0 because Next
-  # standalone binds to $HOSTNAME (see deploy/docker-compose.prod.yml) and
+  # standalone binds to $HOSTNAME and
   # the probe here comes through the published port instead of exec.
   # Only what this job needs: the image build (GHA layer cache uses the
   # runner's runtime token, not GITHUB_TOKEN scopes) and docker. It never

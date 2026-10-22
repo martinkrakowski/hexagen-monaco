@@ -21,7 +21,7 @@ env:
   IMAGE: ghcr.io/martinkrakowski/hexagen-web
   CONTEXT: .
   DOCKERFILE: apps/web/Dockerfile
-  # The three public build args, as deploy.yml computes them; passed quoted from env, never inlined.
+  # The three public build args (formerly computed by the removed deploy.yml); passed quoted from env, never inlined.
   LLM_AVAILABLE: ${{ secrets.WEB_LLM_API_KEY != '' || secrets.LLM_API_KEY != '' }}
   LLM_MODEL: ${{ secrets.LLM_MODEL }}
   FREE_TIER_MODEL: ${{ secrets.NEXT_PUBLIC_FREE_TIER_MODEL }}

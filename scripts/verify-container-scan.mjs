@@ -14,8 +14,8 @@
  *   --make-fixture <dir>   write the throwaway project the scan runs against
  *                          (same shape as verify-standalone-scan.mjs)
  *   --wait <url>           poll until the app answers with ANY status < 500 —
- *                          the deploy healthcheck's exact liveness contract
- *                          (deploy/docker-compose.prod.yml): up-and-routing,
+ *                          the container healthcheck's liveness contract
+ *                          (any status below 500): up-and-routing,
  *                          not necessarily configured
  *   --assert <file>        read captured scan stdout, take the LAST JSON line
  *                          (the envelope contract from #577), and require the

@@ -42,44 +42,14 @@ The sequence is intentional: `@hexagen/sync` must regenerate barrel files and po
 
 ---
 
-## `deploy.yml` — Production Deployment
+## Production deployment (no workflow here)
 
-Manual trigger only (`workflow_dispatch`). Builds a Docker image on the Actions runner, ships it to the VPS via SCP, and hot-swaps the running container.
-
-**Why SCP instead of a registry?**
-
-A private registry adds infrastructure overhead (authentication, storage costs, network routing) that isn't justified at this scale. Building on the runner and transferring the tarball is simpler, auditable, and avoids the registry as a dependency in the deployment path.
-
-**Why `docker system prune -a -f --volumes`?**
-
-This runs _after_ the new container is confirmed up. It is intentional and safe for the following reasons:
-
-- The application is **stateless** — there are no database volumes or persistent data attached to any container.
-- The VPS has a constrained memory profile (~7GB RAM). Leaving previous image layers and stopped containers resident would cause OOM conditions on the next deploy.
-- Removing all unused layers maximises available swap for the running container.
-
-If a stateful service (database, cache) is ever added, this line must be updated to use named volume exemptions (`--filter "label!=preserve"`).
-
-**Runtime env / secret handling:**
-
-At deploy time the SSH step writes a multi-line `.env` heredoc to `/opt/hexagen-monaco/.env`, consumed by Docker Compose and never committed:
-
-```
-NEXTAUTH_URL=...        # canonical prod URL (hardcoded in the workflow env)
-NEXTAUTH_SECRET=...      # = AUTH_SECRET (NextAuth reads NEXTAUTH_SECRET)
-AUTH_SECRET=...          # kept for back-compat
-GITHUB_ID / GITHUB_SECRET  # GitHub OAuth App client id/secret
-LLM_API_KEY / LLM_BASE_URL / LLM_MODEL
-```
-
-Values are sourced from GitHub repository secrets and mapped into the runner via the step's `env:` block, then forwarded to the remote shell through the action's `envs:` list (without that mapping the forwarded values would be empty).
-
-Two naming details worth knowing:
-
-- **`NEXTAUTH_SECRET` vs `AUTH_SECRET`** — the app reads `NEXTAUTH_SECRET` (NextAuth default + `getToken()` in the push/export routes); the heredoc writes it from the existing `AUTH_SECRET` secret.
-- **`GH_OAUTH_ID` / `GH_OAUTH_SECRET`** — GitHub forbids repository secrets with a `GITHUB_` prefix, so the OAuth credentials are stored under these names and rewritten to `GITHUB_ID` / `GITHUB_SECRET` in the `.env`.
-
-> **Container caveat:** the `.env` only reaches the container if the VPS `docker-compose.yml` web service declares `env_file: [.env]` (or an explicit `environment:` block). A project-level `.env` is otherwise used only for `${VAR}` interpolation, not injected as container environment. See [`docs/planning/managed-deploy-compose.md`](../../docs/planning/managed-deploy-compose.md).
+Production runs on the OCI k3s cluster and is deployed by Flux from the
+`martinkrakowski/platform` repository (`apps/production/hexagen-web`).
+`build-image.yml` builds, signs and pushes the multi-arch image to GHCR; a
+platform pull request moves the pinned digest. Nothing in this repository
+reaches production. The old `deploy.yml` (SCP to the droplet) was removed on
+2026-10-21 after the cutover to OCI.
 
 ---
 
