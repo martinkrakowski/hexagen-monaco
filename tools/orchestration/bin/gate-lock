@@ -728,11 +728,11 @@ forward_signal() {
 run_cleanup() {
   status=$?
   # A second signal during cleanup must not kill the shell before the lock is
-  # released (issue #876): INT and TERM stay ignored for the rest of the
+  # released: INT and TERM stay ignored for the rest of the
   # cleanup; EXIT is cleared so the final `exit` does not re-enter.
   trap - EXIT
   trap '' INT TERM
-  # Test seam (gate-lock.test.ts, #876): park here until the test removes the
+  # Test seam (gate-lock.test.ts): park here until the test removes the
   # file, at most 10 s.
   if [ -n "${GATE_LOCK_TEST_CLEANUP_PARK:-}" ]; then
     : > "$GATE_LOCK_TEST_CLEANUP_PARK.entered"
