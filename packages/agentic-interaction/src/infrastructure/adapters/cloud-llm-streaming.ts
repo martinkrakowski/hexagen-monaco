@@ -8,8 +8,15 @@ import {
 } from "./cloud-llm-types";
 import { reasoningBodyFieldFor } from "./cloud-llm-reasoning";
 import { clampTemperatureFor } from "./cloud-llm-temperature";
+import { SpanStatusCode, trace } from "@opentelemetry/api";
+import { recordLlmUsage, type LlmUsage } from "../telemetry/llm-span";
 
 export { type CloudLLMPipelineAdapterConfig } from "./cloud-llm-types";
+
+/** Holder shared between the wrapper and the inner generator for usage chunks. */
+interface UsageHolder {
+  usage?: LlmUsage;
+}
 
 function getErrorStatus(error: Error): number | null {
   const match = error.message.match(/(\d{3})/);
@@ -24,6 +31,50 @@ export async function* streamStructuredRequest(
   config: CloudLLMPipelineAdapterConfig,
   fetchFn: typeof fetch,
   request: LLMRequest,
+): AsyncGenerator<Result<string>> {
+  const primary = config.fallbackChain.primary;
+  const model = request.preferredCloudModel ?? primary.model;
+  const span = trace.getTracer("hexagen").startSpan("llm.chat.stream", {
+    attributes: {
+      "openinference.span.kind": "LLM",
+      "llm.provider": primary.providerId,
+      "llm.system": primary.providerId,
+      "llm.model_name": model,
+      "gen_ai.system": primary.providerId,
+      "gen_ai.request.model": model,
+      "gen_ai.operation.name": "chat.stream",
+    },
+  });
+  const usageHolder: UsageHolder = {};
+  try {
+    for await (const result of streamStructuredRequestInner(
+      config,
+      fetchFn,
+      request,
+      usageHolder,
+    )) {
+      yield result;
+    }
+    span.setStatus({ code: SpanStatusCode.OK });
+  } catch (error) {
+    span.setStatus({
+      code: SpanStatusCode.ERROR,
+      message: error instanceof Error ? error.name : "Error",
+    });
+    throw error;
+  } finally {
+    if (usageHolder.usage) {
+      recordLlmUsage(span, usageHolder.usage);
+    }
+    span.end();
+  }
+}
+
+async function* streamStructuredRequestInner(
+  config: CloudLLMPipelineAdapterConfig,
+  fetchFn: typeof fetch,
+  request: LLMRequest,
+  usageHolder: UsageHolder,
 ): AsyncGenerator<Result<string>> {
   const providers = resolveFallbackChain(
     config.secretVault,
@@ -45,7 +96,12 @@ export async function* streamStructuredRequest(
     let hadSuccess = false;
     let providerErrored = false;
     try {
-      for await (const result of streamProvider(fetchFn, provider, request)) {
+      for await (const result of streamProvider(
+        fetchFn,
+        provider,
+        request,
+        usageHolder,
+      )) {
         if (!result.success) {
           const err: Error =
             result.error instanceof Error
@@ -95,6 +151,7 @@ async function* streamProvider(
   fetchFn: typeof fetch,
   provider: ResolvedProvider,
   request: LLMRequest,
+  usageHolder: UsageHolder,
 ): AsyncGenerator<Result<string>> {
   const messages = request.messages.map((m) => ({
     role: m.role,
@@ -212,6 +269,10 @@ async function* streamProvider(
 
         try {
           const parsed = JSON.parse(data);
+          const maybeUsage = (parsed as { usage?: LlmUsage }).usage;
+          if (maybeUsage && typeof maybeUsage === "object") {
+            usageHolder.usage = maybeUsage;
+          }
           if (!modelReported) {
             modelReported = true;
             // Observability side-channel: a throwing caller callback must

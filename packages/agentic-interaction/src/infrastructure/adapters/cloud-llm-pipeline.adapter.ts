@@ -17,6 +17,7 @@ import { streamStructuredRequest as streamStructuredRequestImpl } from "./cloud-
 import { reasoningBodyFieldFor } from "./cloud-llm-reasoning";
 import { clampTemperatureFor } from "./cloud-llm-temperature";
 import { ndjsonResponseFormatFor, unwrapNdjsonLines } from "./cloud-llm-ndjson";
+import { recordLlmUsage, withLlmSpan } from "../telemetry/llm-span";
 
 export type { CloudLLMPipelineAdapterConfig } from "./cloud-llm-types";
 
@@ -28,35 +29,59 @@ export class CloudLLMPipelineAdapter implements SendStructuredRequestPort {
   }
 
   async sendRequest(request: LLMRequest): Promise<Result<LLMResponse>> {
-    const providers = resolveFallbackChain(
-      this.config.secretVault,
-      this.config.fallbackChain,
+    const primary = this.config.fallbackChain.primary;
+    const model = request.preferredCloudModel ?? primary.model;
+    return withLlmSpan(
+      "llm.chat",
+      {
+        "llm.provider": primary.providerId,
+        "llm.system": primary.providerId,
+        "llm.model_name": model,
+        "gen_ai.system": primary.providerId,
+        "gen_ai.request.model": model,
+        "gen_ai.operation.name": "chat",
+      },
+      async (span) => {
+        const providers = resolveFallbackChain(
+          this.config.secretVault,
+          this.config.fallbackChain,
+        );
+        if (providers.length === 0) {
+          return {
+            success: false,
+            error: new Error(
+              "No cloud LLM API keys configured. Set environment variables for at least one provider.",
+            ),
+          };
+        }
+
+        let lastError: Error | null = null;
+
+        for (const provider of providers) {
+          try {
+            const response = await this.callProvider(provider, request);
+            if (response) {
+              if (response.success && response.value.usage) {
+                recordLlmUsage(span, {
+                  prompt_tokens: response.value.usage.promptTokens,
+                  completion_tokens: response.value.usage.completionTokens,
+                  total_tokens: response.value.usage.totalTokens,
+                });
+              }
+              return response;
+            }
+          } catch (error) {
+            lastError = error instanceof Error ? error : new Error(String(error));
+            continue;
+          }
+        }
+
+        return {
+          success: false,
+          error: lastError ?? new Error("All cloud LLM providers failed"),
+        };
+      },
     );
-    if (providers.length === 0) {
-      return {
-        success: false,
-        error: new Error(
-          "No cloud LLM API keys configured. Set environment variables for at least one provider.",
-        ),
-      };
-    }
-
-    let lastError: Error | null = null;
-
-    for (const provider of providers) {
-      try {
-        const response = await this.callProvider(provider, request);
-        if (response) return response;
-      } catch (error) {
-        lastError = error instanceof Error ? error : new Error(String(error));
-        continue;
-      }
-    }
-
-    return {
-      success: false,
-      error: lastError ?? new Error("All cloud LLM providers failed"),
-    };
   }
 
   async *streamStructuredRequest(

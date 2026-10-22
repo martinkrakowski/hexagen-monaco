@@ -4,6 +4,9 @@ import type {
   LLMCompletionResponse,
 } from "../../domain/ports/llm-provider.port";
 import { ok, err } from "@hexagen/shared";
+import type { Attributes } from "@opentelemetry/api";
+import { SpanStatusCode, trace } from "@opentelemetry/api";
+import { withLlmSpan } from "../telemetry/llm-span";
 
 export class ServerLLMAdapter implements LLMProviderPort {
   constructor(
@@ -21,42 +24,63 @@ export class ServerLLMAdapter implements LLMProviderPort {
     return !!this.apiKey && this.apiKey.trim().length > 0;
   }
 
+  private systemLabel(): string {
+    return this.baseUrl.replace(/^https?:\/\//, "").split("/")[0];
+  }
+
+  private llmAttrs(operation: string, model: string): Attributes {
+    const system = this.systemLabel();
+    return {
+      "llm.provider": system,
+      "llm.system": system,
+      "llm.model_name": model,
+      "gen_ai.system": system,
+      "gen_ai.request.model": model,
+      "gen_ai.operation.name": operation,
+    };
+  }
+
   async complete(
     request: LLMCompletionRequest,
   ): Promise<import("@hexagen/shared").Result<LLMCompletionResponse>> {
     const model = request.model || this.defaultModel;
 
-    try {
-      const response = await fetch(`${this.baseUrl}/chat/completions`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${this.apiKey}`,
-        },
-        body: JSON.stringify({
-          model,
-          messages: request.messages,
-          temperature: request.temperature ?? 0.7,
-          max_tokens: request.maxTokens ?? 2048,
-        }),
-      });
+    return withLlmSpan("llm.chat", this.llmAttrs("chat", model), async () => {
+      try {
+        const response = await fetch(`${this.baseUrl}/chat/completions`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${this.apiKey}`,
+          },
+          body: JSON.stringify({
+            model,
+            messages: request.messages,
+            temperature: request.temperature ?? 0.7,
+            max_tokens: request.maxTokens ?? 2048,
+          }),
+        });
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        return err(new Error(`LLM API error: ${response.status} ${errorText}`));
+        if (!response.ok) {
+          const errorText = await response.text();
+          return err(new Error(`LLM API error: ${response.status} ${errorText}`));
+        }
+
+        const data = (await response.json()) as LLMCompletionResponse;
+        return ok(data);
+      } catch (error) {
+        return err(error instanceof Error ? error : new Error(String(error)));
       }
-
-      const data = (await response.json()) as LLMCompletionResponse;
-      return ok(data);
-    } catch (error) {
-      return err(error instanceof Error ? error : new Error(String(error)));
-    }
+    });
   }
 
   async *streamComplete(
     request: LLMCompletionRequest,
   ): AsyncGenerator<import("@hexagen/shared").Result<string>> {
     const model = request.model || this.defaultModel;
+    const span = trace.getTracer("hexagen").startSpan("llm.chat.stream", {
+      attributes: this.llmAttrs("chat.stream", model),
+    });
 
     try {
       const response = await fetch(`${this.baseUrl}/chat/completions`, {
@@ -114,8 +138,16 @@ export class ServerLLMAdapter implements LLMProviderPort {
           }
         }
       }
+
+      span.setStatus({ code: SpanStatusCode.OK });
     } catch (error) {
+      span.setStatus({
+        code: SpanStatusCode.ERROR,
+        message: error instanceof Error ? error.name : "Error",
+      });
       yield err(error instanceof Error ? error : new Error(String(error)));
+    } finally {
+      span.end();
     }
   }
 }
