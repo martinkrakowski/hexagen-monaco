@@ -41,7 +41,7 @@ jobs:
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069  # v4.4.1
       - name: Install trivy (pinned, checksum-verified; the solstice builder's version)
         run: |
-          curl -sfL -o /tmp/trivy.tgz https://github.com/aquasecurity/trivy/releases/download/v0.75.0/trivy_0.75.0_Linux-64bit.tar.gz
+          curl -sfL --proto '=https' --tlsv1.2 -o /tmp/trivy.tgz https://github.com/aquasecurity/trivy/releases/download/v0.75.0/trivy_0.75.0_Linux-64bit.tar.gz
           echo "c6e65abddb348e25f10549df887045629cf28cc72453cd1c63acb717316b3f3f  /tmp/trivy.tgz" | sha256sum -c -
           sudo tar -xzf /tmp/trivy.tgz -C /usr/local/bin trivy
       - name: Build both platforms (no push)
@@ -84,11 +84,11 @@ jobs:
       - name: Install cosign, syft and trivy (pinned, checksum-verified; the solstice builder's versions)
         run: |
           cd "$RUNNER_TEMP"
-          curl -sfL -o cosign https://github.com/sigstore/cosign/releases/download/v3.1.3/cosign-linux-amd64
+          curl -sfL --proto '=https' --tlsv1.2 -o cosign https://github.com/sigstore/cosign/releases/download/v3.1.3/cosign-linux-amd64
           echo "4629c757b7618056f8ddd7e2625ae9fdd94c0372a65049520bc7d9df9efc7f71  cosign" | sha256sum -c -
-          curl -sfL -o syft.tgz https://github.com/anchore/syft/releases/download/v1.54.0/syft_1.54.0_linux_amd64.tar.gz
+          curl -sfL --proto '=https' --tlsv1.2 -o syft.tgz https://github.com/anchore/syft/releases/download/v1.54.0/syft_1.54.0_linux_amd64.tar.gz
           echo "54a87372498168b2d033e876fd41fa4e8035b872699e525a57046e1f2f09c860  syft.tgz" | sha256sum -c -
-          curl -sfL -o trivy.tgz https://github.com/aquasecurity/trivy/releases/download/v0.75.0/trivy_0.75.0_Linux-64bit.tar.gz
+          curl -sfL --proto '=https' --tlsv1.2 -o trivy.tgz https://github.com/aquasecurity/trivy/releases/download/v0.75.0/trivy_0.75.0_Linux-64bit.tar.gz
           echo "c6e65abddb348e25f10549df887045629cf28cc72453cd1c63acb717316b3f3f  trivy.tgz" | sha256sum -c -
           tar -xzf syft.tgz syft && tar -xzf trivy.tgz trivy
           sudo install -m 755 cosign syft trivy /usr/local/bin/ && rm -f cosign syft syft.tgz trivy trivy.tgz
