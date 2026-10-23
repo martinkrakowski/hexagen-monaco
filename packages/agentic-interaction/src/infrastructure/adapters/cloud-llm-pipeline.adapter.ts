@@ -35,6 +35,7 @@ export class CloudLLMPipelineAdapter implements SendStructuredRequestPort {
       "llm.chat",
       {
         "llm.provider": primary.providerId,
+        "llm.provider.primary": primary.providerId,
         "llm.system": primary.providerId,
         "llm.model_name": model,
         "gen_ai.system": primary.providerId,
@@ -61,11 +62,32 @@ export class CloudLLMPipelineAdapter implements SendStructuredRequestPort {
           try {
             const response = await this.callProvider(provider, request);
             if (response) {
-              if (response.success && response.value.usage) {
-                recordLlmUsage(span, {
-                  prompt_tokens: response.value.usage.promptTokens,
-                  completion_tokens: response.value.usage.completionTokens,
-                  total_tokens: response.value.usage.totalTokens,
+              if (response.success) {
+                if (response.value.usage) {
+                  recordLlmUsage(span, {
+                    prompt_tokens: response.value.usage.promptTokens,
+                    completion_tokens: response.value.usage.completionTokens,
+                    total_tokens: response.value.usage.totalTokens,
+                  });
+                }
+                // Attribute the span to the provider and model that
+                // actually answered — with a fallback chain that is not
+                // necessarily the primary, which stays recorded as
+                // llm.provider.primary. callProvider reports the serving
+                // pair through the response's metadata.
+                const meta = (response.value.metadata ?? {}) as {
+                  provider?: string;
+                  model?: string;
+                };
+                const servedProvider = meta.provider ?? provider.providerId;
+                const servedModel =
+                  meta.model ?? request.preferredCloudModel ?? provider.model;
+                span.setAttributes({
+                  "llm.provider": servedProvider,
+                  "llm.system": servedProvider,
+                  "llm.model_name": servedModel,
+                  "gen_ai.system": servedProvider,
+                  "gen_ai.request.model": servedModel,
                 });
               }
               return response;

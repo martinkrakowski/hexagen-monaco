@@ -202,4 +202,81 @@ describe("CloudLLMPipelineAdapter telemetry", () => {
     expect(String(span.status.message)).not.toContain("Test prompt");
     expect(String(span.status.message)).not.toContain("upstream exploded");
   });
+
+  it("attributes the span to the fallback provider that answered", async () => {
+    let calls = 0;
+    const fetchMock = (async () => {
+      calls++;
+      if (calls === 1) {
+        return {
+          ok: false,
+          status: 500,
+          text: async () => "primary exploded",
+          json: async () => ({}),
+        } as Response;
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          ...validResponseBody,
+          // The provider echoes the model it actually served — an alias,
+          // not the requested name.
+          model: "mistral-large-20261001",
+          usage: { prompt_tokens: 8, completion_tokens: 4, total_tokens: 12 },
+        }),
+        text: async () => "{}",
+      } as Response;
+    }) as unknown as typeof fetch;
+
+    process.env.TEST_MISTRAL_API_KEY = "sk-test-key-mistral";
+    const fallbackChain: ProviderFallbackChain = {
+      primary: testChain.primary,
+      fallbacks: [
+        {
+          providerId: "mistral",
+          baseUrl: "https://api.mistral.ai/v1",
+          model: "mistral-large-latest",
+          apiKeyEnvVar: "TEST_MISTRAL_API_KEY",
+          temperature: 0.4,
+          maxTokens: 4096,
+          timeoutMs: 60000,
+        },
+      ],
+    };
+
+    const config: CloudLLMPipelineAdapterConfig = {
+      fallbackChain,
+      secretVault: envVault(),
+      fetchFn: fetchMock,
+    };
+
+    const result: Result<unknown> = await new CloudLLMPipelineAdapter(
+      config,
+    ).sendRequest(makeRequest());
+    expect(result.success).toBe(true);
+    expect(calls).toBe(2);
+
+    const spans = exporter.getFinishedSpans();
+    expect(spans).toHaveLength(1);
+    const span = spans[0];
+    // The span names the provider and model that actually answered; the
+    // primary stays recorded only as llm.provider.primary.
+    expect(span.attributes["llm.provider"]).toBe("mistral");
+    expect(span.attributes["llm.system"]).toBe("mistral");
+    expect(span.attributes["llm.model_name"]).toBe("mistral-large-20261001");
+    expect(span.attributes["gen_ai.system"]).toBe("mistral");
+    expect(span.attributes["gen_ai.request.model"]).toBe(
+      "mistral-large-20261001",
+    );
+    expect(span.attributes["llm.provider.primary"]).toBe("openai");
+    expect(span.status.code).toBe(SpanStatusCode.OK);
+    // Usage comes from the fallback's response.
+    expect(span.attributes["llm.token_count.total"]).toBe(12);
+    expect(span.attributes["gen_ai.usage.input_tokens"]).toBe(8);
+    // No attribute carries the failed primary's response body.
+    for (const [, value] of Object.entries(span.attributes)) {
+      expect(String(value)).not.toContain("primary exploded");
+    }
+  });
 });

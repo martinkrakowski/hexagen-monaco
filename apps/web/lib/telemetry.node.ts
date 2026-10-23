@@ -10,15 +10,49 @@ import { ATTR_SERVICE_NAME } from "@opentelemetry/semantic-conventions";
 import { installSigtermFlush } from "./sigterm-flush";
 
 /**
+ * The one line logged when telemetry cannot start. Never log the endpoint
+ * value alongside it — the value can carry a token or credentials.
+ */
+function logTracingDisabled(): void {
+  console.error("tracing disabled (invalid endpoint)");
+}
+
+/**
  * Registers a NodeTracerProvider exporting OTLP traces to
- * `<OTEL_EXPORTER_OTLP_ENDPOINT>/v1/traces` (Phoenix through Alloy).
+ * `<OTEL_EXPORTER_OTLP_ENDPOINT>/v1/traces` (Phoenix through Alloy): the path
+ * is appended to the endpoint URL's pathname, keeping its query and
+ * credentials.
  *
- * Does nothing when no endpoint is configured. Spans carry no prompt, message,
+ * Does nothing when no endpoint is configured. A malformed endpoint, or an
+ * exporter that fails to build, logs one line and registers nothing —
+ * telemetry must never crash startup. Spans carry no prompt, message,
  * response or user text — only model/provider/operation/token metadata.
  */
 export function registerOtlpTelemetry(): void {
   const endpoint = (process.env.OTEL_EXPORTER_OTLP_ENDPOINT ?? "").trim();
   if (!endpoint) return;
+
+  // A malformed endpoint must not crash startup: validate before building
+  // anything, and never log the value.
+  let base: URL;
+  try {
+    base = new URL(endpoint);
+  } catch {
+    logTracingDisabled();
+    return;
+  }
+
+  // Append to the URL's pathname — never by string concatenation, which
+  // would mangle an endpoint that carries a query or credentials.
+  base.pathname = `${base.pathname.replace(/\/+$/, "")}/v1/traces`;
+
+  let exporter: OTLPTraceExporter;
+  try {
+    exporter = new OTLPTraceExporter({ url: base.toString() });
+  } catch {
+    logTracingDisabled();
+    return;
+  }
 
   const provider = new NodeTracerProvider({
     resource: resourceFromAttributes({
@@ -27,13 +61,7 @@ export function registerOtlpTelemetry(): void {
       "deployment.environment":
         process.env.OTEL_DEPLOYMENT_ENVIRONMENT || "unknown",
     }),
-    spanProcessors: [
-      new BatchSpanProcessor(
-        new OTLPTraceExporter({
-          url: `${endpoint.replace(/\/+$/, "")}/v1/traces`,
-        }),
-      ),
-    ],
+    spanProcessors: [new BatchSpanProcessor(exporter)],
   });
 
   provider.register();

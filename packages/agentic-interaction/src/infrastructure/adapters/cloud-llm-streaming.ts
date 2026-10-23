@@ -13,9 +13,16 @@ import { recordLlmUsage, type LlmUsage } from "../telemetry/llm-span";
 
 export { type CloudLLMPipelineAdapterConfig } from "./cloud-llm-types";
 
-/** Holder shared between the wrapper and the inner generator for usage chunks. */
+/**
+ * Holder shared between the wrapper and the inner generator: usage chunks the
+ * provider may send, the provider that actually served (reported on its first
+ * parsed frame), and a failure the inner generator swallows after partial
+ * output — the wrapper still needs it to mark the span ERROR.
+ */
 interface UsageHolder {
   usage?: LlmUsage;
+  servedBy?: { provider: string; model: string };
+  streamError?: Error;
 }
 
 function getErrorStatus(error: Error): number | null {
@@ -38,6 +45,7 @@ export async function* streamStructuredRequest(
     attributes: {
       "openinference.span.kind": "LLM",
       "llm.provider": primary.providerId,
+      "llm.provider.primary": primary.providerId,
       "llm.system": primary.providerId,
       "llm.model_name": model,
       "gen_ai.system": primary.providerId,
@@ -66,7 +74,10 @@ export async function* streamStructuredRequest(
       }
       yield result;
     }
-    if (!sawFailure) {
+    if (!sawFailure && !usageHolder.streamError) {
+      // The SDK's `setStatus` ignores ERROR once the status is OK — OK is
+      // sticky — so the OK may only be decided here, after the inner
+      // generator is final about a swallowed post-partial failure.
       span.setStatus({ code: SpanStatusCode.OK });
     }
   } catch (error) {
@@ -76,8 +87,29 @@ export async function* streamStructuredRequest(
     });
     throw error;
   } finally {
+    // Attribute the span to the provider and model that actually streamed
+    // the output — with a fallback chain that is not necessarily the
+    // primary, which stays recorded as llm.provider.primary.
+    if (usageHolder.servedBy) {
+      span.setAttributes({
+        "llm.provider": usageHolder.servedBy.provider,
+        "llm.system": usageHolder.servedBy.provider,
+        "llm.model_name": usageHolder.servedBy.model,
+        "gen_ai.system": usageHolder.servedBy.provider,
+        "gen_ai.request.model": usageHolder.servedBy.model,
+      });
+    }
     if (usageHolder.usage) {
       recordLlmUsage(span, usageHolder.usage);
+    }
+    // A failure after a successful chunk never reaches this wrapper as a
+    // yielded value — the inner generator returns to preserve the partial
+    // output — so without this the span would end OK despite the error.
+    if (usageHolder.streamError) {
+      span.setStatus({
+        code: SpanStatusCode.ERROR,
+        message: usageHolder.streamError.name,
+      });
     }
     span.end();
   }
@@ -124,8 +156,10 @@ async function* streamStructuredRequestInner(
           const status = getErrorStatus(err);
           // If we already streamed content from this provider, surface the
           // partial result and stop — switching providers mid-stream would
-          // duplicate output.
+          // duplicate output. The failure is not yielded, so record it on
+          // the shared holder; the span must still end ERROR.
           if (hadSuccess) {
+            usageHolder.streamError = err;
             return;
           }
           if (!isRetryable(status ?? 0)) {
@@ -150,7 +184,12 @@ async function* streamStructuredRequestInner(
         return;
       }
       lastError = error instanceof Error ? error : new Error(String(error));
-      if (hadSuccess) return;
+      if (hadSuccess) {
+        // Same as a yielded failure after output: keep the partial result,
+        // but record the error so the wrapper's span still ends ERROR.
+        usageHolder.streamError = lastError;
+        return;
+      }
       continue;
     }
   }
@@ -288,16 +327,24 @@ async function* streamProvider(
           }
           if (!modelReported) {
             modelReported = true;
+            const servedModel =
+              typeof parsed.model === "string" && parsed.model
+                ? parsed.model
+                : requestedModel;
+            // The serving provider's identity, recorded once on its first
+            // parsed frame — the wrapper re-attributes the span with it
+            // when the stream ends.
+            usageHolder.servedBy = {
+              provider: provider.providerId,
+              model: servedModel,
+            };
             // Observability side-channel: a throwing caller callback must
             // not affect delivery — unisolated it would be swallowed by the
             // JSON catch below and silently drop this frame's content.
             try {
               request.onModelResolved?.({
                 provider: provider.providerId,
-                model:
-                  typeof parsed.model === "string" && parsed.model
-                    ? parsed.model
-                    : requestedModel,
+                model: servedModel,
               });
             } catch {
               // Ignore callback errors.
