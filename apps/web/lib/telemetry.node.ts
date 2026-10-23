@@ -18,6 +18,19 @@ function logTracingDisabled(): void {
 }
 
 /**
+ * Strips every trailing `/` from `pathname` with a plain loop — the regex
+ * form (`/\/+$/`) is flagged for backtracking (Sonar S8786). Same result:
+ * `"/"` → `""`, `"/otlp///"` → `"/otlp"`.
+ */
+function stripTrailingSlashes(pathname: string): string {
+  let stripped = pathname;
+  while (stripped.endsWith("/")) {
+    stripped = stripped.slice(0, -1);
+  }
+  return stripped;
+}
+
+/**
  * Registers a NodeTracerProvider exporting OTLP traces to
  * `<OTEL_EXPORTER_OTLP_ENDPOINT>/v1/traces` (Phoenix through Alloy): the path
  * is appended to the endpoint URL's pathname, keeping its query and
@@ -44,7 +57,7 @@ export function registerOtlpTelemetry(): void {
 
   // Append to the URL's pathname — never by string concatenation, which
   // would mangle an endpoint that carries a query or credentials.
-  base.pathname = `${base.pathname.replace(/\/+$/, "")}/v1/traces`;
+  base.pathname = `${stripTrailingSlashes(base.pathname)}/v1/traces`;
 
   let exporter: OTLPTraceExporter;
   try {

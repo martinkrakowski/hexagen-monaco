@@ -6,7 +6,11 @@ import type {
 import { ok, err } from "@hexagen/shared";
 import type { Attributes } from "@opentelemetry/api";
 import { SpanStatusCode, trace } from "@opentelemetry/api";
-import { LLM_SPAN_KIND, withLlmSpan } from "../telemetry/llm-span";
+import {
+  LLM_SPAN_KIND,
+  failureOfResult,
+  withLlmSpan,
+} from "../telemetry/llm-span";
 
 export class ServerLLMAdapter implements LLMProviderPort {
   constructor(
@@ -82,12 +86,7 @@ export class ServerLLMAdapter implements LLMProviderPort {
       },
       // A provider failure returned as an error Result must mark the span
       // ERROR, not OK.
-      (result) =>
-        result.success
-          ? undefined
-          : result.error instanceof Error
-            ? result.error
-            : { name: "Error" },
+      failureOfResult,
     );
   }
 

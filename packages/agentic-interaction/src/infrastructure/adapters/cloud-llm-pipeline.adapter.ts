@@ -17,7 +17,11 @@ import { streamStructuredRequest as streamStructuredRequestImpl } from "./cloud-
 import { reasoningBodyFieldFor } from "./cloud-llm-reasoning";
 import { clampTemperatureFor } from "./cloud-llm-temperature";
 import { ndjsonResponseFormatFor, unwrapNdjsonLines } from "./cloud-llm-ndjson";
-import { recordLlmUsage, withLlmSpan } from "../telemetry/llm-span";
+import {
+  failureOfResult,
+  recordLlmUsage,
+  withLlmSpan,
+} from "../telemetry/llm-span";
 
 export type { CloudLLMPipelineAdapterConfig } from "./cloud-llm-types";
 
@@ -106,12 +110,7 @@ export class CloudLLMPipelineAdapter implements SendStructuredRequestPort {
       },
       // A failure returned as a value (every provider failed, or the single
       // response was an error Result) must mark the span ERROR, not OK.
-      (result) =>
-        result.success
-          ? undefined
-          : result.error instanceof Error
-            ? result.error
-            : { name: "Error" },
+      failureOfResult,
     );
   }
 

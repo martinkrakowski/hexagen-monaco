@@ -4,6 +4,7 @@ import {
   SpanStatusCode,
   trace,
 } from "@opentelemetry/api";
+import type { Result } from "@hexagen/shared";
 
 /**
  * The OpenInference span-kind value used for every LLM span this package emits.
@@ -100,4 +101,26 @@ export function recordLlmUsage(span: Span, usage: LlmUsage): void {
   if (typeof usage.total_tokens === "number") {
     span.setAttribute("llm.token_count.total", usage.total_tokens);
   }
+}
+
+/**
+ * `withLlmSpan`'s `failed` callback for call sites whose `fn` resolves a
+ * `Result`: a success reports no failure, an `Error` failure reports the
+ * error itself (its class name becomes the span's ERROR message), and any
+ * other failure value reports the bare class name `Error`.
+ *
+ * Written with plain `if` statements — the nested-ternary form of this
+ * mapping is flagged by Sonar (S3358), and every Result-returning call
+ * site needs the exact same mapping.
+ */
+export function failureOfResult<T>(
+  result: Result<T>,
+): { name: string } | undefined {
+  if (result.success) {
+    return undefined;
+  }
+  if (result.error instanceof Error) {
+    return result.error;
+  }
+  return { name: "Error" };
 }
