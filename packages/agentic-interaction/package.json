@@ -48,11 +48,13 @@
     "@hexagen/reconciliation-engine": "workspace:*",
     "@hexagen/shared": "workspace:*",
     "@hexagen/transaction-system": "workspace:*",
+    "@opentelemetry/api": "~1.9.1",
     "js-yaml": "^4.1.1",
     "jsonrepair": "^3.14.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@opentelemetry/sdk-trace-base": "^2.12.0",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^20.0.0",
     "eslint": "^8.57.0",

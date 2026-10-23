@@ -6,6 +6,7 @@ import type {
 } from "@hexagen/local-llm/client";
 import { createLLMResponse } from "@hexagen/local-llm/client";
 import type { DomainModelId } from "@hexagen/local-llm/client";
+import type { Span } from "@opentelemetry/api";
 import type { ResolvedProvider } from "../../domain/provider-config";
 import { resolveFallbackChain } from "../../domain/provider-config";
 import {
@@ -17,6 +18,11 @@ import { streamStructuredRequest as streamStructuredRequestImpl } from "./cloud-
 import { reasoningBodyFieldFor } from "./cloud-llm-reasoning";
 import { clampTemperatureFor } from "./cloud-llm-temperature";
 import { ndjsonResponseFormatFor, unwrapNdjsonLines } from "./cloud-llm-ndjson";
+import {
+  failureOfResult,
+  recordLlmUsage,
+  withLlmSpan,
+} from "../telemetry/llm-span";
 
 export type { CloudLLMPipelineAdapterConfig } from "./cloud-llm-types";
 
@@ -28,6 +34,35 @@ export class CloudLLMPipelineAdapter implements SendStructuredRequestPort {
   }
 
   async sendRequest(request: LLMRequest): Promise<Result<LLMResponse>> {
+    const primary = this.config.fallbackChain.primary;
+    const model = request.preferredCloudModel ?? primary.model;
+    return withLlmSpan(
+      "llm.chat",
+      {
+        "llm.provider": primary.providerId,
+        "llm.provider.primary": primary.providerId,
+        "llm.system": primary.providerId,
+        "llm.model_name": model,
+        "gen_ai.system": primary.providerId,
+        "gen_ai.request.model": model,
+        "gen_ai.operation.name": "chat",
+      },
+      async (span) => this.dispatchWithFallback(span, request),
+      // A failure returned as a value (every provider failed, or the single
+      // response was an error Result) must mark the span ERROR, not OK.
+      failureOfResult,
+    );
+  }
+
+  /**
+   * Walks the fallback chain inside the span: the first provider that
+   * answers (success or a non-retryable error Result) is returned as-is;
+   * retryable failures (a thrown/aborted call) move to the next provider.
+   */
+  private async dispatchWithFallback(
+    span: Span,
+    request: LLMRequest,
+  ): Promise<Result<LLMResponse>> {
     const providers = resolveFallbackChain(
       this.config.secretVault,
       this.config.fallbackChain,
@@ -46,7 +81,10 @@ export class CloudLLMPipelineAdapter implements SendStructuredRequestPort {
     for (const provider of providers) {
       try {
         const response = await this.callProvider(provider, request);
-        if (response) return response;
+        if (response) {
+          this.attributeToServedProvider(span, response, provider, request);
+          return response;
+        }
       } catch (error) {
         lastError = error instanceof Error ? error : new Error(String(error));
         continue;
@@ -57,6 +95,46 @@ export class CloudLLMPipelineAdapter implements SendStructuredRequestPort {
       success: false,
       error: lastError ?? new Error("All cloud LLM providers failed"),
     };
+  }
+
+  /**
+   * Records a successful response's token counts and attributes the span
+   * to the provider and model that actually answered — with a fallback
+   * chain that is not necessarily the primary, which stays recorded as
+   * `llm.provider.primary`. `callProvider` reports the serving pair through
+   * the response's metadata. An error Result is not attributed: it is
+   * returned unchanged.
+   */
+  private attributeToServedProvider(
+    span: Span,
+    response: Result<LLMResponse>,
+    provider: ResolvedProvider,
+    request: LLMRequest,
+  ): void {
+    if (!response.success) {
+      return;
+    }
+    if (response.value.usage) {
+      recordLlmUsage(span, {
+        prompt_tokens: response.value.usage.promptTokens,
+        completion_tokens: response.value.usage.completionTokens,
+        total_tokens: response.value.usage.totalTokens,
+      });
+    }
+    const meta = (response.value.metadata ?? {}) as {
+      provider?: string;
+      model?: string;
+    };
+    const servedProvider = meta.provider ?? provider.providerId;
+    const servedModel =
+      meta.model ?? request.preferredCloudModel ?? provider.model;
+    span.setAttributes({
+      "llm.provider": servedProvider,
+      "llm.system": servedProvider,
+      "llm.model_name": servedModel,
+      "gen_ai.system": servedProvider,
+      "gen_ai.request.model": servedModel,
+    });
   }
 
   async *streamStructuredRequest(

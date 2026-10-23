@@ -9,8 +9,10 @@ import type {
   DecisionAdviceResult,
   DecisionAnswer,
   DecisionReceipt,
+  DecisionUnknownReason,
 } from "../../domain/decision-advice";
 import type { SecretVaultPort } from "../../domain/provider-config";
+import { withLlmSpan } from "../telemetry/llm-span";
 
 /**
  * The real Jev decision adapter (lane J1b). Server-only: exported from the
@@ -32,6 +34,38 @@ const JEV_MODEL = "typesafe/jev-1.14";
 const JEV_API_KEY_NAME = "JEV_API_KEY";
 const DEFAULT_TIMEOUT_MS = 3000;
 const BODY_CAP_BYTES = 64 * 1024; // 64 KiB
+
+/**
+ * Fixed class-like tokens for `unknown` receipt reasons, so the
+ * `jev.decision` span is marked ERROR with a closed-set token only — never
+ * the receipt's message, the state or any question text.
+ */
+const RECEIPT_ERROR_TOKENS: Record<DecisionUnknownReason, string> = {
+  disabled: "JevDisabled",
+  refused: "JevRefused",
+  budget: "JevBudget",
+  timeout: "JevTimeout",
+  http: "JevHttp",
+  shape: "JevShape",
+  tie: "JevTie",
+  error: "JevError",
+};
+
+/**
+ * `withLlmSpan`'s `failed` callback: an `unknown` receipt fails the span.
+ * Only a receipt counts — `unknown` without one (disabled, error) made no
+ * call and carries nothing to report, so those spans stay OK.
+ */
+function unknownReceiptToken(
+  result: DecisionAdviceResult,
+): { name: string } | undefined {
+  if (result.status !== "unknown") return undefined;
+  const receiptStatus = result.receipt?.status;
+  if (receiptStatus === undefined || receiptStatus === "advised") {
+    return undefined;
+  }
+  return { name: RECEIPT_ERROR_TOKENS[receiptStatus] };
+}
 
 export interface JevDecisionAdapterOptions {
   /** Secrets vault; the key is looked up per call as `JEV_API_KEY`. */
@@ -67,90 +101,110 @@ export class JevDecisionAdapter implements DecisionAdvicePort {
   private async askOnce(
     request: DecisionAdviceRequest,
   ): Promise<DecisionAdviceResult> {
-    const key = this.secretVault.getSecret(JEV_API_KEY_NAME);
-    if (key === null) {
-      return { status: "unknown", reason: "disabled" };
-    }
+    return withLlmSpan(
+      "jev.decision",
+      {
+        "llm.provider": "openrouter",
+        "llm.system": "openrouter",
+        "llm.model_name": JEV_MODEL,
+        "gen_ai.system": "openrouter",
+        "gen_ai.request.model": JEV_MODEL,
+        "gen_ai.operation.name": "decision",
+      },
+      async () => {
+        const key = this.secretVault.getSecret(JEV_API_KEY_NAME);
+        if (key === null) {
+          return { status: "unknown", reason: "disabled" };
+        }
 
-    // One deadline for the whole call: the request and the body read share a
-    // single AbortController (invariant 4).
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
-    const startedAt = Date.now();
+        // One deadline for the whole call: the request and the body read share
+        // a single AbortController (invariant 4).
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+        const startedAt = Date.now();
 
-    try {
-      const built = buildState(request.fields, "");
-      if (!built.ok) {
-        return { status: "unknown", reason: built.reason };
-      }
-
-      // The deadline aborts the controller; the race makes sure `ask` resolves
-      // at the deadline even if the underlying fetch never settles.
-      const abortPromise = new Promise<Response | null | "http">((resolve) => {
-        controller.signal.addEventListener("abort", () => resolve(null), {
-          once: true,
-        });
-      });
-      const response = await Promise.race([
-        this.fetchImpl(JEV_ENDPOINT, {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            // Sent once, here; never echoed back in any failure path.
-            authorization: `Bearer ${key}`,
-          },
-          body: JSON.stringify({
-            model: JEV_MODEL,
-            state: built.state,
-            questions: request.questions,
-          }),
-          redirect: "error",
-          signal: controller.signal,
-        }).catch((error: unknown): Response | null | "http" => {
-          // The deadline won, not the network: timeout, not http.
-          if (controller.signal.aborted) return null;
-          if (error instanceof DOMException && error.name === "AbortError") {
-            return null;
+        try {
+          const built = buildState(request.fields, "");
+          if (!built.ok) {
+            return { status: "unknown", reason: built.reason };
           }
-          // A redirect (`redirect: "error"`) or any other fetch-level failure
-          // is a transport failure (`unknown/http`).
-          return "http";
-        }),
-        abortPromise,
-      ]);
 
-      if (response === null) {
-        return this.unknownReceipt(request, "timeout", startedAt);
-      }
-      if (response === "http") {
-        return this.unknownReceipt(request, "http", startedAt);
-      }
-      if (!response.ok) {
-        // Release the connection: an unread body holds the socket until GC.
-        response.body?.cancel().catch(() => undefined);
-        return this.unknownReceipt(request, "http", startedAt);
-      }
+          // The deadline aborts the controller; the race makes sure `ask`
+          // resolves at the deadline even if the underlying fetch never
+          // settles.
+          const abortPromise = new Promise<Response | null | "http">(
+            (resolve) => {
+              controller.signal.addEventListener("abort", () => resolve(null), {
+                once: true,
+              });
+            },
+          );
+          const response = await Promise.race([
+            this.fetchImpl(JEV_ENDPOINT, {
+              method: "POST",
+              headers: {
+                "content-type": "application/json",
+                // Sent once, here; never echoed back in any failure path.
+                authorization: `Bearer ${key}`,
+              },
+              body: JSON.stringify({
+                model: JEV_MODEL,
+                state: built.state,
+                questions: request.questions,
+              }),
+              redirect: "error",
+              signal: controller.signal,
+            }).catch((error: unknown): Response | null | "http" => {
+              // The deadline won, not the network: timeout, not http.
+              if (controller.signal.aborted) return null;
+              if (
+                error instanceof DOMException &&
+                error.name === "AbortError"
+              ) {
+                return null;
+              }
+              // A redirect (`redirect: "error"`) or any other fetch-level
+              // failure is a transport failure (`unknown/http`).
+              return "http";
+            }),
+            abortPromise,
+          ]);
 
-      const bodyResult = await this.readBody(response, controller);
-      if (bodyResult === "timeout") {
-        return this.unknownReceipt(request, "timeout", startedAt);
-      }
-      if (bodyResult === "cap") {
-        // Past the 64 KiB cap: the shape can no longer be trusted.
-        return this.unknownReceipt(request, "shape", startedAt);
-      }
+          if (response === null) {
+            return this.unknownReceipt(request, "timeout", startedAt);
+          }
+          if (response === "http") {
+            return this.unknownReceipt(request, "http", startedAt);
+          }
+          if (!response.ok) {
+            // Release the connection: an unread body holds the socket until GC.
+            response.body?.cancel().catch(() => undefined);
+            return this.unknownReceipt(request, "http", startedAt);
+          }
 
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(bodyResult) as unknown;
-      } catch {
-        return this.unknownReceipt(request, "shape", startedAt);
-      }
+          const bodyResult = await this.readBody(response, controller);
+          if (bodyResult === "timeout") {
+            return this.unknownReceipt(request, "timeout", startedAt);
+          }
+          if (bodyResult === "cap") {
+            // Past the 64 KiB cap: the shape can no longer be trusted.
+            return this.unknownReceipt(request, "shape", startedAt);
+          }
 
-      return this.parseAnswers(request, parsed, startedAt);
-    } finally {
-      clearTimeout(timer);
-    }
+          let parsed: unknown;
+          try {
+            parsed = JSON.parse(bodyResult) as unknown;
+          } catch {
+            return this.unknownReceipt(request, "shape", startedAt);
+          }
+
+          return this.parseAnswers(request, parsed, startedAt);
+        } finally {
+          clearTimeout(timer);
+        }
+      },
+      unknownReceiptToken,
+    );
   }
 
   /**

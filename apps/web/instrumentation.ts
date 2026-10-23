@@ -26,5 +26,10 @@ export async function register() {
         await import("./lib/platform/pg-startup");
       await startPlatformMigrations(process.env);
     }
+
+    if ((process.env.OTEL_EXPORTER_OTLP_ENDPOINT ?? "").trim()) {
+      const { registerOtlpTelemetry } = await import("./lib/telemetry.node");
+      registerOtlpTelemetry();
+    }
   }
 }
