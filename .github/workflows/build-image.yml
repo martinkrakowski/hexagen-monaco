@@ -22,9 +22,11 @@ env:
   CONTEXT: .
   DOCKERFILE: apps/web/Dockerfile
   # The three public build args (formerly computed by the removed deploy.yml); passed quoted from env, never inlined.
-  LLM_AVAILABLE: ${{ secrets.WEB_LLM_API_KEY != '' || secrets.LLM_API_KEY != '' }}
-  LLM_MODEL: ${{ secrets.LLM_MODEL }}
-  FREE_TIER_MODEL: ${{ secrets.NEXT_PUBLIC_FREE_TIER_MODEL }}
+  # They are baked into the public bundle, so they belong in repository variables; the secrets are a
+  # fallback until the owner sets the variables (vault plan P0.1), then the secrets are deleted.
+  LLM_AVAILABLE: ${{ vars.NEXT_PUBLIC_LLM_AVAILABLE || (secrets.WEB_LLM_API_KEY != '' || secrets.LLM_API_KEY != '') }}
+  LLM_MODEL: ${{ vars.LLM_MODEL || secrets.LLM_MODEL }}
+  FREE_TIER_MODEL: ${{ vars.NEXT_PUBLIC_FREE_TIER_MODEL || secrets.NEXT_PUBLIC_FREE_TIER_MODEL }}
 jobs:
   check:
     if: github.event_name == 'pull_request'
