@@ -65,28 +65,66 @@ jobs:
           docker image rm "scan-$GITHUB_RUN_ID" 2>/dev/null || true
           docker builder prune -af --filter until=24h >/dev/null 2>&1 || true
 
-  publish:
+  build:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    # Each platform builds natively on GitHub's hosted runners (free for public repositories):
+    # QEMU-emulated arm64 on a 2-CPU runner could run for hours. Each leg pushes a per-platform tag;
+    # publish joins them into the one multi-platform image that is scanned, signed and promoted.
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - {arch: amd64, runner: ubuntu-24.04}
+          - {arch: arm64, runner: ubuntu-24.04-arm}
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      # Before setup-buildx: buildx records its builder under DOCKER_CONFIG, so changing DOCKER_CONFIG
+      # afterwards drops back to the plain docker driver, which cannot write attestations.
+      - name: Keep the registry login inside this job's temp directory
+        run: echo "DOCKER_CONFIG=$RUNNER_TEMP/docker" >> "$GITHUB_ENV"
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069  # v4.4.1
+      - name: Log in to GHCR with this job's own token
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: printf '%s' "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+      - name: Build and push this platform
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: |
+          docker buildx build --platform "linux/$ARCH" --push --provenance=mode=max \
+            --label "org.opencontainers.image.source=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
+            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+            --build-arg NEXT_PUBLIC_LLM_AVAILABLE="$LLM_AVAILABLE" \
+            --build-arg NEXT_PUBLIC_LLM_MODEL="$LLM_MODEL" \
+            --build-arg NEXT_PUBLIC_FREE_TIER_MODEL="$FREE_TIER_MODEL" \
+            -t "$IMAGE:sha-${GITHUB_SHA::12}-$ARCH" \
+            -f "$DOCKERFILE" "$CONTEXT"
+      - name: Log out and clean up
+        if: always()
+        run: |
+          docker logout ghcr.io >/dev/null 2>&1 || true
+          rm -rf "$DOCKER_CONFIG"
+          docker builder prune -af --filter until=24h >/dev/null 2>&1 || true
+
+  publish:
+    needs: build
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       packages: write
       id-token: write
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-        with:
-          persist-credentials: false
       # Public repository: no job runs on solstice. A fork's pull request runs the workflow as
       # changed in that PR, so any self-hosted runner registered here would be reachable from it.
       # The signature identity Kyverno checks is this workflow on main, not the runner.
-      # Before setup-buildx: buildx records its builder under DOCKER_CONFIG, so changing DOCKER_CONFIG
-      # afterwards drops back to the plain docker driver, which cannot write attestations.
       - name: Keep the registry login inside this job's temp directory
         run: echo "DOCKER_CONFIG=$RUNNER_TEMP/docker" >> "$GITHUB_ENV"
-      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1  # v4.4.0
-        with:
-          # The action runs this image --privileged: pinned by digest, never a moving tag (CodeRabbit).
-          image: docker.io/tonistiigi/binfmt:qemu-v10.0.4@sha256:8f58e6214f4cc9dc83ce8f5acad1ece508eb6b20e696a8c1e9f274481982c541
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069  # v4.4.1
       - name: Install cosign, syft and trivy (pinned, checksum-verified; the solstice builder's versions)
         run: |
@@ -103,17 +141,11 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: printf '%s' "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
-      - name: Build and push both platforms
+      - name: Join both platforms into one image
         run: |
-          docker buildx build --platform linux/amd64,linux/arm64 --push --provenance=mode=max \
-            --label "org.opencontainers.image.source=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
-            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
-            --build-arg NEXT_PUBLIC_LLM_AVAILABLE="$LLM_AVAILABLE" \
-            --build-arg NEXT_PUBLIC_LLM_MODEL="$LLM_MODEL" \
-            --build-arg NEXT_PUBLIC_FREE_TIER_MODEL="$FREE_TIER_MODEL" \
-            -t "$IMAGE:sha-${GITHUB_SHA::12}" --metadata-file "$RUNNER_TEMP/meta.json" \
-            -f "$DOCKERFILE" "$CONTEXT"
-          echo "DIGEST=$(jq -r '."containerimage.digest"' "$RUNNER_TEMP/meta.json")" >> "$GITHUB_ENV"
+          tag="$IMAGE:sha-${GITHUB_SHA::12}"
+          docker buildx imagetools create -t "$tag" "$tag-amd64" "$tag-arm64"
+          echo "DIGEST=$(docker buildx imagetools inspect "$tag" --format '{{json .Manifest}}' | jq -r .digest)" >> "$GITHUB_ENV"
       - name: Scan the pushed image, both platforms
         run: |
           for p in linux/amd64 linux/arm64; do
