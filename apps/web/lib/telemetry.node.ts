@@ -54,6 +54,12 @@ export function registerOtlpTelemetry(): void {
     logTracingDisabled();
     return;
   }
+  // The exporter accepts any scheme and only fails at export time, after
+  // tracing is registered: allow HTTP(S) only.
+  if (base.protocol !== "http:" && base.protocol !== "https:") {
+    logTracingDisabled();
+    return;
+  }
 
   // Append to the URL's pathname — never by string concatenation, which
   // would mangle an endpoint that carries a query or credentials.

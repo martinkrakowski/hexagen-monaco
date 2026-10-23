@@ -57,29 +57,32 @@ describe("registerOtlpTelemetry (telemetry.node)", () => {
     }
   }
 
-  it("registers nothing and does not throw on an invalid endpoint", () => {
-    process.env.OTEL_EXPORTER_OTLP_ENDPOINT = "not-a-valid-url";
-    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {
-      /* swallow the line under test */
-    });
+  it.each(["not-a-valid-url", "ftp://collector.example/otlp"])(
+    "registers nothing and does not throw on the endpoint %s",
+    (endpoint) => {
+      process.env.OTEL_EXPORTER_OTLP_ENDPOINT = endpoint;
+      const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {
+        /* swallow the line under test */
+      });
 
-    try {
-      expect(() => registerOtlpTelemetry()).not.toThrow();
+      try {
+        expect(() => registerOtlpTelemetry()).not.toThrow();
 
-      expect(mocks.exporterOptions).toHaveLength(0);
-      expect(mocks.registered).toBe(0);
-      // One line, the fixed message — never the endpoint value.
-      expect(errorSpy).toHaveBeenCalledTimes(1);
-      expect(errorSpy).toHaveBeenCalledWith(
-        "tracing disabled (invalid endpoint)",
-      );
-      expect(errorSpy.mock.calls[0].join(" ").length).toBeGreaterThan(0);
-      expect(errorSpy.mock.calls[0].join(" ")).not.toContain("not-a-valid-url");
-    } finally {
-      errorSpy.mockRestore();
-      restoreEndpoint();
-    }
-  });
+        expect(mocks.exporterOptions).toHaveLength(0);
+        expect(mocks.registered).toBe(0);
+        // One line, the fixed message — never the endpoint value.
+        expect(errorSpy).toHaveBeenCalledTimes(1);
+        expect(errorSpy).toHaveBeenCalledWith(
+          "tracing disabled (invalid endpoint)",
+        );
+        expect(errorSpy.mock.calls[0].join(" ").length).toBeGreaterThan(0);
+        expect(errorSpy.mock.calls[0].join(" ")).not.toContain(endpoint);
+      } finally {
+        errorSpy.mockRestore();
+        restoreEndpoint();
+      }
+    },
+  );
 
   it("appends /v1/traces to the pathname, keeping the query", () => {
     process.env.OTEL_EXPORTER_OTLP_ENDPOINT = "https://h/otlp?token=t";
