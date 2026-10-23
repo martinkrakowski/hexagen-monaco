@@ -157,7 +157,10 @@ export class JevDecisionAdapter implements DecisionAdvicePort {
             }).catch((error: unknown): Response | null | "http" => {
               // The deadline won, not the network: timeout, not http.
               if (controller.signal.aborted) return null;
-              if (error instanceof DOMException && error.name === "AbortError") {
+              if (
+                error instanceof DOMException &&
+                error.name === "AbortError"
+              ) {
                 return null;
               }
               // A redirect (`redirect: "error"`) or any other fetch-level

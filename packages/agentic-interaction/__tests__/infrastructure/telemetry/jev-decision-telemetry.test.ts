@@ -81,9 +81,10 @@ const advisedBody = {
 };
 
 /** Nothing but the closed-set metadata may appear on the span. */
-function expectOnlyClosedSetValues(
-  span: { attributes: Record<string, unknown>; status: { message?: string } },
-): void {
+function expectOnlyClosedSetValues(span: {
+  attributes: Record<string, unknown>;
+  status: { message?: string };
+}): void {
   for (const [, value] of Object.entries(span.attributes)) {
     const text = String(value);
     expect(text).not.toContain(request.questions["q0"].instructions);

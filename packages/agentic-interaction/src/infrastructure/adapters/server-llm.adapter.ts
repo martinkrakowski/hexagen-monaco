@@ -69,7 +69,9 @@ export class ServerLLMAdapter implements LLMProviderPort {
 
           if (!response.ok) {
             const errorText = await response.text();
-            return err(new Error(`LLM API error: ${response.status} ${errorText}`));
+            return err(
+              new Error(`LLM API error: ${response.status} ${errorText}`),
+            );
           }
 
           const data = (await response.json()) as LLMCompletionResponse;
@@ -115,7 +117,9 @@ export class ServerLLMAdapter implements LLMProviderPort {
 
       if (!response.ok) {
         const errorText = await response.text();
-        const error = new Error(`LLM API error: ${response.status} ${errorText}`);
+        const error = new Error(
+          `LLM API error: ${response.status} ${errorText}`,
+        );
         // The failure is returned as a value, not thrown — mark the span
         // ERROR here, with the error's class name only.
         span.setStatus({

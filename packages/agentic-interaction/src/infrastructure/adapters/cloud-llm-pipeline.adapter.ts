@@ -71,7 +71,8 @@ export class CloudLLMPipelineAdapter implements SendStructuredRequestPort {
               return response;
             }
           } catch (error) {
-            lastError = error instanceof Error ? error : new Error(String(error));
+            lastError =
+              error instanceof Error ? error : new Error(String(error));
             continue;
           }
         }

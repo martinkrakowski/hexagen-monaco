@@ -67,7 +67,10 @@ describe("ServerLLMAdapter telemetry", () => {
       }),
     });
 
-    const adapter = new ServerLLMAdapter("sk-test", "https://api.openai.com/v1");
+    const adapter = new ServerLLMAdapter(
+      "sk-test",
+      "https://api.openai.com/v1",
+    );
     const chunks: string[] = [];
     for await (const r of adapter.streamComplete(makeRequest())) {
       if (r.success) chunks.push(r.value);
@@ -95,7 +98,10 @@ describe("ServerLLMAdapter telemetry", () => {
       text: async () => "upstream exploded",
     });
 
-    const adapter = new ServerLLMAdapter("sk-test", "https://api.openai.com/v1");
+    const adapter = new ServerLLMAdapter(
+      "sk-test",
+      "https://api.openai.com/v1",
+    );
     const outcomes: boolean[] = [];
     for await (const r of adapter.streamComplete(makeRequest())) {
       outcomes.push(r.success);
@@ -130,7 +136,10 @@ describe("ServerLLMAdapter telemetry", () => {
       text: async () => "invalid api key",
     });
 
-    const adapter = new ServerLLMAdapter("sk-test", "https://api.openai.com/v1");
+    const adapter = new ServerLLMAdapter(
+      "sk-test",
+      "https://api.openai.com/v1",
+    );
     const result = await adapter.complete(makeRequest());
     expect(result.success).toBe(false);
 
