@@ -1,3 +1,9 @@
+> **Retired (2026-10-23).** This directory deployed staging to the midnight cluster, which was
+> decommissioned on 2026-10-19. Staging now runs from the `platform` repository
+> (`apps/staging/hexagen-web`), and its runtime settings come from the vault through External Secrets
+> (fleet `docs/planning/2026-10-23_vault-migration-plan.md`). Do not create Secrets with
+> `--from-env-file`; the commands below are kept only as history.
+
 # Staging deploy (k3s on midnight)
 
 `yarn deploy:staging` builds the web app image from the tracked files at `HEAD`,
