@@ -1,25 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { SpanStatusCode, trace } from "@opentelemetry/api";
-import {
-  BasicTracerProvider,
-  InMemorySpanExporter,
-  SimpleSpanProcessor,
-} from "@opentelemetry/sdk-trace-base";
+import { SpanStatusCode } from "@opentelemetry/api";
+import type { InMemorySpanExporter } from "@opentelemetry/sdk-trace-base";
 import { JevDecisionAdapter } from "../../../src/infrastructure/adapters/jev-decision.adapter";
 import type {
   DecisionAdviceRequest,
   DecisionAdviceResult,
 } from "../../../src/domain/decision-advice";
 import type { SecretVaultPort } from "../../../src/domain/provider-config";
-
-function setupTelemetry(): InMemorySpanExporter {
-  const exporter = new InMemorySpanExporter();
-  const provider = new BasicTracerProvider({
-    spanProcessors: [new SimpleSpanProcessor(exporter)],
-  });
-  trace.setGlobalTracerProvider(provider);
-  return exporter;
-}
+import {
+  expectNoTextInSpan,
+  setupTelemetry,
+  teardownTelemetry,
+} from "./helpers";
 
 const KEY = "sk-or-v1-jev-test-key-DO-NOT-LEAK";
 
@@ -85,16 +77,13 @@ function expectOnlyClosedSetValues(span: {
   attributes: Record<string, unknown>;
   status: { message?: string };
 }): void {
-  for (const [, value] of Object.entries(span.attributes)) {
-    const text = String(value);
-    expect(text).not.toContain(request.questions["q0"].instructions);
-    expect(text).not.toContain("Central business capability");
-    expect(text).not.toContain("bike-rental");
-    expect(text).not.toContain(KEY);
-    expect(text).not.toContain("upstream exploded");
-  }
-  expect(String(span.status.message)).not.toContain(KEY);
-  expect(String(span.status.message)).not.toContain("upstream exploded");
+  expectNoTextInSpan(span, [
+    request.questions["q0"].instructions,
+    "Central business capability",
+    "bike-rental",
+    KEY,
+    "upstream exploded",
+  ]);
 }
 
 describe("JevDecisionAdapter telemetry", () => {
@@ -105,7 +94,7 @@ describe("JevDecisionAdapter telemetry", () => {
   });
 
   afterEach(() => {
-    trace.disable();
+    teardownTelemetry();
     vi.useRealTimers();
   });
 

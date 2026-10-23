@@ -1,24 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { SpanStatusCode, trace } from "@opentelemetry/api";
-import {
-  BasicTracerProvider,
-  InMemorySpanExporter,
-  SimpleSpanProcessor,
-} from "@opentelemetry/sdk-trace-base";
+import { SpanStatusCode } from "@opentelemetry/api";
+import type { InMemorySpanExporter } from "@opentelemetry/sdk-trace-base";
 import { err, ok } from "@hexagen/shared";
 import {
+  failureOfResult,
   recordLlmUsage,
   withLlmSpan,
 } from "../../../src/infrastructure/telemetry/llm-span";
-
-function setupTelemetry(): InMemorySpanExporter {
-  const exporter = new InMemorySpanExporter();
-  const provider = new BasicTracerProvider({
-    spanProcessors: [new SimpleSpanProcessor(exporter)],
-  });
-  trace.setGlobalTracerProvider(provider);
-  return exporter;
-}
+import { setupTelemetry, teardownTelemetry } from "./helpers";
 
 describe("llm-span helper", () => {
   let exporter: InMemorySpanExporter;
@@ -28,7 +17,7 @@ describe("llm-span helper", () => {
   });
 
   afterEach(() => {
-    trace.disable();
+    teardownTelemetry();
   });
 
   it("sets the LLM span kind and the caller's attributes", async () => {
@@ -86,12 +75,7 @@ describe("llm-span helper", () => {
       "llm.chat",
       {},
       async () => err(new RangeError("quota exhausted")),
-      (result) =>
-        result.success
-          ? undefined
-          : result.error instanceof Error
-            ? result.error
-            : { name: "Error" },
+      failureOfResult,
     );
 
     const [span] = exporter.getFinishedSpans();
@@ -103,17 +87,7 @@ describe("llm-span helper", () => {
   });
 
   it("stays OK when failed() is given but reports the value as a success", async () => {
-    await withLlmSpan(
-      "llm.chat",
-      {},
-      async () => ok("fine"),
-      (result) =>
-        result.success
-          ? undefined
-          : result.error instanceof Error
-            ? result.error
-            : { name: "Error" },
-    );
+    await withLlmSpan("llm.chat", {}, async () => ok("fine"), failureOfResult);
 
     const [span] = exporter.getFinishedSpans();
     expect(span).toBeDefined();

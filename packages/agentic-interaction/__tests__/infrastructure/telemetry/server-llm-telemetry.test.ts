@@ -1,27 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { SpanStatusCode, trace } from "@opentelemetry/api";
-import {
-  BasicTracerProvider,
-  InMemorySpanExporter,
-  SimpleSpanProcessor,
-} from "@opentelemetry/sdk-trace-base";
+import { SpanStatusCode } from "@opentelemetry/api";
+import type { InMemorySpanExporter } from "@opentelemetry/sdk-trace-base";
 import { ServerLLMAdapter } from "../../../src/infrastructure/adapters/server-llm.adapter";
 import type { LLMCompletionRequest } from "../../../src/domain/ports/llm-provider.port";
+import {
+  expectNoTextInSpan,
+  onlySpan,
+  setupTelemetry,
+  sseChunk,
+  sseResponse,
+  teardownTelemetry,
+} from "./helpers";
 
-function setupTelemetry(): InMemorySpanExporter {
-  const exporter = new InMemorySpanExporter();
-  const provider = new BasicTracerProvider({
-    spanProcessors: [new SimpleSpanProcessor(exporter)],
-  });
-  trace.setGlobalTracerProvider(provider);
-  return exporter;
-}
-
-function sseChunk(content: string): string {
-  return `data: {"choices":[{"delta":{"content":${JSON.stringify(
-    content,
-  )}}}]}\n`;
-}
+const MESSAGE_TEXT = ["You are an assistant.", "Test prompt"];
 
 function makeRequest(): LLMCompletionRequest {
   return {
@@ -50,22 +41,11 @@ describe("ServerLLMAdapter telemetry", () => {
 
   afterEach(() => {
     globalThis.fetch = realFetch;
-    trace.disable();
+    teardownTelemetry();
   });
 
   it("emits a llm.chat.stream span carrying openinference.span.kind = LLM", async () => {
-    stubFetch({
-      ok: true,
-      status: 200,
-      body: new ReadableStream({
-        start(controller) {
-          const encoder = new TextEncoder();
-          controller.enqueue(encoder.encode(sseChunk("hello")));
-          controller.enqueue(encoder.encode("data: [DONE]\n"));
-          controller.close();
-        },
-      }),
-    });
+    stubFetch(sseResponse([sseChunk("hello"), "data: [DONE]\n"]));
 
     const adapter = new ServerLLMAdapter(
       "sk-test",
@@ -77,9 +57,7 @@ describe("ServerLLMAdapter telemetry", () => {
     }
     expect(chunks).toEqual(["hello"]);
 
-    const spans = exporter.getFinishedSpans();
-    expect(spans).toHaveLength(1);
-    const span = spans[0];
+    const span = onlySpan(exporter);
     expect(span.name).toBe("llm.chat.stream");
     expect(span.attributes["openinference.span.kind"]).toBe("LLM");
     expect(span.attributes["llm.provider"]).toBe("api.openai.com");
@@ -91,72 +69,50 @@ describe("ServerLLMAdapter telemetry", () => {
     expect(span.endTime).toBeDefined();
   });
 
-  it("marks the stream span ERROR (class name only) when the provider responds non-ok", async () => {
-    stubFetch({
-      ok: false,
+  it.each([
+    {
+      title: "stream",
+      spanName: "llm.chat.stream",
       status: 500,
-      text: async () => "upstream exploded",
-    });
-
-    const adapter = new ServerLLMAdapter(
-      "sk-test",
-      "https://api.openai.com/v1",
-    );
-    const outcomes: boolean[] = [];
-    for await (const r of adapter.streamComplete(makeRequest())) {
-      outcomes.push(r.success);
-    }
-    expect(outcomes).toEqual([false]);
-
-    const spans = exporter.getFinishedSpans();
-    expect(spans).toHaveLength(1);
-    const span = spans[0];
-    expect(span.name).toBe("llm.chat.stream");
-    expect(span.attributes["openinference.span.kind"]).toBe("LLM");
-    expect(span.status.code).toBe(SpanStatusCode.ERROR);
-    // The error's class name only — never its message body.
-    expect(span.status.message).toBe("Error");
-    // No attribute or status carries the request's message text or the
-    // provider's response body.
-    for (const [, value] of Object.entries(span.attributes)) {
-      const text = String(value);
-      expect(text).not.toContain("You are an assistant.");
-      expect(text).not.toContain("Test prompt");
-      expect(text).not.toContain("upstream exploded");
-    }
-    expect(String(span.status.message)).not.toContain("You are an assistant.");
-    expect(String(span.status.message)).not.toContain("Test prompt");
-    expect(String(span.status.message)).not.toContain("upstream exploded");
-  });
-
-  it("marks the chat span ERROR (class name only) when complete returns an error Result", async () => {
-    stubFetch({
-      ok: false,
+      body: "upstream exploded",
+      stream: true,
+    },
+    {
+      title: "chat",
+      spanName: "llm.chat",
       status: 401,
-      text: async () => "invalid api key",
-    });
+      body: "invalid api key",
+      stream: false,
+    },
+  ])(
+    "marks the $title span ERROR (class name only) when the provider responds non-ok",
+    async ({ spanName, status, body, stream }) => {
+      stubFetch({ ok: false, status, text: async () => body });
 
-    const adapter = new ServerLLMAdapter(
-      "sk-test",
-      "https://api.openai.com/v1",
-    );
-    const result = await adapter.complete(makeRequest());
-    expect(result.success).toBe(false);
+      const adapter = new ServerLLMAdapter(
+        "sk-test",
+        "https://api.openai.com/v1",
+      );
+      if (stream) {
+        const outcomes: boolean[] = [];
+        for await (const r of adapter.streamComplete(makeRequest())) {
+          outcomes.push(r.success);
+        }
+        expect(outcomes).toEqual([false]);
+      } else {
+        const result = await adapter.complete(makeRequest());
+        expect(result.success).toBe(false);
+      }
 
-    const spans = exporter.getFinishedSpans();
-    expect(spans).toHaveLength(1);
-    const span = spans[0];
-    expect(span.name).toBe("llm.chat");
-    expect(span.attributes["openinference.span.kind"]).toBe("LLM");
-    expect(span.status.code).toBe(SpanStatusCode.ERROR);
-    // The error's class name only — never its message body.
-    expect(span.status.message).toBe("Error");
-    for (const [, value] of Object.entries(span.attributes)) {
-      const text = String(value);
-      expect(text).not.toContain("You are an assistant.");
-      expect(text).not.toContain("Test prompt");
-      expect(text).not.toContain("invalid api key");
-    }
-    expect(String(span.status.message)).not.toContain("invalid api key");
-  });
+      const span = onlySpan(exporter);
+      expect(span.name).toBe(spanName);
+      expect(span.attributes["openinference.span.kind"]).toBe("LLM");
+      expect(span.status.code).toBe(SpanStatusCode.ERROR);
+      // The error's class name only — never its message body.
+      expect(span.status.message).toBe("Error");
+      // No attribute or status carries the request's message text or the
+      // provider's response body.
+      expectNoTextInSpan(span, [...MESSAGE_TEXT, body]);
+    },
+  );
 });
