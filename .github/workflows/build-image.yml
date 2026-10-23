@@ -79,6 +79,10 @@ jobs:
       # Public repository: no job runs on solstice. A fork's pull request runs the workflow as
       # changed in that PR, so any self-hosted runner registered here would be reachable from it.
       # The signature identity Kyverno checks is this workflow on main, not the runner.
+      # Before setup-buildx: buildx records its builder under DOCKER_CONFIG, so changing DOCKER_CONFIG
+      # afterwards drops back to the plain docker driver, which cannot write attestations.
+      - name: Keep the registry login inside this job's temp directory
+        run: echo "DOCKER_CONFIG=$RUNNER_TEMP/docker" >> "$GITHUB_ENV"
       - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1  # v4.4.0
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069  # v4.4.1
       - name: Install cosign, syft and trivy (pinned, checksum-verified; the solstice builder's versions)
@@ -92,8 +96,6 @@ jobs:
           echo "c6e65abddb348e25f10549df887045629cf28cc72453cd1c63acb717316b3f3f  trivy.tgz" | sha256sum -c -
           tar -xzf syft.tgz syft && tar -xzf trivy.tgz trivy
           sudo install -m 755 cosign syft trivy /usr/local/bin/ && rm -f cosign syft syft.tgz trivy trivy.tgz
-      - name: Keep the registry login inside this job's temp directory
-        run: echo "DOCKER_CONFIG=$RUNNER_TEMP/docker" >> "$GITHUB_ENV"
       - name: Log in to GHCR with this job's own token
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
