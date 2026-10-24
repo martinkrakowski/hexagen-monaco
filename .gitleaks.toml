@@ -1,0 +1,32 @@
+# gitleaks configuration: the default rules, plus narrow allowlists for reviewed test fixtures and
+# non-secret look-alikes. Each entry requires the file AND the rule AND the line's shape
+# (condition = "AND"), so any other finding in the same file is still caught. Add an entry only
+# for a reviewed fixture, never for a real value.
+title = "hexagen-monaco"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "LLM wiring: apiKeyEnvVar names an environment variable, not a value"
+condition = "AND"
+targetRules = ["generic-api-key"]
+paths = ['''^(apps/web/app/lib/wire\.server\.ts|packages/agentic-interaction/scripts/golden-manifest-harness\.ts)$''']
+regexTarget = "line"
+regexes = ['''^\s*apiKeyEnvVar: "[A-Z0-9_]+",$''']
+
+[[allowlists]]
+description = "byok tests: fake raw provider keys encrypted by the test doubles"
+condition = "AND"
+targetRules = ["generic-api-key"]
+paths = ['''^packages/byok/__tests__/(doubles/stub-encryption\.adapter\.ts|infrastructure/adapters/aes-gcm-encryption\.adapter\.test\.ts)$''']
+regexTarget = "line"
+regexes = ['''^\s*(const )?(rawKey|DECRYPTED_RAW_KEY)( =|:) "''']
+
+[[allowlists]]
+description = "mcp-server grant-signature test: a fixed test key in hex"
+condition = "AND"
+targetRules = ["generic-api-key"]
+paths = ['''^packages/mcp-server/__tests__/infrastructure/adapters/grant-signature\.adapter\.test\.ts$''']
+regexTarget = "line"
+regexes = ['''const TRUSTED_KEY_HEX =''']
