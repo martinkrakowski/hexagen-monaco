@@ -98,6 +98,8 @@ const NOT_A_PACKAGE_BIN = new Set([
   "trivy",
   "syft",
   "cosign",
+  // Secret scanner: pinned by checksum and installed into $RUNNER_TEMP/bin by gitleaks.yml itself.
+  "gitleaks",
   // Shell grammar — not binaries. Needed once this guard reads .sh / workflow
   // `run:` lines rather than only package.json script strings.
   "if",
