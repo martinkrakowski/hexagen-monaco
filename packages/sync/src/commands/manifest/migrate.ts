@@ -5,17 +5,44 @@
  * registry walk + stamp, report, write back (with a backup, mirroring
  * `manifest split`'s `.pre-split-backup`). All migration semantics — and
  * their tests — live in the use-case.
+ *
+ * Since H1, it also stamps the generator identity marker (`generator.name`,
+ * see stamp-generator-identity.use-case.ts). For a split manifest the marker
+ * lives in the side-car named by `workspace_config` (whose `generator`, when
+ * present, replaces the root's), otherwise at the root.
  */
 import { Command } from "commander";
 import path from "node:path";
 import fs from "node:fs/promises";
 import { isDeepStrictEqual } from "node:util";
+import yaml from "js-yaml";
+import { HEXAGEN_GENERATOR_NAME } from "@hexagen/project-configuration";
 import { findWorkspaceRoot } from "../../sync-engine-init.js";
 import { MigrateManifestUseCase } from "../../application/use-cases/migrate-manifest.use-case.js";
+import { StampGeneratorIdentityUseCase } from "../../application/use-cases/stamp-generator-identity.use-case.js";
+import { isIndexManifest } from "../../loaders/index.js";
+
+/** Write a file atomically (temp + rename) with a `.pre-migrate-backup` copy. Returns the backup path. */
+async function writeWithBackup(
+  filePath: string,
+  content: string,
+): Promise<string> {
+  const backupPath = filePath + ".pre-migrate-backup";
+  await fs.copyFile(filePath, backupPath);
+  const tempPath = filePath + ".tmp";
+  try {
+    await fs.writeFile(tempPath, content, "utf-8");
+    await fs.rename(tempPath, filePath);
+  } catch (writeErr) {
+    await fs.rm(tempPath, { force: true });
+    throw writeErr;
+  }
+  return backupPath;
+}
 
 export const manifestMigrateCommander = new Command("migrate")
   .description(
-    "Bring .architecture/manifest.yaml to the current schema version (stamps schemaVersion, applies registered migrations)",
+    "Bring .architecture/manifest.yaml to the current schema version (stamps schemaVersion, applies registered migrations) and add the generator identity marker (generator.name)",
   )
   .option("--dry-run", "Preview changes without writing files")
   .action(async (options: { dryRun?: boolean }) => {
@@ -38,6 +65,8 @@ export const manifestMigrateCommander = new Command("migrate")
       const result = new MigrateManifestUseCase(isDeepStrictEqual).execute(
         content,
       );
+      const rootContent = result.content;
+      const rootChanged = result.changed;
 
       const from =
         result.fromVersion === undefined
@@ -50,34 +79,124 @@ export const manifestMigrateCommander = new Command("migrate")
         console.log(`Applied : ${step}`);
       }
 
-      if (!result.changed) {
+      const root = yaml.load(rootContent) as Record<string, unknown>;
+      const workspaceConfigPointer =
+        typeof root.workspace_config === "string"
+          ? root.workspace_config
+          : undefined;
+
+      const archDir = path.join(workspaceRoot, ".architecture");
+
+      type StampTarget = "root" | "side-car" | "none";
+      let target: StampTarget;
+      let sideCarPath: string | undefined;
+      let sideCarRel: string | undefined;
+      let sideCarText: string | undefined;
+
+      if (workspaceConfigPointer !== undefined) {
+        sideCarPath = path.join(archDir, workspaceConfigPointer);
+        const containmentRel = path.relative(archDir, sideCarPath);
+        if (containmentRel.startsWith("..") || path.isAbsolute(containmentRel)) {
+          throw new Error(
+            `workspace_config points outside .architecture/: ${workspaceConfigPointer}`,
+          );
+        }
+        sideCarRel = path.relative(workspaceRoot, sideCarPath);
+
+        try {
+          sideCarText = await fs.readFile(sideCarPath, "utf-8");
+        } catch {
+          throw new Error(`Workspace config file not found: ${sideCarPath}`);
+        }
+
+        const sideCarParsed = yaml.load(sideCarText);
+        const sideCarHasGenerator =
+          sideCarParsed !== null &&
+          typeof sideCarParsed === "object" &&
+          !Array.isArray(sideCarParsed) &&
+          (sideCarParsed as Record<string, unknown>).generator !== undefined;
+
+        const rootHasGenerator = root.generator !== undefined;
+        if (sideCarHasGenerator) {
+          target = "side-car";
+        } else if (rootHasGenerator) {
+          target = "root";
+        } else {
+          target = "side-car";
+        }
+      } else {
+        target = isIndexManifest(root) ? "none" : "root";
+      }
+
+      const identityStamp = new StampGeneratorIdentityUseCase(
+        isDeepStrictEqual,
+      );
+      const identityLabel = JSON.stringify(HEXAGEN_GENERATOR_NAME);
+
+      let stampedRoot = rootContent;
+      let rootChangedFinal = rootChanged;
+      let stampedSideCar: string | undefined;
+      let sideCarChanged = false;
+
+      if (target === "none") {
         console.log(
-          "\n✅ Already at the current schema version — nothing to do.",
+          "Identity : skipped (split manifest has no workspace_config side-car)",
+        );
+      } else if (target === "root") {
+        const stamp = identityStamp.execute(rootContent);
+        stampedRoot = stamp.content;
+        rootChangedFinal = rootChanged || stamp.changed;
+        const rel = path.relative(workspaceRoot, manifestPath);
+        if (stamp.changed) {
+          console.log(`Identity: generator.name ${identityLabel} — added to ${rel}`);
+        } else {
+          console.log(`Identity: generator.name already present in ${rel}`);
+        }
+      } else {
+        const stamp = identityStamp.execute(sideCarText as string);
+        stampedSideCar = stamp.content;
+        sideCarChanged = stamp.changed;
+        if (stamp.changed) {
+          console.log(
+            `Identity: generator.name ${identityLabel} — added to ${sideCarRel}`,
+          );
+        } else {
+          console.log(`Identity: generator.name already present in ${sideCarRel}`);
+        }
+      }
+
+      const anyChanged = rootChangedFinal || sideCarChanged;
+      if (!anyChanged) {
+        console.log(
+          "\n✅ Already at the current schema version and generator identity — nothing to do.",
         );
         return;
       }
 
       if (dryRun) {
+        const wouldRewrite: string[] = [];
+        if (rootChangedFinal) {
+          wouldRewrite.push(path.relative(workspaceRoot, manifestPath));
+        }
+        if (sideCarChanged) {
+          wouldRewrite.push(sideCarRel as string);
+        }
         console.log(
-          "\n[dry-run] Would rewrite the manifest. No files written.",
+          `\n[dry-run] Would rewrite: ${wouldRewrite.join(", ")}. No files written.`,
         );
         return;
       }
 
-      const backupPath = manifestPath + ".pre-migrate-backup";
-      await fs.copyFile(manifestPath, backupPath);
-      console.log(`\nBackup created at ${backupPath}`);
-
-      // Atomic replace (house idiom — cf. yaml-service.saveManifest and
-      // fs-utils.safeWriteFileAtomic): write to a temp file, rename into
-      // place. A crash mid-write can then never leave a truncated manifest.
-      const tempPath = manifestPath + ".tmp";
-      try {
-        await fs.writeFile(tempPath, result.content, "utf-8");
-        await fs.rename(tempPath, manifestPath);
-      } catch (writeErr) {
-        await fs.rm(tempPath, { force: true });
-        throw writeErr;
+      if (sideCarChanged) {
+        const backupPath = await writeWithBackup(
+          sideCarPath as string,
+          stampedSideCar as string,
+        );
+        console.log(`\nBackup created at ${backupPath}`);
+      }
+      if (rootChangedFinal) {
+        const backupPath = await writeWithBackup(manifestPath, stampedRoot);
+        console.log(`\nBackup created at ${backupPath}`);
       }
       console.log("✅ Manifest migrated successfully.");
     } catch (err) {
