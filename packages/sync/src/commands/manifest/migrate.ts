@@ -9,7 +9,10 @@
  * Since H1, it also stamps the generator identity marker (`generator.name`,
  * see stamp-generator-identity.use-case.ts). For a split manifest the marker
  * lives in the side-car named by `workspace_config` (whose `generator`, when
- * present, replaces the root's), otherwise at the root.
+ * present, replaces the root's), otherwise at the root. H1 review 2: both
+ * files are resolved to canonical paths inside `.architecture/` — and refused
+ * when they are not regular files or resolve elsewhere — before anything is
+ * read, backed up or written.
  */
 import { Command } from "commander";
 import path from "node:path";
@@ -40,50 +43,94 @@ async function writeWithBackup(
   return backupPath;
 }
 
+/** Refusal messages {@link canonicalPathInsideArchitecture} uses for a file. */
+type CanonicalPathLabel = {
+  /** prefix of the regular-file refusal, e.g. "manifest" */
+  kind: string;
+  /** prefix of the containment refusal, e.g. "workspace_config" */
+  owner: string;
+  /** path shown in both refusals, e.g. a pointer or ".architecture/manifest.yaml" */
+  display: string;
+  /** message thrown when the containing directory cannot be resolved at all */
+  notFound: string;
+};
+
 /**
  * H1 review: the lexical containment check in the command cannot see
  * symlinks, so `.architecture/external -> /tmp/external` would let migrate
- * read, back up and rewrite a file outside the project. Resolve both
- * `.architecture/` and the side-car with realpath and require the canonical
- * side-car to stay inside the canonical `.architecture/` before anything
- * is read, backed up or written. The side-car itself must be a regular
- * file — lstat, so a symlink is refused even when it points back inside —
- * and a side-car that does not exist yet is resolved through its parent
- * directory, so the check still applies to where it would be created.
+ * read, back up and rewrite a file outside the project. Resolve the target
+ * with realpath and require its canonical path to stay inside the
+ * project's `.architecture/` before anything is read, backed up or
+ * written. The target itself must be a regular file — lstat, so a
+ * symlink is refused even when it points back inside — and a target that
+ * does not exist yet is resolved through its parent directory, so the
+ * check still applies to where it would be created. H1 review 2 folded
+ * the root manifest into the same check (it was previously read and
+ * rewritten through whatever `.architecture/manifest.yaml` happened to
+ * be) and made the returned canonical path the one every later read,
+ * backup and write must go through. `.architecture/` itself is
+ * canonicalised through the workspace root and kept literal, so a
+ * symlinked `.architecture/` resolving anywhere else fails the
+ * containment check instead of relocating the project's boundaries.
  */
-async function assertSideCarInsideArchitecture(
+async function canonicalPathInsideArchitecture(
   archDir: string,
-  sideCarPath: string,
-  pointer: string,
-): Promise<void> {
-  const canonicalArchDir = await fs.realpath(archDir);
-  const sideCarStat = await fs.lstat(sideCarPath).catch((): null => null);
-  if (sideCarStat !== null && !sideCarStat.isFile()) {
-    throw new Error(
-      `workspace_config side-car is not a regular file: ${pointer}`,
-    );
+  filePath: string,
+  label: CanonicalPathLabel,
+): Promise<string> {
+  const canonicalArchDir = path.join(
+    await fs.realpath(path.dirname(archDir)),
+    path.basename(archDir),
+  );
+  const targetStat = await fs.lstat(filePath).catch((): null => null);
+  if (targetStat !== null && !targetStat.isFile()) {
+    throw new Error(`${label.kind} is not a regular file: ${label.display}`);
   }
-  let canonicalSideCarPath: string;
-  if (sideCarStat === null) {
-    // Not created yet: canonicalise the parent (when even the parent is
-    // missing, the read below would fail — report it the way migrate does).
+  let canonicalPath: string;
+  if (targetStat === null) {
+    // Not created yet: canonicalise the parent, so the containment check
+    // still applies to where the file would be created (when even the
+    // parent is missing, the read below would fail — report it the way
+    // migrate does).
     const canonicalParent = await fs
-      .realpath(path.dirname(sideCarPath))
+      .realpath(path.dirname(filePath))
       .catch((): null => null);
     if (canonicalParent === null) {
-      throw new Error(`Workspace config file not found: ${sideCarPath}`);
+      throw new Error(label.notFound);
     }
-    canonicalSideCarPath = path.join(
-      canonicalParent,
-      path.basename(sideCarPath),
-    );
+    canonicalPath = path.join(canonicalParent, path.basename(filePath));
   } else {
-    canonicalSideCarPath = await fs.realpath(sideCarPath);
+    canonicalPath = await fs.realpath(filePath);
   }
-  const canonicalRel = path.relative(canonicalArchDir, canonicalSideCarPath);
+  const canonicalRel = path.relative(canonicalArchDir, canonicalPath);
   if (canonicalRel.startsWith("..") || path.isAbsolute(canonicalRel)) {
     throw new Error(
-      `workspace_config points outside .architecture/: ${pointer}`,
+      `${label.owner} points outside .architecture/: ${label.display}`,
+    );
+  }
+  return canonicalPath;
+}
+
+/**
+ * Re-run the containment check immediately before a write: the file may
+ * have been swapped for a symlink or moved since it was read. Refuse
+ * unless it still resolves to the exact canonical path that was
+ * validated and read.
+ */
+async function assertUnchangedSinceRead(
+  archDir: string,
+  filePath: string,
+  label: CanonicalPathLabel,
+  canonicalPath: string,
+): Promise<void> {
+  const revalidated = await canonicalPathInsideArchitecture(
+    archDir,
+    filePath,
+    label,
+  );
+  if (revalidated !== canonicalPath) {
+    throw new Error(
+      `${label.owner} changed since it was read: ${label.display}`,
     );
   }
 }
@@ -98,14 +145,31 @@ export const manifestMigrateCommander = new Command("migrate")
 
     try {
       const workspaceRoot = await findWorkspaceRoot({});
+      const archDir = path.join(workspaceRoot, ".architecture");
       const manifestPath = path.join(
         workspaceRoot,
         ".architecture/manifest.yaml",
       );
 
+      // H1 review 2: the root manifest gets the same refusal as the
+      // side-car — a symlink or non-regular file is refused before it is
+      // read, and the canonical path (which must stay inside the
+      // project's .architecture/) is the one read, backed up and written.
+      const manifestLabel: CanonicalPathLabel = {
+        kind: "manifest",
+        owner: "manifest",
+        display: path.relative(workspaceRoot, manifestPath),
+        notFound: `Failed to read ${manifestPath}. Does it exist?`,
+      };
+      const canonicalManifestPath = await canonicalPathInsideArchitecture(
+        archDir,
+        manifestPath,
+        manifestLabel,
+      );
+
       let content: string;
       try {
-        content = await fs.readFile(manifestPath, "utf-8");
+        content = await fs.readFile(canonicalManifestPath, "utf-8");
       } catch {
         throw new Error(`Failed to read ${manifestPath}. Does it exist?`);
       }
@@ -133,13 +197,13 @@ export const manifestMigrateCommander = new Command("migrate")
           ? root.workspace_config
           : undefined;
 
-      const archDir = path.join(workspaceRoot, ".architecture");
-
       type StampTarget = "root" | "side-car" | "none";
       let target: StampTarget;
       let sideCarPath: string | undefined;
       let sideCarRel: string | undefined;
       let sideCarText: string | undefined;
+      let sideCarLabel: CanonicalPathLabel | undefined;
+      let canonicalSideCarPath: string | undefined;
 
       if (workspaceConfigPointer !== undefined) {
         sideCarPath = path.join(archDir, workspaceConfigPointer);
@@ -155,16 +219,23 @@ export const manifestMigrateCommander = new Command("migrate")
         // H1 review: the check above is lexical — canonicalise both sides
         // and refuse a side-car that resolves outside .architecture/ (or
         // is itself a symlink) before anything is read, backed up or
-        // written.
-        await assertSideCarInsideArchitecture(
+        // written. H1 review 2: the canonical path it returns is the one
+        // every later read, backup and write goes through.
+        sideCarLabel = {
+          kind: "workspace_config side-car",
+          owner: "workspace_config",
+          display: workspaceConfigPointer,
+          notFound: `Workspace config file not found: ${sideCarPath}`,
+        };
+        canonicalSideCarPath = await canonicalPathInsideArchitecture(
           archDir,
           sideCarPath,
-          workspaceConfigPointer,
+          sideCarLabel,
         );
-        sideCarRel = path.relative(workspaceRoot, sideCarPath);
+        sideCarRel = path.relative(workspaceRoot, canonicalSideCarPath);
 
         try {
-          sideCarText = await fs.readFile(sideCarPath, "utf-8");
+          sideCarText = await fs.readFile(canonicalSideCarPath, "utf-8");
         } catch {
           throw new Error(`Workspace config file not found: ${sideCarPath}`);
         }
@@ -206,7 +277,7 @@ export const manifestMigrateCommander = new Command("migrate")
         const stamp = identityStamp.execute(rootContent);
         stampedRoot = stamp.content;
         rootChangedFinal = rootChanged || stamp.changed;
-        const rel = path.relative(workspaceRoot, manifestPath);
+        const rel = path.relative(workspaceRoot, canonicalManifestPath);
         if (stamp.changed) {
           console.log(
             `Identity: generator.name ${identityLabel} — added to ${rel}`,
@@ -240,7 +311,9 @@ export const manifestMigrateCommander = new Command("migrate")
       if (dryRun) {
         const wouldRewrite: string[] = [];
         if (rootChangedFinal) {
-          wouldRewrite.push(path.relative(workspaceRoot, manifestPath));
+          wouldRewrite.push(
+            path.relative(workspaceRoot, canonicalManifestPath),
+          );
         }
         if (sideCarChanged) {
           wouldRewrite.push(sideCarRel as string);
@@ -252,14 +325,31 @@ export const manifestMigrateCommander = new Command("migrate")
       }
 
       if (sideCarChanged) {
-        const backupPath = await writeWithBackup(
+        // Re-validate right before the write: the file may have been
+        // swapped for a symlink or moved since it was read.
+        await assertUnchangedSinceRead(
+          archDir,
           sideCarPath as string,
+          sideCarLabel as CanonicalPathLabel,
+          canonicalSideCarPath as string,
+        );
+        const backupPath = await writeWithBackup(
+          canonicalSideCarPath as string,
           stampedSideCar as string,
         );
         console.log(`\nBackup created at ${backupPath}`);
       }
       if (rootChangedFinal) {
-        const backupPath = await writeWithBackup(manifestPath, stampedRoot);
+        await assertUnchangedSinceRead(
+          archDir,
+          manifestPath,
+          manifestLabel,
+          canonicalManifestPath,
+        );
+        const backupPath = await writeWithBackup(
+          canonicalManifestPath,
+          stampedRoot,
+        );
         console.log(`\nBackup created at ${backupPath}`);
       }
       console.log("✅ Manifest migrated successfully.");

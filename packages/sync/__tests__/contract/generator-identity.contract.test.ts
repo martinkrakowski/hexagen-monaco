@@ -44,6 +44,18 @@ workspace_config: external/workspace.config.yaml
 bounded_contexts: []
 `;
 
+const INDEX_MANIFEST_NESTED_POINTER = `version: '2.0'
+description: x
+workspace_config: nested/workspace.config.yaml
+bounded_contexts: []
+`;
+
+const INDEX_MANIFEST_NESTED_LINKED_POINTER = `version: '2.0'
+description: x
+workspace_config: nested/linked/workspace.config.yaml
+bounded_contexts: []
+`;
+
 const SIDE_CAR_NO_GENERATOR = `monorepo:
   packageManager: yarn
 `;
@@ -326,6 +338,156 @@ describe("generator identity contract — built dist in published layout", () =>
           ),
         ),
         false,
+      );
+    } finally {
+      await cleanupFixture(fix.root);
+    }
+  });
+
+  it("refuses a manifest.yaml symlinked to a file outside .architecture/ (H1 review 2)", async () => {
+    const fix = await createPublishedLayoutFixture(
+      VALID_MANIFEST,
+      FIXTURE_PREFIX,
+    );
+    try {
+      const outsideDir = await fs.mkdtemp(
+        path.join(os.tmpdir(), OUTSIDE_PREFIX),
+      );
+      outsideDirs.push(outsideDir);
+      const outsideFile = path.join(outsideDir, "manifest.yaml");
+      await fs.writeFile(outsideFile, VALID_MANIFEST, "utf8");
+      const manifestPath = path.join(
+        fix.root,
+        ".architecture",
+        "manifest.yaml",
+      );
+      await fs.rm(manifestPath, { force: true });
+      await fs.symlink(outsideFile, manifestPath, "file");
+
+      const beforeOutside = await fs.readFile(outsideFile, "utf8");
+      const r = await runHexagen(fix, ["manifest", "migrate"]);
+      assert.equal(r.code, 1, describeResult(r));
+      assert.ok(r.stderr.includes("Migration failed"), describeResult(r));
+      assert.ok(
+        r.stderr.includes("manifest is not a regular file"),
+        describeResult(r),
+      );
+      assert.equal(await fs.readFile(outsideFile, "utf8"), beforeOutside);
+      assert.equal(
+        await pathExists(outsideFile + ".pre-migrate-backup"),
+        false,
+      );
+    } finally {
+      await cleanupFixture(fix.root);
+    }
+  });
+
+  it("refuses a .architecture that is itself a symlink to a directory outside the project (H1 review 2)", async () => {
+    const fix = await createPublishedLayoutFixture(
+      VALID_MANIFEST,
+      FIXTURE_PREFIX,
+    );
+    try {
+      const outsideDir = await fs.mkdtemp(
+        path.join(os.tmpdir(), OUTSIDE_PREFIX),
+      );
+      outsideDirs.push(outsideDir);
+      const realArchDir = path.join(fix.root, ".architecture");
+      const outsideArchDir = path.join(outsideDir, ".architecture");
+      await fs.rename(realArchDir, outsideArchDir);
+      await fs.symlink(outsideArchDir, realArchDir, "dir");
+
+      const outsideManifest = path.join(outsideArchDir, "manifest.yaml");
+      const beforeOutside = await fs.readFile(outsideManifest, "utf8");
+      const r = await runHexagen(fix, ["manifest", "migrate"]);
+      assert.equal(r.code, 1, describeResult(r));
+      assert.ok(r.stderr.includes("Migration failed"), describeResult(r));
+      assert.ok(
+        r.stderr.includes("manifest points outside .architecture/"),
+        describeResult(r),
+      );
+      assert.equal(await fs.readFile(outsideManifest, "utf8"), beforeOutside);
+      assert.equal(
+        await pathExists(outsideManifest + ".pre-migrate-backup"),
+        false,
+      );
+    } finally {
+      await cleanupFixture(fix.root);
+    }
+  });
+
+  it("refuses a side-car whose parent directory inside .architecture is a symlink to outside (H1 review 2)", async () => {
+    const fix = await createPublishedLayoutFixture(
+      VALID_MANIFEST,
+      FIXTURE_PREFIX,
+    );
+    try {
+      const outsideDir = await fs.mkdtemp(
+        path.join(os.tmpdir(), OUTSIDE_PREFIX),
+      );
+      outsideDirs.push(outsideDir);
+      const outsideFile = path.join(outsideDir, "workspace.config.yaml");
+      await fs.writeFile(outsideFile, SIDE_CAR_NO_GENERATOR, "utf8");
+      const nestedDir = path.join(fix.root, ".architecture", "nested");
+      await fs.mkdir(nestedDir, { recursive: true });
+      await fs.symlink(outsideDir, path.join(nestedDir, "linked"), "dir");
+      await fs.writeFile(
+        path.join(fix.root, ".architecture", "manifest.yaml"),
+        INDEX_MANIFEST_NESTED_LINKED_POINTER,
+        "utf8",
+      );
+
+      const beforeOutside = await fs.readFile(outsideFile, "utf8");
+      const r = await runHexagen(fix, ["manifest", "migrate"]);
+      assert.equal(r.code, 1, describeResult(r));
+      assert.ok(r.stderr.includes("Migration failed"), describeResult(r));
+      assert.ok(
+        r.stderr.includes("workspace_config points outside .architecture/"),
+        describeResult(r),
+      );
+      assert.equal(await fs.readFile(outsideFile, "utf8"), beforeOutside);
+      assert.equal(
+        await pathExists(outsideFile + ".pre-migrate-backup"),
+        false,
+      );
+    } finally {
+      await cleanupFixture(fix.root);
+    }
+  });
+
+  it("the regular case still migrates and writes the backup next to the real file (H1 review 2)", async () => {
+    const fix = await createPublishedLayoutFixture(
+      VALID_MANIFEST,
+      FIXTURE_PREFIX,
+    );
+    try {
+      await fs.mkdir(path.join(fix.root, ".architecture", "nested"), {
+        recursive: true,
+      });
+      await fs.writeFile(
+        path.join(fix.root, ".architecture", "manifest.yaml"),
+        INDEX_MANIFEST_NESTED_POINTER,
+        "utf8",
+      );
+      const realSideCar = path.join(
+        fix.root,
+        ".architecture",
+        "nested",
+        "workspace.config.yaml",
+      );
+      await fs.writeFile(realSideCar, SIDE_CAR_NO_GENERATOR, "utf8");
+
+      const r = await runHexagen(fix, ["manifest", "migrate"]);
+      assert.equal(r.code, 0, describeResult(r));
+
+      const stamped = yaml.load(
+        await fs.readFile(realSideCar, "utf8"),
+      ) as Record<string, unknown>;
+      const generator = stamped.generator as { name?: string } | undefined;
+      assert.equal(generator?.name, "@hexagen-monaco/sync");
+      assert.equal(
+        await pathExists(realSideCar + ".pre-migrate-backup"),
+        true,
       );
     } finally {
       await cleanupFixture(fix.root);
