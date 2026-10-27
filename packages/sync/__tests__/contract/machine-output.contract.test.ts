@@ -16,6 +16,7 @@ import {
   describeResult,
   cleanupFixture,
   assertBuiltArtifactsPresent,
+  writeBinStub,
   type ContractFixture,
 } from "../helpers/published-layout.js";
 
@@ -75,13 +76,28 @@ async function lintableFixture(source: string): Promise<ContractFixture> {
 }
 
 function oneJsonLine(stdout: string): Record<string, unknown> {
-  const lines = stdout.trim().split("\n");
-  assert.equal(
-    lines.length,
-    1,
-    `expected one stdout line, got ${lines.length}`,
+  assert.ok(
+    stdout.endsWith("\n"),
+    `expected stdout to end with a newline, got ${JSON.stringify(stdout)}`,
   );
-  return JSON.parse(lines[0]) as Record<string, unknown>;
+  const newlineCount = stdout.split("\n").length - 1;
+  assert.equal(
+    newlineCount,
+    1,
+    `expected exactly one newline in stdout, got ${newlineCount}:\n${stdout}`,
+  );
+  const line = stdout.slice(0, -1);
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(line);
+  } catch (e) {
+    assert.fail(`stdout line is not valid JSON (${String(e)}): ${line}`);
+  }
+  assert.ok(
+    typeof parsed === "object" && parsed !== null,
+    `stdout line is not a JSON object: ${line}`,
+  );
+  return parsed as Record<string, unknown>;
 }
 
 describe("machine-readable output contract (H2)", () => {
@@ -178,6 +194,62 @@ describe("machine-readable output contract (H2)", () => {
       assert.ok(
         typeof line.reason === "string" && line.reason.includes("not found"),
       );
+    } finally {
+      await cleanupFixture(fix.root);
+    }
+  });
+
+  it("hexagen arch validate --json with a crashed linter exits 2 with a could-not-run line", async () => {
+    const fix = await lintableFixture(CLEAN);
+    try {
+      // A fake linter that dies the way a crashed process does: exit 1, a
+      // stack trace on stderr, no JSON line. This used to be classified as
+      // violations/exit 1 (H2a review fix 1).
+      await writeBinStub(
+        path.join(fix.root, "node_modules", ".bin"),
+        "hexagen-lint",
+        {
+          sh: `#!/bin/sh\nexec "${process.execPath}" -e "throw new Error('boom')"\n`,
+          cmd: `@echo off\r\n"${process.execPath}" -e "throw new Error('boom')"\r\n`,
+        },
+      );
+      const r = await runHexagen(fix, ["arch", "validate", "--json"]);
+      assert.equal(r.code, 2, describeResult(r));
+      const line = oneJsonLine(r.stdout);
+      assert.equal(line.status, "could-not-run");
+      assert.equal(line.exitCode, 2);
+      assert.ok(
+        typeof line.reason === "string" &&
+          line.reason.includes("exited 1 but printed no readable JSON line"),
+      );
+    } finally {
+      await cleanupFixture(fix.root);
+    }
+  });
+
+  it("hexagen arch validate --json with no manifest exits 2 with a could-not-run line", async () => {
+    // clientRepo: no .architecture/manifest.yaml in the fixture and none
+    // above it (the fixture lives under the test TMPDIR, outside any
+    // HexaGen project). This used to process.exit(1) with no JSON line
+    // (H2a review fix 2).
+    const fix = await createPublishedLayoutFixture(
+      VALID_MANIFEST,
+      FIXTURE_PREFIX,
+      {
+        clientRepo: true,
+      },
+    );
+    try {
+      const r = await runHexagen(fix, ["arch", "validate", "--json"]);
+      assert.equal(r.code, 2, describeResult(r));
+      const line = oneJsonLine(r.stdout);
+      assert.equal(line.status, "could-not-run");
+      assert.equal(line.exitCode, 2);
+      assert.ok(
+        typeof line.reason === "string" &&
+          line.reason.startsWith("no .architecture/manifest.yaml found from "),
+      );
+      assert.equal(line.fresh, null);
     } finally {
       await cleanupFixture(fix.root);
     }

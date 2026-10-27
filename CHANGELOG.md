@@ -38,6 +38,13 @@ is the guard working, not a fault to bypass.
   must accept 2. Generated projects' `lint:arch` script runs
   `hexagen arch validate` (`packages/sync/src/generators/root-file-templates.ts:37`),
   so the same applies there.
+- **A crashed linter and a missing manifest both exit 2.** A `hexagen-lint`
+  that dies before printing its `--json` line (exit 1, nothing readable on
+  stdout) is `could-not-run`, not `violations` — it checked nothing. Running
+  `arch validate` where no `.architecture/manifest.yaml` can be found from the
+  working directory is `could-not-run` too; it used to exit 1 with no JSON line
+  at all. In `--json` mode both print the one machine-readable line, with
+  `status: "could-not-run"` and exit 2.
 
 ## 0.14.0
 

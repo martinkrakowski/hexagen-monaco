@@ -6,20 +6,32 @@ import path from "node:path";
 import { validateCommand } from "../../../src/commands/arch/validate.js";
 
 /**
- * Install a fake `hexagen-lint` bin so validateCommand can actually invoke it.
- * `exitCode` 0 = compliant, non-zero = violations.
+ * The one machine-readable line the real linter prints in --json mode.
+ * validateCommand always invokes the linter with --json (H2a review fix 1b),
+ * so the fake emits it by default; `emitJsonLine: false` simulates a linter
+ * that crashes or prints nothing.
+ * `exitCode` 0 = compliant, 1 = violations, anything else = could not run.
  */
-async function installFakeLinter(dir: string, exitCode = 0): Promise<void> {
+const FAKE_LINT_LINE =
+  '{"schemaVersion":1,"fresh":[],"baselined":[],"stale":[],"expired":[],"introduced":[],"baselineGrowth":[],"filesScanned":1}';
+
+async function installFakeLinter(
+  dir: string,
+  exitCode = 0,
+  emitJsonLine = true,
+): Promise<void> {
   const binDir = path.join(dir, "node_modules", ".bin");
   await fs.mkdir(binDir, { recursive: true });
   if (process.platform === "win32") {
+    const echo = emitJsonLine ? `echo ${FAKE_LINT_LINE}\r\n` : "";
     await fs.writeFile(
       path.join(binDir, "hexagen-lint.cmd"),
-      `@echo off\r\nexit /b ${exitCode}\r\n`,
+      `@echo off\r\n${echo}exit /b ${exitCode}\r\n`,
     );
   } else {
+    const echo = emitJsonLine ? `echo '${FAKE_LINT_LINE}'\n` : "";
     const bin = path.join(binDir, "hexagen-lint");
-    await fs.writeFile(bin, `#!/bin/sh\nexit ${exitCode}\n`);
+    await fs.writeFile(bin, `#!/bin/sh\n${echo}exit ${exitCode}\n`);
     await fs.chmod(bin, 0o755);
   }
 }
@@ -66,6 +78,7 @@ async function withHarness<T>(
   tempDir: string,
   exitCode: number,
   fn: (capture: Capture) => Promise<T>,
+  emitJsonLine = true,
 ): Promise<T> {
   const originalCwd = process.cwd;
   const originalConsoleLog = console.log;
@@ -99,7 +112,7 @@ async function withHarness<T>(
     (process.cwd as () => string) = () => tempDir;
     process.exitCode = undefined;
 
-    await installFakeLinter(tempDir, exitCode);
+    await installFakeLinter(tempDir, exitCode, emitJsonLine);
     return await fn(capture);
   } finally {
     process.cwd = originalCwd;
@@ -156,16 +169,46 @@ describe("validateCommand", () => {
     }
   });
 
+  it("fake exit 1 with no line, human mode: exitCode 2 and errors contain 'Could not run the architecture linter'", async () => {
+    const tempDir = await makeTempProject();
+    try {
+      await withHarness(
+        tempDir,
+        1,
+        async ({ errors }) => {
+          await validateCommand();
+          assert.equal(process.exitCode, 2);
+          assert.ok(
+            errors.join("\n").includes("Could not run the architecture linter"),
+          );
+          assert.ok(
+            errors
+              .join("\n")
+              .includes("exited 1 but printed no readable JSON line"),
+          );
+        },
+        false,
+      );
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
   it("fake exit 0 with --json and no JSON printed: exitCode 2 and one could-not-run stdout line", async () => {
     const tempDir = await makeTempProject();
     try {
-      await withHarness(tempDir, 0, async ({ stdoutLines }) => {
-        await validateCommand({ json: true });
-        assert.equal(process.exitCode, 2);
-        assert.equal(stdoutLines.length, 1);
-        const parsed = JSON.parse(stdoutLines[0]) as { status: string };
-        assert.equal(parsed.status, "could-not-run");
-      });
+      await withHarness(
+        tempDir,
+        0,
+        async ({ stdoutLines }) => {
+          await validateCommand({ json: true });
+          assert.equal(process.exitCode, 2);
+          assert.equal(stdoutLines.length, 1);
+          const parsed = JSON.parse(stdoutLines[0]) as { status: string };
+          assert.equal(parsed.status, "could-not-run");
+        },
+        false,
+      );
     } finally {
       await fs.rm(tempDir, { recursive: true, force: true });
     }

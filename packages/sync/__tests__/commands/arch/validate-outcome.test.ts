@@ -3,6 +3,7 @@ import { describe, it } from "vitest";
 import {
   classifyLintRun,
   linterNotFoundOutcome,
+  noManifestOutcome,
   parseLintJsonLine,
   toArchValidateJson,
 } from "../../../src/commands/arch/validate-outcome.js";
@@ -75,10 +76,20 @@ describe("classifyLintRun", () => {
     assert.equal(outcome.counts?.fresh, 2);
   });
 
-  it("exit 1 with no line: violations, counts null", () => {
+  it("exit 1 with no line: could-not-run, exitCode 2", () => {
     const outcome = classifyLintRun(1, "", true);
-    assert.equal(outcome.status, "violations");
-    assert.equal(outcome.exitCode, 1);
+    assert.equal(outcome.status, "could-not-run");
+    assert.equal(outcome.exitCode, 2);
+    assert.equal(outcome.counts, null);
+    assert.ok(
+      outcome.reason?.includes("exited 1 but printed no readable JSON line"),
+    );
+  });
+
+  it("exit 1 with an unparseable line: could-not-run, exitCode 2", () => {
+    const outcome = classifyLintRun(1, "{not json\n", true);
+    assert.equal(outcome.status, "could-not-run");
+    assert.equal(outcome.exitCode, 2);
     assert.equal(outcome.counts, null);
   });
 
@@ -117,6 +128,19 @@ describe("linterNotFoundOutcome", () => {
     assert.equal(outcome.exitCode, 2);
     assert.equal(outcome.status, "could-not-run");
     assert.ok(outcome.reason?.includes("not found"));
+  });
+});
+
+describe("noManifestOutcome", () => {
+  it("is could-not-run, exitCode 2, and names the cwd it searched from", () => {
+    const outcome = noManifestOutcome("/some/cwd");
+    assert.equal(outcome.status, "could-not-run");
+    assert.equal(outcome.exitCode, 2);
+    assert.equal(outcome.counts, null);
+    assert.equal(
+      outcome.reason,
+      "no .architecture/manifest.yaml found from /some/cwd",
+    );
   });
 });
 

@@ -101,7 +101,20 @@ export function classifyLintRun(
   }
 
   if (linterExit === 1) {
-    const counts = json ? parseLintJsonLine(stdout) : null;
+    if (!json) {
+      return { status: "violations", exitCode: 1, counts: null, reason: null };
+    }
+    const counts = parseLintJsonLine(stdout);
+    if (counts === null) {
+      // A crashed linter exits 1 with a stack trace and no JSON line. Nothing
+      // was checked, so "could not run" (exit 2) — never "violations".
+      return {
+        status: "could-not-run",
+        exitCode: 2,
+        counts: null,
+        reason: "hexagen-lint exited 1 but printed no readable JSON line",
+      };
+    }
     return { status: "violations", exitCode: 1, counts, reason: null };
   }
 
@@ -119,6 +132,20 @@ export function linterNotFoundOutcome(): ArchValidateOutcome {
     exitCode: 2,
     counts: null,
     reason: "arch-linter not found — install @hexagen-monaco/arch-linter",
+  };
+}
+
+/**
+ * No `.architecture/manifest.yaml` is reachable from `cwd`. getProjectRoot()
+ * would process.exit(1) here, with no JSON line in --json mode; the consumer
+ * contract needs could-not-run/2 through the normal emission paths.
+ */
+export function noManifestOutcome(cwd: string): ArchValidateOutcome {
+  return {
+    status: "could-not-run",
+    exitCode: 2,
+    counts: null,
+    reason: "no .architecture/manifest.yaml found from " + cwd,
   };
 }
 
