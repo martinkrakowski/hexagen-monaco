@@ -29,15 +29,18 @@ import { workbookCommander } from "./commands/workbook/index.js";
 import { grantCommander } from "./commands/grant/index.js";
 import { runReportCommand } from "./commands/report/index.js";
 import { resolveToolchainVersion } from "./toolchain-version.js";
+import type { SyncRunSummary } from "./results.js";
+import { buildSyncCheckJson } from "./commands/sync/check-json.js";
 import type { LoggerPort } from "@hexagen/shared";
 
-function createLogger(): LoggerPort {
+function createLogger(toStderr = false): LoggerPort {
+  const out = toStderr ? console.error : console.log;
   return {
     error: (msg, ctx) => console.error(`[sync] ${msg}`, ctx ?? ""),
     warn: (msg, ctx) => console.warn(`[sync] ${msg}`, ctx ?? ""),
-    info: (msg, ctx) => console.log(`[sync] ${msg}`, ctx ?? ""),
+    info: (msg, ctx) => out(`[sync] ${msg}`, ctx ?? ""),
     debug: (msg, ctx) => {
-      if (process.env.DEBUG) console.log(`[debug] ${msg}`, ctx ?? "");
+      if (process.env.DEBUG) out(`[debug] ${msg}`, ctx ?? "");
     },
     errorWithException: (err, msg, ctx) => {
       const errorMessage =
@@ -68,6 +71,10 @@ function buildProgram(): Command {
       "--check",
       "CI drift gate: implies --dry-run and exits non-zero iff any change would be made (created/updated/deleted). A converged tree exits 0.",
     )
+    .option(
+      "--json",
+      "With --check: print one JSON summary line on stdout (schemaVersion 1); every log line goes to stderr",
+    )
     .option("--force", "Overwrite non-generated files in packages")
     .option(
       "--force-root",
@@ -88,6 +95,12 @@ function buildProgram(): Command {
     )
     .action(async (options) => {
       const check = options.check ?? false;
+      const json = options.json ?? false;
+      if (json && !check) {
+        console.error("--json is only supported together with --check.");
+        process.exitCode = 2;
+        return;
+      }
       const flags = {
         dryRun: (options.dryRun || options.check) ?? false,
         force: options.force ?? false,
@@ -97,12 +110,15 @@ function buildProgram(): Command {
         only: options.only as string[] | undefined,
         report: options.report as string | undefined,
         mode: "self-regen" as const,
-        logger,
+        logger: json ? createLogger(true) : logger,
       };
+
+      let summary: SyncRunSummary | undefined;
+      let fatalMessage: string | undefined;
 
       try {
         const engine = new SyncEngine(flags);
-        const summary = await engine.run();
+        summary = await engine.run();
         if (summary.errors > 0) {
           console.error(
             `Sync incomplete: ${summary.errors} generator failure(s) — see the FAILED row(s) above.`,
@@ -126,8 +142,15 @@ function buildProgram(): Command {
       } catch (err) {
         const message =
           err instanceof Error ? err.message : "Unknown fatal error";
+        fatalMessage = message;
         console.error(`Fatal sync error: ${message}`);
         process.exitCode = 1;
+      }
+
+      if (json) {
+        process.stdout.write(
+          JSON.stringify(buildSyncCheckJson(summary, fatalMessage)) + "\n",
+        );
       }
     });
 
