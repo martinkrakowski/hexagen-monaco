@@ -51,6 +51,8 @@ export interface SyncConfig {
 }
 
 export interface GeneratorConfig {
+  /** Identity marker; "@hexagen-monaco/sync" when hexagen wrote the manifest. Absent = legacy. */
+  name?: string;
   version?: string;
   sync?: SyncConfig;
 }

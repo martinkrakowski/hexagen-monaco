@@ -120,6 +120,82 @@ describe("architecture files", () => {
     });
   });
 
+  it("stamps generator.name on a fresh external manifest", async () => {
+    await withTempWorkspace(async ({ workspaceRoot }) => {
+      const archDir = path.join(workspaceRoot, ".architecture");
+      const manifest: Manifest = {
+        system: "stamp-target",
+        scope: "st",
+        architecture: "modular-monolith",
+        bounded_contexts: [{ name: "alpha" }],
+      };
+      const config = makeConfig(workspaceRoot, manifest, {
+        mode: "external",
+        forceRoot: true,
+      });
+
+      await generateArchitectureFiles(config);
+
+      const manifestPath = path.join(archDir, "manifest.yaml");
+      const parsed = yaml.load(await readText(manifestPath)) as Manifest;
+      assert.strictEqual(parsed.generator?.name, "@hexagen-monaco/sync");
+    });
+  });
+
+  it("keeps existing generator keys and adds the identity name", async () => {
+    await withTempWorkspace(async ({ workspaceRoot }) => {
+      const archDir = path.join(workspaceRoot, ".architecture");
+      const manifest: Manifest = {
+        system: "keep-keys",
+        scope: "kk",
+        architecture: "modular-monolith",
+        bounded_contexts: [{ name: "alpha" }],
+        generator: { version: "0.2.0", sync: { idempotent: true } },
+      };
+      const config = makeConfig(workspaceRoot, manifest, {
+        mode: "external",
+        forceRoot: true,
+      });
+
+      await generateArchitectureFiles(config);
+
+      const manifestPath = path.join(archDir, "manifest.yaml");
+      const parsed = yaml.load(await readText(manifestPath)) as {
+        generator: Record<string, unknown>;
+      };
+      assert.deepStrictEqual(parsed.generator, {
+        name: "@hexagen-monaco/sync",
+        version: "0.2.0",
+        sync: { idempotent: true },
+      });
+    });
+  });
+
+  it("preserves an explicit generator.name", async () => {
+    await withTempWorkspace(async ({ workspaceRoot }) => {
+      const archDir = path.join(workspaceRoot, ".architecture");
+      const manifest: Manifest = {
+        system: "explicit-name",
+        scope: "en",
+        architecture: "modular-monolith",
+        bounded_contexts: [{ name: "alpha" }],
+        generator: { name: "acme-tool" },
+      };
+      const config = makeConfig(workspaceRoot, manifest, {
+        mode: "external",
+        forceRoot: true,
+      });
+
+      await generateArchitectureFiles(config);
+
+      const manifestPath = path.join(archDir, "manifest.yaml");
+      const parsed = yaml.load(await readText(manifestPath)) as {
+        generator: { name?: string };
+      };
+      assert.strictEqual(parsed.generator?.name, "acme-tool");
+    });
+  });
+
   it("should preserve existing manifest.yaml in external mode", async () => {
     await withTempWorkspace(async ({ workspaceRoot }) => {
       const archDir = path.join(workspaceRoot, ".architecture");

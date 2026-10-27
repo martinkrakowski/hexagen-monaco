@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import yaml from "js-yaml";
+import { HEXAGEN_GENERATOR_NAME } from "@hexagen/project-configuration";
 import type { SyncConfig } from "../config.js";
 import { safeWriteFileAtomic, isInScope } from "../fs-utils.js";
 import {
@@ -211,6 +212,17 @@ function interpolateWithLogging(
   return output;
 }
 
+/** Stamp the identity marker on a manifest hexagen is about to create. An explicit name already present is kept. */
+function withGeneratorIdentity(manifest: Manifest): Manifest {
+  return {
+    ...manifest,
+    generator: {
+      ...manifest.generator,
+      name: manifest.generator?.name ?? HEXAGEN_GENERATOR_NAME,
+    },
+  };
+}
+
 async function writeManifestIfFreshExternal(
   config: SyncConfig,
   result: GeneratorResult,
@@ -256,7 +268,7 @@ async function writeManifestIfFreshExternal(
     return;
   }
 
-  const content = yaml.dump(config.manifest);
+  const content = yaml.dump(withGeneratorIdentity(config.manifest));
   // PR-B1 (RCA #4): this is a deliberate raw write (not safeWriteFileAtomic),
   // so it must journal itself. The exists-check above guarantees the file is
   // fresh — pre-image is null (a create), rolled back by unlinking.

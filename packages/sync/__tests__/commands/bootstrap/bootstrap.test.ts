@@ -65,8 +65,12 @@ describe("hexagen bootstrap", () => {
           path.join(root, ".architecture", "manifest.yaml"),
           "utf8",
         ),
-      ) as { bounded_contexts: { name: string }[] };
+      ) as {
+        bounded_contexts: { name: string }[];
+        generator?: { name?: string };
+      };
       assert.ok(manifest.bounded_contexts.some((c) => c.name === "billing"));
+      assert.equal(manifest.generator?.name, "@hexagen-monaco/sync");
 
       const layout = yaml.load(
         await fs.readFile(
