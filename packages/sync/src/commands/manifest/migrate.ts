@@ -40,6 +40,54 @@ async function writeWithBackup(
   return backupPath;
 }
 
+/**
+ * H1 review: the lexical containment check in the command cannot see
+ * symlinks, so `.architecture/external -> /tmp/external` would let migrate
+ * read, back up and rewrite a file outside the project. Resolve both
+ * `.architecture/` and the side-car with realpath and require the canonical
+ * side-car to stay inside the canonical `.architecture/` before anything
+ * is read, backed up or written. The side-car itself must be a regular
+ * file — lstat, so a symlink is refused even when it points back inside —
+ * and a side-car that does not exist yet is resolved through its parent
+ * directory, so the check still applies to where it would be created.
+ */
+async function assertSideCarInsideArchitecture(
+  archDir: string,
+  sideCarPath: string,
+  pointer: string,
+): Promise<void> {
+  const canonicalArchDir = await fs.realpath(archDir);
+  const sideCarStat = await fs.lstat(sideCarPath).catch((): null => null);
+  if (sideCarStat !== null && !sideCarStat.isFile()) {
+    throw new Error(
+      `workspace_config side-car is not a regular file: ${pointer}`,
+    );
+  }
+  let canonicalSideCarPath: string;
+  if (sideCarStat === null) {
+    // Not created yet: canonicalise the parent (when even the parent is
+    // missing, the read below would fail — report it the way migrate does).
+    const canonicalParent = await fs
+      .realpath(path.dirname(sideCarPath))
+      .catch((): null => null);
+    if (canonicalParent === null) {
+      throw new Error(`Workspace config file not found: ${sideCarPath}`);
+    }
+    canonicalSideCarPath = path.join(
+      canonicalParent,
+      path.basename(sideCarPath),
+    );
+  } else {
+    canonicalSideCarPath = await fs.realpath(sideCarPath);
+  }
+  const canonicalRel = path.relative(canonicalArchDir, canonicalSideCarPath);
+  if (canonicalRel.startsWith("..") || path.isAbsolute(canonicalRel)) {
+    throw new Error(
+      `workspace_config points outside .architecture/: ${pointer}`,
+    );
+  }
+}
+
 export const manifestMigrateCommander = new Command("migrate")
   .description(
     "Bring .architecture/manifest.yaml to the current schema version (stamps schemaVersion, applies registered migrations) and add the generator identity marker (generator.name)",
@@ -104,6 +152,15 @@ export const manifestMigrateCommander = new Command("migrate")
             `workspace_config points outside .architecture/: ${workspaceConfigPointer}`,
           );
         }
+        // H1 review: the check above is lexical — canonicalise both sides
+        // and refuse a side-car that resolves outside .architecture/ (or
+        // is itself a symlink) before anything is read, backed up or
+        // written.
+        await assertSideCarInsideArchitecture(
+          archDir,
+          sideCarPath,
+          workspaceConfigPointer,
+        );
         sideCarRel = path.relative(workspaceRoot, sideCarPath);
 
         try {
