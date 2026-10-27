@@ -18,7 +18,7 @@ Make hexagen's existing command-line contract (ADR-0056: the `hexagen` and `hexa
 
 ## 2. Gaps found (read-only, 2026-10-25)
 
-- **No generator identity.** The manifest's `generator` block has `version` but no `name`. The block may also live in the side-car `.architecture/generator.config.yaml` (see `manifest-merge-loader.ts`). An orchestrator cannot tell a hexagen manifest from any other tool's file in `.architecture/`. This repository itself keeps ADRs in `.architecture/decisions/`.
+- **No generator identity.** The manifest's `generator` block has `version` but no `name`. The block may also live in the side-car named by `workspace_config:` (normally `.architecture/workspace.config.yaml`; see `manifest-merge-loader.ts`), whose `generator` block wins on merge. `.architecture/generator.config.yaml` is runtime state, not the side-car (corrected 2026-10-27; see ADR-0072). An orchestrator cannot tell a hexagen manifest from any other tool's file in `.architecture/`. This repository itself keeps ADRs in `.architecture/decisions/`.
 - **`hexagen arch validate` gives human output only,** and uses exit 1 both for "violations" and for "could not run" (`packages/sync/src/commands/arch/validate.ts`). `hexagen-lint` already distinguishes them (0, 1 and 2).
 - **`hexagen sync --check`** reports pending operations only as prose on stderr.
 - **`hexagen-lint --json`** has no `schemaVersion` field in its output line.
