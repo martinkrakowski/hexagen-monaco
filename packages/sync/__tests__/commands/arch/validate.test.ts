@@ -6,7 +6,7 @@ import path from "node:path";
 import { validateCommand } from "../../../src/commands/arch/validate.js";
 
 /**
- * Install a fake `hexagen-lint` bin so validateManifest can actually invoke it.
+ * Install a fake `hexagen-lint` bin so validateCommand can actually invoke it.
  * `exitCode` 0 = compliant, non-zero = violations.
  */
 async function installFakeLinter(dir: string, exitCode = 0): Promise<void> {
@@ -37,44 +37,135 @@ bounded_contexts:
           - Entity1
 `;
 
-describe("validateCommand", () => {
-  it("should pass when linter succeeds", async () => {
-    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "hexagen-test-"));
-    const archDir1 = path.join(tempDir, ".architecture");
-    await fs.mkdir(archDir1, { recursive: true });
-    await fs.writeFile(
-      path.join(archDir1, "manifest.yaml"),
-      validManifestYaml,
-      "utf8",
-    );
-    await installFakeLinter(tempDir, 0);
+async function makeTempProject(): Promise<string> {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "hexagen-test-"));
+  const archDir = path.join(tempDir, ".architecture");
+  await fs.mkdir(archDir, { recursive: true });
+  await fs.writeFile(
+    path.join(archDir, "manifest.yaml"),
+    validManifestYaml,
+    "utf8",
+  );
+  return tempDir;
+}
 
-    const originalCwd = process.cwd;
-    const originalExit = process.exit;
-    const originalConsoleLog = console.log;
-    const originalConsoleWarn = console.warn;
-    const originalConsoleError = console.error;
-    const logs: string[] = [];
-    const warnings: string[] = [];
-    const errors: string[] = [];
-    console.log = (...args: unknown[]) => logs.push(args.map(String).join(" "));
+interface Capture {
+  logs: string[];
+  warnings: string[];
+  errors: string[];
+  stdoutLines: string[];
+  stderrLines: string[];
+}
+
+/**
+ * Install a fake linter, capture console/stdout/stderr/exitCode, run `fn`,
+ * and restore everything in `finally`. `process.exitCode` is reset both before
+ * and after every case so no state leaks between tests.
+ */
+async function withHarness<T>(
+  tempDir: string,
+  exitCode: number,
+  fn: (capture: Capture) => Promise<T>,
+): Promise<T> {
+  const originalCwd = process.cwd;
+  const originalConsoleLog = console.log;
+  const originalConsoleWarn = console.warn;
+  const originalConsoleError = console.error;
+  const originalStdoutWrite = process.stdout.write.bind(process.stdout);
+  const originalStderrWrite = process.stderr.write.bind(process.stderr);
+  const capture: Capture = {
+    logs: [],
+    warnings: [],
+    errors: [],
+    stdoutLines: [],
+    stderrLines: [],
+  };
+
+  try {
+    console.log = (...args: unknown[]) =>
+      capture.logs.push(args.map(String).join(" "));
     console.warn = (...args: unknown[]) =>
-      warnings.push(args.map(String).join(" "));
+      capture.warnings.push(args.map(String).join(" "));
     console.error = (...args: unknown[]) =>
-      errors.push(args.map(String).join(" "));
-    (process.exit as () => void) = () => {};
+      capture.errors.push(args.map(String).join(" "));
+    (process.stdout.write as unknown) = (chunk: unknown) => {
+      capture.stdoutLines.push(String(chunk));
+      return true;
+    };
+    (process.stderr.write as unknown) = (chunk: unknown) => {
+      capture.stderrLines.push(String(chunk));
+      return true;
+    };
     (process.cwd as () => string) = () => tempDir;
+    process.exitCode = undefined;
 
-    await validateCommand();
-    const output1 = logs.join("\n");
-
+    await installFakeLinter(tempDir, exitCode);
+    return await fn(capture);
+  } finally {
     process.cwd = originalCwd;
-    process.exit = originalExit;
     console.log = originalConsoleLog;
     console.warn = originalConsoleWarn;
     console.error = originalConsoleError;
-    await fs.rm(tempDir, { recursive: true, force: true });
+    process.stdout.write = originalStdoutWrite;
+    process.stderr.write = originalStderrWrite;
+    process.exitCode = undefined;
+  }
+}
 
-    assert.ok(output1.includes("Architecture is compliant"));
+describe("validateCommand", () => {
+  it("should pass when linter succeeds", async () => {
+    const tempDir = await makeTempProject();
+    try {
+      await withHarness(tempDir, 0, async ({ logs }) => {
+        await validateCommand();
+        assert.equal(process.exitCode, 0);
+        assert.ok(logs.join("\n").includes("Architecture is compliant"));
+      });
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("fake exit 1, human mode: exitCode 1 and warnings contain 'Architecture violations detected'", async () => {
+    const tempDir = await makeTempProject();
+    try {
+      await withHarness(tempDir, 1, async ({ warnings }) => {
+        await validateCommand();
+        assert.equal(process.exitCode, 1);
+        assert.ok(warnings.join("\n").includes("Architecture violations detected"));
+      });
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("fake exit 2, human mode: exitCode 2 and errors contain 'Could not run the architecture linter'", async () => {
+    const tempDir = await makeTempProject();
+    try {
+      await withHarness(tempDir, 2, async ({ errors }) => {
+        await validateCommand();
+        assert.equal(process.exitCode, 2);
+        assert.ok(
+          errors.join("\n").includes("Could not run the architecture linter"),
+        );
+      });
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("fake exit 0 with --json and no JSON printed: exitCode 2 and one could-not-run stdout line", async () => {
+    const tempDir = await makeTempProject();
+    try {
+      await withHarness(tempDir, 0, async ({ stdoutLines }) => {
+        await validateCommand({ json: true });
+        assert.equal(process.exitCode, 2);
+        assert.equal(stdoutLines.length, 1);
+        const parsed = JSON.parse(stdoutLines[0]) as { status: string };
+        assert.equal(parsed.status, "could-not-run");
+      });
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true });
+    }
   });
 });
