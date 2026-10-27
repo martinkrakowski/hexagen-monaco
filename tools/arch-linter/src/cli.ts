@@ -102,6 +102,10 @@ const logger = createConsoleLogger(process.argv.includes("--json"));
 // asks "did this succeed?" behaves exactly as before.
 const EXIT_COULD_NOT_RUN = 2;
 
+// `--json` line format version. Additive keys keep it; a removed or
+// re-typed key bumps it (docs/planning/consumer-contract-and-fleet-integration.md, H2/H3).
+const LINT_JSON_SCHEMA_VERSION = 1;
+
 // ─── Dynamic Project Root Discovery ─────────────────────────────────────────
 
 function findProjectRoot(): string {
@@ -1247,6 +1251,7 @@ function reportAndExit(
   if (JSON_MODE) {
     process.stdout.write(
       `${JSON.stringify({
+        schemaVersion: LINT_JSON_SCHEMA_VERSION,
         fresh,
         baselined,
         stale,
