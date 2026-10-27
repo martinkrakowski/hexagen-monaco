@@ -17,6 +17,8 @@ is the guard working, not a fault to bypass.
 - `hexagen sync` writes it when it creates a new manifest (external mode, fresh target), and so does `hexagen bootstrap`.
 - `hexagen manifest migrate` adds it to an existing project: in the side-car named by `workspace_config` for a split manifest, otherwise at the root.
 - Absence stays valid, as legacy.
+- `hexagen manifest migrate` is stricter about paths: it refuses a symlinked `.architecture`, a symlinked manifest or side-car, a side-car that resolves outside `.architecture/`, and a `.pre-migrate-backup` or `.tmp` path that exists as anything but a regular file. It exits 1 and writes nothing. Run it in the real directory.
+- A manifest whose `generator.name` names another generator is refused by `migrate`, which names both values; its `schemaVersion` is not stamped in that run.
 - Where a consumer reads it: `.architecture/manifest.yaml`, then the file `workspace_config` names, whose `generator` wins.
 
 ### `hexagen-lint`

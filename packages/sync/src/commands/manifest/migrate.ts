@@ -17,6 +17,7 @@
 import { Command } from "commander";
 import path from "node:path";
 import fs from "node:fs/promises";
+import { constants as fsConstants } from "node:fs";
 import { isDeepStrictEqual } from "node:util";
 import yaml from "js-yaml";
 import { HEXAGEN_GENERATOR_NAME } from "@hexagen/project-configuration";
@@ -25,16 +26,42 @@ import { MigrateManifestUseCase } from "../../application/use-cases/migrate-mani
 import { StampGeneratorIdentityUseCase } from "../../application/use-cases/stamp-generator-identity.use-case.js";
 import { isIndexManifest } from "../../loaders/index.js";
 
-/** Write a file atomically (temp + rename) with a `.pre-migrate-backup` copy. Returns the backup path. */
+/**
+ * Refuse a sibling path (backup or temp) that exists as anything but a regular
+ * file: a planted symlink there would make copyFile or writeFile follow it out of
+ * .architecture/ (H1 pre-merge review). A stale regular file is removed so the
+ * exclusive create below can proceed.
+ */
+async function clearSiblingPath(siblingPath: string): Promise<void> {
+  const stat = await fs.lstat(siblingPath).catch((): null => null);
+  if (stat === null) {
+    return;
+  }
+  if (!stat.isFile()) {
+    throw new Error(
+      `refusing to write ${path.basename(siblingPath)}: it exists and is not a regular file`,
+    );
+  }
+  await fs.rm(siblingPath);
+}
+
+/**
+ * Write a file atomically (temp + rename) with a `.pre-migrate-backup` copy. Returns the backup path.
+ * Both sibling paths are created exclusively (COPYFILE_EXCL, flag "wx"), which never follows a symlink.
+ * A swap between the caller's re-check and this write is still possible in principle; Node exposes no
+ * dirfd-relative I/O to close it, so the re-check is the practical limit.
+ */
 async function writeWithBackup(
   filePath: string,
   content: string,
 ): Promise<string> {
   const backupPath = filePath + ".pre-migrate-backup";
-  await fs.copyFile(filePath, backupPath);
   const tempPath = filePath + ".tmp";
+  await clearSiblingPath(backupPath);
+  await clearSiblingPath(tempPath);
+  await fs.copyFile(filePath, backupPath, fsConstants.COPYFILE_EXCL);
   try {
-    await fs.writeFile(tempPath, content, "utf-8");
+    await fs.writeFile(tempPath, content, { encoding: "utf-8", flag: "wx" });
     await fs.rename(tempPath, filePath);
   } catch (writeErr) {
     await fs.rm(tempPath, { force: true });
@@ -105,7 +132,7 @@ async function canonicalPathInsideArchitecture(
   const canonicalRel = path.relative(canonicalArchDir, canonicalPath);
   if (canonicalRel.startsWith("..") || path.isAbsolute(canonicalRel)) {
     throw new Error(
-      `${label.owner} points outside .architecture/: ${label.display}`,
+      `${label.owner} points outside .architecture/: ${label.display} (.architecture itself must not be a symlink; run migrate in the real directory)`,
     );
   }
   return canonicalPath;

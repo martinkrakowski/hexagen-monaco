@@ -39,7 +39,7 @@ export class StampGeneratorIdentityUseCase {
     }
     if (name !== undefined) {
       throw new Error(
-        `generator.name is already set to ${String(name)} — refusing to overwrite another generator's identity.`,
+        `generator.name is already set to ${String(name)}, not ${HEXAGEN_GENERATOR_NAME} — refusing to overwrite another generator's identity.`,
       );
     }
 

@@ -491,6 +491,27 @@ describe("generator identity contract — built dist in published layout", () =>
     }
   });
 
+  it("refuses a symlinked .pre-migrate-backup and leaves the outside file untouched (H1 pre-merge)", async () => {
+    const fix = await createPublishedLayoutFixture(
+      VALID_MANIFEST,
+      FIXTURE_PREFIX,
+    );
+    const outside = await fs.mkdtemp(path.join(os.tmpdir(), OUTSIDE_PREFIX));
+    outsideDirs.push(outside);
+    try {
+      const target = path.join(outside, "victim.txt");
+      await fs.writeFile(target, "UNTOUCHED", "utf8");
+      const manifest = path.join(fix.root, ".architecture", "manifest.yaml");
+      await fs.symlink(target, manifest + ".pre-migrate-backup");
+
+      const r = await runHexagen(fix, ["manifest", "migrate"]);
+      assert.equal(r.code, 1, describeResult(r));
+      assert.equal(await fs.readFile(target, "utf8"), "UNTOUCHED");
+    } finally {
+      await cleanupFixture(fix.root);
+    }
+  });
+
   it("a stamped manifest still loads through sync --dry-run", async () => {
     const stamped = `${VALID_MANIFEST}generator:
   name: "@hexagen-monaco/sync"
