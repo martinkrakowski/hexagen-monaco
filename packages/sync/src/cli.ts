@@ -144,8 +144,13 @@ function buildProgram(): Command {
 
   archCommand
     .command("validate")
-    .description("Validate the architecture with hexagen-lint (exit 0 compliant, 1 violations, 2 could not run)")
-    .option("--json", "Print one JSON result line on stdout (schemaVersion 1); linter logs go to stderr")
+    .description(
+      "Validate the architecture with hexagen-lint (exit 0 compliant, 1 violations, 2 could not run)",
+    )
+    .option(
+      "--json",
+      "Print one JSON result line on stdout (schemaVersion 1); linter logs go to stderr",
+    )
     .action(async (options: { json?: boolean }) => {
       await validateCommand({ json: options.json ?? false });
     });

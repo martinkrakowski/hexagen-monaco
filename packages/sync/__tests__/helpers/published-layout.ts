@@ -281,7 +281,10 @@ export function runHexagen(
   return runNode(fix.cli, args, fix.root);
 }
 
-export function runLint(fix: ContractFixture, args: string[] = []): Promise<RunResult> {
+export function runLint(
+  fix: ContractFixture,
+  args: string[] = [],
+): Promise<RunResult> {
   return runProcess(fix.lintBin, args, fix.root);
 }
 

@@ -35,11 +35,21 @@ describe("parseLintJsonLine", () => {
 
 describe("classifyLintRun", () => {
   it("exit 0 with a valid line and json true: compliant, with the counts", () => {
-    const stdout = lintLine({ fresh: ["a", "b"], expired: ["c"], baselineGrowth: [], filesScanned: 7 });
+    const stdout = lintLine({
+      fresh: ["a", "b"],
+      expired: ["c"],
+      baselineGrowth: [],
+      filesScanned: 7,
+    });
     const outcome = classifyLintRun(0, stdout, true);
     assert.equal(outcome.status, "compliant");
     assert.equal(outcome.exitCode, 0);
-    assert.deepEqual(outcome.counts, { fresh: 2, expired: 1, baselineGrowth: 0, filesScanned: 7 });
+    assert.deepEqual(outcome.counts, {
+      fresh: 2,
+      expired: 1,
+      baselineGrowth: 0,
+      filesScanned: 7,
+    });
     assert.equal(outcome.reason, null);
   });
 

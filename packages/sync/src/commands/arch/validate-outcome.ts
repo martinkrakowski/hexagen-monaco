@@ -49,7 +49,11 @@ export function parseLintJsonLine(stdout: string): LintCounts | null {
 
   const filesScanned = obj.filesScanned;
   if (filesScanned !== null) {
-    if (typeof filesScanned !== "number" || !Number.isInteger(filesScanned) || filesScanned <= 0) {
+    if (
+      typeof filesScanned !== "number" ||
+      !Number.isInteger(filesScanned) ||
+      filesScanned <= 0
+    ) {
       return null;
     }
   }

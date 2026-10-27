@@ -132,7 +132,9 @@ describe("validateCommand", () => {
       await withHarness(tempDir, 1, async ({ warnings }) => {
         await validateCommand();
         assert.equal(process.exitCode, 1);
-        assert.ok(warnings.join("\n").includes("Architecture violations detected"));
+        assert.ok(
+          warnings.join("\n").includes("Architecture violations detected"),
+        );
       });
     } finally {
       await fs.rm(tempDir, { recursive: true, force: true });

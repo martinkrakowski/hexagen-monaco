@@ -13,6 +13,8 @@ is the guard working, not a fault to bypass.
 
 ### `hexagen-lint`
 
+- `--json` lines carry `schemaVersion: 1` as their first key (additive).
+
 - **Co-located test files are outside `node-builtin-in-layer` and
   `npm-package-in-domain`.** From 0.11.0 to 0.14.0 those two rules flagged
   every co-located test file: its `import { it } from "vitest"` and
@@ -24,6 +26,18 @@ is the guard working, not a fault to bypass.
   `*.test.tsx`, `*.spec.ts` or `*.spec.tsx` is now exempt from those two
   rules and from no other: cross-package, layer-import and subpath findings
   still apply to it exactly as they do to production code.
+
+### `hexagen`
+
+- `hexagen arch validate --json` prints one JSON line on stdout with keys
+  `schemaVersion`, `command`, `status`, `exitCode`, `fresh`, `expired`,
+  `baselineGrowth`, `filesScanned`, `reason`.
+- Exit codes are now `0` compliant, `1` violations, `2` could not run.
+  **A broken manifest or a missing linter now exits 2 instead of 1.** A caller
+  that checks only "non-zero" is unaffected, and one that tests for exactly 1
+  must accept 2. Generated projects' `lint:arch` script runs
+  `hexagen arch validate` (`packages/sync/src/generators/root-file-templates.ts:37`),
+  so the same applies there.
 
 ## 0.14.0
 

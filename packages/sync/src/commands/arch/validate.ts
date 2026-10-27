@@ -1,6 +1,9 @@
 import { exec } from "node:child_process";
 import { promisify } from "node:util";
-import { archLinterCommand, resolveArchLinterBin } from "../../arch-linter-bin.js";
+import {
+  archLinterCommand,
+  resolveArchLinterBin,
+} from "../../arch-linter-bin.js";
 import { getProjectRoot } from "../shared/project-root.js";
 import {
   classifyLintRun,
@@ -11,7 +14,9 @@ import {
 
 const execAsync = promisify(exec);
 
-export async function validateCommand(options: { json?: boolean } = {}): Promise<void> {
+export async function validateCommand(
+  options: { json?: boolean } = {},
+): Promise<void> {
   const json = options.json === true;
   const workspaceRoot = getProjectRoot();
 

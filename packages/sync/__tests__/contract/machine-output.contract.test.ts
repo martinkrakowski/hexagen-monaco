@@ -76,7 +76,11 @@ async function lintableFixture(source: string): Promise<ContractFixture> {
 
 function oneJsonLine(stdout: string): Record<string, unknown> {
   const lines = stdout.trim().split("\n");
-  assert.equal(lines.length, 1, `expected one stdout line, got ${lines.length}`);
+  assert.equal(
+    lines.length,
+    1,
+    `expected one stdout line, got ${lines.length}`,
+  );
   return JSON.parse(lines[0]) as Record<string, unknown>;
 }
 
@@ -139,9 +143,7 @@ describe("machine-readable output contract (H2)", () => {
       const line = oneJsonLine(r.stdout);
       assert.equal(line.status, "violations");
       assert.equal(line.exitCode, 1);
-      assert.ok(
-        typeof line.fresh === "number" && (line.fresh as number) >= 1,
-      );
+      assert.ok(typeof line.fresh === "number" && (line.fresh as number) >= 1);
     } finally {
       await cleanupFixture(fix.root);
     }
