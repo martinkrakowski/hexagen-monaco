@@ -11,6 +11,14 @@ is the guard working, not a fault to bypass.
 
 ## Unreleased
 
+### `hexagen`
+
+- Manifests now carry the identity marker `generator.name: "@hexagen-monaco/sync"`.
+- `hexagen sync` writes it when it creates a new manifest (external mode, fresh target), and so does `hexagen bootstrap`.
+- `hexagen manifest migrate` adds it to an existing project: in the side-car named by `workspace_config` for a split manifest, otherwise at the root.
+- Absence stays valid, as legacy.
+- Where a consumer reads it: `.architecture/manifest.yaml`, then the file `workspace_config` names, whose `generator` wins.
+
 ### `hexagen-lint`
 
 - `--json` lines carry `schemaVersion: 1` as their first key (additive).

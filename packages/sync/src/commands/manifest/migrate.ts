@@ -96,7 +96,10 @@ export const manifestMigrateCommander = new Command("migrate")
       if (workspaceConfigPointer !== undefined) {
         sideCarPath = path.join(archDir, workspaceConfigPointer);
         const containmentRel = path.relative(archDir, sideCarPath);
-        if (containmentRel.startsWith("..") || path.isAbsolute(containmentRel)) {
+        if (
+          containmentRel.startsWith("..") ||
+          path.isAbsolute(containmentRel)
+        ) {
           throw new Error(
             `workspace_config points outside .architecture/: ${workspaceConfigPointer}`,
           );
@@ -148,7 +151,9 @@ export const manifestMigrateCommander = new Command("migrate")
         rootChangedFinal = rootChanged || stamp.changed;
         const rel = path.relative(workspaceRoot, manifestPath);
         if (stamp.changed) {
-          console.log(`Identity: generator.name ${identityLabel} — added to ${rel}`);
+          console.log(
+            `Identity: generator.name ${identityLabel} — added to ${rel}`,
+          );
         } else {
           console.log(`Identity: generator.name already present in ${rel}`);
         }
@@ -161,7 +166,9 @@ export const manifestMigrateCommander = new Command("migrate")
             `Identity: generator.name ${identityLabel} — added to ${sideCarRel}`,
           );
         } else {
-          console.log(`Identity: generator.name already present in ${sideCarRel}`);
+          console.log(
+            `Identity: generator.name already present in ${sideCarRel}`,
+          );
         }
       }
 

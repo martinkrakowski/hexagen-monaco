@@ -93,7 +93,10 @@ describe("generator identity contract — built dist in published layout", () =>
       );
       const second = await runHexagen(fix, ["manifest", "migrate"]);
       assert.equal(second.code, 0, describeResult(second));
-      assert.ok(second.stdout.includes("nothing to do"), describeResult(second));
+      assert.ok(
+        second.stdout.includes("nothing to do"),
+        describeResult(second),
+      );
       const afterSecond = await fs.readFile(
         path.join(fix.root, ".architecture", "manifest.yaml"),
         "utf8",

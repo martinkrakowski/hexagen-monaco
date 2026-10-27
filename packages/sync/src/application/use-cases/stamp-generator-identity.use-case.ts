@@ -45,7 +45,7 @@ export class StampGeneratorIdentityUseCase {
 
     const refusal =
       "Could not stamp generator.name without altering the file (unsupported YAML layout). " +
-      "Add `name: \"@hexagen-monaco/sync\"` under `generator:` by hand.";
+      'Add `name: "@hexagen-monaco/sync"` under `generator:` by hand.';
 
     if (gen === undefined) {
       const quoted = JSON.stringify(HEXAGEN_GENERATOR_NAME);
@@ -101,7 +101,7 @@ export class StampGeneratorIdentityUseCase {
     if (!clean) {
       throw new Error(
         "Could not stamp generator.name without altering the file (unsupported YAML layout). " +
-          "Add `name: \"@hexagen-monaco/sync\"` under `generator:` by hand.",
+          'Add `name: "@hexagen-monaco/sync"` under `generator:` by hand.',
       );
     }
   }

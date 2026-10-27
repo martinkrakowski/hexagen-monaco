@@ -97,12 +97,9 @@ describe("StampGeneratorIdentityUseCase", () => {
   });
 
   it("keeps a comment directly under generator: and uses the first real child's indentation", () => {
-    const input = [
-      "generator:",
-      "  # tool notes",
-      "  version: 1.0.0",
-      "",
-    ].join("\n");
+    const input = ["generator:", "  # tool notes", "  version: 1.0.0", ""].join(
+      "\n",
+    );
     const result = useCase.execute(input);
     assert.strictEqual(
       result.content,
