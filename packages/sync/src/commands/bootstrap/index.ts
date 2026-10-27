@@ -12,6 +12,7 @@ import { Command } from "commander";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import yaml from "js-yaml";
+import { HEXAGEN_GENERATOR_NAME } from "@hexagen/project-configuration";
 import { err, ok, type Result } from "../../domain/result.js";
 // The canonical npm-scope normaliser. This module used to carry a private,
 // character-identical copy of it; the two were free to drift, and only one of
@@ -209,6 +210,7 @@ function emitManifest(answers: BootstrapAnswers): string {
       system: answers.system ?? "app",
       scope: sanitizeScope(answers.scope ?? answers.system ?? "app"),
       architecture: answers.architecture ?? "modular-monolith",
+      generator: { name: HEXAGEN_GENERATOR_NAME },
       bounded_contexts: answers.contexts
         .filter((c) => c.include)
         .map((c) => ({

@@ -76,6 +76,20 @@ a missing linter, a timeout, or an unreadable `--json` line). `status` is one of
 `"compliant" | "violations" | "could-not-run"`, and `reason` is `null` unless the
 status is `"could-not-run"`.
 
+### Generator identity
+
+Hexagen-written manifests carry an identity marker: `generator.name: "@hexagen-monaco/sync"`
+(the **published** package name). `hexagen sync` stamps it when it creates a new
+manifest (external mode, fresh target) and so does `hexagen bootstrap`; `hexagen
+manifest migrate` adds it to an existing project — in the side-car named by
+`workspace_config` for a split manifest, otherwise at the root. Absence stays
+valid (legacy). A consumer reads `.architecture/manifest.yaml`, then the file
+`workspace_config` names, whose `generator` wins:
+
+```bash
+npx hexagen manifest migrate --dry-run
+```
+
 ### `hexagen grant issue`
 
 Mints a signed Grant — the file `hexagen_accept_transaction` trusts as its
