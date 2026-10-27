@@ -88,6 +88,64 @@ async function readSideCar(
   return yaml.load(raw) as Record<string, unknown>;
 }
 
+/**
+ * Create a published-layout fixture from `manifest`, run `fn` and always
+ * clean the fixture up afterwards — the shared skeleton of the tests below.
+ */
+async function withFixture(
+  manifest: string,
+  fn: (fix: ContractFixture) => Promise<void>,
+): Promise<void> {
+  const fix = await createPublishedLayoutFixture(manifest, FIXTURE_PREFIX);
+  try {
+    await fn(fix);
+  } finally {
+    await cleanupFixture(fix.root);
+  }
+}
+
+/**
+ * Make a temp dir OUTSIDE any fixture, registered in `outsideDirs` for the
+ * afterEach cleanup. Returns its path.
+ */
+async function makeOutsideDir(): Promise<string> {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), OUTSIDE_PREFIX));
+  outsideDirs.push(dir);
+  return dir;
+}
+
+/**
+ * Make an outside temp dir (see {@link makeOutsideDir}) and plant `content`
+ * in `name` inside it. Returns the file's path.
+ */
+async function makeOutsideFile(name: string, content: string): Promise<string> {
+  const dir = await makeOutsideDir();
+  const file = path.join(dir, name);
+  await fs.writeFile(file, content, "utf8");
+  return file;
+}
+
+/**
+ * The refusal contract the symlink-escape tests share: `hexagen manifest
+ * migrate` must exit non-zero with "Migration failed" plus `stderrNeedle` on
+ * stderr, leave `outsideFile` byte-identical to `outsideContent`, and leave
+ * no `backupPath` sibling behind.
+ */
+async function expectMigrateRefused(
+  fix: ContractFixture,
+  stderrNeedle: string,
+  outsideFile: string,
+  outsideContent: string,
+  backupPath: string,
+): Promise<void> {
+  const r = await runHexagen(fix, ["manifest", "migrate"]);
+  assert.notEqual(r.code, 0, describeResult(r));
+  assert.ok(r.stderr.includes("Migration failed"), describeResult(r));
+  assert.ok(r.stderr.includes(stderrNeedle), describeResult(r));
+  assert.equal(await fs.readFile(outsideFile, "utf8"), outsideContent);
+  assert.equal(await pathExists(backupPath), false);
+}
+
 describe("generator identity contract — built dist in published layout", () => {
   beforeAll(assertBuiltArtifactsPresent);
 
@@ -260,19 +318,13 @@ describe("generator identity contract — built dist in published layout", () =>
   });
 
   it("refuses a side-car behind a symlinked directory inside .architecture/ (H1 review)", async () => {
-    const fix = await createPublishedLayoutFixture(
-      VALID_MANIFEST,
-      FIXTURE_PREFIX,
-    );
-    try {
-      const outsideDir = await fs.mkdtemp(
-        path.join(os.tmpdir(), OUTSIDE_PREFIX),
+    await withFixture(VALID_MANIFEST, async (fix) => {
+      const outsideFile = await makeOutsideFile(
+        "workspace.config.yaml",
+        SIDE_CAR_NO_GENERATOR,
       );
-      outsideDirs.push(outsideDir);
-      const outsideFile = path.join(outsideDir, "workspace.config.yaml");
-      await fs.writeFile(outsideFile, SIDE_CAR_NO_GENERATOR, "utf8");
       await fs.symlink(
-        outsideDir,
+        path.dirname(outsideFile),
         path.join(fix.root, ".architecture", "external"),
         "dir",
       );
@@ -281,37 +333,22 @@ describe("generator identity contract — built dist in published layout", () =>
         INDEX_MANIFEST_EXTERNAL_POINTER,
         "utf8",
       );
-
-      const beforeOutside = await fs.readFile(outsideFile, "utf8");
-      const r = await runHexagen(fix, ["manifest", "migrate"]);
-      assert.notEqual(r.code, 0, describeResult(r));
-      assert.ok(r.stderr.includes("Migration failed"), describeResult(r));
-      assert.ok(
-        r.stderr.includes("external/workspace.config.yaml"),
-        describeResult(r),
+      await expectMigrateRefused(
+        fix,
+        "external/workspace.config.yaml",
+        outsideFile,
+        SIDE_CAR_NO_GENERATOR,
+        outsideFile + ".pre-migrate-backup",
       );
-      assert.equal(await fs.readFile(outsideFile, "utf8"), beforeOutside);
-      assert.equal(
-        await pathExists(outsideFile + ".pre-migrate-backup"),
-        false,
-      );
-    } finally {
-      await cleanupFixture(fix.root);
-    }
+    });
   });
 
   it("refuses a side-car that is itself a symlink to a file outside .architecture/ (H1 review)", async () => {
-    const fix = await createPublishedLayoutFixture(
-      VALID_MANIFEST,
-      FIXTURE_PREFIX,
-    );
-    try {
-      const outsideDir = await fs.mkdtemp(
-        path.join(os.tmpdir(), OUTSIDE_PREFIX),
+    await withFixture(VALID_MANIFEST, async (fix) => {
+      const outsideFile = await makeOutsideFile(
+        "workspace.config.yaml",
+        SIDE_CAR_NO_GENERATOR,
       );
-      outsideDirs.push(outsideDir);
-      const outsideFile = path.join(outsideDir, "workspace.config.yaml");
-      await fs.writeFile(outsideFile, SIDE_CAR_NO_GENERATOR, "utf8");
       await fs.symlink(
         outsideFile,
         path.join(fix.root, ".architecture", "workspace.config.yaml"),
@@ -322,40 +359,26 @@ describe("generator identity contract — built dist in published layout", () =>
         INDEX_MANIFEST,
         "utf8",
       );
-
-      const beforeOutside = await fs.readFile(outsideFile, "utf8");
-      const r = await runHexagen(fix, ["manifest", "migrate"]);
-      assert.notEqual(r.code, 0, describeResult(r));
-      assert.ok(r.stderr.includes("Migration failed"), describeResult(r));
-      assert.ok(r.stderr.includes("workspace.config.yaml"), describeResult(r));
-      assert.equal(await fs.readFile(outsideFile, "utf8"), beforeOutside);
-      assert.equal(
-        await pathExists(
-          path.join(
-            fix.root,
-            ".architecture",
-            "workspace.config.yaml.pre-migrate-backup",
-          ),
+      await expectMigrateRefused(
+        fix,
+        "workspace.config.yaml",
+        outsideFile,
+        SIDE_CAR_NO_GENERATOR,
+        path.join(
+          fix.root,
+          ".architecture",
+          "workspace.config.yaml.pre-migrate-backup",
         ),
-        false,
       );
-    } finally {
-      await cleanupFixture(fix.root);
-    }
+    });
   });
 
   it("refuses a manifest.yaml symlinked to a file outside .architecture/ (H1 review 2)", async () => {
-    const fix = await createPublishedLayoutFixture(
-      VALID_MANIFEST,
-      FIXTURE_PREFIX,
-    );
-    try {
-      const outsideDir = await fs.mkdtemp(
-        path.join(os.tmpdir(), OUTSIDE_PREFIX),
+    await withFixture(VALID_MANIFEST, async (fix) => {
+      const outsideFile = await makeOutsideFile(
+        "manifest.yaml",
+        VALID_MANIFEST,
       );
-      outsideDirs.push(outsideDir);
-      const outsideFile = path.join(outsideDir, "manifest.yaml");
-      await fs.writeFile(outsideFile, VALID_MANIFEST, "utf8");
       const manifestPath = path.join(
         fix.root,
         ".architecture",
@@ -363,104 +386,65 @@ describe("generator identity contract — built dist in published layout", () =>
       );
       await fs.rm(manifestPath, { force: true });
       await fs.symlink(outsideFile, manifestPath, "file");
-
-      const beforeOutside = await fs.readFile(outsideFile, "utf8");
-      const r = await runHexagen(fix, ["manifest", "migrate"]);
-      assert.equal(r.code, 1, describeResult(r));
-      assert.ok(r.stderr.includes("Migration failed"), describeResult(r));
-      assert.ok(
-        r.stderr.includes("manifest is not a regular file"),
-        describeResult(r),
+      await expectMigrateRefused(
+        fix,
+        "manifest is not a regular file",
+        outsideFile,
+        VALID_MANIFEST,
+        outsideFile + ".pre-migrate-backup",
       );
-      assert.equal(await fs.readFile(outsideFile, "utf8"), beforeOutside);
-      assert.equal(
-        await pathExists(outsideFile + ".pre-migrate-backup"),
-        false,
-      );
-    } finally {
-      await cleanupFixture(fix.root);
-    }
+    });
   });
 
   it("refuses a .architecture that is itself a symlink to a directory outside the project (H1 review 2)", async () => {
-    const fix = await createPublishedLayoutFixture(
-      VALID_MANIFEST,
-      FIXTURE_PREFIX,
-    );
-    try {
-      const outsideDir = await fs.mkdtemp(
-        path.join(os.tmpdir(), OUTSIDE_PREFIX),
-      );
-      outsideDirs.push(outsideDir);
+    await withFixture(VALID_MANIFEST, async (fix) => {
+      const outsideDir = await makeOutsideDir();
       const realArchDir = path.join(fix.root, ".architecture");
       const outsideArchDir = path.join(outsideDir, ".architecture");
       await fs.rename(realArchDir, outsideArchDir);
       await fs.symlink(outsideArchDir, realArchDir, "dir");
-
       const outsideManifest = path.join(outsideArchDir, "manifest.yaml");
       const beforeOutside = await fs.readFile(outsideManifest, "utf8");
-      const r = await runHexagen(fix, ["manifest", "migrate"]);
-      assert.equal(r.code, 1, describeResult(r));
-      assert.ok(r.stderr.includes("Migration failed"), describeResult(r));
-      assert.ok(
-        r.stderr.includes("manifest points outside .architecture/"),
-        describeResult(r),
+      await expectMigrateRefused(
+        fix,
+        "manifest points outside .architecture/",
+        outsideManifest,
+        beforeOutside,
+        outsideManifest + ".pre-migrate-backup",
       );
-      assert.equal(await fs.readFile(outsideManifest, "utf8"), beforeOutside);
-      assert.equal(
-        await pathExists(outsideManifest + ".pre-migrate-backup"),
-        false,
-      );
-    } finally {
-      await cleanupFixture(fix.root);
-    }
+    });
   });
 
   it("refuses a side-car whose parent directory inside .architecture is a symlink to outside (H1 review 2)", async () => {
-    const fix = await createPublishedLayoutFixture(
-      VALID_MANIFEST,
-      FIXTURE_PREFIX,
-    );
-    try {
-      const outsideDir = await fs.mkdtemp(
-        path.join(os.tmpdir(), OUTSIDE_PREFIX),
+    await withFixture(VALID_MANIFEST, async (fix) => {
+      const outsideFile = await makeOutsideFile(
+        "workspace.config.yaml",
+        SIDE_CAR_NO_GENERATOR,
       );
-      outsideDirs.push(outsideDir);
-      const outsideFile = path.join(outsideDir, "workspace.config.yaml");
-      await fs.writeFile(outsideFile, SIDE_CAR_NO_GENERATOR, "utf8");
       const nestedDir = path.join(fix.root, ".architecture", "nested");
       await fs.mkdir(nestedDir, { recursive: true });
-      await fs.symlink(outsideDir, path.join(nestedDir, "linked"), "dir");
+      await fs.symlink(
+        path.dirname(outsideFile),
+        path.join(nestedDir, "linked"),
+        "dir",
+      );
       await fs.writeFile(
         path.join(fix.root, ".architecture", "manifest.yaml"),
         INDEX_MANIFEST_NESTED_LINKED_POINTER,
         "utf8",
       );
-
-      const beforeOutside = await fs.readFile(outsideFile, "utf8");
-      const r = await runHexagen(fix, ["manifest", "migrate"]);
-      assert.equal(r.code, 1, describeResult(r));
-      assert.ok(r.stderr.includes("Migration failed"), describeResult(r));
-      assert.ok(
-        r.stderr.includes("workspace_config points outside .architecture/"),
-        describeResult(r),
+      await expectMigrateRefused(
+        fix,
+        "workspace_config points outside .architecture/",
+        outsideFile,
+        SIDE_CAR_NO_GENERATOR,
+        outsideFile + ".pre-migrate-backup",
       );
-      assert.equal(await fs.readFile(outsideFile, "utf8"), beforeOutside);
-      assert.equal(
-        await pathExists(outsideFile + ".pre-migrate-backup"),
-        false,
-      );
-    } finally {
-      await cleanupFixture(fix.root);
-    }
+    });
   });
 
   it("the regular case still migrates and writes the backup next to the real file (H1 review 2)", async () => {
-    const fix = await createPublishedLayoutFixture(
-      VALID_MANIFEST,
-      FIXTURE_PREFIX,
-    );
-    try {
+    await withFixture(VALID_MANIFEST, async (fix) => {
       await fs.mkdir(path.join(fix.root, ".architecture", "nested"), {
         recursive: true,
       });
@@ -486,30 +470,19 @@ describe("generator identity contract — built dist in published layout", () =>
       const generator = stamped.generator as { name?: string } | undefined;
       assert.equal(generator?.name, "@hexagen-monaco/sync");
       assert.equal(await pathExists(realSideCar + ".pre-migrate-backup"), true);
-    } finally {
-      await cleanupFixture(fix.root);
-    }
+    });
   });
 
   it("refuses a symlinked .pre-migrate-backup and leaves the outside file untouched (H1 pre-merge)", async () => {
-    const fix = await createPublishedLayoutFixture(
-      VALID_MANIFEST,
-      FIXTURE_PREFIX,
-    );
-    const outside = await fs.mkdtemp(path.join(os.tmpdir(), OUTSIDE_PREFIX));
-    outsideDirs.push(outside);
-    try {
-      const target = path.join(outside, "victim.txt");
-      await fs.writeFile(target, "UNTOUCHED", "utf8");
+    await withFixture(VALID_MANIFEST, async (fix) => {
+      const target = await makeOutsideFile("victim.txt", "UNTOUCHED");
       const manifest = path.join(fix.root, ".architecture", "manifest.yaml");
       await fs.symlink(target, manifest + ".pre-migrate-backup");
 
       const r = await runHexagen(fix, ["manifest", "migrate"]);
       assert.equal(r.code, 1, describeResult(r));
       assert.equal(await fs.readFile(target, "utf8"), "UNTOUCHED");
-    } finally {
-      await cleanupFixture(fix.root);
-    }
+    });
   });
 
   it("a stamped manifest still loads through sync --dry-run", async () => {

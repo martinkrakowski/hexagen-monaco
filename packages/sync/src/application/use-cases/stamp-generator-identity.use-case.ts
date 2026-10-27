@@ -38,8 +38,10 @@ export class StampGeneratorIdentityUseCase {
       return { content, changed: false };
     }
     if (name !== undefined) {
+      const displayName =
+        typeof name === "string" ? name : JSON.stringify(name);
       throw new Error(
-        `generator.name is already set to ${String(name)}, not ${HEXAGEN_GENERATOR_NAME} — refusing to overwrite another generator's identity.`,
+        `generator.name is already set to ${displayName}, not ${HEXAGEN_GENERATOR_NAME} — refusing to overwrite another generator's identity.`,
       );
     }
 
@@ -91,7 +93,7 @@ export class StampGeneratorIdentityUseCase {
       clean = this.deepEqual(reparsed, {
         ...parsed,
         generator: {
-          ...(gen ?? {}),
+          ...gen,
           name: HEXAGEN_GENERATOR_NAME,
         },
       });

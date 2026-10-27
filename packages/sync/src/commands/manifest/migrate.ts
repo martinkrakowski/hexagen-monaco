@@ -162,6 +162,298 @@ async function assertUnchangedSinceRead(
   }
 }
 
+/** Where the identity marker is stamped (decided by {@link resolveSideCar}). */
+type StampTarget = "root" | "side-car" | "none";
+
+/** What {@link loadRootManifest} hands to the later steps. */
+interface RootManifestPlan {
+  workspaceRoot: string;
+  archDir: string;
+  manifestPath: string;
+  manifestLabel: CanonicalPathLabel;
+  canonicalManifestPath: string;
+  rootContent: string;
+  rootChanged: boolean;
+}
+
+/**
+ * Read and migrate the root `.architecture/manifest.yaml`: resolve its
+ * canonical path inside the project's `.architecture/`, run the schema
+ * migrations, and print the migration report.
+ */
+async function loadRootManifest(
+  workspaceRoot: string,
+): Promise<RootManifestPlan> {
+  const archDir = path.join(workspaceRoot, ".architecture");
+  const manifestPath = path.join(workspaceRoot, ".architecture/manifest.yaml");
+
+  // H1 review 2: the root manifest gets the same refusal as the
+  // side-car — a symlink or non-regular file is refused before it is
+  // read, and the canonical path (which must stay inside the
+  // project's .architecture/) is the one read, backed up and written.
+  const manifestLabel: CanonicalPathLabel = {
+    kind: "manifest",
+    owner: "manifest",
+    display: path.relative(workspaceRoot, manifestPath),
+    notFound: `Failed to read ${manifestPath}. Does it exist?`,
+  };
+  const canonicalManifestPath = await canonicalPathInsideArchitecture(
+    archDir,
+    manifestPath,
+    manifestLabel,
+  );
+
+  let content: string;
+  try {
+    content = await fs.readFile(canonicalManifestPath, "utf-8");
+  } catch {
+    throw new Error(`Failed to read ${manifestPath}. Does it exist?`);
+  }
+
+  const result = new MigrateManifestUseCase(isDeepStrictEqual).execute(content);
+
+  const from =
+    result.fromVersion === undefined
+      ? "legacy (no schemaVersion)"
+      : `schemaVersion ${result.fromVersion}`;
+  console.log(`Manifest: ${manifestPath}`);
+  console.log(`From    : ${from}`);
+  console.log(`To      : schemaVersion ${result.toVersion}`);
+  for (const step of result.applied) {
+    console.log(`Applied : ${step}`);
+  }
+
+  return {
+    workspaceRoot,
+    archDir,
+    manifestPath,
+    manifestLabel,
+    canonicalManifestPath,
+    rootContent: result.content,
+    rootChanged: result.changed,
+  };
+}
+
+/** The side-car half of the stamping decision. */
+interface SideCarPlan {
+  target: StampTarget;
+  sideCarPath: string | undefined;
+  sideCarRel: string | undefined;
+  sideCarText: string | undefined;
+  sideCarLabel: CanonicalPathLabel | undefined;
+  canonicalSideCarPath: string | undefined;
+}
+
+/** True when the parsed side-car document already has a `generator:` block. */
+function hasGeneratorBlock(parsed: unknown): boolean {
+  return (
+    parsed !== null &&
+    typeof parsed === "object" &&
+    !Array.isArray(parsed) &&
+    (parsed as Record<string, unknown>).generator !== undefined
+  );
+}
+
+/**
+ * Decide where the identity marker goes: a split manifest names a
+ * `workspace_config` side-car, whose `generator` (when present) replaces the
+ * root's.
+ */
+async function resolveSideCar(plan: RootManifestPlan): Promise<SideCarPlan> {
+  const root = yaml.load(plan.rootContent) as Record<string, unknown>;
+  const workspaceConfigPointer =
+    typeof root.workspace_config === "string"
+      ? root.workspace_config
+      : undefined;
+
+  if (workspaceConfigPointer === undefined) {
+    return {
+      target: isIndexManifest(root) ? "none" : "root",
+      sideCarPath: undefined,
+      sideCarRel: undefined,
+      sideCarText: undefined,
+      sideCarLabel: undefined,
+      canonicalSideCarPath: undefined,
+    };
+  }
+
+  const sideCarPath = path.join(plan.archDir, workspaceConfigPointer);
+  const containmentRel = path.relative(plan.archDir, sideCarPath);
+  if (containmentRel.startsWith("..") || path.isAbsolute(containmentRel)) {
+    throw new Error(
+      `workspace_config points outside .architecture/: ${workspaceConfigPointer}`,
+    );
+  }
+  // H1 review: the check above is lexical — canonicalise both sides
+  // and refuse a side-car that resolves outside .architecture/ (or
+  // is itself a symlink) before anything is read, backed up or
+  // written. H1 review 2: the canonical path it returns is the one
+  // every later read, backup and write goes through.
+  const sideCarLabel: CanonicalPathLabel = {
+    kind: "workspace_config side-car",
+    owner: "workspace_config",
+    display: workspaceConfigPointer,
+    notFound: `Workspace config file not found: ${sideCarPath}`,
+  };
+  const canonicalSideCarPath = await canonicalPathInsideArchitecture(
+    plan.archDir,
+    sideCarPath,
+    sideCarLabel,
+  );
+  const sideCarRel = path.relative(plan.workspaceRoot, canonicalSideCarPath);
+
+  let sideCarText: string;
+  try {
+    sideCarText = await fs.readFile(canonicalSideCarPath, "utf-8");
+  } catch {
+    throw new Error(`Workspace config file not found: ${sideCarPath}`);
+  }
+
+  let target: StampTarget;
+  if (hasGeneratorBlock(yaml.load(sideCarText))) {
+    target = "side-car";
+  } else if (root.generator !== undefined) {
+    target = "root";
+  } else {
+    target = "side-car";
+  }
+
+  return {
+    target,
+    sideCarPath,
+    sideCarRel,
+    sideCarText,
+    sideCarLabel,
+    canonicalSideCarPath,
+  };
+}
+
+/** What {@link stampIdentity} decided to write (and whether). */
+interface IdentityPlan {
+  stampedRoot: string;
+  rootChangedFinal: boolean;
+  stampedSideCar: string | undefined;
+  sideCarChanged: boolean;
+}
+
+/**
+ * Stamp `generator.name` on the target {@link resolveSideCar} picked and
+ * report what was done. No file is written here.
+ */
+function stampIdentity(
+  plan: RootManifestPlan,
+  sideCar: SideCarPlan,
+): IdentityPlan {
+  const identityStamp = new StampGeneratorIdentityUseCase(isDeepStrictEqual);
+  const identityLabel = JSON.stringify(HEXAGEN_GENERATOR_NAME);
+
+  if (sideCar.target === "none") {
+    console.log(
+      "Identity : skipped (split manifest has no workspace_config side-car)",
+    );
+    return {
+      stampedRoot: plan.rootContent,
+      rootChangedFinal: plan.rootChanged,
+      stampedSideCar: undefined,
+      sideCarChanged: false,
+    };
+  }
+
+  if (sideCar.target === "root") {
+    const stamp = identityStamp.execute(plan.rootContent);
+    const rel = path.relative(plan.workspaceRoot, plan.canonicalManifestPath);
+    if (stamp.changed) {
+      console.log(
+        `Identity: generator.name ${identityLabel} — added to ${rel}`,
+      );
+    } else {
+      console.log(`Identity: generator.name already present in ${rel}`);
+    }
+    return {
+      stampedRoot: stamp.content,
+      rootChangedFinal: plan.rootChanged || stamp.changed,
+      stampedSideCar: undefined,
+      sideCarChanged: false,
+    };
+  }
+
+  const stamp = identityStamp.execute(sideCar.sideCarText as string);
+  if (stamp.changed) {
+    console.log(
+      `Identity: generator.name ${identityLabel} — added to ${sideCar.sideCarRel}`,
+    );
+  } else {
+    console.log(
+      `Identity: generator.name already present in ${sideCar.sideCarRel}`,
+    );
+  }
+  return {
+    stampedRoot: plan.rootContent,
+    rootChangedFinal: plan.rootChanged,
+    stampedSideCar: stamp.content,
+    sideCarChanged: stamp.changed,
+  };
+}
+
+/** Print the dry-run report: what would be rewritten; nothing is written. */
+function printDryRun(
+  plan: RootManifestPlan,
+  sideCar: SideCarPlan,
+  identity: IdentityPlan,
+): void {
+  const wouldRewrite: string[] = [];
+  if (identity.rootChangedFinal) {
+    wouldRewrite.push(
+      path.relative(plan.workspaceRoot, plan.canonicalManifestPath),
+    );
+  }
+  if (identity.sideCarChanged) {
+    wouldRewrite.push(sideCar.sideCarRel as string);
+  }
+  console.log(
+    `\n[dry-run] Would rewrite: ${wouldRewrite.join(", ")}. No files written.`,
+  );
+}
+
+/**
+ * Write the stamped files with backups, re-validating each target's
+ * canonical path immediately before its write.
+ */
+async function writeChanges(
+  plan: RootManifestPlan,
+  sideCar: SideCarPlan,
+  identity: IdentityPlan,
+): Promise<void> {
+  if (identity.sideCarChanged) {
+    // Re-validate right before the write: the file may have been
+    // swapped for a symlink or moved since it was read.
+    await assertUnchangedSinceRead(
+      plan.archDir,
+      sideCar.sideCarPath as string,
+      sideCar.sideCarLabel as CanonicalPathLabel,
+      sideCar.canonicalSideCarPath as string,
+    );
+    const backupPath = await writeWithBackup(
+      sideCar.canonicalSideCarPath as string,
+      identity.stampedSideCar as string,
+    );
+    console.log(`\nBackup created at ${backupPath}`);
+  }
+  if (identity.rootChangedFinal) {
+    await assertUnchangedSinceRead(
+      plan.archDir,
+      plan.manifestPath,
+      plan.manifestLabel,
+      plan.canonicalManifestPath,
+    );
+    const backupPath = await writeWithBackup(
+      plan.canonicalManifestPath,
+      identity.stampedRoot,
+    );
+    console.log(`\nBackup created at ${backupPath}`);
+  }
+}
+
 export const manifestMigrateCommander = new Command("migrate")
   .description(
     "Bring .architecture/manifest.yaml to the current schema version (stamps schemaVersion, applies registered migrations) and add the generator identity marker (generator.name)",
@@ -172,162 +464,11 @@ export const manifestMigrateCommander = new Command("migrate")
 
     try {
       const workspaceRoot = await findWorkspaceRoot({});
-      const archDir = path.join(workspaceRoot, ".architecture");
-      const manifestPath = path.join(
-        workspaceRoot,
-        ".architecture/manifest.yaml",
-      );
+      const plan = await loadRootManifest(workspaceRoot);
+      const sideCar = await resolveSideCar(plan);
+      const identity = stampIdentity(plan, sideCar);
 
-      // H1 review 2: the root manifest gets the same refusal as the
-      // side-car — a symlink or non-regular file is refused before it is
-      // read, and the canonical path (which must stay inside the
-      // project's .architecture/) is the one read, backed up and written.
-      const manifestLabel: CanonicalPathLabel = {
-        kind: "manifest",
-        owner: "manifest",
-        display: path.relative(workspaceRoot, manifestPath),
-        notFound: `Failed to read ${manifestPath}. Does it exist?`,
-      };
-      const canonicalManifestPath = await canonicalPathInsideArchitecture(
-        archDir,
-        manifestPath,
-        manifestLabel,
-      );
-
-      let content: string;
-      try {
-        content = await fs.readFile(canonicalManifestPath, "utf-8");
-      } catch {
-        throw new Error(`Failed to read ${manifestPath}. Does it exist?`);
-      }
-
-      const result = new MigrateManifestUseCase(isDeepStrictEqual).execute(
-        content,
-      );
-      const rootContent = result.content;
-      const rootChanged = result.changed;
-
-      const from =
-        result.fromVersion === undefined
-          ? "legacy (no schemaVersion)"
-          : `schemaVersion ${result.fromVersion}`;
-      console.log(`Manifest: ${manifestPath}`);
-      console.log(`From    : ${from}`);
-      console.log(`To      : schemaVersion ${result.toVersion}`);
-      for (const step of result.applied) {
-        console.log(`Applied : ${step}`);
-      }
-
-      const root = yaml.load(rootContent) as Record<string, unknown>;
-      const workspaceConfigPointer =
-        typeof root.workspace_config === "string"
-          ? root.workspace_config
-          : undefined;
-
-      type StampTarget = "root" | "side-car" | "none";
-      let target: StampTarget;
-      let sideCarPath: string | undefined;
-      let sideCarRel: string | undefined;
-      let sideCarText: string | undefined;
-      let sideCarLabel: CanonicalPathLabel | undefined;
-      let canonicalSideCarPath: string | undefined;
-
-      if (workspaceConfigPointer !== undefined) {
-        sideCarPath = path.join(archDir, workspaceConfigPointer);
-        const containmentRel = path.relative(archDir, sideCarPath);
-        if (
-          containmentRel.startsWith("..") ||
-          path.isAbsolute(containmentRel)
-        ) {
-          throw new Error(
-            `workspace_config points outside .architecture/: ${workspaceConfigPointer}`,
-          );
-        }
-        // H1 review: the check above is lexical — canonicalise both sides
-        // and refuse a side-car that resolves outside .architecture/ (or
-        // is itself a symlink) before anything is read, backed up or
-        // written. H1 review 2: the canonical path it returns is the one
-        // every later read, backup and write goes through.
-        sideCarLabel = {
-          kind: "workspace_config side-car",
-          owner: "workspace_config",
-          display: workspaceConfigPointer,
-          notFound: `Workspace config file not found: ${sideCarPath}`,
-        };
-        canonicalSideCarPath = await canonicalPathInsideArchitecture(
-          archDir,
-          sideCarPath,
-          sideCarLabel,
-        );
-        sideCarRel = path.relative(workspaceRoot, canonicalSideCarPath);
-
-        try {
-          sideCarText = await fs.readFile(canonicalSideCarPath, "utf-8");
-        } catch {
-          throw new Error(`Workspace config file not found: ${sideCarPath}`);
-        }
-
-        const sideCarParsed = yaml.load(sideCarText);
-        const sideCarHasGenerator =
-          sideCarParsed !== null &&
-          typeof sideCarParsed === "object" &&
-          !Array.isArray(sideCarParsed) &&
-          (sideCarParsed as Record<string, unknown>).generator !== undefined;
-
-        const rootHasGenerator = root.generator !== undefined;
-        if (sideCarHasGenerator) {
-          target = "side-car";
-        } else if (rootHasGenerator) {
-          target = "root";
-        } else {
-          target = "side-car";
-        }
-      } else {
-        target = isIndexManifest(root) ? "none" : "root";
-      }
-
-      const identityStamp = new StampGeneratorIdentityUseCase(
-        isDeepStrictEqual,
-      );
-      const identityLabel = JSON.stringify(HEXAGEN_GENERATOR_NAME);
-
-      let stampedRoot = rootContent;
-      let rootChangedFinal = rootChanged;
-      let stampedSideCar: string | undefined;
-      let sideCarChanged = false;
-
-      if (target === "none") {
-        console.log(
-          "Identity : skipped (split manifest has no workspace_config side-car)",
-        );
-      } else if (target === "root") {
-        const stamp = identityStamp.execute(rootContent);
-        stampedRoot = stamp.content;
-        rootChangedFinal = rootChanged || stamp.changed;
-        const rel = path.relative(workspaceRoot, canonicalManifestPath);
-        if (stamp.changed) {
-          console.log(
-            `Identity: generator.name ${identityLabel} — added to ${rel}`,
-          );
-        } else {
-          console.log(`Identity: generator.name already present in ${rel}`);
-        }
-      } else {
-        const stamp = identityStamp.execute(sideCarText as string);
-        stampedSideCar = stamp.content;
-        sideCarChanged = stamp.changed;
-        if (stamp.changed) {
-          console.log(
-            `Identity: generator.name ${identityLabel} — added to ${sideCarRel}`,
-          );
-        } else {
-          console.log(
-            `Identity: generator.name already present in ${sideCarRel}`,
-          );
-        }
-      }
-
-      const anyChanged = rootChangedFinal || sideCarChanged;
+      const anyChanged = identity.rootChangedFinal || identity.sideCarChanged;
       if (!anyChanged) {
         console.log(
           "\n✅ Already at the current schema version and generator identity — nothing to do.",
@@ -336,49 +477,11 @@ export const manifestMigrateCommander = new Command("migrate")
       }
 
       if (dryRun) {
-        const wouldRewrite: string[] = [];
-        if (rootChangedFinal) {
-          wouldRewrite.push(
-            path.relative(workspaceRoot, canonicalManifestPath),
-          );
-        }
-        if (sideCarChanged) {
-          wouldRewrite.push(sideCarRel as string);
-        }
-        console.log(
-          `\n[dry-run] Would rewrite: ${wouldRewrite.join(", ")}. No files written.`,
-        );
+        printDryRun(plan, sideCar, identity);
         return;
       }
 
-      if (sideCarChanged) {
-        // Re-validate right before the write: the file may have been
-        // swapped for a symlink or moved since it was read.
-        await assertUnchangedSinceRead(
-          archDir,
-          sideCarPath as string,
-          sideCarLabel as CanonicalPathLabel,
-          canonicalSideCarPath as string,
-        );
-        const backupPath = await writeWithBackup(
-          canonicalSideCarPath as string,
-          stampedSideCar as string,
-        );
-        console.log(`\nBackup created at ${backupPath}`);
-      }
-      if (rootChangedFinal) {
-        await assertUnchangedSinceRead(
-          archDir,
-          manifestPath,
-          manifestLabel,
-          canonicalManifestPath,
-        );
-        const backupPath = await writeWithBackup(
-          canonicalManifestPath,
-          stampedRoot,
-        );
-        console.log(`\nBackup created at ${backupPath}`);
-      }
+      await writeChanges(plan, sideCar, identity);
       console.log("✅ Manifest migrated successfully.");
     } catch (err) {
       console.error(
