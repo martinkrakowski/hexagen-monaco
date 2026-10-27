@@ -52,6 +52,30 @@ npx hexagen sync
 
 Consult `npx hexagen arch --help` for the full list of manifest operations.
 
+### Machine-readable output
+
+`hexagen arch validate --json` prints exactly one JSON line on stdout, with the
+linter's own logs relayed to stderr:
+
+```json
+{
+  "schemaVersion": 1,
+  "command": "arch validate",
+  "status": "compliant",
+  "exitCode": 0,
+  "fresh": 0,
+  "expired": 0,
+  "baselineGrowth": 0,
+  "filesScanned": 12,
+  "reason": null
+}
+```
+
+Exit codes: `0` compliant, `1` violations, `2` could not run (a broken manifest,
+a missing linter, a timeout, or an unreadable `--json` line). `status` is one of
+`"compliant" | "violations" | "could-not-run"`, and `reason` is `null` unless the
+status is `"could-not-run"`.
+
 ### `hexagen grant issue`
 
 Mints a signed Grant — the file `hexagen_accept_transaction` trusts as its

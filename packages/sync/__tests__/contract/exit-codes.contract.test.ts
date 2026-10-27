@@ -274,20 +274,20 @@ describe("exit-code contract — built dist in published layout", () => {
       }
     });
 
-    it("arch validate on a broken manifest exits non-zero", async () => {
+    it("arch validate on a broken manifest exits 2 (could not run)", async () => {
       const fix = await createPublishedLayoutFixture(
         BROKEN_MANIFEST,
         FIXTURE_PREFIX,
       );
       try {
         const r = await runHexagen(fix, ["arch", "validate"]);
-        assert.notEqual(r.code, 0, describeResult(r));
+        assert.equal(r.code, 2, describeResult(r));
         // Pins that validate actually REACHED the linter (shim resolved via
         // node_modules/.bin walk-up) and failed on the manifest — without
-        // these, a missing shim ("arch-linter not found") also exits 1 and
+        // these, a missing shim ("arch-linter not found") also exits 2 and
         // the test would pass while validating nothing.
         assert.ok(
-          r.stderr.includes("Architecture violations detected"),
+          r.stderr.includes("Could not run the architecture linter"),
           describeResult(r),
         );
         assert.ok(

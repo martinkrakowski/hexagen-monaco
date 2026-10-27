@@ -58,7 +58,7 @@ npx hexagen-lint --update-baseline
 #   --pr-diff           only this PR's new findings vs the base-branch baseline
 #   --base-ref <ref>    git ref for --pr-diff (or GITHUB_BASE_REF)
 #   --staged            only findings on git-staged files
-#   --json              machine-readable partition on stdout
+#   --json              one machine-readable JSON line on stdout (schemaVersion 1)
 #   --comment-file PATH write a PR comment body (empty when clean)
 npx hexagen-lint --ratchet --pr-diff
 ```
@@ -87,6 +87,12 @@ launcher in this repo (`bin/lint-arch.mjs`) — an unbuilt linter. It is a separ
 code from `1` on purpose: a caller that cannot tell "the gate found problems"
 from "the gate never ran" is one reordered build step away from a green check
 over an empty run.
+
+With `--json`, stdout carries exactly one JSON line with these keys, in this
+order: `schemaVersion`, `fresh`, `baselined`, `stale`, `expired`, `introduced`,
+`baselineGrowth`, `filesScanned`. On exit `2` (could not run) no JSON line is
+printed. `schemaVersion` changes only when a key is removed or changes type;
+additive keys keep the version unchanged.
 
 If you also use `@hexagen-monaco/sync`, `hexagen sync` runs the linter for you —
 invoking `hexagen-lint` directly is for standalone or CI checks.
