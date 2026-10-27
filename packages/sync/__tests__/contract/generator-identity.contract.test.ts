@@ -485,10 +485,7 @@ describe("generator identity contract — built dist in published layout", () =>
       ) as Record<string, unknown>;
       const generator = stamped.generator as { name?: string } | undefined;
       assert.equal(generator?.name, "@hexagen-monaco/sync");
-      assert.equal(
-        await pathExists(realSideCar + ".pre-migrate-backup"),
-        true,
-      );
+      assert.equal(await pathExists(realSideCar + ".pre-migrate-backup"), true);
     } finally {
       await cleanupFixture(fix.root);
     }
