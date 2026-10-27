@@ -55,6 +55,13 @@ is the guard working, not a fault to bypass.
   working directory is `could-not-run` too; it used to exit 1 with no JSON line
   at all. In `--json` mode both print the one machine-readable line, with
   `status: "could-not-run"` and exit 2.
+- `hexagen sync --check --json` prints one JSON summary line on stdout with keys
+  `schemaVersion`, `command`, `status`, `exitCode`, `pending`, `errors`,
+  `manifestMissing`, `reason`, and `status` one of `"converged"`,
+  `"drift"` or `"could-not-run"`. In this mode every log line — the dry-run
+  plan, the generator summary and the total — goes to stderr. Exit codes are
+  unchanged: `0` converged, `1` otherwise. `--json` without `--check` is a
+  usage error: exit 2 and nothing on stdout.
 
 ## 0.14.0
 

@@ -76,6 +76,31 @@ a missing linter, a timeout, or an unreadable `--json` line). `status` is one of
 `"compliant" | "violations" | "could-not-run"`, and `reason` is `null` unless the
 status is `"could-not-run"`.
 
+`hexagen sync --check --json` prints exactly one JSON line on stdout, with every
+sync engine log relayed to stderr:
+
+```json
+{
+  "schemaVersion": 1,
+  "command": "sync --check",
+  "status": "drift",
+  "exitCode": 1,
+  "pending": { "created": 1, "updated": 0, "deleted": 0, "total": 1 },
+  "errors": 0,
+  "manifestMissing": false,
+  "reason": null
+}
+```
+
+`status` is one of `"converged" | "drift" | "could-not-run"`, decided in this
+order: a thrown fatal error is `could-not-run` (with `pending`, `errors` and
+`manifestMissing` all `null` and `reason` set to the error message); a missing
+manifest is `could-not-run` with `reason` `"manifest not found"`; any generator
+failure is `could-not-run` with `reason` `"<n> generator failure(s)"`; any
+pending change is `"drift"`; otherwise `"converged"`. `exitCode` is `0` only
+for `converged`, and `1` otherwise — the exit codes are unchanged. `--json`
+without `--check` is a usage error: exit 2, nothing on stdout.
+
 ### Generator identity
 
 Hexagen-written manifests carry an identity marker: `generator.name: "@hexagen-monaco/sync"`

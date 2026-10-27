@@ -85,7 +85,10 @@ describe("buildSyncCheckJson", () => {
   });
 
   it("a missing manifest is could-not-run with the named reason", () => {
-    const json = buildSyncCheckJson(makeSummary({ manifestMissing: true }), undefined);
+    const json = buildSyncCheckJson(
+      makeSummary({ manifestMissing: true }),
+      undefined,
+    );
     assert.equal(json.status, "could-not-run");
     assert.equal(json.reason, "manifest not found");
     assert.equal(json.manifestMissing, true);
