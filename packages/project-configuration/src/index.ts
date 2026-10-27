@@ -58,6 +58,7 @@ export {
   readManifestSchemaVersion,
   assertSupportedSchemaVersion,
 } from "./domain/model/manifest-schema/manifest-schema-version.js";
+export { HEXAGEN_GENERATOR_NAME } from "./domain/model/manifest-schema/generator-identity.js";
 export { WorkspaceConfigSchema } from "./domain/model/workspace-config/workspace-config.schema";
 export type { WorkspaceConfig } from "./domain/model/workspace-config/workspace-config.schema";
 export { isIndexManifest } from "./domain/model/manifest-schema/index.js";

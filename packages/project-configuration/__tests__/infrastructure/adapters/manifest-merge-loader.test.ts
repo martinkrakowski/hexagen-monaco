@@ -398,6 +398,51 @@ describe("mergeSplitManifest", () => {
     );
   });
 
+  it("merges the side-car's generator block into the merged manifest", async () => {
+    const dir = await setupDir();
+    const archDir = join(dir, ".architecture");
+    const ctxDir = join(archDir, "contexts", "core", "billing");
+    await mkdir(ctxDir, { recursive: true });
+
+    const indexYaml = [
+      `version: '2.0'`,
+      `description: side-car generator fixture`,
+      `bounded_contexts:`,
+      `  - name: billing`,
+      `    type: core`,
+      `    file: contexts/core/billing/context.yaml`,
+      `workspace_config: workspace.config.yaml`,
+    ].join("\n");
+
+    const sideCarYaml = [
+      `generator:`,
+      `  name: "@hexagen-monaco/sync"`,
+      `  version: 0.2.0`,
+    ].join("\n");
+
+    await writeFile(join(archDir, "manifest.yaml"), indexYaml, "utf-8");
+    await writeFile(
+      join(archDir, "workspace.config.yaml"),
+      sideCarYaml,
+      "utf-8",
+    );
+    await writeFile(
+      join(ctxDir, "context.yaml"),
+      [`name: billing`, `type: core`].join("\n"),
+      "utf-8",
+    );
+
+    const result = await mergeSplitManifest(
+      dir,
+      join(archDir, "manifest.yaml"),
+    );
+
+    assert.deepStrictEqual(result.generator, {
+      name: "@hexagen-monaco/sync",
+      version: "0.2.0",
+    });
+  });
+
   it("rejects an index entry missing `file:` instead of skipping it", async () => {
     // The index branch never skips a context. `file` is required on every
     // index entry, so an entry without one fails the index parse and takes the

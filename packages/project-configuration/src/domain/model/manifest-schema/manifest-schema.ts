@@ -213,6 +213,16 @@ export const CrossContextEdgeSchema = z.object({
   integrationPattern: z.enum(["open-host", "acl"]).optional(),
 });
 
+/**
+ * The root `generator` block. Passthrough: only `name` is declared (the
+ * identity marker, see generator-identity.ts); every other key
+ * (`version`, `sync`, …) is carried through untouched, exactly as the
+ * previous `z.record(z.unknown())` did.
+ */
+export const GeneratorBlockSchema = z
+  .object({ name: z.string().min(1).optional() })
+  .passthrough();
+
 export const IndexManifestSchema = z
   .object({
     // Toolchain-compatibility stamp (see manifest-schema-version.ts). Note
@@ -311,7 +321,7 @@ export const ManifestSchema = z
     workspaceTemplate: z.string().optional(),
     planes: z.record(z.array(z.string())).optional(),
     monorepo: z.record(z.unknown()).optional(),
-    generator: z.record(z.unknown()).optional(),
+    generator: GeneratorBlockSchema.optional(),
     mvk: z.record(z.unknown()).optional(),
     invariants: z.record(z.string()).optional(),
     governance: z.record(z.string()).optional(),

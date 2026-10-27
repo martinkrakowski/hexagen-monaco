@@ -13,6 +13,9 @@ import { z } from "zod";
  * (eslint, tsconfig), `generator.sync.protectedRootFiles`. A stripping
  * `z.object` here would re-create, one level down, exactly the silent data loss
  * this schema exists to end.
+ *
+ * `generator.name` is the identity marker (see generator-identity.ts); it lives
+ * here for split manifests, whose side-car `generator` replaces the root's.
  */
 const MonorepoConfigSchema = z
   .object({
@@ -34,6 +37,7 @@ const GeneratorSyncSchema = z
 
 const GeneratorConfigSchema = z
   .object({
+    name: z.string().min(1).optional(),
     version: z.string().optional(),
     sync: GeneratorSyncSchema.optional(),
   })
