@@ -9,7 +9,20 @@ Release notes for the co-published `@hexagen-monaco/sync` and
 (F1 preflight, #432): a merged bump blocks deploys until it is published. That
 is the guard working, not a fault to bypass.
 
-## Unreleased
+## 0.15.0
+
+**Machine-readable contracts for the tools that consume hexagen.** Manifests
+now name the generator that wrote them (`generator.name`), and
+`hexagen arch validate --json` and `hexagen sync --check --json` each print one
+versioned JSON line a caller can parse instead of scraping log text.
+`hexagen manifest migrate` adds the marker to an existing project and is
+stricter about the paths it will write.
+
+**Minor, not patch.** One new manifest field, two new machine-readable outputs,
+and a change to `arch validate`'s exit codes (ADR-0072): **a run that could not
+check anything now exits 2, not 1.** A caller that tests only for non-zero is
+unaffected. Generated projects pin `^<engine version>`, so a project scaffolded
+by 0.14.x stays on 0.14.x until the pin is changed.
 
 ### `hexagen`
 
@@ -20,25 +33,6 @@ is the guard working, not a fault to bypass.
 - `hexagen manifest migrate` is stricter about paths: it refuses a symlinked `.architecture`, a symlinked manifest or side-car, a side-car that resolves outside `.architecture/`, and a `.pre-migrate-backup` or `.tmp` path that exists as anything but a regular file. It exits 1 and writes nothing. Run it in the real directory.
 - A manifest whose `generator.name` names another generator is refused by `migrate`, which names both values; its `schemaVersion` is not stamped in that run.
 - Where a consumer reads it: `.architecture/manifest.yaml`, then the file `workspace_config` names, whose `generator` wins.
-
-### `hexagen-lint`
-
-- `--json` lines carry `schemaVersion: 1` as their first key (additive).
-
-- **Co-located test files are outside `node-builtin-in-layer` and
-  `npm-package-in-domain`.** From 0.11.0 to 0.14.0 those two rules flagged
-  every co-located test file: its `import { it } from "vitest"` and
-  `import assert from "node:assert/strict"` are the test harness, not a
-  dependency of the domain layer or of the code beside it. Only files under
-  `__tests__/` were skipped (and only with
-  `test_double_rules.allowed_cross_package_imports: true`), so a project that keeps its tests next to the
-  source collected a finding per test file. A file named `*.test.ts`,
-  `*.test.tsx`, `*.spec.ts` or `*.spec.tsx` is now exempt from those two
-  rules and from no other: cross-package, layer-import and subpath findings
-  still apply to it exactly as they do to production code.
-
-### `hexagen`
-
 - `hexagen arch validate --json` prints one JSON line on stdout with keys
   `schemaVersion`, `command`, `status`, `exitCode`, `fresh`, `expired`,
   `baselineGrowth`, `filesScanned`, `reason`.
@@ -62,6 +56,21 @@ is the guard working, not a fault to bypass.
   plan, the generator summary and the total — goes to stderr. Exit codes are
   unchanged: `0` converged, `1` otherwise. `--json` without `--check` is a
   usage error: exit 2 and nothing on stdout.
+
+### `hexagen-lint`
+
+- `--json` lines carry `schemaVersion: 1` as their first key (additive).
+- **Co-located test files are outside `node-builtin-in-layer` and
+  `npm-package-in-domain`.** From 0.11.0 to 0.14.0 those two rules flagged
+  every co-located test file: its `import { it } from "vitest"` and
+  `import assert from "node:assert/strict"` are the test harness, not a
+  dependency of the domain layer or of the code beside it. Only files under
+  `__tests__/` were skipped (and only with
+  `test_double_rules.allowed_cross_package_imports: true`), so a project that keeps its tests next to the
+  source collected a finding per test file. A file named `*.test.ts`,
+  `*.test.tsx`, `*.spec.ts` or `*.spec.tsx` is now exempt from those two
+  rules and from no other: cross-package, layer-import and subpath findings
+  still apply to it exactly as they do to production code.
 
 ## 0.14.0
 
