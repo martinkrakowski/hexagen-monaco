@@ -41,11 +41,11 @@ monorepo's current runner (Vitest, ADR-0044) against `0.15.0` main at
   (`buildProgram`, `SyncEngine.run`, `validateCommand`, the `contract`
   commands, and `hexagen-lint`) — honest exit codes on success, broken
   manifest, and violations.
-- **PR-A2 (dry-run purity)** — `dry-run-purity.contract.test.ts` (3 tests)
-  (the empty-barrel unlink, the layer-folder mkdirs + barrel planning, and
-  the migration-report write path): only the first asserts dry-run leaves the
-  tree byte-identical (incl. empty dirs) and writes no report; the other two
-  assert `--report <path>` opt-in report writes under dry-run.
+- **PR-A2 (dry-run purity)** — `dry-run-purity.contract.test.ts` (3 tests,
+  `:194`, `:260`, `:306`): the first asserts dry-run leaves the tree
+  byte-identical (incl. empty dirs) and writes no report; the other two assert
+  that `--report <path>` writes only the opted-in report under dry-run, creating
+  the parent directories for a nested path.
 - **PR-B1 (rollback)** — `rollback.contract.test.ts` (2 tests) (the journal's
   pre-image restore via `safeWriteFileAtomic`): `--allow-dirty` never rolls
   back; a clean tree rolls back only journaled paths (porcelain-clean after,
@@ -75,7 +75,7 @@ monorepo's current runner (Vitest, ADR-0044) against `0.15.0` main at
 - Test-runner mandate: `node:test` + `tsx --test` everywhere
   (`:3-10,:13,:126,:144,:207,:267,:271`) is superseded — ADR-0044 made Vitest
   the monorepo runner; assertions remain `node:assert/strict` per AGENTS.md.
-- Release train: the `v0.7.0`/`0.7.x` sequencing (`:28,:170-175,:273-284`) was
+- Release train: the `v0.7.0`/`0.7.x` sequencing (`:28,:170-175,:273-283`) was
   overtaken — `main` is `0.15.0`.
 - Arch-linter split: `tools/arch-linter/src/index.ts:1-10` is now a pure,
   side-effect-free barrel; the CLI bootstrap lives in
