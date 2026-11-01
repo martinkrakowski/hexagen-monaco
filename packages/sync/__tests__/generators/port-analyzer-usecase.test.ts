@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
-import { promises as fs } from "node:fs";
+import fsSync, { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { describe, it } from "vitest";
+import { describe, it, vi } from "vitest";
 import {
   analyzePortFile,
   generateUseCaseFromPort,
@@ -11,6 +11,7 @@ import {
   type PortAnalysisResult,
   type UseCaseOutPort,
 } from "../../src/generators/port-analyzer.js";
+import { SyncEngine } from "../../src/sync-engine.js";
 
 /**
  * Edge cases hardened after the PR #251 review: collision-safe imports/params and
@@ -281,6 +282,79 @@ describe("analyzePortFile — per-run memoization (#907)", () => {
       resetPortAnalysisMemo();
       const after = analyzePortFile(portPath);
       assert.ok(after, "analysis still works after reset");
+      assert.notStrictEqual(after, before);
+      assert.deepStrictEqual(after, before);
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("uses the snapshot content read for hashing when parsing (avoids rewrite race)", async () => {
+    const dir = await tempDir();
+    try {
+      const portPath = path.join(dir, "Payment.in-port.ts");
+      await fs.writeFile(portPath, PAYMENT_PORT_V1, "utf8");
+
+      const original = fsSync.readFileSync.bind(fsSync);
+      const readSpy = vi
+        .spyOn(fsSync, "readFileSync")
+        .mockImplementation((...args) => {
+          const content = original(...args);
+          if (
+            typeof args[0] === "string" &&
+            args[0].endsWith("Payment.in-port.ts")
+          ) {
+            fsSync.writeFileSync(args[0], PAYMENT_PORT_V2, "utf8");
+          }
+          return content;
+        });
+
+      try {
+        const result = analyzePortFile(portPath);
+        assert.ok(result, "analysis should succeed");
+        assert.strictEqual(result.interfaceName, "PaymentPort");
+      } finally {
+        readSpy.mockRestore();
+      }
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("SyncEngine.run clears the port analysis memo at the run boundary", async () => {
+    const dir = await tempDir();
+    try {
+      const portPath = path.join(dir, "Payment.in-port.ts");
+      await fs.writeFile(portPath, PAYMENT_PORT_V1, "utf8");
+      const before = analyzePortFile(portPath);
+      assert.ok(before);
+
+      const engine = new SyncEngine(
+        {
+          dryRun: true,
+          force: false,
+          forceRoot: false,
+          allowDirty: true,
+          strict: false,
+          mode: "external",
+          logger: {
+            error: () => {},
+            warn: () => {},
+            info: () => {},
+            debug: () => {},
+            errorWithException: () => {},
+          },
+        },
+        {
+          targetRoot: dir,
+          manifest: { bounded_contexts: [] },
+        },
+      );
+      await engine.run();
+
+      const after = analyzePortFile(portPath);
+      assert.ok(after);
+      assert.notStrictEqual(after, before);
       assert.deepStrictEqual(after, before);
     } finally {
       await fs.rm(dir, { recursive: true, force: true });

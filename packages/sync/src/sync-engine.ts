@@ -18,6 +18,7 @@ import { generateEslintConfig } from "./generators/eslint.js";
 import { generateStubs } from "./generators/stubs.js";
 import { generateCrossContext } from "./generators/cross-context.js";
 import { generateSharedKernel } from "./generators/shared-kernel.js";
+import { resetPortAnalysisMemo } from "./generators/port-analyzer.js";
 import {
   createEmptyResult,
   type GeneratorResult,
@@ -250,6 +251,7 @@ export class SyncEngine {
   }
 
   async run(): Promise<SyncRunSummary> {
+    resetPortAnalysisMemo();
     const { logger, dryRun, allowDirty, mode } = this.partialConfig;
     const start = Date.now();
     let lockFile: LockFile | null = null;

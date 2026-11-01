@@ -8,7 +8,7 @@
 // 4. Generate implementation scaffolds with proper signatures
 
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
+import fs, { readFileSync } from "node:fs";
 import path from "node:path";
 import {
   Project,
@@ -183,7 +183,7 @@ export function analyzePortFile(
   // uncached contract (`null`) and is never memoized.
   let contents: string;
   try {
-    contents = readFileSync(absolute, "utf8");
+    contents = (fs.readFileSync ?? readFileSync)(absolute, "utf8");
   } catch {
     return null;
   }
@@ -192,19 +192,18 @@ export function analyzePortFile(
   if (analysisMemo.has(key)) {
     return analysisMemo.get(key) ?? null;
   }
-  const result = analyzePortFileUncached(absolute);
+  const result = analyzePortFileUncached(absolute, contents);
   analysisMemo.set(key, result);
   return result;
 }
 
 function analyzePortFileUncached(
   portFilePath: string,
+  contents: string,
 ): PortAnalysisResult | null {
   try {
     // Create a ts-morph project for analysis — one fresh Project per memo
-    // miss. ts-morph's addSourceFileAtPath returns an already-added file with
-    // old text if the Project is reused, so Projects are never shared (issue
-    // #907); the savings come from memo hits.
+    // miss. Projects are never shared (issue #907); the savings come from memo hits.
     const project = new Project({
       skipAddingFilesFromTsConfig: true,
       compilerOptions: {
@@ -214,7 +213,7 @@ function analyzePortFileUncached(
     });
 
     // Add the port file to the project
-    const sourceFile = project.addSourceFileAtPath(portFilePath);
+    const sourceFile = project.createSourceFile(portFilePath, contents);
 
     // Find the first exported interface (port interfaces are always exported)
     const interfaces = sourceFile.getInterfaces().filter((i) => i.isExported());
