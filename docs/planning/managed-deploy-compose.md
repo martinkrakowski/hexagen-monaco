@@ -1,6 +1,6 @@
 # Managed Production `docker-compose.yml`
 
-**Status:** Plan
+**Status:** SUPERSEDED (stamped 2026-11-01): production moved to OCI k3s through Flux and Vault; commit 22c822c9 removed deploy.yml and the compose file, so this compose-based plan no longer applies.
 **Suggested branch:** `feature/managed-deploy-compose`
 
 > Bring the production Docker Compose definition into version control and have

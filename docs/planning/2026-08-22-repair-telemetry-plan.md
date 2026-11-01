@@ -26,7 +26,7 @@ exact repairs and the correct answer is more deterministic rules, not a model.**
 This plan is designed to make that outcome visible rather than to justify the
 model.
 
-## P0 — Stable violation codes
+## P0 — Stable violation codes _(merged 2026-08-23; status stamped 2026-11-01)_
 
 **This is a prerequisite, not a nicety. Telemetry cannot ship before it.**
 
@@ -81,7 +81,7 @@ and `ManifestAutoFixDrawer.tsx`. Behaviour must not change — same violations
 fixable, same output. Characterisation tests over the current `canAutoFix`
 matrix before the refactor, not after.
 
-## P1 — The store _(delegated, in progress)_
+## P1 — The store _(delegated, in progress)_ _(merged 2026-08-23; status stamped 2026-11-01)_
 
 `apps/web/lib/platform/repair-telemetry-store.ts`, matching the idiom of
 `run-history-store.ts` (`*Input` / `*Record` / internal `*Row` / repository

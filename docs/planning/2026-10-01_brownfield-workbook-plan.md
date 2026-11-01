@@ -1,7 +1,7 @@
 # Brownfield workbook: implementation plan
 
 **Date:** 2026-10-01
-**Status:** plan. Merging this document adopts the recommendations in §3 as the decisions of record. The owner can overturn any one of them by editing its row before a lane that waits on it is dispatched.
+**Status:** SHIPPED (stamped 2026-11-01: every lane BW0 to BW11 is merged on main). Historical text follows; originally: plan. Merging this document adopts the recommendations in §3 as the decisions of record. The owner can overturn any one of them by editing its row before a lane that waits on it is dispatched.
 **Wave id:** `brownfield-workbook-w03`
 **Input:** the owner's feature proposal "Brownfield Workbook — Feature Plan" (2026-10-01, kept outside the repo; cited below as _proposal §n_). The proposal was given an adversarial review against `origin/main` at `1c1a1f87`, and this plan was given a second one; §8 records what that second review changed.
 
