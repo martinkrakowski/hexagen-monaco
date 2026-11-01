@@ -43,8 +43,9 @@ monorepo's current runner (Vitest, ADR-0044) against `0.15.0` main at
   manifest, and violations.
 - **PR-A2 (dry-run purity)** — `dry-run-purity.contract.test.ts` (3 tests)
   (the empty-barrel unlink, the layer-folder mkdirs + barrel planning, and
-  the migration-report write path): dry-run leaves the tree byte-identical
-  (incl. empty dirs) and writes no report.
+  the migration-report write path): only the first asserts dry-run leaves the
+  tree byte-identical (incl. empty dirs) and writes no report; the other two
+  assert `--report <path>` opt-in report writes under dry-run.
 - **PR-B1 (rollback)** — `rollback.contract.test.ts` (2 tests) (the journal's
   pre-image restore via `safeWriteFileAtomic`): `--allow-dirty` never rolls
   back; a clean tree rolls back only journaled paths (porcelain-clean after,
@@ -64,17 +65,17 @@ monorepo's current runner (Vitest, ADR-0044) against `0.15.0` main at
 - **Self-regen convergence** — `hexagen sync --check` and `yarn sync:dry` both
   exit 0 with `Total ops : 0`; `git status --porcelain` stays empty.
   `scripts/capstone/first-run-green.js` still implements all five acceptance-gate
-  rows: pins (`:201-223`), dry-run purity (`:303-326`) and the converged
-  `sync --check` zero-ops gate (`:515-541`) for row 2, second-sync
-  byte-idempotence (`:543-653`), broken-manifest exit ≠0 (`:353-399`), and
-  `--allow-dirty` no-rollback survival (`:401-513`).
+  rows: pins (`:201-223`), the converged `sync --check` zero-ops gate
+  (`:515-541`) for row 2, second-sync byte-idempotence (`:543-653`),
+  broken-manifest exit ≠0 (`:353-399`), and `--allow-dirty` no-rollback
+  survival (`:401-513`).
 
 **(b) Obsolete plan items.**
 
 - Test-runner mandate: `node:test` + `tsx --test` everywhere
-  (`:3-10,:13,:125,:143,:206,:266,:270`) is superseded — ADR-0044 made Vitest
+  (`:3-10,:13,:126,:144,:207,:267,:271`) is superseded — ADR-0044 made Vitest
   the monorepo runner; assertions remain `node:assert/strict` per AGENTS.md.
-- Release train: the `v0.7.0`/`0.7.x` sequencing (`:28,:169-174,:272-283`) was
+- Release train: the `v0.7.0`/`0.7.x` sequencing (`:28,:170-175,:273-284`) was
   overtaken — `main` is `0.15.0`.
 - Arch-linter split: `tools/arch-linter/src/index.ts:1-10` is now a pure,
   side-effect-free barrel; the CLI bootstrap lives in
@@ -83,9 +84,9 @@ monorepo's current runner (Vitest, ADR-0044) against `0.15.0` main at
   (could-not-run), not `1` (CHANGELOG.md:39-51;
   `exit-codes.contract.test.ts:277-300`).
 - Empty-layer barrels: the `export {};` convention is retired by ADR-0050
-  (`packages/sync/src/generators/layer-folders.ts:185-197`,
-  `packages/sync/src/generators/barrels/recursive.ts:287-325`).
-- Frozen contexts: `:237` and `:270` no longer hold — in
+  (`packages/sync/src/generators/barrels/recursive.ts:292-294`,
+  `:303-321`).
+- Frozen contexts: `:238` and `:271` no longer hold — in
   `.architecture/manifest.yaml`, `sync` is `status: active` (`:51-55`) and
   only `transaction-system` remains `frozen` (`:142-147`).
 
