@@ -9,7 +9,7 @@
 > (dead-generator finding, mkdir accounting, version inlining, governance gates) stands.
 > Assertions are unaffected: `node:assert/strict` is still fine, per AGENTS.md.
 
-**Status:** Proposed — ready to execute. Not started.
+**Status:** ✅ COMPLETE — Waves A–C shipped in `v0.7.0`/`v0.7.1` (CHANGELOG.md:634-691); re-verified at `f76f0751` on `0.15.0` — see "Re-verification against main" below.
 **Date:** 2026-06-11 · **Amended same day** after a four-review pass — test-runner mandate (`node:test`, never vitest), dead-generator finding reshaping B2, `layer-folders` mkdir accounting + dry-run gap, build-time version inlining for A3, consumer-resolved-commander candidate for A1, and the AGENTS.md governance gates (manifest mapping, protected files, frozen contexts).
 **Source:** [sync-toolchain-rca-and-remediation.md](./sync-toolchain-rca-and-remediation.md) (the RCA; findings #1–#9 referenced throughout as "RCA #n").
 **Sibling:** [generator-scaffold-and-wizard-remediation.md](./generator-scaffold-and-wizard-remediation.md) — this plan supersedes its #8 (via PR-B2) and coordinates template-content changes with it (PR-C4).
@@ -27,6 +27,68 @@ The RCA was verified against the **published** artifacts (0.4.2 / 0.6.0). Before
 5. **The `arch validate` exit-0 swallow is not visible in source.** `commands/arch/validate.ts` exits 1 on both failure paths; `manifest-service.ts · validateManifest` maps a failing `hexagen-lint` exec to `valid: false`; the linter's own startup exits 1 on a bad manifest. Yet the published binaries exit 0 (RCA evidence). The swallow therefore lives in the **built/published artifact** (tsup bundle, bin shim, or commander's sync `program.parse` + async-action wiring). PR-A1 starts with a reproduce-on-built-dist step — fixing source patterns without pinning the artifact-level mechanism risks "fixed in source, still broken on npm".
 6. **Version state changes the release vehicle.** Main's package versions are already bumped to **0.7.0, unpublished** (tag not pushed; npm `latest` = 0.6.0). The RCA's "ship P0 as 0.6.1" is overtaken: the cheapest correct path is to **hold the v0.7.0 tag until the P0 wave merges** and publish once (see Release sequencing).
 7. **Schema drift continues as a matter of course** (`packages/project-configuration` has follow-on work queued: normalizer rewire, free-tier). `ManifestSchema` is `.strict()` — every future additive key is a repeat of this incident for any consumer whose CLI lags. #1 and #6 are the durable guards, not one-off repairs.
+
+### Re-verification against main (f76f0751)
+
+Re-verified 2026-11-01: this plan's verification steps re-run under the
+monorepo's current runner (Vitest, ADR-0044) against `0.15.0` main at
+`f76f0751`. Every check passes; several plan items are obsolete (b).
+
+**(a) Passing checks.**
+
+- **PR-A1 (exit codes)** — `yarn turbo run test:contract --filter=@hexagen/sync`:
+  `exit-codes.contract.test.ts` (16 tests) on the built `dist/cli.js`
+  (`buildProgram`, `SyncEngine.run`, `validateCommand`, the `contract`
+  commands, and `hexagen-lint`) — honest exit codes on success, broken
+  manifest, and violations.
+- **PR-A2 (dry-run purity)** — `dry-run-purity.contract.test.ts` (3 tests,
+  `:194`, `:260`, `:306`): the first asserts dry-run leaves the tree
+  byte-identical (incl. empty dirs) and writes no report; the other two assert
+  that `--report <path>` writes only the opted-in report under dry-run, creating
+  the parent directories for a nested path.
+- **PR-B1 (rollback)** — `rollback.contract.test.ts` (2 tests) (the journal's
+  pre-image restore via `safeWriteFileAtomic`): `--allow-dirty` never rolls
+  back; a clean tree rolls back only journaled paths (porcelain-clean after,
+  exit non-zero).
+- **PR-B2 (check/drift)** — `check-drift.contract.test.ts` (10 tests)
+  (the `--check`/`--check --json` drift gate): the converged tree reports
+  truthful zero counts and `--check` exits 0; drift exits 1; missing
+  manifest / dirty tree are `could-not-run`. Dead generators deleted by
+  B2 (D6) are confirmed in `packages/sync/src/migration-report.ts:12-15`.
+- **PR-A3/C1–C4 (unit)** — `yarn workspace @hexagen/sync test`: 1505 tests
+  pass, covering `resolveToolchainVersion`/`generateRootFiles` (A3),
+  `mergeSplitManifest`/`MigrateManifestUseCase` (C1), `findWorkspaceRoot`
+  (C2), and `generateArchitectureFiles` (C4).
+- **Arch-linter unit suite** — `yarn workspace @hexagen/arch-linter test`:
+  258 tests pass, covering the manifest `depends_on` import grants
+  (`buildManifestImportGrants`/`isCrossPackageViolation`, C3).
+- **Self-regen convergence** — `hexagen sync --check` and `yarn sync:dry` both
+  exit 0 with `Total ops : 0`; `git status --porcelain` stays empty.
+  `scripts/capstone/first-run-green.js` still implements all five acceptance-gate
+  rows: pins (`:201-223`), the converged `sync --check` zero-ops gate
+  (`:515-541`) for row 2, second-sync byte-idempotence (`:543-653`),
+  broken-manifest exit ≠0 (`:353-399`), and `--allow-dirty` no-rollback
+  survival (`:401-513`).
+
+**(b) Obsolete plan items.**
+
+- Test-runner mandate: `node:test` + `tsx --test` everywhere
+  (`:3-10,:13,:126,:144,:207,:267,:271`) is superseded — ADR-0044 made Vitest
+  the monorepo runner; assertions remain `node:assert/strict` per AGENTS.md.
+- Release train: the `v0.7.0`/`0.7.x` sequencing (`:28,:170-175,:273-283`) was
+  overtaken — `main` is `0.15.0`.
+- Arch-linter split: `tools/arch-linter/src/index.ts:1-10` is now a pure,
+  side-effect-free barrel; the CLI bootstrap lives in
+  `tools/arch-linter/src/cli.ts` (bin → `dist/cli.js`).
+- Exit-code refinement: `arch validate` on a broken manifest exits `2`
+  (could-not-run), not `1` (CHANGELOG.md:39-51;
+  `exit-codes.contract.test.ts:277-300`).
+- Empty-layer barrels: the `export {};` convention is retired by ADR-0050
+  (`packages/sync/src/generators/barrels/recursive.ts:292-294`,
+  `:303-321`).
+- Frozen contexts: `:238` and `:271` no longer hold — in
+  `.architecture/manifest.yaml`, `sync` is `status: active` (`:51-55`) and
+  only `transaction-system` remains `frozen` (`:142-147`).
 
 ## PR map
 
