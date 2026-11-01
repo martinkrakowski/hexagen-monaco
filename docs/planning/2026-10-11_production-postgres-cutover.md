@@ -5,7 +5,7 @@
 **Read against:** this revision, `origin/main` at `f76f0751`; earlier reads: `origin/main` at `61277698`, and pull request #872 (`origin/fix/production-database-choice`, head `10defd56`, merge base `884d1c4a`).
 **Review:** one read-only pre-merge pass (Fable, 2026-10-11) on four questions: the SQLite data, TLS and the CA, the rollback, and the order with #872. Verdict "merge after fixes"; its six findings are applied in this text (the older-ref deploy, the both-variables case with an empty URL, signed-in browsers, re-reading the row counts before the deploy, the previous image after a failed deploy, and F3 stated as read). It did not check F1, F2, F8, most of F11, or anything about Aiven itself.
 **How it was written:** a read-only pass. No database was contacted, no command was run against any host, no password was seen or asked for. Every secret below is the placeholder `<PASSWORD>`.
-**Sources:** a claim with a path and line number was read in code at the commit above. Driver claims were read in the installed packages `pg` 8.23.1, `pg-connection-string` 2.14.1 and `pg-pool` 3.14.0. The checkout this plan was read in has no `node_modules`, so those files were read in a second checkout of this repository whose `yarn.lock` resolves the same versions (`yarn.lock:9811-9813`, `9825-9827`, `9854-9856`). A claim marked **UNVERIFIED** was not read in code. "owner, 2026-10-11" marks a fact the owner gave that is not in the repository.
+**Sources:** a claim with a path and line number was read in code at the commit above. Driver claims were read in the installed packages `pg` 8.23.1, `pg-connection-string` 2.14.1 and `pg-pool` 3.14.0. The checkout this plan was read in has no `node_modules`, so those files were read in a second checkout of this repository whose `yarn.lock` resolves the same versions (`pg` at `yarn.lock:10070-10072`, `pg-connection-string` at `10027-10029`, `pg-pool` at `10041-10043`). A claim marked **UNVERIFIED** was not read in code. "owner, 2026-10-11" marks a fact the owner gave that is not in the repository.
 
 **The database (owner, 2026-10-11):** Aiven managed Postgres, host `hexagen-monaco-krakowski-cloud-solutions.b.aivencloud.com`, port 12194, TLS required, PostgreSQL 18.6. Database `hexagen`, empty, CONNECT revoked from PUBLIC. Application role `hgxadmin`: ordinary role, replication off; CONNECT, CREATE, TEMPORARY on the database; USAGE, CREATE on schema `public`. The admin role `avnadmin` stays with the owner. The owner ran every statement himself.
 
@@ -14,8 +14,8 @@
 **Recommendation.** Production starts on the empty Aiven database. There is no data to move and no tool to move it. The service applies its four migrations itself the first time it starts with `DATABASE_URL` set. Do it in this order:
 
 1. PR #872 is already merged on `main`, and migration `0004` is merged and published by `build-image.yml`.
-2. One platform-repo pull request (described in F6) removes `PLATFORM_DB=sqlite` from `apps/base/hexagen-web/app.yaml` and wires `DATABASE_URL` plus the Aiven CA mount in `apps/production/hexagen-web`. It stays reviewed and unmerged until Vault is populated.
-3. The owner stores `DATABASE_URL` and rotated session secrets in Vault, waits for the External Secrets sync, and verifies the cluster Secret's keys are present with non-zero lengths without printing values. This must happen **before** the platform-repo PR merges: as long as `PLATFORM_DB=sqlite` satisfies `checkProductionDatabaseChoice` with a blank `DATABASE_URL`, a deploy on SQLite in between lets users write rows that nothing can carry over (F7).
+2. One platform-repo pull request (described in F6) removes `PLATFORM_DB=sqlite` from `apps/base/hexagen-web/app.yaml` and wires `DATABASE_URL`, the Aiven CA mount, and the TCP `12194` egress rule the pod needs (F11.9) in `apps/production/hexagen-web`. It stays reviewed and unmerged until Vault is populated.
+3. The owner stores `DATABASE_URL` and rotated session secrets in Vault, forces the External Secrets sync, and verifies the cluster Secret's keys are present with non-zero lengths without printing values. This must happen **before** the platform-repo PR merges: as long as `PLATFORM_DB=sqlite` satisfies `checkProductionDatabaseChoice` with a blank `DATABASE_URL`, a deploy on SQLite in between lets users write rows that nothing can carry over (F7).
 4. The owner merges the platform-repo PR, reconciles Flux, verifies with three checks (F9), and tests a restore before users are let in (F10).
 
 **The three facts that decide the shape of this plan.**
@@ -174,7 +174,7 @@ Notes.
 | `.github/workflows/build-image.yml`            | Publishes the image from `main`. Only the three public build args pass (lines 20-30). No runtime secret touches it; the `DATABASE_URL` is never a build arg.                                                            |
 | `deploy/.env.example`                          | Unshipped documentation of the variables the web container reads (lines 3-7, 24-28). Update it to document `DATABASE_URL` and the CA mount.                                                                             |
 | `.github/workflows/lint.yml`                   | `PLATFORM_DB: sqlite` for `standalone-smoke` (line 374) and `-e PLATFORM_DB=sqlite` on `container-smoke` (line 502): **stay as they are.** Neither job has a database. They test packaging and the scan, not the store. |
-| platform repo `apps/base/hexagen-web/app.yaml` | Sets `PLATFORM_DB=sqlite` (line 45). The cutover PR removes it and wires `DATABASE_URL` (from the Secret) and the CA mount.                                                                                             |
+| platform repo `apps/base/hexagen-web/app.yaml` | Sets `PLATFORM_DB=sqlite` (line 45). The cutover PR removes it and wires `DATABASE_URL` (from the Secret) and the CA mount, and adds the TCP `12194` egress rule (F11.9).                                               |
 | platform repo `apps/production/hexagen-web`    | The production overlay that Flux reconciles; the cutover PR lands here.                                                                                                                                                 |
 
 The compose-era rows (`deploy.yml`, `docker-compose.prod.yml`) are superseded: commit `22c822c9` removed both files.
@@ -216,7 +216,7 @@ The compose-era rows (`deploy.yml`, `docker-compose.prod.yml`) are superseded: c
 - **A health endpoint that reports the database:** does not exist. There is no `/api/health`. The probe everywhere is `/api/auth/providers` with any status below 500 (platform repository `apps/base/hexagen-web/app.yaml`; `deploy/k8s/staging/deployment.yaml:80-99`); it does not prove the database is in use.
 - **A log line that names the store:** does not exist as such. The evidence is the `[platform-migrate]` line, which is printed only when `DATABASE_URL` is set (`instrumentation.ts:24`). No `[platform-migrate]` line in the log means the service is on SQLite.
 - **Three checks, all in "The owner's steps":**
-  1. `kubectl logs` on the `hexagen-web` pod shows `[platform-migrate] applied versions: [1, 2, 3, 4]` and no `[platform-db]` warning.
+  1. `kubectl logs` on the `web` pod (`kubectl -n hexagen-web logs deploy/web`; the pods are named `web-…`) shows `[platform-migrate] applied versions: [1, 2, 3, 4]` and no `[platform-db]` warning.
   2. As `hgxadmin`: `select version, name, applied_at from schema_migrations order by version;` returns `1 initial`, `2 owner_document_revs_and_audit_detail`, `3 byok`, `4 decision_receipts`.
   3. After signing in and saving a project: `select count(*) from users;` and `select count(*) from saved_projects;` are above zero, and `/data/platform.db` on the volume has not changed its modification time. The first sign-in of an unknown account calls `createUser` (`apps/web/lib/platform/auth-store.ts:167-169`). If `users` is 0 after a save, the save was made with a cookie from before the cutover (F7): sign out, sign in, save again.
 
@@ -224,11 +224,11 @@ The compose-era rows (`deploy.yml`, `docker-compose.prod.yml`) are superseded: c
 
 Per-step rollbacks are in the step table. The general picture:
 
-- **Until the first user writes to Postgres, everything is reversible.** The SQLite files are not opened while `DATABASE_URL` is set and stay on the `/data` volume. Going back means: revert the platform-repo PR (restores `PLATFORM_DB=sqlite`, drops the `DATABASE_URL` wiring) and reconcile Flux.
-- **Fast way back:** revert the platform-repo PR in the platform repository. The previous manifest — with `PLATFORM_DB=sqlite` and no `DATABASE_URL` — is restored on the next Flux reconcile.
-- **Slow way back:** also re-pin the image tag the platform repo had before the cutover, then reconcile Flux.
-- **The previous image.** The `Recreate` strategy terminates the old pod before the new one starts (platform repository `apps/base/hexagen-web/app.yaml:19`; ADR-0071:91 keeps it single-container). After a SUCCESSFUL rollout the old pod is gone, but the previous image tag still exists in the registry. After a FAILED rollout (the new pod exits at start) the site is down until the manifest is reverted and Flux reconciles.
-- **Never point the cluster at an image built before the merge of #872 and migration `0004`.** A build before `0004` knows versions 1..3 and refuses loudly against the migrated database — "this build is older than the database" (`pg-migrate.ts:121-128`). A build before #872 has no check at all, opens `/data/platform.db` (`store.ts:161`) when `PLATFORM_DB=sqlite` is still set, and rolls out green. To ship older application code, revert the application commits on `main` and publish a new image; do not pin an old tag.
+- **Until the first user writes to Postgres, everything is reversible.** The SQLite files are not opened while `DATABASE_URL` is set and stay on the `/data` volume. Going back means: remove `DATABASE_URL` from the Vault secret, force the ExternalSecret sync so the cluster Secret `hexagen-web-env` drops the key, **then** revert the platform-repo PR and reconcile Flux — in that order. The revert alone does not return the process to SQLite: `envFrom: [{secretRef: {name: hexagen-web-env}}]` is already at `app.yaml:37` before the cutover PR, and `env-secret.yaml:1-14` copies every key of Vault secret `hexagen-web-env` into that Secret (`refreshInterval: 1h`), so reverting the PR leaves `DATABASE_URL` in the environment, where `PLATFORM_DB=sqlite` does not mask it (`production-db-choice.ts:25-27` uses Postgres whenever the URL is set) — and with the CA mount gone, `sslrootcert=/etc/hexagen/aiven-ca.pem` points at a missing file, the pod exits at start, and `Recreate` keeps the site down. Removing the key first means the pod that runs after the revert starts with `PLATFORM_DB=sqlite` and no `DATABASE_URL` and opens the SQLite file.
+- **Fast way back:** as above — Vault key removed and the ExternalSecret force-synced first, then the revert, then `flux reconcile kustomization apps --with-source --namespace flux-system`. Verify the Secret before restarting anything: `kubectl get secret hexagen-web-env -o jsonpath='{.data.DATABASE_URL}'` must print nothing.
+- **Slow way back (app code):** production does not run a tag. `apps/production/hexagen-web/kustomization.yaml:8-9` pins `ghcr.io/martinkrakowski/hexagen-web` by digest, and `.github/workflows/build-image.yml:163-165` records that digest for a platform promotion pull request. So app-code rollback after door 1 is a **new** digest — built from the reverted application commits on `main`, with `PLATFORM_DB` left unset — promoted by a platform-repo PR that updates the digest; there is no tag to re-pin.
+- **The previous image.** The `Recreate` strategy terminates the old pod before the new one starts (platform repository `apps/base/hexagen-web/app.yaml:19`; ADR-0071:91 keeps it single-container). After a SUCCESSFUL rollout the old pod is gone, but the digest the production overlay pinned before the cutover is still in the registry (`apps/production/hexagen-web/kustomization.yaml:8-9` pins by digest). After a FAILED rollout (the new pod exits at start) the site is down until the manifest is reverted and Flux reconciles.
+- **Never point the cluster at an image built before the merge of #872 and migration `0004`.** A build before `0004` knows versions 1..3 and refuses loudly against the migrated database — "this build is older than the database" (`pg-migrate.ts:121-128`). A build before #872 has no check at all, opens `/data/platform.db` (`store.ts:161`) when `PLATFORM_DB=sqlite` is still set, and rolls out green. To ship older application code, revert the application commits on `main`, publish a new image, and promote its digest through a platform-repo PR; never promote the old digest.
 
 **One-way doors.**
 
@@ -250,7 +250,7 @@ Per-step rollbacks are in the step table. The general picture:
 6. **The container smoke test does not cover Postgres.** `container-smoke` boots the production image on SQLite (`lint.yml:502`). The Postgres tests run from source on Node 22.7, not in the image on Node 20. Whether `pg` and the four `.sql` files (bundled through the rule at `next.config.mjs:273-277`) work inside the built image has, as far as the repository shows, never been exercised: staging is retired (`deploy/k8s/staging/README.md:1-5`). The first run of the image against Postgres may be production (Q7).
 7. **The sslmode warning.** With `sslmode=require` the driver prints a security warning once per process (`pg-connection-string/index.js:219-230`). The recommended `sslmode=verify-full` prints none.
 8. **IPv6.** The driver passes the host name to Node and does not pick an address family. Whether the Aiven name has an IPv6 address, and whether the pod can reach it, is **UNVERIFIED**.
-9. **Network allow-list.** The only network that connects is the cluster's; the GitHub runner does not. If the Aiven service restricts source addresses (**UNVERIFIED**), the cluster's egress address(es) must be allowed.
+9. **Egress: the pod cannot reach Aiven's port today.** The only network that connects is the cluster's; the GitHub runner does not. But the egress the pod has is not enough: `apps/base/hexagen-web/networkpolicies.yaml:6-9` is default-deny for every pod in namespace `hexagen-web`, and the `web-egress` policy (`:30-51`) allows only DNS and TCP `443` to public IPv4. No rule opens TCP `12194`, and `apps/production/hexagen-web/kustomization.yaml` adds none; a throwaway pod in the namespace has no egress at all. The `web` pod therefore cannot open `hexagen-…aivencloud.com:12194` today, and with `strategy: Recreate` (`app.yaml:19`) a cutover deploy whose connections all fail makes the new pod exit at start and the site stays down (F11.1). The platform-repo PR must add an egress rule for TCP `12194` from the `web` pod to the Aiven service's addresses in the same change that wires `DATABASE_URL`; without it the cutover is an outage. Independently, if the Aiven service restricts source addresses (**UNVERIFIED**), the cluster's egress address(es) must be allowed on Aiven's side.
 10. **The error log hides the URL only as a whole string** (`pg-startup.ts:52`). A driver message that quotes part of it would not be caught. The messages read in the driver quote the host, not the password.
 
 ## Step table
@@ -258,9 +258,9 @@ Per-step rollbacks are in the step table. The general picture:
 | #   | Step                                                                                                                           | Who   | Command                                                                        | Expected output                                                        | Rollback                                 | One-way?                         |
 | --- | ------------------------------------------------------------------------------------------------------------------------------ | ----- | ------------------------------------------------------------------------------ | ---------------------------------------------------------------------- | ---------------------------------------- | -------------------------------- |
 | 1   | Confirm #872 and migration `0004` are merged and published by `build-image.yml`; the platform-repo PR is reviewed and unmerged | owner | none                                                                           | CI green; image published for the merge                                | n/a                                      | no                               |
-| 2   | Read the production SQLite row counts and file times                                                                           | owner | `kubectl exec` on `hexagen-web` (owner's step 2)                               | 0 rows everywhere except 3 in `model_prices`                           | none needed; if not zero, stop           | no                               |
+| 2   | Read the production SQLite row counts and file times                                                                           | owner | `kubectl exec` on `deploy/web` in `hexagen-web` (owner's step 2)               | 0 rows everywhere except 3 in `model_prices`                           | none needed; if not zero, stop           | no                               |
 | 3   | Read-only checks on the database                                                                                               | owner | `psql` as `hgxadmin` (owner's step 1)                                          | 18.6; `public` creatable; no tables                                    | none needed                              | no                               |
-| 4   | Validate the CA and TLS from cluster egress                                                                                    | owner | owner's step 3                                                                 | certificate parses; `verify-full` handshake succeeds                   | none needed                              | no                               |
+| 4   | Validate the CA and the TLS handshake from your machine                                                                        | owner | owner's step 3                                                                 | certificate parses; `verify-full` handshake succeeds                   | none needed                              | no                               |
 | 5   | Set `DATABASE_URL` and rotated session secrets in Vault                                                                        | owner | Vault + External Secrets sync (owner's step 4)                                 | keys present, non-zero lengths                                         | rotate/delete in Vault                   | no                               |
 | 6   | Merge the platform-repo PR                                                                                                     | owner | merge in the platform repository                                               | nothing deploys until Flux reconciles                                  | revert the merge                         | no                               |
 | 7   | Reconcile Flux and verify the migration                                                                                        | owner | `flux reconcile`; `kubectl rollout status`; `kubectl logs` (owner's steps 6-7) | log shows `applied versions: [1, 2, 3, 4]`; no `[platform-db]` warning | revert platform-repo PR + reconcile Flux | the migration is applied: door 2 |
@@ -299,8 +299,8 @@ Look for: version 18.6; `can_create` is `t`; `tables` is 0; `search_path` contai
 **Step 2. Read the production SQLite row counts. Read-only, on the cluster.**
 
 ```sh
-kubectl exec -it hexagen-web -- node -e "const D=require('node:module').createRequire('/app/apps/web/')('better-sqlite3');for(const f of ['platform','byok','quota']){try{const d=new D('/data/'+f+'.db',{readonly:true,fileMustExist:true});for(const t of d.prepare(\"select name from sqlite_master where type='table' and name not like 'sqlite_%' order by name\").all())console.log(f,t.name,d.prepare('select count(*) n from \"'+t.name+'\"').get().n);d.close()}catch(e){console.log(f,'-',e.message)}}"
-kubectl exec -it hexagen-web -- sh -c 'stat -c "%y %n" /data/*.db'
+kubectl exec -it deploy/web -n hexagen-web -- node -e "const D=require('node:module').createRequire('/app/apps/web/')('better-sqlite3');for(const f of ['platform','byok','quota']){try{const d=new D('/data/'+f+'.db',{readonly:true,fileMustExist:true});for(const t of d.prepare(\"select name from sqlite_master where type='table' and name not like 'sqlite_%' order by name\").all())console.log(f,t.name,d.prepare('select count(*) n from \"'+t.name+'\"').get().n);d.close()}catch(e){console.log(f,'-',e.message)}}"
+kubectl exec -it deploy/web -n hexagen-web -- sh -c 'stat -c "%y %n" /data/*.db'
 ```
 
 The row-count command is adapted from the `tableCounts` helper in `deploy/k8s/staging/sqlite-backup/sqlite-backup.cjs:24`, `39-55` and has not been run: **UNVERIFIED**.
@@ -316,9 +316,9 @@ openssl x509 -in /path/to/aiven-ca.pem -noout -subject -enddate
 openssl s_client -starttls postgres -connect hexagen-monaco-krakowski-cloud-solutions.b.aivencloud.com:12194 -CAfile /path/to/aiven-ca.pem -verify_hostname hexagen-monaco-krakowski-cloud-solutions.b.aivencloud.com -verify_return_error </dev/null
 ```
 
-Run the second command from a pod in the cluster (for example `kubectl exec` into a pod that carries `openssl`, or a throwaway Job) to prove cluster egress reaches Aiven.
+Run both commands from your own machine. Do not try to prove reachability from the cluster: every pod in namespace `hexagen-web` sits behind a default-deny NetworkPolicy (`apps/base/hexagen-web/networkpolicies.yaml:6-9`), and the `web-egress` policy (`:30-51`) allows only DNS and TCP `443` to public IPv4 — no rule opens TCP `12194`, so no pod, throwaway Job included, can reach Aiven at all today (F11.9). The platform-repo PR adds the `12194` egress rule; until it merges and Flux reconciles it, there is no pod-side proof of reachability, and the first end-to-end proof is the start-up migration log after step 6. That is why the egress rule must be part of the same PR: if the port is still blocked at that start, the new pod exits and the site is down under `Recreate` (F11.1).
 
-Look for: a subject and an end date in the future from the first command; `Verify return code: 0 (ok)` from the second. They send no password. They prove that the cluster reaches the service, that the CA is the right one, and that the host name matches. That this `openssl` supports `-starttls postgres` is **UNVERIFIED**. If the check does not return 0, stop.
+Look for: a subject and an end date in the future from the first command; `Verify return code: 0 (ok)` from the second. They send no password. They prove that your machine reaches the service, that the CA is the right one, and that the host name matches. That this `openssl` supports `-starttls postgres` is **UNVERIFIED**. If the check does not return 0, stop.
 
 **Step 4. Set the secrets in Vault.**
 
@@ -338,14 +338,18 @@ openssl rand -base64 48
 
 Set the result as both `NEXTAUTH_SECRET` and `AUTH_SECRET` (the app reads `NEXTAUTH_SECRET ?? AUTH_SECRET`; `deploy/.env.example:15-18`, `deploy/k8s/staging/README.md:51-53`). The value is shown nowhere. (If you would rather not rotate it, see Q8; then signing out before step 6 matters.)
 
-Wait for the External Secrets sync, then verify the cluster Secret's keys are present with non-zero lengths without printing values:
+Force the External Secrets sync, then verify the cluster Secret's keys are present with non-zero lengths without printing values. Do not just wait: a Vault edit only shows up on the ExternalSecret's `refreshInterval`, which is 1 hour (`env-secret.yaml:1-14`). Find the ExternalSecret that owns the Secret `hexagen-web-env`, annotate it for a force sync, then check the keys:
 
 ```sh
-kubectl get secret <hexagen-web-env> -o jsonpath='{.data.DATABASE_URL}' | wc -c
-kubectl get secret <hexagen-web-env> -o jsonpath='{.data.NEXTAUTH_SECRET}' | wc -c
+kubectl get externalsecret -n hexagen-web
+kubectl -n hexagen-web annotate externalsecret <NAME> force-sync="$(date +%s)" --overwrite
+kubectl get secret hexagen-web-env -o jsonpath='{.data.DATABASE_URL}' | wc -c
+kubectl get secret hexagen-web-env -o jsonpath='{.data.NEXTAUTH_SECRET}' | wc -c
 ```
 
 Look for: byte counts well above zero for both keys. Do not print the values.
+
+From this moment the cluster Secret carries `DATABASE_URL` while the running pod still has no CA mount and `PLATFORM_DB=sqlite` in its manifest. That combination is unstable on restart: with `DATABASE_URL` set, `PLATFORM_DB=sqlite` does not mask it (`production-db-choice.ts:25-27`), and the URL's `sslrootcert=/etc/hexagen/aiven-ca.pem` points at a file that does not exist until the platform-repo PR's mount reconciles — so a pod start in this window crashes, and `Recreate` turns one crash into an outage (F11.1). Keep this window short and restart nothing between here and step 6.
 
 **Step 5. Merge the platform-repo pull request.**
 
@@ -356,10 +360,12 @@ Look for: CI green on the platform repository. Nothing deploys until Flux reconc
 First run the commands of step 2 again and look for the same result: the site was live while you did steps 3 to 5. If a table now has rows, stop. Then sign out of the application in your own browser.
 
 ```sh
-flux reconcile kustomization hexagen-web --namespace <production-namespace>
-kubectl -n <production-namespace> rollout status deployment/hexagen-web
-kubectl -n <production-namespace> logs deploy/hexagen-web 2>&1 | grep -E '\[platform-(migrate|db)\]'
+flux reconcile kustomization apps --with-source --namespace flux-system
+kubectl -n hexagen-web rollout status deployment/web
+kubectl -n hexagen-web logs deploy/web 2>&1 | grep -E '\[platform-(migrate|db)\]'
 ```
+
+The Flux object that reconciles `./apps/production` is the Kustomization `apps` in namespace `flux-system` (`clusters/production/layers.yaml:36-48`). `--with-source` forces a fresh Git fetch, so the reconcile cannot apply the last fetched artifact from before the merge (the source interval is 1 minute, `gotk-sync.yaml:9`, and a plain reconcile may still race it). The Deployment, its container and the Service are named `web` (`app.yaml:16`, `:35`, `:66`) in namespace `hexagen-web` (`namespace.yaml:6`); the pods are `web-…`.
 
 Look for: the rollout completes. If it does not, the site may be down (F11.1): go to "If something goes wrong".
 
@@ -382,7 +388,7 @@ Look for: four rows (`initial`, `owner_document_revs_and_audit_detail`, `byok`, 
 On the cluster:
 
 ```sh
-kubectl exec -it hexagen-web -- sh -c 'stat -c "%y %n" /data/*.db'
+kubectl exec -it deploy/web -n hexagen-web -- sh -c 'stat -c "%y %n" /data/*.db'
 ```
 
 (That the image's `stat` accepts `-c` is **UNVERIFIED**; plain `ls -l /data` shows the time to the minute.) Write down the time of `platform.db` and `byok.db`. Sign in at `https://app.hexagen-monaco.cloud` with your own account and save one project. Run the same command again.
@@ -412,13 +418,28 @@ This is the one-way door. From the first user's write, the way back is a Postgre
 
 **If something goes wrong (before step 11).**
 
-Revert the platform-repo PR in the platform repository, then reconcile Flux:
+The revert of the platform-repo PR alone does **not** return the process to SQLite. `envFrom: [{secretRef: {name: hexagen-web-env}}]` predates the cutover PR (`app.yaml:37`), and `env-secret.yaml:1-14` copies every key of Vault secret `hexagen-web-env` into that Secret (`refreshInterval: 1h`); the revert removes neither. With `DATABASE_URL` still in the environment, `PLATFORM_DB=sqlite` does not mask it (`production-db-choice.ts:25-27`) and the process uses Postgres — but the reverted manifest no longer mounts the CA, so `sslrootcert=/etc/hexagen/aiven-ca.pem` fails to read, the pod exits at start, and `Recreate` leaves the site down (F11.1). Do it in this order:
+
+1. In Vault, remove `DATABASE_URL` from the secret the ExternalSecret reads. (Leave the rotated `NEXTAUTH_SECRET` / `AUTH_SECRET` in place unless you also want the old sessions back.)
+2. Force the ExternalSecret sync and wait until the cluster Secret has dropped the key:
+
+```sh
+kubectl get externalsecret -n hexagen-web            # find the one that owns hexagen-web-env
+kubectl -n hexagen-web annotate externalsecret <NAME> force-sync="$(date +%s)" --overwrite
+kubectl get secret hexagen-web-env -o jsonpath='{.data.DATABASE_URL}' | wc -c   # expect 0
+```
+
+3. Only then revert the cutover PR in the platform repository and reconcile Flux:
 
 ```sh
 # from the platform repository, after reverting the cutover PR:
-flux reconcile kustomization hexagen-web --namespace <production-namespace>
-kubectl -n <production-namespace> rollout status deployment/hexagen-web
-kubectl -n <production-namespace> logs deploy/hexagen-web 2>&1 | grep -E '\[platform-(migrate|db)\]'
+flux reconcile kustomization apps --with-source --namespace flux-system
+kubectl -n hexagen-web rollout status deployment/web
+kubectl -n hexagen-web logs deploy/web 2>&1 | grep -E '\[platform-(migrate|db)\]'
 ```
 
+`--with-source` forces a fresh Git fetch, so the reconcile applies the reverted manifest and not the last fetched artifact. The workload is Deployment `web` in namespace `hexagen-web`; the pods are `web-…`.
+
 Look for: the pod healthy and no `[platform-migrate]` line; the service is back on the SQLite file. The Aiven database can stay as it is: a later attempt finds its migrations applied and logs `[platform-migrate] up to date`.
+
+The same gap exists before the cutover PR merges: any pod start between the Secret receiving `DATABASE_URL` (step 4) and the PR's CA mount reconciling crashes for the same missing-`sslrootcert` reason. That is why step 4 ends with the forced sync verified and nothing is restarted until step 6.
