@@ -8,7 +8,7 @@
 // 4. Generate implementation scaffolds with proper signatures
 
 import { createHash } from "node:crypto";
-import fs, { readFileSync } from "node:fs";
+import fs from "node:fs";
 import path from "node:path";
 import {
   Project,
@@ -183,7 +183,7 @@ export function analyzePortFile(
   // uncached contract (`null`) and is never memoized.
   let contents: string;
   try {
-    contents = (fs.readFileSync ?? readFileSync)(absolute, "utf8");
+    contents = fs.readFileSync(absolute, "utf8");
   } catch {
     return null;
   }
@@ -213,7 +213,7 @@ function analyzePortFileUncached(
     });
 
     // Add the port file to the project
-    const sourceFile = project.createSourceFile(portFilePath, contents);
+    const sourceFile = project.createSourceFile(portFilePath, contents, { overwrite: true });
 
     // Find the first exported interface (port interfaces are always exported)
     const interfaces = sourceFile.getInterfaces().filter((i) => i.isExported());
