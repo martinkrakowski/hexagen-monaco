@@ -88,6 +88,19 @@ export interface SyncRunSummary {
    */
   manifestMissing: boolean;
   durationMs: number;
+  /**
+   * Per-phase wall-clock timings for this run, in ms. `null` means the phase
+   * did not run: git status is skipped under `--allow-dirty` or in external
+   * mode; preflight and linter are skipped in external mode. A phase that ran
+   * and returned early — such as preflight in dry-run — reports a small
+   * number, not `null`.
+   */
+  phaseTimingsMs?: {
+    gitStatus: number | null;
+    preflight: number | null;
+    generators: number;
+    linter: number | null;
+  };
 }
 
 /**

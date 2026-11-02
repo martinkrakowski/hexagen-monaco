@@ -254,6 +254,9 @@ export class SyncEngine {
     resetPortAnalysisMemo();
     const { logger, dryRun, allowDirty, mode } = this.partialConfig;
     const start = Date.now();
+    let gitStatusMs: number | null = null;
+    let preflightMs: number | null = null;
+    let linterMs: number | null = null;
     let lockFile: LockFile | null = null;
 
     // Fresh journal per run (PR-B1 review): both live callers construct a
@@ -272,12 +275,14 @@ export class SyncEngine {
 
     if (mode === "self-regen" && !allowDirty) {
       try {
+        const gitStart = Date.now();
         const { stdout: gitStatus } = await execAsync(
           "git status --porcelain",
           {
             cwd: this.options?.targetRoot ?? process.cwd(),
           },
         );
+        gitStatusMs = Date.now() - gitStart;
         if (gitStatus && gitStatus.trim().length > 0) {
           logger.error(
             "Git working tree is dirty. Commit or stash changes, or use --allow-dirty to proceed.",
@@ -350,11 +355,14 @@ export class SyncEngine {
       }
 
       if (mode === "self-regen") {
+        const preflightStart = Date.now();
         await ensureDependenciesBuilt(this.fullConfig!);
+        preflightMs = Date.now() - preflightStart;
       } else {
         logger.info("Skipping preflight build (external mode)");
       }
 
+      const generatorsStart = Date.now();
       const rootFilesResult = await generateRootFiles(
         this.fullConfig,
         this.report,
@@ -412,6 +420,7 @@ export class SyncEngine {
         mergeResult(secondPassBarrels, pass2);
       }
       const barrels = mergeBarrelPasses(firstPassBarrels, secondPassBarrels);
+      const generatorsMs = Date.now() - generatorsStart;
 
       // Ordered rows for the per-generator summary below — also the single
       // source for the run-level aggregate (PR-B2): adding a generator here
@@ -451,7 +460,9 @@ export class SyncEngine {
       }
 
       if (mode === "self-regen") {
+        const linterStart = Date.now();
         await runArchLinter(this.fullConfig);
+        linterMs = Date.now() - linterStart;
         await this.report.writeReport(this.fullConfig!);
       } else {
         logger.info("Skipping arch-linter and report (external mode)");
@@ -459,6 +470,12 @@ export class SyncEngine {
 
       const duration = Date.now() - start;
       runSummary.durationMs = duration;
+      runSummary.phaseTimingsMs = {
+        gitStatus: gitStatusMs,
+        preflight: preflightMs,
+        generators: generatorsMs,
+        linter: linterMs,
+      };
 
       if (this.failures.length === 0) {
         logger.info("\nSync completed successfully.");
@@ -491,6 +508,17 @@ export class SyncEngine {
         logger.error(`• ${f.row} : FAILED — ${f.message}`);
       }
       logger.info(`• Total ops : ${runSummary.totalOps}`);
+      logger.info(`\n=== Phase Timings ===`);
+      const phaseTimingRows: ReadonlyArray<readonly [string, number | null]> = [
+        ["git status", gitStatusMs],
+        ["preflight", preflightMs],
+        ["generators", generatorsMs],
+        ["linter", linterMs],
+      ];
+      for (const [label, value] of phaseTimingRows) {
+        const formatted = value === null ? "skipped" : `${value}ms`;
+        logger.info(`• ${label} : ${formatted}`);
+      }
       return runSummary;
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown sync error";
