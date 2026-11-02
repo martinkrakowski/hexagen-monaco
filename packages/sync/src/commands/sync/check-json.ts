@@ -2,7 +2,8 @@ import type { SyncRunSummary } from "../../results.js";
 
 /**
  * Schema version of the machine-readable line `hexagen sync --check --json`
- * prints (lane H2b). Bump when the shape changes.
+ * prints (lane H2b). Bump on a breaking change. An added key is additive under the
+ * compatibility policy (consumer-contract plan, H3), so it keeps the version.
  */
 export const SYNC_CHECK_JSON_SCHEMA_VERSION = 1;
 
