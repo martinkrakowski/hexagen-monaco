@@ -16,6 +16,7 @@ const DOCUMENTED_KEY_ORDER = [
   "errors",
   "manifestMissing",
   "reason",
+  "timingsMs",
 ] as const;
 
 function makeSummary(overrides: Partial<SyncRunSummary> = {}): SyncRunSummary {
@@ -121,7 +122,105 @@ describe("buildSyncCheckJson", () => {
     assert.equal(json.reason, "sync produced no summary");
   });
 
-  it("every result has the documented 8-key order", () => {
+  it("a converged result carries timingsMs with total from durationMs", () => {
+    const json = buildSyncCheckJson(
+      makeSummary({
+        durationMs: 130,
+        phaseTimingsMs: {
+          gitStatus: 5,
+          preflight: 0,
+          generators: 120,
+          linter: 0,
+        },
+      }),
+      undefined,
+    );
+    assert.deepEqual(json.timingsMs, {
+      gitStatus: 5,
+      preflight: 0,
+      generators: 120,
+      linter: 0,
+      total: 130,
+    });
+  });
+
+  it("drift and could-not-run results carry timingsMs when the summary has it", () => {
+    const drift = buildSyncCheckJson(
+      makeSummary({
+        created: 1,
+        totalOps: 1,
+        durationMs: 50,
+        phaseTimingsMs: {
+          gitStatus: 1,
+          preflight: 2,
+          generators: 3,
+          linter: null,
+        },
+      }),
+      undefined,
+    );
+    const couldNotRun = buildSyncCheckJson(
+      makeSummary({
+        errors: 1,
+        durationMs: 60,
+        phaseTimingsMs: {
+          gitStatus: null,
+          preflight: 1,
+          generators: 2,
+          linter: 3,
+        },
+      }),
+      undefined,
+    );
+    assert.deepEqual(drift.timingsMs, {
+      gitStatus: 1,
+      preflight: 2,
+      generators: 3,
+      linter: null,
+      total: 50,
+    });
+    assert.deepEqual(couldNotRun.timingsMs, {
+      gitStatus: null,
+      preflight: 1,
+      generators: 2,
+      linter: 3,
+      total: 60,
+    });
+  });
+
+  it("a summary without phaseTimingsMs yields timingsMs null", () => {
+    const json = buildSyncCheckJson(makeSummary(), undefined);
+    assert.equal(json.timingsMs, null);
+  });
+
+  it("the fatal path yields timingsMs null", () => {
+    const json = buildSyncCheckJson(undefined, "boom");
+    assert.equal(json.timingsMs, null);
+  });
+
+  it("null phases pass through as null, not 0", () => {
+    const json = buildSyncCheckJson(
+      makeSummary({
+        durationMs: 10,
+        phaseTimingsMs: {
+          gitStatus: null,
+          preflight: null,
+          generators: 4,
+          linter: null,
+        },
+      }),
+      undefined,
+    );
+    assert.deepEqual(json.timingsMs, {
+      gitStatus: null,
+      preflight: null,
+      generators: 4,
+      linter: null,
+      total: 10,
+    });
+  });
+
+  it("every result has the documented 9-key order", () => {
     const results: SyncCheckJson[] = [
       buildSyncCheckJson(makeSummary(), undefined),
       buildSyncCheckJson(makeSummary({ created: 1, totalOps: 1 }), undefined),

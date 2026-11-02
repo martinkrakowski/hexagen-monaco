@@ -10,9 +10,10 @@ export const SYNC_CHECK_JSON_SCHEMA_VERSION = 1;
 export type SyncCheckStatus = "converged" | "drift" | "could-not-run";
 
 /**
- * The one JSON line `hexagen sync --check --json` writes to stdout. Keys are
- * documented in this order; `pending`, `errors` and `manifestMissing` are
- * `null` only on the fatal path, where no summary exists to report.
+ * The one JSON line `hexagen sync --check --json` writes to stdout. Nine
+ * keys, `timingsMs` last, documented in this order; `pending`, `errors`,
+ * `manifestMissing` and `timingsMs` are `null` only on the fatal path, where
+ * no summary exists to report.
  */
 export interface SyncCheckJson {
   schemaVersion: number;
@@ -28,6 +29,18 @@ export interface SyncCheckJson {
   errors: number | null;
   manifestMissing: boolean | null;
   reason: string | null;
+  /**
+   * Per-phase timings, or `null` on the fatal path or when the summary has no
+   * `phaseTimingsMs`. `total` is the run's overall duration
+   * (`summary.durationMs`).
+   */
+  timingsMs: {
+    gitStatus: number | null;
+    preflight: number | null;
+    generators: number;
+    linter: number | null;
+    total: number;
+  } | null;
 }
 
 /**
@@ -61,8 +74,13 @@ export function buildSyncCheckJson(
       errors: null,
       manifestMissing: null,
       reason: fatalMessage ?? "sync produced no summary",
+      timingsMs: null,
     };
   }
+
+  const timingsMs = summary.phaseTimingsMs
+    ? { ...summary.phaseTimingsMs, total: summary.durationMs }
+    : null;
 
   const pending = {
     created: summary.created,
@@ -81,6 +99,7 @@ export function buildSyncCheckJson(
       errors: summary.errors,
       manifestMissing: true,
       reason: "manifest not found",
+      timingsMs,
     };
   }
 
@@ -94,6 +113,7 @@ export function buildSyncCheckJson(
       errors: summary.errors,
       manifestMissing: false,
       reason: `${summary.errors} generator failure(s)`,
+      timingsMs,
     };
   }
 
@@ -107,6 +127,7 @@ export function buildSyncCheckJson(
       errors: summary.errors,
       manifestMissing: false,
       reason: null,
+      timingsMs,
     };
   }
 
@@ -119,5 +140,6 @@ export function buildSyncCheckJson(
     errors: summary.errors,
     manifestMissing: false,
     reason: null,
+    timingsMs,
   };
 }
