@@ -20,19 +20,19 @@ async function installFakeLinter(
   exitCode = 0,
   emitJsonLine = true,
 ): Promise<void> {
-  const binDir = path.join(dir, "node_modules", ".bin");
-  await fs.mkdir(binDir, { recursive: true });
-  if (process.platform === "win32") {
-    const echo = emitJsonLine ? `echo ${FAKE_LINT_LINE}\r\n` : "";
-    await fs.writeFile(
-      path.join(binDir, "hexagen-lint.cmd"),
-      `@echo off\r\n${echo}exit /b ${exitCode}\r\n`,
-    );
-  } else {
-    const echo = emitJsonLine ? `echo '${FAKE_LINT_LINE}'\n` : "";
-    const bin = path.join(binDir, "hexagen-lint");
-    await fs.writeFile(bin, `#!/bin/sh\n${echo}exit ${exitCode}\n`);
-    await fs.chmod(bin, 0o755);
+  const isWin = process.platform === "win32";
+  const binName = isWin ? "hexagen-lint.cmd" : "hexagen-lint";
+  const binPath = path.join(dir, "node_modules", ".bin", binName);
+  await fs.mkdir(path.dirname(binPath), { recursive: true });
+
+  const payload = emitJsonLine ? FAKE_LINT_LINE : "";
+  const body = isWin
+    ? `@echo off\r\n${payload ? `echo ${payload}\r\n` : ""}exit /b ${exitCode}\r\n`
+    : `#!/bin/sh\n${payload ? `echo '${payload}'\n` : ""}exit ${exitCode}\n`;
+
+  await fs.writeFile(binPath, body);
+  if (!isWin) {
+    await fs.chmod(binPath, 0o755);
   }
 }
 
@@ -125,92 +125,78 @@ async function withHarness<T>(
   }
 }
 
+async function runWithProject<T>(
+  exitCode: number,
+  fn: (capture: Capture) => Promise<T>,
+  emitJsonLine = true,
+): Promise<T> {
+  const tempDir = await makeTempProject();
+  try {
+    return await withHarness(tempDir, exitCode, fn, emitJsonLine);
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+}
+
 describe("validateCommand", () => {
   it("should pass when linter succeeds", async () => {
-    const tempDir = await makeTempProject();
-    try {
-      await withHarness(tempDir, 0, async ({ logs }) => {
-        await validateCommand();
-        assert.equal(process.exitCode, 0);
-        assert.ok(logs.join("\n").includes("Architecture is compliant"));
-      });
-    } finally {
-      await fs.rm(tempDir, { recursive: true, force: true });
-    }
+    await runWithProject(0, async ({ logs }) => {
+      await validateCommand();
+      assert.equal(process.exitCode, 0);
+      assert.ok(logs.join("\n").includes("Architecture is compliant"));
+    });
   });
 
   it("fake exit 1, human mode: exitCode 1 and warnings contain 'Architecture violations detected'", async () => {
-    const tempDir = await makeTempProject();
-    try {
-      await withHarness(tempDir, 1, async ({ warnings }) => {
-        await validateCommand();
-        assert.equal(process.exitCode, 1);
-        assert.ok(
-          warnings.join("\n").includes("Architecture violations detected"),
-        );
-      });
-    } finally {
-      await fs.rm(tempDir, { recursive: true, force: true });
-    }
+    await runWithProject(1, async ({ warnings }) => {
+      await validateCommand();
+      assert.equal(process.exitCode, 1);
+      assert.ok(
+        warnings.join("\n").includes("Architecture violations detected"),
+      );
+    });
   });
 
   it("fake exit 2, human mode: exitCode 2 and errors contain 'Could not run the architecture linter'", async () => {
-    const tempDir = await makeTempProject();
-    try {
-      await withHarness(tempDir, 2, async ({ errors }) => {
+    await runWithProject(2, async ({ errors }) => {
+      await validateCommand();
+      assert.equal(process.exitCode, 2);
+      assert.ok(
+        errors.join("\n").includes("Could not run the architecture linter"),
+      );
+    });
+  });
+
+  it("fake exit 1 with no line, human mode: exitCode 2 and errors contain 'Could not run the architecture linter'", async () => {
+    await runWithProject(
+      1,
+      async ({ errors }) => {
         await validateCommand();
         assert.equal(process.exitCode, 2);
         assert.ok(
           errors.join("\n").includes("Could not run the architecture linter"),
         );
-      });
-    } finally {
-      await fs.rm(tempDir, { recursive: true, force: true });
-    }
-  });
-
-  it("fake exit 1 with no line, human mode: exitCode 2 and errors contain 'Could not run the architecture linter'", async () => {
-    const tempDir = await makeTempProject();
-    try {
-      await withHarness(
-        tempDir,
-        1,
-        async ({ errors }) => {
-          await validateCommand();
-          assert.equal(process.exitCode, 2);
-          assert.ok(
-            errors.join("\n").includes("Could not run the architecture linter"),
-          );
-          assert.ok(
-            errors
-              .join("\n")
-              .includes("exited 1 but printed no readable JSON line"),
-          );
-        },
-        false,
-      );
-    } finally {
-      await fs.rm(tempDir, { recursive: true, force: true });
-    }
+        assert.ok(
+          errors
+            .join("\n")
+            .includes("exited 1 but printed no readable JSON line"),
+        );
+      },
+      false,
+    );
   });
 
   it("fake exit 0 with --json and no JSON printed: exitCode 2 and one could-not-run stdout line", async () => {
-    const tempDir = await makeTempProject();
-    try {
-      await withHarness(
-        tempDir,
-        0,
-        async ({ stdoutLines }) => {
-          await validateCommand({ json: true });
-          assert.equal(process.exitCode, 2);
-          assert.equal(stdoutLines.length, 1);
-          const parsed = JSON.parse(stdoutLines[0]) as { status: string };
-          assert.equal(parsed.status, "could-not-run");
-        },
-        false,
-      );
-    } finally {
-      await fs.rm(tempDir, { recursive: true, force: true });
-    }
+    await runWithProject(
+      0,
+      async ({ stdoutLines }) => {
+        await validateCommand({ json: true });
+        assert.equal(process.exitCode, 2);
+        assert.equal(stdoutLines.length, 1);
+        const parsed = JSON.parse(stdoutLines[0]) as { status: string };
+        assert.equal(parsed.status, "could-not-run");
+      },
+      false,
+    );
   });
 });

@@ -158,6 +158,68 @@ export function recordWriteStatus(
   }
 }
 
+function driftReason(action: DriftAction): string {
+  if (action === "create") {
+    return "missing on disk; sync would create it";
+  }
+  if (action === "update") {
+    return "content differs from generated output";
+  }
+  return "no longer generated; sync would remove it";
+}
+
+function normalizeRelativePath(
+  filePath: string,
+  workspaceRoot: string,
+): string {
+  const relative = path.isAbsolute(filePath)
+    ? path.relative(workspaceRoot, filePath)
+    : filePath;
+  return relative.replaceAll("\\", "/");
+}
+
+function compareStrings(a: string, b: string): number {
+  if (a < b) return -1;
+  if (a > b) return 1;
+  return 0;
+}
+
+function compareDriftFiles(a: DriftFile, b: DriftFile): number {
+  const byPath = compareStrings(a.path, b.path);
+  if (byPath !== 0) return byPath;
+  const byAction = compareStrings(a.action, b.action);
+  if (byAction !== 0) return byAction;
+  return compareStrings(a.generator, b.generator);
+}
+
+function collectDriftFilesForRow(
+  generator: string,
+  result: GeneratorResult,
+  workspaceRoot: string,
+  seen: Set<string>,
+  files: DriftFile[],
+): void {
+  const buckets: ReadonlyArray<readonly [DriftAction, readonly string[]]> = [
+    ["create", result.created],
+    ["update", result.updated],
+    ["delete", result.deleted],
+  ];
+  for (const [action, paths] of buckets) {
+    for (const p of paths) {
+      const relPath = normalizeRelativePath(p, workspaceRoot);
+      const key = `${relPath}\u0000${action}\u0000${generator}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      files.push({
+        path: relPath,
+        action,
+        generator,
+        reason: driftReason(action),
+      });
+    }
+  }
+}
+
 /**
  * Build the per-file drift list from the engine's ordered generator rows.
  * Paths are made workspace-relative (absolute paths resolve against
@@ -173,40 +235,8 @@ export function buildDriftFiles(
   const seen = new Set<string>();
   const files: DriftFile[] = [];
   for (const [generator, result] of rows) {
-    const buckets: ReadonlyArray<readonly [DriftAction, readonly string[]]> = [
-      ["create", result.created],
-      ["update", result.updated],
-      ["delete", result.deleted],
-    ];
-    for (const [action, paths] of buckets) {
-      for (const p of paths) {
-        const relative = path.isAbsolute(p)
-          ? path.relative(workspaceRoot, p)
-          : p;
-        const relPath = relative.replace(/\\/g, "/");
-        const key = `${relPath}\u0000${action}\u0000${generator}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        files.push({
-          path: relPath,
-          action,
-          generator,
-          reason:
-            action === "create"
-              ? "missing on disk; sync would create it"
-              : action === "update"
-                ? "content differs from generated output"
-                : "no longer generated; sync would remove it",
-        });
-      }
-    }
+    collectDriftFilesForRow(generator, result, workspaceRoot, seen, files);
   }
-  files.sort((a, b) => {
-    const byPath = a.path < b.path ? -1 : a.path > b.path ? 1 : 0;
-    if (byPath !== 0) return byPath;
-    const byAction = a.action < b.action ? -1 : a.action > b.action ? 1 : 0;
-    if (byAction !== 0) return byAction;
-    return a.generator < b.generator ? -1 : a.generator > b.generator ? 1 : 0;
-  });
+  files.sort(compareDriftFiles);
   return files;
 }
