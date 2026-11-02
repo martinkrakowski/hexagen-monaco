@@ -7,6 +7,8 @@
 // 3. Extract import statements for type dependencies
 // 4. Generate implementation scaffolds with proper signatures
 
+import { createHash } from "node:crypto";
+import fs from "node:fs";
 import path from "node:path";
 import {
   Project,
@@ -152,6 +154,22 @@ export interface PortAnalysisResult {
 }
 
 /**
+ * Per-run memo of analyzePortFile keyed by the resolved absolute path plus the
+ * SHA-256 of the file's current content (issue #907). A real (non-dry) sync
+ * writes port files during the run and later passes re-analyze them, so a
+ * path-only key would serve stale results — content participates in the key,
+ * so a rewrite is seen as a fresh file. The memo lives in module memory for
+ * the lifetime of the process (one `sync` invocation) and never leaks across
+ * processes.
+ */
+const analysisMemo = new Map<string, PortAnalysisResult | null>();
+
+/** Test/run boundary: forget the memo (issue #907). */
+export function resetPortAnalysisMemo(): void {
+  analysisMemo.clear();
+}
+
+/**
  * Analyze a port interface file and extract method signatures and imports
  *
  * @param portFilePath - Absolute path to the port interface file
@@ -160,8 +178,32 @@ export interface PortAnalysisResult {
 export function analyzePortFile(
   portFilePath: string,
 ): PortAnalysisResult | null {
+  const absolute = path.resolve(portFilePath);
+  // Read the file on every call: a missing or unreadable file returns the
+  // uncached contract (`null`) and is never memoized.
+  let contents: string;
   try {
-    // Create a ts-morph project for analysis
+    contents = fs.readFileSync(absolute, "utf8");
+  } catch {
+    return null;
+  }
+  const fingerprint = createHash("sha256").update(contents).digest("hex");
+  const key = `${absolute}:${fingerprint}`;
+  if (analysisMemo.has(key)) {
+    return analysisMemo.get(key) ?? null;
+  }
+  const result = analyzePortFileUncached(absolute, contents);
+  analysisMemo.set(key, result);
+  return result;
+}
+
+function analyzePortFileUncached(
+  portFilePath: string,
+  contents: string,
+): PortAnalysisResult | null {
+  try {
+    // Create a ts-morph project for analysis — one fresh Project per memo
+    // miss. Projects are never shared (issue #907); the savings come from memo hits.
     const project = new Project({
       skipAddingFilesFromTsConfig: true,
       compilerOptions: {
@@ -171,7 +213,9 @@ export function analyzePortFile(
     });
 
     // Add the port file to the project
-    const sourceFile = project.addSourceFileAtPath(portFilePath);
+    const sourceFile = project.createSourceFile(portFilePath, contents, {
+      overwrite: true,
+    });
 
     // Find the first exported interface (port interfaces are always exported)
     const interfaces = sourceFile.getInterfaces().filter((i) => i.isExported());
