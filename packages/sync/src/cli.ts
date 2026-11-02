@@ -82,6 +82,10 @@ function buildProgram(): Command {
     )
     .option("--allow-dirty", "Skip git clean check (for development)")
     .option(
+      "--no-preflight",
+      "Skip the whole-repo turbo build that real runs perform first. The build is left to the gate (yarn build in CI); use only when something else builds. No effect with --dry-run/--check, which never build.",
+    )
+    .option(
       "--strict",
       "Abort the sync when the architecture linter reports a violation (or cannot verify)",
     )
@@ -117,7 +121,9 @@ function buildProgram(): Command {
       let fatalMessage: string | undefined;
 
       try {
-        const engine = new SyncEngine(flags);
+        const engine = new SyncEngine(flags, {
+          noPreflight: options.preflight === false,
+        });
         summary = await engine.run();
         if (summary.errors > 0) {
           console.error(
