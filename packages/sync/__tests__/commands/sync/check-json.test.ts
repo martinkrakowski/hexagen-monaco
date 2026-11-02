@@ -17,6 +17,7 @@ const DOCUMENTED_KEY_ORDER = [
   "manifestMissing",
   "reason",
   "timingsMs",
+  "files",
 ] as const;
 
 function makeSummary(overrides: Partial<SyncRunSummary> = {}): SyncRunSummary {
@@ -193,7 +194,7 @@ describe("buildSyncCheckJson", () => {
     });
   });
 
-  it("every result has the documented 9-key order", () => {
+  it("every result has the documented 10-key order", () => {
     const results: SyncCheckJson[] = [
       checkWithSummary(),
       checkWithSummary({ created: 1, totalOps: 1 }),

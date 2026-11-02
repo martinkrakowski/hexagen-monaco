@@ -65,6 +65,10 @@ const TSCONFIG = path.join(PACKAGE_ROOT, "tsconfig.json");
  * Before that: 0.10.0 removed `InMemoryConfigDouble`, `YamlConfigAdapter`, and
  * the six `fs-utils` names (`protectedFiles`, `isGeneratedFile`,
  * `isProtectedRoot`, `isInScope`, `safeWriteFileAtomic`, `safeWriteFile`).
+ *
+ * Lane HX2 (2026-11-02): added `DriftAction`, `DriftFile` and
+ * `buildDriftFiles` — the per-file drift report backing the new `files` key
+ * of `sync --check --json`. Additive; the schema version stays 1.
  */
 const EXPECTED_PUBLIC_SURFACE: readonly string[] = [
   "AclDefinition",
@@ -73,6 +77,8 @@ const EXPECTED_PUBLIC_SURFACE: readonly string[] = [
   "BoundedContext",
   "DEFAULT_NAMING",
   "DEFAULT_TEMPLATES",
+  "DriftAction",
+  "DriftFile",
   "FailureMode",
   "FileSystemPort",
   "GeneratorConfigPort",
@@ -108,6 +114,7 @@ const EXPECTED_PUBLIC_SURFACE: readonly string[] = [
   "WorkspaceFileInfo",
   "WorkspaceFileProviderPort",
   "WriteStatus",
+  "buildDriftFiles",
   "createEmptyResult",
   "err",
   "isIndexManifest",

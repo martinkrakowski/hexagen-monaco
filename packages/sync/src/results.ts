@@ -1,3 +1,5 @@
+import path from "node:path";
+
 /**
  * Outcome vocabulary of `safeWriteFileAtomic` (fs-utils.ts). Declared here so
  * every generator routes the same closed set through `recordWriteStatus`
@@ -53,6 +55,21 @@ export function createEmptyResult(): GeneratorResult {
 }
 
 /**
+ * The kind of drift a generated file is in: missing on disk (`create`),
+ * different bytes from the generated output (`update`), or no longer
+ * generated (`delete`).
+ */
+export type DriftAction = "create" | "update" | "delete";
+
+/** One workspace-relative file in `sync --check --json`'s `files` list. */
+export interface DriftFile {
+  path: string;
+  action: DriftAction;
+  generator: string;
+  reason: string;
+}
+
+/**
  * Run-level aggregate returned by `SyncEngine.run()` (PR-B2). Counts sum every
  * generator's buckets; `totalOps` is the number of actual (real run) or planned
  * (--dry-run) mutations — creates + updates + deletes. A converged tree
@@ -101,6 +118,11 @@ export interface SyncRunSummary {
     generators: number;
     linter: number | null;
   };
+  /**
+   * Per-file drift details, sorted by path then action then generator and
+   * workspace-relative. Absent when built without the engine's rows.
+   */
+  files?: DriftFile[];
 }
 
 /**
@@ -134,4 +156,57 @@ export function recordWriteStatus(
     // "skipped" | "protected"
     result.skipped.push(filePath);
   }
+}
+
+/**
+ * Build the per-file drift list from the engine's ordered generator rows.
+ * Paths are made workspace-relative (absolute paths resolve against
+ * `workspaceRoot`, relative ones pass through) with backslashes normalized to
+ * `/`. Entries with the same path+action+generator collapse; the result is
+ * sorted by path, then action, then generator using code-point comparison
+ * (locale-free).
+ */
+export function buildDriftFiles(
+  rows: ReadonlyArray<readonly [string, GeneratorResult]>,
+  workspaceRoot: string,
+): DriftFile[] {
+  const seen = new Set<string>();
+  const files: DriftFile[] = [];
+  for (const [generator, result] of rows) {
+    const buckets: ReadonlyArray<readonly [DriftAction, readonly string[]]> = [
+      ["create", result.created],
+      ["update", result.updated],
+      ["delete", result.deleted],
+    ];
+    for (const [action, paths] of buckets) {
+      for (const p of paths) {
+        const relative = path.isAbsolute(p)
+          ? path.relative(workspaceRoot, p)
+          : p;
+        const relPath = relative.replace(/\\/g, "/");
+        const key = `${relPath}\u0000${action}\u0000${generator}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        files.push({
+          path: relPath,
+          action,
+          generator,
+          reason:
+            action === "create"
+              ? "missing on disk; sync would create it"
+              : action === "update"
+                ? "content differs from generated output"
+                : "no longer generated; sync would remove it",
+        });
+      }
+    }
+  }
+  files.sort((a, b) => {
+    const byPath = a.path < b.path ? -1 : a.path > b.path ? 1 : 0;
+    if (byPath !== 0) return byPath;
+    const byAction = a.action < b.action ? -1 : a.action > b.action ? 1 : 0;
+    if (byAction !== 0) return byAction;
+    return a.generator < b.generator ? -1 : a.generator > b.generator ? 1 : 0;
+  });
+  return files;
 }
