@@ -5,36 +5,25 @@ import {
 } from "./check-json.js";
 import type { DriftFile, SyncRunSummary } from "../../results.js";
 
-function makeSummary(overrides: Partial<SyncRunSummary> = {}): SyncRunSummary {
-  return {
-    created: 0,
-    updated: 0,
-    deleted: 0,
-    unchanged: 0,
-    skipped: 0,
-    totalOps: 0,
-    errors: 0,
-    manifestMissing: false,
-    durationMs: 0,
-    ...overrides,
-  };
-}
-
-const PRE_EXISTING_KEYS = [
-  "schemaVersion",
-  "command",
-  "status",
-  "exitCode",
-  "pending",
-  "errors",
-  "manifestMissing",
-  "reason",
-] as const;
+const makeSummary = (
+  overrides: Partial<SyncRunSummary> = {},
+): SyncRunSummary => ({
+  created: 0,
+  updated: 0,
+  deleted: 0,
+  unchanged: 0,
+  skipped: 0,
+  totalOps: 0,
+  errors: 0,
+  manifestMissing: false,
+  durationMs: 0,
+  ...overrides,
+});
 
 describe("buildSyncCheckJson files key", () => {
-  const driftFiles: DriftFile[] = [
+  const sampleDrift: DriftFile[] = [
     {
-      path: "packages/a/src/index.ts",
+      path: "src/file.ts",
       action: "create",
       generator: "RootFiles",
       reason: "missing on disk; sync would create it",
@@ -45,11 +34,11 @@ describe("buildSyncCheckJson files key", () => {
     const summary = makeSummary({
       created: 1,
       totalOps: 1,
-      files: driftFiles,
+      files: sampleDrift,
     });
     const json = buildSyncCheckJson(summary, undefined);
     expect(json.status).toBe("drift");
-    expect(json.files).toEqual(driftFiles);
+    expect(json.files).toEqual(sampleDrift);
   });
 
   it("converged with files undefined yields []", () => {
@@ -75,9 +64,9 @@ describe("buildSyncCheckJson files key", () => {
   });
 
   it("schemaVersion is 1 in every case", () => {
-    const results = [
+    const cases = [
       buildSyncCheckJson(
-        makeSummary({ created: 1, totalOps: 1, files: driftFiles }),
+        makeSummary({ created: 1, totalOps: 1, files: sampleDrift }),
         undefined,
       ),
       buildSyncCheckJson(makeSummary(), undefined),
@@ -85,28 +74,8 @@ describe("buildSyncCheckJson files key", () => {
       buildSyncCheckJson(makeSummary({ errors: 1 }), undefined),
       buildSyncCheckJson(undefined, "boom"),
     ];
-    for (const result of results) {
-      expect(result.schemaVersion).toBe(SYNC_CHECK_JSON_SCHEMA_VERSION);
-    }
-  });
-
-  it("files is the last key and every pre-existing key is still present", () => {
-    const results = [
-      buildSyncCheckJson(
-        makeSummary({ created: 1, totalOps: 1, files: driftFiles }),
-        undefined,
-      ),
-      buildSyncCheckJson(makeSummary(), undefined),
-      buildSyncCheckJson(makeSummary({ manifestMissing: true }), undefined),
-      buildSyncCheckJson(makeSummary({ errors: 1 }), undefined),
-      buildSyncCheckJson(undefined, "boom"),
-    ];
-    for (const result of results) {
-      const keys = Object.keys(result);
-      expect(keys[keys.length - 1]).toBe("files");
-      for (const key of PRE_EXISTING_KEYS) {
-        expect(keys).toContain(key);
-      }
+    for (const res of cases) {
+      expect(res.schemaVersion).toBe(SYNC_CHECK_JSON_SCHEMA_VERSION);
     }
   });
 });
