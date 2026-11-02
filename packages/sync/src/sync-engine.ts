@@ -46,6 +46,8 @@ const execAsync = promisify(exec);
 export interface SyncEngineOptions {
   targetRoot?: string;
   manifest?: Manifest;
+  // Skips the turbo build and leaves it to the gate.
+  noPreflight?: boolean;
 }
 
 export class SyncEngine {
@@ -357,7 +359,9 @@ export class SyncEngine {
 
       if (mode === "self-regen") {
         const preflightStart = Date.now();
-        await ensureDependenciesBuilt(this.fullConfig!);
+        await ensureDependenciesBuilt(this.fullConfig!, {
+          skip: this.options?.noPreflight,
+        });
         preflightMs = Date.now() - preflightStart;
       } else {
         logger.info("Skipping preflight build (external mode)");

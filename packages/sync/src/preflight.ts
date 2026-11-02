@@ -11,14 +11,23 @@ const MAX_BUFFER = 1024 * 1024 * 10;
 /**
  * Runs a full build for all packages that have stale source files.
  * For simplicity we invoke the monorepo turbo build which will rebuild any out‑of‑date packages.
+ * `options.skip` skips the build and leaves it to the gate.
  */
 export async function ensureDependenciesBuilt(
   config: SyncConfig,
+  options: { skip?: boolean } = {},
 ): Promise<void> {
   const { logger, dryRun } = config;
 
   if (dryRun) {
     logger.info("Pre‑flight: skipping build in dry-run mode");
+    return;
+  }
+
+  if (options.skip) {
+    logger.info(
+      "Preflight: build skipped (--no-preflight); the build is left to the gate",
+    );
     return;
   }
 
