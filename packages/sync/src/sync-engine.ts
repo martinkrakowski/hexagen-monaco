@@ -516,9 +516,8 @@ export class SyncEngine {
         ["linter", linterMs],
       ];
       for (const [label, value] of phaseTimingRows) {
-        logger.info(
-          `• ${label} : ${value === null ? "skipped" : `${value}ms`}`,
-        );
+        const formatted = value === null ? "skipped" : `${value}ms`;
+        logger.info(`• ${label} : ${formatted}`);
       }
       return runSummary;
     } catch (err) {

@@ -34,9 +34,36 @@ function makeSummary(overrides: Partial<SyncRunSummary> = {}): SyncRunSummary {
   };
 }
 
+function checkWithSummary(
+  overrides: Partial<SyncRunSummary> = {},
+): SyncCheckJson {
+  return buildSyncCheckJson(makeSummary(overrides), undefined);
+}
+
+function makePhases(
+  gitStatus: number | null,
+  preflight: number | null,
+  generators: number,
+  linter: number | null,
+) {
+  return { gitStatus, preflight, generators, linter };
+}
+
+function checkWithTimings(
+  durationMs: number,
+  phaseTimings: ReturnType<typeof makePhases>,
+  extra: Partial<SyncRunSummary> = {},
+): SyncCheckJson {
+  return checkWithSummary({
+    durationMs,
+    phaseTimingsMs: phaseTimings,
+    ...extra,
+  });
+}
+
 describe("buildSyncCheckJson", () => {
   it("a zero summary converges with exitCode 0 and the documented envelope", () => {
-    const json = buildSyncCheckJson(makeSummary(), undefined);
+    const json = checkWithSummary();
     assert.equal(json.schemaVersion, SYNC_CHECK_JSON_SCHEMA_VERSION);
     assert.equal(json.command, "sync --check");
     assert.equal(json.status, "converged");
@@ -53,10 +80,7 @@ describe("buildSyncCheckJson", () => {
   });
 
   it("totalOps > 0 reports drift with the planned ops", () => {
-    const json = buildSyncCheckJson(
-      makeSummary({ created: 2, updated: 1, totalOps: 3 }),
-      undefined,
-    );
+    const json = checkWithSummary({ created: 2, updated: 1, totalOps: 3 });
     assert.equal(json.status, "drift");
     assert.equal(json.exitCode, 1);
     assert.deepEqual(json.pending, {
@@ -69,10 +93,7 @@ describe("buildSyncCheckJson", () => {
   });
 
   it("generator failures are could-not-run but still report counts", () => {
-    const json = buildSyncCheckJson(
-      makeSummary({ errors: 1, created: 2, totalOps: 2 }),
-      undefined,
-    );
+    const json = checkWithSummary({ errors: 1, created: 2, totalOps: 2 });
     assert.equal(json.status, "could-not-run");
     assert.equal(json.exitCode, 1);
     assert.ok(json.reason?.includes("1 generator failure"));
@@ -86,20 +107,14 @@ describe("buildSyncCheckJson", () => {
   });
 
   it("a missing manifest is could-not-run with the named reason", () => {
-    const json = buildSyncCheckJson(
-      makeSummary({ manifestMissing: true }),
-      undefined,
-    );
+    const json = checkWithSummary({ manifestMissing: true });
     assert.equal(json.status, "could-not-run");
     assert.equal(json.reason, "manifest not found");
     assert.equal(json.manifestMissing, true);
   });
 
   it("manifestMissing beats generator failures in precedence", () => {
-    const json = buildSyncCheckJson(
-      makeSummary({ manifestMissing: true, errors: 2 }),
-      undefined,
-    );
+    const json = checkWithSummary({ manifestMissing: true, errors: 2 });
     assert.equal(json.status, "could-not-run");
     assert.equal(json.reason, "manifest not found");
   });
@@ -123,18 +138,7 @@ describe("buildSyncCheckJson", () => {
   });
 
   it("a converged result carries timingsMs with total from durationMs", () => {
-    const json = buildSyncCheckJson(
-      makeSummary({
-        durationMs: 130,
-        phaseTimingsMs: {
-          gitStatus: 5,
-          preflight: 0,
-          generators: 120,
-          linter: 0,
-        },
-      }),
-      undefined,
-    );
+    const json = checkWithTimings(130, makePhases(5, 0, 120, 0));
     assert.deepEqual(json.timingsMs, {
       gitStatus: 5,
       preflight: 0,
@@ -145,32 +149,15 @@ describe("buildSyncCheckJson", () => {
   });
 
   it("drift and could-not-run results carry timingsMs when the summary has it", () => {
-    const drift = buildSyncCheckJson(
-      makeSummary({
-        created: 1,
-        totalOps: 1,
-        durationMs: 50,
-        phaseTimingsMs: {
-          gitStatus: 1,
-          preflight: 2,
-          generators: 3,
-          linter: null,
-        },
-      }),
-      undefined,
+    const drift = checkWithTimings(
+      50,
+      makePhases(1, 2, 3, null),
+      { created: 1, totalOps: 1 },
     );
-    const couldNotRun = buildSyncCheckJson(
-      makeSummary({
-        errors: 1,
-        durationMs: 60,
-        phaseTimingsMs: {
-          gitStatus: null,
-          preflight: 1,
-          generators: 2,
-          linter: 3,
-        },
-      }),
-      undefined,
+    const couldNotRun = checkWithTimings(
+      60,
+      makePhases(null, 1, 2, 3),
+      { errors: 1 },
     );
     assert.deepEqual(drift.timingsMs, {
       gitStatus: 1,
@@ -189,7 +176,7 @@ describe("buildSyncCheckJson", () => {
   });
 
   it("a summary without phaseTimingsMs yields timingsMs null", () => {
-    const json = buildSyncCheckJson(makeSummary(), undefined);
+    const json = checkWithSummary();
     assert.equal(json.timingsMs, null);
   });
 
@@ -199,18 +186,7 @@ describe("buildSyncCheckJson", () => {
   });
 
   it("null phases pass through as null, not 0", () => {
-    const json = buildSyncCheckJson(
-      makeSummary({
-        durationMs: 10,
-        phaseTimingsMs: {
-          gitStatus: null,
-          preflight: null,
-          generators: 4,
-          linter: null,
-        },
-      }),
-      undefined,
-    );
+    const json = checkWithTimings(10, makePhases(null, null, 4, null));
     assert.deepEqual(json.timingsMs, {
       gitStatus: null,
       preflight: null,
@@ -222,10 +198,10 @@ describe("buildSyncCheckJson", () => {
 
   it("every result has the documented 9-key order", () => {
     const results: SyncCheckJson[] = [
-      buildSyncCheckJson(makeSummary(), undefined),
-      buildSyncCheckJson(makeSummary({ created: 1, totalOps: 1 }), undefined),
-      buildSyncCheckJson(makeSummary({ errors: 1, totalOps: 1 }), undefined),
-      buildSyncCheckJson(makeSummary({ manifestMissing: true }), undefined),
+      checkWithSummary(),
+      checkWithSummary({ created: 1, totalOps: 1 }),
+      checkWithSummary({ errors: 1, totalOps: 1 }),
+      checkWithSummary({ manifestMissing: true }),
       buildSyncCheckJson(undefined, "boom"),
       buildSyncCheckJson(undefined, undefined),
     ];
