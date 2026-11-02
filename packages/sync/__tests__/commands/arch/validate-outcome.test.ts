@@ -6,7 +6,20 @@ import {
   noManifestOutcome,
   parseLintJsonLine,
   toArchValidateJson,
+  type ArchValidateOutcome,
 } from "../../../src/commands/arch/validate-outcome.js";
+
+function assertCouldNotRun(
+  outcome: ArchValidateOutcome,
+  reasonSubstring?: string,
+): void {
+  assert.equal(outcome.status, "could-not-run");
+  assert.equal(outcome.exitCode, 2);
+  assert.equal(outcome.counts, null);
+  if (reasonSubstring !== undefined) {
+    assert.ok(outcome.reason?.includes(reasonSubstring));
+  }
+}
 
 function lintLine(overrides: Record<string, unknown> = {}): string {
   return JSON.stringify({
@@ -55,10 +68,7 @@ describe("classifyLintRun", () => {
   });
 
   it("exit 0 with json true and empty stdout: could-not-run, exitCode 2", () => {
-    const outcome = classifyLintRun(0, "", true);
-    assert.equal(outcome.status, "could-not-run");
-    assert.equal(outcome.exitCode, 2);
-    assert.equal(outcome.counts, null);
+    assertCouldNotRun(classifyLintRun(0, "", true));
   });
 
   it("exit 0 with json false: compliant, counts null", () => {
@@ -77,34 +87,22 @@ describe("classifyLintRun", () => {
   });
 
   it("exit 1 with no line: could-not-run, exitCode 2", () => {
-    const outcome = classifyLintRun(1, "", true);
-    assert.equal(outcome.status, "could-not-run");
-    assert.equal(outcome.exitCode, 2);
-    assert.equal(outcome.counts, null);
-    assert.ok(
-      outcome.reason?.includes("exited 1 but printed no readable JSON line"),
+    assertCouldNotRun(
+      classifyLintRun(1, "", true),
+      "exited 1 but printed no readable JSON line",
     );
   });
 
   it("exit 1 with an unparseable line: could-not-run, exitCode 2", () => {
-    const outcome = classifyLintRun(1, "{not json\n", true);
-    assert.equal(outcome.status, "could-not-run");
-    assert.equal(outcome.exitCode, 2);
-    assert.equal(outcome.counts, null);
+    assertCouldNotRun(classifyLintRun(1, "{not json\n", true));
   });
 
   it("exit 2: could-not-run, the reason contains 'exited 2'", () => {
-    const outcome = classifyLintRun(2, "", true);
-    assert.equal(outcome.status, "could-not-run");
-    assert.equal(outcome.exitCode, 2);
-    assert.ok(outcome.reason?.includes("exited 2"));
+    assertCouldNotRun(classifyLintRun(2, "", true), "exited 2");
   });
 
   it("exit null: could-not-run, the reason mentions the timeout", () => {
-    const outcome = classifyLintRun(null, "", true);
-    assert.equal(outcome.status, "could-not-run");
-    assert.equal(outcome.exitCode, 2);
-    assert.ok(outcome.reason?.includes("timeout"));
+    assertCouldNotRun(classifyLintRun(null, "", true), "timeout");
   });
 
   it("exit 0 where stdout has log lines before the JSON line: the last { line is used", () => {
@@ -124,19 +122,14 @@ describe("classifyLintRun", () => {
 
 describe("linterNotFoundOutcome", () => {
   it("has exitCode 2", () => {
-    const outcome = linterNotFoundOutcome();
-    assert.equal(outcome.exitCode, 2);
-    assert.equal(outcome.status, "could-not-run");
-    assert.ok(outcome.reason?.includes("not found"));
+    assertCouldNotRun(linterNotFoundOutcome(), "not found");
   });
 });
 
 describe("noManifestOutcome", () => {
   it("is could-not-run, exitCode 2, and names the cwd it searched from", () => {
     const outcome = noManifestOutcome("/some/cwd");
-    assert.equal(outcome.status, "could-not-run");
-    assert.equal(outcome.exitCode, 2);
-    assert.equal(outcome.counts, null);
+    assertCouldNotRun(outcome);
     assert.equal(
       outcome.reason,
       "no .architecture/manifest.yaml found from /some/cwd",

@@ -17,6 +17,7 @@ const DOCUMENTED_KEY_ORDER = [
   "manifestMissing",
   "reason",
   "timingsMs",
+  "files",
 ] as const;
 
 function makeSummary(overrides: Partial<SyncRunSummary> = {}): SyncRunSummary {
@@ -61,6 +62,21 @@ function checkWithTimings(
   });
 }
 
+function assertPendingCounts(
+  json: SyncCheckJson,
+  created: number,
+  updated: number,
+  deleted: number,
+  total: number,
+): void {
+  assert.deepEqual(json.pending, {
+    created,
+    updated,
+    deleted,
+    total,
+  });
+}
+
 describe("buildSyncCheckJson", () => {
   it("a zero summary converges with exitCode 0 and the documented envelope", () => {
     const json = checkWithSummary();
@@ -68,12 +84,7 @@ describe("buildSyncCheckJson", () => {
     assert.equal(json.command, "sync --check");
     assert.equal(json.status, "converged");
     assert.equal(json.exitCode, 0);
-    assert.deepEqual(json.pending, {
-      created: 0,
-      updated: 0,
-      deleted: 0,
-      total: 0,
-    });
+    assertPendingCounts(json, 0, 0, 0, 0);
     assert.equal(json.errors, 0);
     assert.equal(json.manifestMissing, false);
     assert.equal(json.reason, null);
@@ -83,12 +94,7 @@ describe("buildSyncCheckJson", () => {
     const json = checkWithSummary({ created: 2, updated: 1, totalOps: 3 });
     assert.equal(json.status, "drift");
     assert.equal(json.exitCode, 1);
-    assert.deepEqual(json.pending, {
-      created: 2,
-      updated: 1,
-      deleted: 0,
-      total: 3,
-    });
+    assertPendingCounts(json, 2, 1, 0, 3);
     assert.equal(json.reason, null);
   });
 
@@ -97,12 +103,7 @@ describe("buildSyncCheckJson", () => {
     assert.equal(json.status, "could-not-run");
     assert.equal(json.exitCode, 1);
     assert.ok(json.reason?.includes("1 generator failure"));
-    assert.deepEqual(json.pending, {
-      created: 2,
-      updated: 0,
-      deleted: 0,
-      total: 2,
-    });
+    assertPendingCounts(json, 2, 0, 0, 2);
     assert.equal(json.errors, 1);
   });
 
@@ -193,7 +194,7 @@ describe("buildSyncCheckJson", () => {
     });
   });
 
-  it("every result has the documented 9-key order", () => {
+  it("every result has the documented 10-key order", () => {
     const results: SyncCheckJson[] = [
       checkWithSummary(),
       checkWithSummary({ created: 1, totalOps: 1 }),

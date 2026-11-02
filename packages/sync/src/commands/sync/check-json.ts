@@ -1,4 +1,4 @@
-import type { SyncRunSummary } from "../../results.js";
+import type { DriftFile, SyncRunSummary } from "../../results.js";
 
 /**
  * Schema version of the machine-readable line `hexagen sync --check --json`
@@ -11,10 +11,11 @@ export const SYNC_CHECK_JSON_SCHEMA_VERSION = 1;
 export type SyncCheckStatus = "converged" | "drift" | "could-not-run";
 
 /**
- * The one JSON line `hexagen sync --check --json` writes to stdout. Nine
- * keys, `timingsMs` last, documented in this order; `pending`, `errors`,
- * `manifestMissing` and `timingsMs` are `null` only on the fatal path, where
- * no summary exists to report.
+ * The one JSON line `hexagen sync --check --json` writes to stdout. Ten
+ * keys, `files` last, documented in this order; `pending`, `errors`,
+ * `manifestMissing`, `timingsMs` and `files` are `null` only on the fatal
+ * path, where no summary exists to report. On the non-fatal paths `files`
+ * is an array (empty when converged), sorted and workspace-relative.
  */
 export interface SyncCheckJson {
   schemaVersion: number;
@@ -42,6 +43,11 @@ export interface SyncCheckJson {
     linter: number | null;
     total: number;
   } | null;
+  /**
+   * Per-file drift, sorted and workspace-relative, or `null` on the fatal
+   * path. `[]` when converged.
+   */
+  files: DriftFile[] | null;
 }
 
 /**
@@ -76,6 +82,7 @@ export function buildSyncCheckJson(
       manifestMissing: null,
       reason: fatalMessage ?? "sync produced no summary",
       timingsMs: null,
+      files: null,
     };
   }
 
@@ -101,6 +108,7 @@ export function buildSyncCheckJson(
       manifestMissing: true,
       reason: "manifest not found",
       timingsMs,
+      files: summary.files ?? [],
     };
   }
 
@@ -115,6 +123,7 @@ export function buildSyncCheckJson(
       manifestMissing: false,
       reason: `${summary.errors} generator failure(s)`,
       timingsMs,
+      files: summary.files ?? [],
     };
   }
 
@@ -129,6 +138,7 @@ export function buildSyncCheckJson(
       manifestMissing: false,
       reason: null,
       timingsMs,
+      files: summary.files ?? [],
     };
   }
 
@@ -142,5 +152,6 @@ export function buildSyncCheckJson(
     manifestMissing: false,
     reason: null,
     timingsMs,
+    files: summary.files ?? [],
   };
 }

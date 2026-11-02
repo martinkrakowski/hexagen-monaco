@@ -20,6 +20,7 @@ import { generateCrossContext } from "./generators/cross-context.js";
 import { generateSharedKernel } from "./generators/shared-kernel.js";
 import { resetPortAnalysisMemo } from "./generators/port-analyzer.js";
 import {
+  buildDriftFiles,
   createEmptyResult,
   type GeneratorResult,
   type SyncRunSummary,
@@ -462,6 +463,7 @@ export class SyncEngine {
         runSummary.skipped += r.skipped.length;
         runSummary.totalOps += r.totalOps;
       }
+      runSummary.files = buildDriftFiles(rows, this.workspaceRoot);
 
       if (mode === "self-regen") {
         const linterStart = Date.now();

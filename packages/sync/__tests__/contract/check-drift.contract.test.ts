@@ -426,9 +426,20 @@ describe("sync --check --json — one machine-readable line", () => {
     return JSON.parse(lines[0]) as Record<string, unknown>;
   }
 
-  it("converged tree: one JSON line on stdout, logs moved to stderr, exit 0", async () => {
-    const fix = await createConvergedFixture("hexagen-check-json-converged-");
+  async function withCheckJsonFixture<T>(
+    prefix: string,
+    fn: (fix: ContractFixture) => Promise<T>,
+  ): Promise<T> {
+    const fix = await createConvergedFixture(prefix);
     try {
+      return await fn(fix);
+    } finally {
+      await cleanupFixture(fix.root);
+    }
+  }
+
+  it("converged tree: one JSON line on stdout, logs moved to stderr, exit 0", async () => {
+    await withCheckJsonFixture("hexagen-check-json-converged-", async (fix) => {
       const r = await runHexagen(fix, ["sync", "--check", "--json"]);
       assert.equal(
         r.code,
@@ -458,14 +469,11 @@ describe("sync --check --json — one machine-readable line", () => {
         !r.stdout.includes("Total ops"),
         `stdout must carry only the JSON line:\n${describeResult(r)}`,
       );
-    } finally {
-      await cleanupFixture(fix.root);
-    }
+    });
   });
 
   it("drift: status drift, exitCode 1, exact pending counts", async () => {
-    const fix = await createConvergedFixture("hexagen-check-json-drift-");
-    try {
+    await withCheckJsonFixture("hexagen-check-json-drift-", async (fix) => {
       const pkgRel = path.join("packages", "billing", "package.json");
       await fs.rm(path.join(fix.root, pkgRel));
       await gitCommitAll(fix.root, "drift: remove generated package.json");
@@ -491,36 +499,33 @@ describe("sync --check --json — one machine-readable line", () => {
         r.stderr.includes("Drift detected"),
         `expected the drift message on stderr:\n${describeResult(r)}`,
       );
-    } finally {
-      await cleanupFixture(fix.root);
-    }
+    });
   });
 
   it("missing manifest: status could-not-run with reason manifest not found", async () => {
-    const fix = await createConvergedFixture("hexagen-check-json-no-manifest-");
-    try {
-      await fs.rm(path.join(fix.root, ".architecture", "manifest.yaml"));
-      await gitCommitAll(fix.root, "drift: remove the manifest");
+    await withCheckJsonFixture(
+      "hexagen-check-json-no-manifest-",
+      async (fix) => {
+        await fs.rm(path.join(fix.root, ".architecture", "manifest.yaml"));
+        await gitCommitAll(fix.root, "drift: remove the manifest");
 
-      const r = await runHexagen(fix, ["sync", "--check", "--json"]);
-      assert.equal(
-        r.code,
-        1,
-        `--check --json without a manifest must exit 1:\n${describeResult(r)}`,
-      );
+        const r = await runHexagen(fix, ["sync", "--check", "--json"]);
+        assert.equal(
+          r.code,
+          1,
+          `--check --json without a manifest must exit 1:\n${describeResult(r)}`,
+        );
 
-      const line = oneJsonLine(r.stdout);
-      assert.equal(line.status, "could-not-run");
-      assert.equal(line.manifestMissing, true);
-      assert.equal(line.reason, "manifest not found");
-    } finally {
-      await cleanupFixture(fix.root);
-    }
+        const line = oneJsonLine(r.stdout);
+        assert.equal(line.status, "could-not-run");
+        assert.equal(line.manifestMissing, true);
+        assert.equal(line.reason, "manifest not found");
+      },
+    );
   });
 
   it("dirty tree (fatal): status could-not-run with pending null and a Dirty git tree reason", async () => {
-    const fix = await createConvergedFixture("hexagen-check-json-dirty-");
-    try {
+    await withCheckJsonFixture("hexagen-check-json-dirty-", async (fix) => {
       await fs.writeFile(path.join(fix.root, "scratch.txt"), "scratch\n");
 
       const r = await runHexagen(fix, ["sync", "--check", "--json"]);
@@ -538,14 +543,11 @@ describe("sync --check --json — one machine-readable line", () => {
           (line.reason as string).includes("Dirty git tree"),
         `expected a Dirty git tree reason:\n${describeResult(r)}`,
       );
-    } finally {
-      await cleanupFixture(fix.root);
-    }
+    });
   });
 
   it("--json without --check is a usage error: exit 2, nothing on stdout", async () => {
-    const fix = await createConvergedFixture("hexagen-check-json-usage-");
-    try {
+    await withCheckJsonFixture("hexagen-check-json-usage-", async (fix) => {
       const r = await runHexagen(fix, ["sync", "--dry-run", "--json"]);
       assert.equal(
         r.code,
@@ -561,8 +563,6 @@ describe("sync --check --json — one machine-readable line", () => {
         r.stderr.includes("only supported together with --check"),
         `expected the usage error on stderr:\n${describeResult(r)}`,
       );
-    } finally {
-      await cleanupFixture(fix.root);
-    }
+    });
   });
 });
