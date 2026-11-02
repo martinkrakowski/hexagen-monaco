@@ -213,7 +213,9 @@ function analyzePortFileUncached(
     });
 
     // Add the port file to the project
-    const sourceFile = project.createSourceFile(portFilePath, contents, { overwrite: true });
+    const sourceFile = project.createSourceFile(portFilePath, contents, {
+      overwrite: true,
+    });
 
     // Find the first exported interface (port interfaces are always exported)
     const interfaces = sourceFile.getInterfaces().filter((i) => i.isExported());
