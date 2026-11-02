@@ -5,6 +5,7 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { SyncEngine } from "../src/sync-engine.js";
+import type { SyncFlags } from "../src/config.js";
 import { createSpyLogger, messagesAt } from "./helpers/spy-logger.js";
 import {
   createFixture,
@@ -35,7 +36,7 @@ async function createGitFixture(): Promise<string> {
 
 async function runTimedEngine(
   targetRoot: string,
-  flagsFactory: (logger: ReturnType<typeof createSpyLogger>) => Parameters<typeof SyncEngine.prototype.constructor>[0],
+  flagsFactory: (logger: ReturnType<typeof createSpyLogger>) => SyncFlags,
 ) {
   const logger = createSpyLogger();
   const engine = new SyncEngine(flagsFactory(logger), {

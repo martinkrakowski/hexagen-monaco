@@ -149,16 +149,13 @@ describe("buildSyncCheckJson", () => {
   });
 
   it("drift and could-not-run results carry timingsMs when the summary has it", () => {
-    const drift = checkWithTimings(
-      50,
-      makePhases(1, 2, 3, null),
-      { created: 1, totalOps: 1 },
-    );
-    const couldNotRun = checkWithTimings(
-      60,
-      makePhases(null, 1, 2, 3),
-      { errors: 1 },
-    );
+    const drift = checkWithTimings(50, makePhases(1, 2, 3, null), {
+      created: 1,
+      totalOps: 1,
+    });
+    const couldNotRun = checkWithTimings(60, makePhases(null, 1, 2, 3), {
+      errors: 1,
+    });
     assert.deepEqual(drift.timingsMs, {
       gitStatus: 1,
       preflight: 2,
