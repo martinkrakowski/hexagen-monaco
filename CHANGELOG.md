@@ -9,6 +9,25 @@ Release notes for the co-published `@hexagen-monaco/sync` and
 (F1 preflight, #432): a merged bump blocks deploys until it is published. That
 is the guard working, not a fault to bypass.
 
+## 0.16.0
+
+**Faster `hexagen sync`, and drift a caller can act on.** On a large consumer
+tree, `sync --check` took about 20 seconds against more than 400 for 0.15.0 in
+one measurement on 2026-11-02: port analysis is parsed once per run (#907,
+#911). `sync --check --json` names each drifted file and reports per-phase
+timings, and real runs can skip the whole-repo build with `--no-preflight`.
+
+**Minor, not patch.** New keys in the `sync --check --json` line (additive under
+the compatibility policy, so its `schemaVersion` stays 1) and one new option. No
+existing output or exit code changes.
+
+### `hexagen sync`
+
+- Port analysis is memoised per run, keyed by one file snapshot and reset between runs (#907, #911).
+- `sync --check --json` adds `timingsMs`: `gitStatus`, `preflight`, `generators`, `linter` and `total` (#912).
+- `sync --check --json` adds `files`: each drifted path, workspace-relative and sorted, with its action, generator and reason (#914).
+- `--no-preflight` skips the whole-repo build on a real run, leaving the build to the caller's gate (#913).
+
 ## 0.15.0
 
 **Machine-readable contracts for the tools that consume hexagen.** Manifests
