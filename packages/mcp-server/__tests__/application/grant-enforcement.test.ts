@@ -58,6 +58,12 @@ class ManifestWriteSpy implements ManifestWritePort {
   async removeContext() {
     return { success: true as const, value: { removed: true } };
   }
+  async removeAdapter() {
+    return { success: true as const, value: { removed: true } };
+  }
+  async removeDependency() {
+    return { success: true as const, value: { removed: true } };
+  }
 }
 
 class ScaffoldingStub implements ScaffoldingPort {

@@ -12,6 +12,18 @@ import type { ScaffoldingPort } from "./ports/out/scaffolding.port.js";
 
 export const PENDING_MANIFEST_MUTATION_KEY = "hexagenPendingManifestMutation";
 
+// Defined locally — HXA1b will replace/align with inbound tool ports.
+export interface PendingRemoveAdapterInput {
+  context_name: string;
+  adapter_name: string;
+  port_name: string;
+}
+
+export interface PendingRemoveDependencyInput {
+  source_module: string;
+  target_module: string;
+}
+
 export type PendingManifestMutation =
   | { kind: "create-context"; input: CreateContextInput }
   | { kind: "add-dependency"; input: AddDependencyInput }
@@ -19,14 +31,38 @@ export type PendingManifestMutation =
   | { kind: "create-adapter"; input: CreateAdapterInput }
   | { kind: "remove-port"; input: RemovePortInput }
   | { kind: "remove-context"; input: RemoveContextInput }
+  | { kind: "remove-adapter"; input: PendingRemoveAdapterInput }
+  | { kind: "remove-dependency"; input: PendingRemoveDependencyInput }
   | { kind: "scaffold-module"; input: ScaffoldModuleInput };
 
 export function readPendingMutation(
   tx: Transaction,
 ): PendingManifestMutation | null {
   const raw = tx.metadata[PENDING_MANIFEST_MUTATION_KEY];
-  if (!raw || typeof raw !== "object") return null;
-  const kind = (raw as { kind?: unknown }).kind;
+  if (raw === null || raw === undefined || typeof raw !== "object") {
+    return null;
+  }
+  if (Array.isArray(raw)) return null;
+  const record = raw as Record<string, unknown>;
+  for (const key of Object.keys(record)) {
+    if (
+      key === "__proto__" ||
+      key === "constructor" ||
+      key === "prototype"
+    ) {
+      return null;
+    }
+  }
+  // Inspect own descriptors only — a getter is never invoked.
+  const kindDescriptor = Object.getOwnPropertyDescriptor(record, "kind");
+  if (kindDescriptor && typeof kindDescriptor.get === "function") {
+    return null;
+  }
+  const inputDescriptor = Object.getOwnPropertyDescriptor(record, "input");
+  if (inputDescriptor && typeof inputDescriptor.get === "function") {
+    return null;
+  }
+  const kind = record.kind;
   if (typeof kind !== "string") return null;
   return raw as PendingManifestMutation;
 }
@@ -59,6 +95,10 @@ export async function applyPendingManifestMutation(
       return applyRemovePort(mutation.input, ports);
     case "remove-context":
       return applyRemoveContext(mutation.input, ports);
+    case "remove-adapter":
+      return applyRemoveAdapter(mutation.input, ports);
+    case "remove-dependency":
+      return applyRemoveDependency(mutation.input, ports);
     case "scaffold-module":
       return applyScaffoldModule(mutation.input, ports);
   }
@@ -246,6 +286,76 @@ async function applyRemoveContext(
     message: result.value.removed
       ? `Context ${input.context_name} removed from manifest.`
       : `Context ${input.context_name} was not found in manifest.`,
+    details: { removed: result.value.removed },
+  };
+}
+
+async function applyRemoveAdapter(
+  input: PendingRemoveAdapterInput,
+  ports: ApplyMutationPorts,
+): Promise<AppliedMutation> {
+  const write = ports.manifestWrite;
+  if (!write || typeof write.removeAdapter !== "function") {
+    throw new Error(
+      "ManifestWritePort.removeAdapter is not available: the write port must implement removeAdapter.",
+    );
+  }
+  const result = await write.removeAdapter({
+    contextName: input.context_name,
+    adapterName: input.adapter_name,
+    portName: input.port_name,
+  });
+  if (!result.success) throw result.error;
+  if (result.value.removed) {
+    ports.eventBus.publish({
+      type: "AdapterRemoved",
+      payload: {
+        contextName: input.context_name,
+        adapterName: input.adapter_name,
+        portName: input.port_name,
+      },
+      timestamp: Date.now(),
+      source: "mcp-server",
+    });
+  }
+  return {
+    message: result.value.removed
+      ? `Adapter ${input.adapter_name} removed from ${input.context_name}.`
+      : `Adapter ${input.adapter_name} was not found in ${input.context_name}.`,
+    details: { removed: result.value.removed },
+  };
+}
+
+async function applyRemoveDependency(
+  input: PendingRemoveDependencyInput,
+  ports: ApplyMutationPorts,
+): Promise<AppliedMutation> {
+  const write = ports.manifestWrite;
+  if (!write || typeof write.removeDependency !== "function") {
+    throw new Error(
+      "ManifestWritePort.removeDependency is not available: the write port must implement removeDependency.",
+    );
+  }
+  const result = await write.removeDependency({
+    sourceModule: input.source_module,
+    targetModule: input.target_module,
+  });
+  if (!result.success) throw result.error;
+  if (result.value.removed) {
+    ports.eventBus.publish({
+      type: "DependencyRemoved",
+      payload: {
+        source: input.source_module,
+        target: input.target_module,
+      },
+      timestamp: Date.now(),
+      source: "mcp-server",
+    });
+  }
+  return {
+    message: result.value.removed
+      ? `Dependency ${input.source_module} → ${input.target_module} removed.`
+      : `Dependency ${input.source_module} → ${input.target_module} was not found.`,
     details: { removed: result.value.removed },
   };
 }
