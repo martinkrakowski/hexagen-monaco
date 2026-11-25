@@ -14,6 +14,8 @@ export * from "./list-transactions-tool.port.js";
 export * from "./mcp-server.port.js";
 export * from "./propose-patch-tool.port.js";
 export * from "./reject-transaction-tool.port.js";
+export * from "./remove-adapter-tool.port.js";
 export * from "./remove-context-tool.port.js";
+export * from "./remove-dependency-tool.port.js";
 export * from "./remove-port-tool.port.js";
 export * from "./scaffold-module-tool.port.js";
