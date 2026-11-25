@@ -12,6 +12,8 @@ import type { ListTransactionsToolPort } from "../../application/ports/in/list-t
 import type { ProposePatchToolPort } from "../../application/ports/in/propose-patch-tool.port.js";
 import type { RejectTransactionToolPort } from "../../application/ports/in/reject-transaction-tool.port.js";
 import type { RemoveContextToolPort } from "../../application/ports/in/remove-context-tool.port.js";
+import type { RemoveAdapterToolPort } from "../../application/ports/in/remove-adapter-tool.port.js";
+import type { RemoveDependencyToolPort } from "../../application/ports/in/remove-dependency-tool.port.js";
 import type { RemovePortToolPort } from "../../application/ports/in/remove-port-tool.port.js";
 import type { ScaffoldModuleToolPort } from "../../application/ports/in/scaffold-module-tool.port.js";
 import type { AuditBoundariesToolUseCase } from "../../application/use-cases/audit-boundaries-tool.use-case.js";
@@ -94,9 +96,22 @@ export interface GenerationScaffoldToolDependencies {
   generateManifestPipelineToolUseCase: GenerateManifestPipelineToolPort;
 }
 
+/**
+ * The manifest-removal tool family (HXA1c): remove-adapter, remove-dependency.
+ *
+ * Typed on the inbound ports (ADR-0048), never on the concrete use-case
+ * classes — same claim as the families above, enforced by
+ * `ManifestRemovalDepsAreInboundPorts`.
+ */
+export interface ManifestRemovalToolDependencies {
+  removeAdapterToolUseCase: RemoveAdapterToolPort;
+  removeDependencyToolUseCase: RemoveDependencyToolPort;
+}
+
 export interface MCPServerAdapterDependencies
   extends
     ManifestStructureToolDependencies,
+    ManifestRemovalToolDependencies,
     TransactionLifecycleToolDependencies,
     GenerationScaffoldToolDependencies {
   getManifestResourceUseCase: GetManifestResourceUseCase;
@@ -165,6 +180,15 @@ export type TransactionLifecycleDepsAreInboundPorts = Expect<
  */
 export type GenerationScaffoldDepsAreInboundPorts = Expect<
   StructurallySatisfiable<GenerationScaffoldToolDependencies> extends GenerationScaffoldToolDependencies
+    ? true
+    : false
+>;
+
+/**
+ * Same check for the manifest-removal family (HXA1c).
+ */
+export type ManifestRemovalDepsAreInboundPorts = Expect<
+  StructurallySatisfiable<ManifestRemovalToolDependencies> extends ManifestRemovalToolDependencies
     ? true
     : false
 >;
