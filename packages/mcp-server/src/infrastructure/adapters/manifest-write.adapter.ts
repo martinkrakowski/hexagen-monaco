@@ -154,9 +154,7 @@ function assertRealArray(value: unknown, label: string): readonly unknown[] {
       typeof descriptor.get === "function" ||
       typeof descriptor.set === "function"
     ) {
-      throw new Error(
-        `${label}[${i}] must be a data entry, not an accessor.`,
-      );
+      throw new Error(`${label}[${i}] must be a data entry, not an accessor.`);
     }
     assertPlainArrayElement(descriptor.value, i, label);
   }
@@ -645,14 +643,13 @@ export class ManifestWriteAdapter implements ManifestWritePort {
       // A context with no infrastructure.adapters at all is treated like one
       // with an empty list, so the missing adapter gets the same typed
       // not-found refusal as a missing item — not "must be an array".
-      const adapters = (
+      const adapters =
         infraLayer.adapters === undefined
           ? []
           : (assertRealArray(
               infraLayer.adapters,
               `adapters of context ${contextName}`,
-            ) as string[])
-      );
+            ) as string[]);
 
       if (!adapters.includes(adapterName)) {
         return {
@@ -694,8 +691,14 @@ export class ManifestWriteAdapter implements ManifestWritePort {
       assertPlainCommandObject(command);
       assertNoGetter(command, "sourceModule");
       assertNoGetter(command, "targetModule");
-      const sourceModule = asCommandString(command.sourceModule, "sourceModule");
-      const targetModule = asCommandString(command.targetModule, "targetModule");
+      const sourceModule = asCommandString(
+        command.sourceModule,
+        "sourceModule",
+      );
+      const targetModule = asCommandString(
+        command.targetModule,
+        "targetModule",
+      );
 
       if (sourceModule === targetModule) {
         return {
@@ -711,9 +714,7 @@ export class ManifestWriteAdapter implements ManifestWritePort {
         manifest.bounded_contexts,
         "bounded_contexts",
       ) as ManifestContexts;
-      const source = contexts.find(
-        (context) => context.name === sourceModule,
-      );
+      const source = contexts.find((context) => context.name === sourceModule);
 
       if (!source) {
         return {
@@ -732,14 +733,13 @@ export class ManifestWriteAdapter implements ManifestWritePort {
       // A module with no depends_on at all is treated like one with an
       // empty list, so the missing edge gets the same typed not-found
       // refusal as a missing item — not "must be an array".
-      const dependsOn = (
+      const dependsOn =
         source.depends_on === undefined
           ? []
           : (assertRealArray(
               source.depends_on,
               `depends_on of module ${sourceModule}`,
-            ) as string[])
-      );
+            ) as string[]);
 
       if (!dependsOn.includes(targetModule)) {
         return {

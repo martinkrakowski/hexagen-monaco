@@ -191,7 +191,10 @@ class WriteSpy implements ManifestWritePort {
     Result<{ registered: boolean; alreadyExisted: boolean }>
   > {
     this.calls.push("registerBoundedContext");
-    return { success: true, value: { registered: true, alreadyExisted: false } };
+    return {
+      success: true,
+      value: { registered: true, alreadyExisted: false },
+    };
   }
   async registerPort(): Promise<Result<{ registered: boolean }>> {
     this.calls.push("registerPort");
@@ -230,9 +233,9 @@ function makePorts(
   };
 }
 
-function minimalTx(metadata: Record<string, unknown>): Parameters<
-  typeof readPendingMutation
->[0] {
+function minimalTx(
+  metadata: Record<string, unknown>,
+): Parameters<typeof readPendingMutation>[0] {
   return { metadata } as unknown as Parameters<typeof readPendingMutation>[0];
 }
 
@@ -333,8 +336,8 @@ describe("manifest write remove", () => {
         unknown
       >;
       (
-        (manifest.bounded_contexts as Array<Record<string, unknown>>)[0]!
-      ).depends_on = ["shipping"];
+        manifest.bounded_contexts as Array<Record<string, unknown>>
+      )[0]!.depends_on = ["shipping"];
       await withTempWorkspace(manifest, async (workspaceRoot, mp) => {
         const result = await adapterFor(workspaceRoot).removeDependency({
           sourceModule: "billing",
@@ -365,12 +368,10 @@ describe("manifest write remove", () => {
 
     it("removeDependency refuses a missing target module and an absent dependency edge", async () => {
       await withTempWorkspace(BASE_MANIFEST, async (workspaceRoot) => {
-        const missingTarget = await adapterFor(workspaceRoot).removeDependency(
-          {
-            sourceModule: "billing",
-            targetModule: "ghost",
-          },
-        );
+        const missingTarget = await adapterFor(workspaceRoot).removeDependency({
+          sourceModule: "billing",
+          targetModule: "ghost",
+        });
         assert.equal(missingTarget.success, false);
         if (!missingTarget.success) {
           assert.match(
@@ -1233,7 +1234,10 @@ describe("accept fail-closed through the tool handler (fail-closed fix, part b)"
 
   class ScaffoldingOk implements ScaffoldingPort {
     async scaffoldModule(): Promise<Result<{ filesCreated: string[] }>> {
-      return { success: true, value: { filesCreated: ["src/payments/index.ts"] } };
+      return {
+        success: true,
+        value: { filesCreated: ["src/payments/index.ts"] },
+      };
     }
     async createPort(): Promise<Result<{ fileCreated: string }>> {
       throw new Error("createPort must not be called by these mutations");
@@ -1299,7 +1303,10 @@ describe("accept fail-closed through the tool handler (fail-closed fix, part b)"
     deps: MCPServerAdapterDependencies,
   ): Promise<string> {
     const proposal = await toolRegistry.get(tool)!.handler(args, deps);
-    assert.ok(!proposal.isError, `proposal failed: ${proposal.content[0]?.text}`);
+    assert.ok(
+      !proposal.isError,
+      `proposal failed: ${proposal.content[0]?.text}`,
+    );
     const output = JSON.parse(proposal.content[0]!.text) as {
       transactionId?: string;
     };
@@ -1336,7 +1343,10 @@ describe("accept fail-closed through the tool handler (fail-closed fix, part b)"
     const result = await toolRegistry
       .get("hexagen_accept_transaction")!
       .handler(
-        { transaction_id: txId, grant: acceptGrant({ contexts: ["elsewhere"] }) },
+        {
+          transaction_id: txId,
+          grant: acceptGrant({ contexts: ["elsewhere"] }),
+        },
         deps,
       );
     assert.equal(result.isError, true);
@@ -1356,7 +1366,13 @@ describe("accept fail-closed through the tool handler (fail-closed fix, part b)"
     const result = await toolRegistry
       .get("hexagen_accept_transaction")!
       .handler(
-        { transaction_id: txId, grant: acceptGrant({ contexts: ["payments"], paths: [MANIFEST_WRITE_PATH, "packages/payments/"] }) },
+        {
+          transaction_id: txId,
+          grant: acceptGrant({
+            contexts: ["payments"],
+            paths: [MANIFEST_WRITE_PATH, "packages/payments/"],
+          }),
+        },
         deps,
       );
     assert.ok(!result.isError, `accept failed: ${result.content[0]?.text}`);

@@ -55,7 +55,11 @@ const POLLUTING_KEYS = new Set(["__proto__", "constructor", "prototype"]);
  * accepted (consistent-trap Proxy residual).
  */
 function snapshotValue(value: unknown, depth: number): unknown | null {
-  if (value === null || typeof value === "boolean" || typeof value === "number") {
+  if (
+    value === null ||
+    typeof value === "boolean" ||
+    typeof value === "number"
+  ) {
     return value;
   }
   if (typeof value === "string") {
@@ -104,7 +108,11 @@ function snapshotValue(value: unknown, depth: number): unknown | null {
   for (const key of Object.keys(source)) {
     if (POLLUTING_KEYS.has(key)) return null;
     const descriptor = Object.getOwnPropertyDescriptor(source, key);
-    if (!descriptor || typeof descriptor.get === "function" || typeof descriptor.set === "function") {
+    if (
+      !descriptor ||
+      typeof descriptor.get === "function" ||
+      typeof descriptor.set === "function"
+    ) {
       return null;
     }
     const rawValue = descriptor.value;

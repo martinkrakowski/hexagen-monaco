@@ -111,8 +111,7 @@ export class AcceptTransactionToolUseCase implements AcceptTransactionToolPort {
           error: new PendingMutationRefusedError(denialReason),
         };
       }
-      pending =
-        pendingRead.status === "ok" ? pendingRead.mutation : null;
+      pending = pendingRead.status === "ok" ? pendingRead.mutation : null;
       const grantCheck = await this.checkGrant(input.grant, pending);
 
       if (!grantCheck.allowed) {
