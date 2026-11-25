@@ -29,6 +29,17 @@ export interface RemovePortCommand {
   direction: "in" | "out";
 }
 
+export interface RemoveAdapterCommand {
+  contextName: string;
+  adapterName: string;
+  portName: string;
+}
+
+export interface RemoveDependencyCommand {
+  sourceModule: string;
+  targetModule: string;
+}
+
 export interface RemoveContextCommand {
   contextName: string;
 }
@@ -50,6 +61,12 @@ export interface ManifestWritePort {
     command: RegisterAdapterCommand,
   ): Promise<Result<{ registered: boolean }>>;
   removePort(command: RemovePortCommand): Promise<Result<{ removed: boolean }>>;
+  removeAdapter(
+    command: RemoveAdapterCommand,
+  ): Promise<Result<{ removed: boolean }>>;
+  removeDependency(
+    command: RemoveDependencyCommand,
+  ): Promise<Result<{ removed: boolean }>>;
   removeContext(
     command: RemoveContextCommand,
   ): Promise<Result<{ removed: boolean }>>;

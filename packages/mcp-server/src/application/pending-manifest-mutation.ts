@@ -12,6 +12,18 @@ import type { ScaffoldingPort } from "./ports/out/scaffolding.port.js";
 
 export const PENDING_MANIFEST_MUTATION_KEY = "hexagenPendingManifestMutation";
 
+// Defined locally — HXA1b will replace/align with inbound tool ports.
+export interface PendingRemoveAdapterInput {
+  context_name: string;
+  adapter_name: string;
+  port_name: string;
+}
+
+export interface PendingRemoveDependencyInput {
+  source_module: string;
+  target_module: string;
+}
+
 export type PendingManifestMutation =
   | { kind: "create-context"; input: CreateContextInput }
   | { kind: "add-dependency"; input: AddDependencyInput }
@@ -19,16 +31,206 @@ export type PendingManifestMutation =
   | { kind: "create-adapter"; input: CreateAdapterInput }
   | { kind: "remove-port"; input: RemovePortInput }
   | { kind: "remove-context"; input: RemoveContextInput }
+  | { kind: "remove-adapter"; input: PendingRemoveAdapterInput }
+  | { kind: "remove-dependency"; input: PendingRemoveDependencyInput }
   | { kind: "scaffold-module"; input: ScaffoldModuleInput };
+
+// Hostile-input bounds for nested pending-mutation input snapshots. Both are
+// O(1) constants; string/array scans are O(length) bounded by these caps.
+const MAX_MUTATION_FIELD_LENGTH = 4096;
+const MAX_MUTATION_ARRAY_LENGTH = 256;
+const MAX_SNAPSHOT_DEPTH = 4;
+const POLLUTING_KEYS = new Set(["__proto__", "constructor", "prototype"]);
+
+/**
+ * Deep-snapshot an untrusted nested value into fresh plain data. Every read
+ * happens once, through own property descriptors — a getter is never
+ * invoked. Getters/setters, functions, symbols, oversized strings/arrays,
+ * polluting keys, and wrong-shaped objects are refused with null. An own
+ * data property (or explicit array element) whose value is `undefined` is
+ * kept as `undefined`, never refused — optional tool fields travel this way.
+ *
+ * Residual risk: a Proxy whose target is a plain object and whose traps
+ * forward consistently is indistinguishable from the target itself and is
+ * accepted (consistent-trap Proxy residual).
+ */
+function snapshotValue(value: unknown, depth: number): unknown | null {
+  if (
+    value === null ||
+    typeof value === "boolean" ||
+    typeof value === "number"
+  ) {
+    return value;
+  }
+  if (typeof value === "string") {
+    if (value.length > MAX_MUTATION_FIELD_LENGTH) return null;
+    return value;
+  }
+  if (depth >= MAX_SNAPSHOT_DEPTH) return null;
+  if (Array.isArray(value)) {
+    // Element-wise snapshot through own property descriptors: `i in value`
+    // passes for an accessor and `value[i]` would invoke the getter, so
+    // every index is inspected via getOwnPropertyDescriptor instead — a
+    // getter is never invoked. Holes and accessor entries are refused.
+    // Length is bounded by MAX_MUTATION_ARRAY_LENGTH (256) above, so this
+    // scan is O(min(length, 256)).
+    if (value.length > MAX_MUTATION_ARRAY_LENGTH) return null;
+    const out: unknown[] = [];
+    for (let i = 0; i < value.length; i++) {
+      const descriptor = Object.getOwnPropertyDescriptor(value, String(i));
+      if (!descriptor) return null; // hole
+      if (
+        typeof descriptor.get === "function" ||
+        typeof descriptor.set === "function"
+      ) {
+        return null; // accessor element
+      }
+      const rawElement = descriptor.value;
+      // An explicit `undefined` data value is legitimate (tool handlers set
+      // optional fields like `description`/`context_type` to undefined) —
+      // keep it as undefined, never treat it as a refusal.
+      if (rawElement === undefined) {
+        out.push(undefined);
+        continue;
+      }
+      const snap = snapshotValue(rawElement, depth + 1);
+      if (snap === null && rawElement !== null) return null;
+      out.push(snap);
+    }
+    return Object.freeze(out);
+  }
+  if (typeof value !== "object" || typeof value === "function") return null;
+  // Nested plain object: same discipline as the top-level input snapshot.
+  const source = value as Record<string, unknown>;
+  const proto = Object.getPrototypeOf(source);
+  if (proto !== Object.prototype && proto !== null) return null;
+  const out: Record<string, unknown> = {};
+  for (const key of Object.keys(source)) {
+    if (POLLUTING_KEYS.has(key)) return null;
+    const descriptor = Object.getOwnPropertyDescriptor(source, key);
+    if (
+      !descriptor ||
+      typeof descriptor.get === "function" ||
+      typeof descriptor.set === "function"
+    ) {
+      return null;
+    }
+    const rawValue = descriptor.value;
+    // Same rule as the array branch: an own data property whose value is
+    // `undefined` is kept as undefined, never treated as a refusal.
+    if (rawValue === undefined) {
+      out[key] = undefined;
+      continue;
+    }
+    const snap = snapshotValue(rawValue, depth + 1);
+    if (snap === null && rawValue !== null) return null;
+    out[key] = snap;
+  }
+  return Object.freeze(out);
+}
+
+/**
+ * Snapshot the nested `input` record into a fresh plain frozen object, so
+ * grant approval (deriveMutationRef) and application (applyRemove*) read the
+ * exact same values — a getter returning an allowed context at approval time
+ * and a different one at apply time cannot split the check from the use.
+ * Returns null on any refusal (getter, polluting key, oversized string,
+ * non-plain object). O(fields × length), bounded by the caps above.
+ *
+ * Accepted residual (hostile-input rule): a Proxy whose traps forward
+ * consistently in every trap is indistinguishable from its plain target and
+ * is accepted. No Proxy detection is attempted — behaviour is unchanged for
+ * this input class by design.
+ */
+function snapshotInput(input: unknown): Record<string, unknown> | null {
+  if (input === null || input === undefined || typeof input !== "object") {
+    return null;
+  }
+  if (Array.isArray(input)) return null;
+  const snapshot = snapshotValue(input, 0);
+  if (
+    snapshot === null ||
+    typeof snapshot !== "object" ||
+    Array.isArray(snapshot)
+  ) {
+    return null;
+  }
+  return snapshot as Record<string, unknown>;
+}
 
 export function readPendingMutation(
   tx: Transaction,
 ): PendingManifestMutation | null {
   const raw = tx.metadata[PENDING_MANIFEST_MUTATION_KEY];
-  if (!raw || typeof raw !== "object") return null;
-  const kind = (raw as { kind?: unknown }).kind;
+  if (raw === null || raw === undefined || typeof raw !== "object") {
+    return null;
+  }
+  if (Array.isArray(raw)) return null;
+  const record = raw as Record<string, unknown>;
+  for (const key of Object.keys(record)) {
+    if (POLLUTING_KEYS.has(key)) {
+      return null;
+    }
+  }
+  // Inspect own descriptors only — a getter is never invoked. `kind` and
+  // `input` must both be own data properties of the record itself.
+  const kindDescriptor = Object.getOwnPropertyDescriptor(record, "kind");
+  if (!kindDescriptor || typeof kindDescriptor.get === "function") {
+    return null;
+  }
+  const inputDescriptor = Object.getOwnPropertyDescriptor(record, "input");
+  if (!inputDescriptor || typeof inputDescriptor.get === "function") {
+    return null;
+  }
+  const kind = kindDescriptor.value;
   if (typeof kind !== "string") return null;
-  return raw as PendingManifestMutation;
+  const input = snapshotInput(inputDescriptor.value);
+  if (input === null) return null;
+  return Object.freeze({
+    kind,
+    input,
+  }) as unknown as PendingManifestMutation;
+}
+
+/**
+ * A pending-mutation refusal the caller can distinguish from "no pending
+ * mutation was ever proposed". `readPendingMutation` returns null for both,
+ * which made accept fail open on a refused payload; this three-case read is
+ * the fail-closed contract:
+ * - "absent": no pending-mutation key on the transaction at all;
+ * - "refused": a pending-mutation key is present but the reader refused it
+ *   (hostile or malformed payload) — the caller must deny, never apply;
+ * - "ok": a valid snapshot the caller may grant-check and apply.
+ */
+export type PendingMutationRead =
+  | { status: "absent" }
+  | { status: "refused" }
+  | { status: "ok"; mutation: PendingManifestMutation };
+
+export function readPendingMutationStatus(
+  tx: Transaction,
+): PendingMutationRead {
+  const raw = tx.metadata[PENDING_MANIFEST_MUTATION_KEY];
+  if (raw === null || raw === undefined) {
+    return { status: "absent" };
+  }
+  const mutation = readPendingMutation(tx);
+  if (mutation === null) {
+    return { status: "refused" };
+  }
+  return { status: "ok", mutation };
+}
+
+/**
+ * Typed refusal for a present-but-refused pending mutation (the "refused"
+ * arm of `readPendingMutationStatus`). Accept must deny on this — never
+ * commit and never report success.
+ */
+export class PendingMutationRefusedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "PendingMutationRefusedError";
+  }
 }
 
 export interface ApplyMutationPorts {
@@ -59,6 +261,10 @@ export async function applyPendingManifestMutation(
       return applyRemovePort(mutation.input, ports);
     case "remove-context":
       return applyRemoveContext(mutation.input, ports);
+    case "remove-adapter":
+      return applyRemoveAdapter(mutation.input, ports);
+    case "remove-dependency":
+      return applyRemoveDependency(mutation.input, ports);
     case "scaffold-module":
       return applyScaffoldModule(mutation.input, ports);
   }
@@ -246,6 +452,76 @@ async function applyRemoveContext(
     message: result.value.removed
       ? `Context ${input.context_name} removed from manifest.`
       : `Context ${input.context_name} was not found in manifest.`,
+    details: { removed: result.value.removed },
+  };
+}
+
+async function applyRemoveAdapter(
+  input: PendingRemoveAdapterInput,
+  ports: ApplyMutationPorts,
+): Promise<AppliedMutation> {
+  const write = ports.manifestWrite;
+  if (!write || typeof write.removeAdapter !== "function") {
+    throw new Error(
+      "ManifestWritePort.removeAdapter is not available: the write port must implement removeAdapter.",
+    );
+  }
+  const result = await write.removeAdapter({
+    contextName: input.context_name,
+    adapterName: input.adapter_name,
+    portName: input.port_name,
+  });
+  if (!result.success) throw result.error;
+  if (result.value.removed) {
+    ports.eventBus.publish({
+      type: "AdapterRemoved",
+      payload: {
+        contextName: input.context_name,
+        adapterName: input.adapter_name,
+        portName: input.port_name,
+      },
+      timestamp: Date.now(),
+      source: "mcp-server",
+    });
+  }
+  return {
+    message: result.value.removed
+      ? `Adapter ${input.adapter_name} removed from ${input.context_name}.`
+      : `Adapter ${input.adapter_name} was not found in ${input.context_name}.`,
+    details: { removed: result.value.removed },
+  };
+}
+
+async function applyRemoveDependency(
+  input: PendingRemoveDependencyInput,
+  ports: ApplyMutationPorts,
+): Promise<AppliedMutation> {
+  const write = ports.manifestWrite;
+  if (!write || typeof write.removeDependency !== "function") {
+    throw new Error(
+      "ManifestWritePort.removeDependency is not available: the write port must implement removeDependency.",
+    );
+  }
+  const result = await write.removeDependency({
+    sourceModule: input.source_module,
+    targetModule: input.target_module,
+  });
+  if (!result.success) throw result.error;
+  if (result.value.removed) {
+    ports.eventBus.publish({
+      type: "DependencyRemoved",
+      payload: {
+        source: input.source_module,
+        target: input.target_module,
+      },
+      timestamp: Date.now(),
+      source: "mcp-server",
+    });
+  }
+  return {
+    message: result.value.removed
+      ? `Dependency ${input.source_module} → ${input.target_module} removed.`
+      : `Dependency ${input.source_module} → ${input.target_module} was not found.`,
     details: { removed: result.value.removed },
   };
 }

@@ -32,6 +32,11 @@ function createWritePortSpy() {
     }),
     removePort: async () => ({ success: true, value: { removed: true } }),
     removeContext: async () => ({ success: true, value: { removed: true } }),
+    removeAdapter: async () => ({ success: true, value: { removed: true } }),
+    removeDependency: async () => ({
+      success: true,
+      value: { removed: true },
+    }),
   };
   return { port, registered };
 }

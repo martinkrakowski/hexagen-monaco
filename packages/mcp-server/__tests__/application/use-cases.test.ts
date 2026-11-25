@@ -155,6 +155,20 @@ class ManifestWriteFake implements ManifestWritePort {
     void _command;
     return { success: true as const, value: { removed: true } };
   }
+
+  async removeAdapter(
+    _command: import("../../src/application/ports/out/manifest-write.port.js").RemoveAdapterCommand,
+  ) {
+    void _command;
+    return { success: true as const, value: { removed: true } };
+  }
+
+  async removeDependency(
+    _command: import("../../src/application/ports/out/manifest-write.port.js").RemoveDependencyCommand,
+  ) {
+    void _command;
+    return { success: true as const, value: { removed: true } };
+  }
 }
 
 describe("use cases", () => {

@@ -104,6 +104,16 @@ export function deriveMutationRef(
         tool: "hexagen_remove_context",
         context: mutation.input.context_name,
       };
+    case "remove-adapter":
+      return {
+        tool: "hexagen_remove_adapter",
+        context: mutation.input.context_name,
+      };
+    case "remove-dependency":
+      return {
+        tool: "hexagen_remove_dependency",
+        context: mutation.input.source_module,
+      };
   }
 }
 
