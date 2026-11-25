@@ -12,7 +12,9 @@ import type {
 const FORBIDDEN_KEYS = new Set(["__proto__", "constructor", "prototype"]);
 const MAX_STRING_LENGTH = 4096;
 
-function assertPlainObject(input: unknown): asserts input is Record<string, unknown> {
+function assertPlainObject(
+  input: unknown,
+): asserts input is Record<string, unknown> {
   if (input === null || input === undefined) {
     throw new Error("input must be a plain object");
   }
@@ -30,7 +32,10 @@ function assertPlainObject(input: unknown): asserts input is Record<string, unkn
   }
   for (const key of Object.getOwnPropertyNames(input)) {
     const desc = Object.getOwnPropertyDescriptor(input, key);
-    if (desc && (typeof desc.get === "function" || typeof desc.set === "function")) {
+    if (
+      desc &&
+      (typeof desc.get === "function" || typeof desc.set === "function")
+    ) {
       throw new Error("input must not contain accessor properties");
     }
   }
@@ -56,7 +61,10 @@ function requireString(
   return value;
 }
 
-function requireOptionalBoolean(input: Record<string, unknown>, field: string): boolean | undefined {
+function requireOptionalBoolean(
+  input: Record<string, unknown>,
+  field: string,
+): boolean | undefined {
   const value = input[field];
   if (value !== undefined && typeof value !== "boolean") {
     throw new Error(`${field} must be a boolean`);
