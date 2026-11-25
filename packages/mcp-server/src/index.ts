@@ -26,6 +26,8 @@ import { LogAgentRemediationToolUseCase } from "./application/use-cases/log-agen
 import { ProposePatchToolUseCase } from "./application/use-cases/propose-patch-tool.use-case.js";
 import { RejectTransactionToolUseCase } from "./application/use-cases/reject-transaction-tool.use-case.js";
 import { RemoveContextToolUseCase } from "./application/use-cases/remove-context-tool.use-case.js";
+import { RemoveAdapterToolUseCase } from "./application/use-cases/remove-adapter-tool.use-case.js";
+import { RemoveDependencyToolUseCase } from "./application/use-cases/remove-dependency-tool.use-case.js";
 import { RemovePortToolUseCase } from "./application/use-cases/remove-port-tool.use-case.js";
 import { ScaffoldModuleToolUseCase } from "./application/use-cases/scaffold-module-tool.use-case.js";
 import { SubmitArchitecturalSpecToolUseCase } from "./application/use-cases/submit-architectural-spec-tool.use-case.js";
@@ -162,6 +164,12 @@ export function createMCPServer(root: MCPCompositionRoot): MCPServerAdapter {
   const removeContextToolUseCase = new RemoveContextToolUseCase(
     root.transactionManagerPort,
   );
+  const removeAdapterToolUseCase = new RemoveAdapterToolUseCase(
+    root.transactionManagerPort,
+  );
+  const removeDependencyToolUseCase = new RemoveDependencyToolUseCase(
+    root.transactionManagerPort,
+  );
   const createContextToolUseCase = new CreateContextToolUseCase(
     root.transactionManagerPort,
   );
@@ -222,6 +230,8 @@ export function createMCPServer(root: MCPCompositionRoot): MCPServerAdapter {
     createAdapterToolUseCase,
     removePortToolUseCase,
     removeContextToolUseCase,
+    removeAdapterToolUseCase,
+    removeDependencyToolUseCase,
     createContextToolUseCase,
     diffManifestToolUseCase,
     initializeFeatureWorktreeToolUseCase,

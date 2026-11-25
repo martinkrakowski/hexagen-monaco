@@ -5,6 +5,8 @@ import { addDependencyTool } from "./add-dependency.js";
 import { createPortTool } from "./create-port.js";
 import { createAdapterTool } from "./create-adapter.js";
 import { removePortTool } from "./remove-port.js";
+import { removeAdapterTool } from "./remove-adapter.js";
+import { removeDependencyTool } from "./remove-dependency.js";
 import { removeContextTool } from "./remove-context.js";
 import { createContextTool } from "./create-context.js";
 import { diffManifestTool } from "./diff-manifest.js";
@@ -27,6 +29,8 @@ const allTools: ToolDefinition[] = [
   createPortTool,
   createAdapterTool,
   removePortTool,
+  removeAdapterTool,
+  removeDependencyTool,
   removeContextTool,
   createContextTool,
   diffManifestTool,
