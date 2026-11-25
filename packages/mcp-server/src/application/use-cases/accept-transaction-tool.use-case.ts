@@ -16,7 +16,8 @@ import { checkGrantSignature } from "../kernel/grant-verification.js";
 import type { HaltReason } from "../kernel/trace.js";
 import {
   applyPendingManifestMutation,
-  readPendingMutation,
+  PendingMutationRefusedError,
+  readPendingMutationStatus,
   type AppliedMutation,
   type PendingManifestMutation,
 } from "../pending-manifest-mutation.js";
@@ -88,7 +89,30 @@ export class AcceptTransactionToolUseCase implements AcceptTransactionToolPort {
         };
       }
 
-      pending = readPendingMutation(tx);
+      // Fail closed (brief item 1b): a present-but-refused pending mutation
+      // is a denial, never "no mutation, apply nothing, commit anyway".
+      const pendingRead = readPendingMutationStatus(tx);
+      if (pendingRead.status === "refused") {
+        const reason =
+          "Pending manifest mutation was refused by the snapshot reader (hostile or malformed payload); nothing was applied";
+        const traceResult = await this.appendTrace(
+          input,
+          tx.id,
+          null,
+          "grant_denied",
+          undefined,
+          reason,
+        );
+        const denialReason = traceResult.success
+          ? reason
+          : `${reason}; additionally, trace evidence write failed: ${traceResult.error.message}`;
+        return {
+          success: false,
+          error: new PendingMutationRefusedError(denialReason),
+        };
+      }
+      pending =
+        pendingRead.status === "ok" ? pendingRead.mutation : null;
       const grantCheck = await this.checkGrant(input.grant, pending);
 
       if (!grantCheck.allowed) {

@@ -46,7 +46,9 @@ const POLLUTING_KEYS = new Set(["__proto__", "constructor", "prototype"]);
  * Deep-snapshot an untrusted nested value into fresh plain data. Every read
  * happens once, through own property descriptors — a getter is never
  * invoked. Getters/setters, functions, symbols, oversized strings/arrays,
- * polluting keys, and wrong-shaped objects are refused with null.
+ * polluting keys, and wrong-shaped objects are refused with null. An own
+ * data property (or explicit array element) whose value is `undefined` is
+ * kept as `undefined`, never refused — optional tool fields travel this way.
  *
  * Residual risk: a Proxy whose target is a plain object and whose traps
  * forward consistently is indistinguishable from the target itself and is
@@ -79,8 +81,16 @@ function snapshotValue(value: unknown, depth: number): unknown | null {
       ) {
         return null; // accessor element
       }
-      const snap = snapshotValue(descriptor.value, depth + 1);
-      if (snap === null && descriptor.value !== null) return null;
+      const rawElement = descriptor.value;
+      // An explicit `undefined` data value is legitimate (tool handlers set
+      // optional fields like `description`/`context_type` to undefined) —
+      // keep it as undefined, never treat it as a refusal.
+      if (rawElement === undefined) {
+        out.push(undefined);
+        continue;
+      }
+      const snap = snapshotValue(rawElement, depth + 1);
+      if (snap === null && rawElement !== null) return null;
       out.push(snap);
     }
     return Object.freeze(out);
@@ -97,8 +107,15 @@ function snapshotValue(value: unknown, depth: number): unknown | null {
     if (!descriptor || typeof descriptor.get === "function" || typeof descriptor.set === "function") {
       return null;
     }
-    const snap = snapshotValue(descriptor.value, depth + 1);
-    if (snap === null && descriptor.value !== null) return null;
+    const rawValue = descriptor.value;
+    // Same rule as the array branch: an own data property whose value is
+    // `undefined` is kept as undefined, never treated as a refusal.
+    if (rawValue === undefined) {
+      out[key] = undefined;
+      continue;
+    }
+    const snap = snapshotValue(rawValue, depth + 1);
+    if (snap === null && rawValue !== null) return null;
     out[key] = snap;
   }
   return Object.freeze(out);
@@ -165,6 +182,47 @@ export function readPendingMutation(
     kind,
     input,
   }) as unknown as PendingManifestMutation;
+}
+
+/**
+ * A pending-mutation refusal the caller can distinguish from "no pending
+ * mutation was ever proposed". `readPendingMutation` returns null for both,
+ * which made accept fail open on a refused payload; this three-case read is
+ * the fail-closed contract:
+ * - "absent": no pending-mutation key on the transaction at all;
+ * - "refused": a pending-mutation key is present but the reader refused it
+ *   (hostile or malformed payload) — the caller must deny, never apply;
+ * - "ok": a valid snapshot the caller may grant-check and apply.
+ */
+export type PendingMutationRead =
+  | { status: "absent" }
+  | { status: "refused" }
+  | { status: "ok"; mutation: PendingManifestMutation };
+
+export function readPendingMutationStatus(
+  tx: Transaction,
+): PendingMutationRead {
+  const raw = tx.metadata[PENDING_MANIFEST_MUTATION_KEY];
+  if (raw === null || raw === undefined) {
+    return { status: "absent" };
+  }
+  const mutation = readPendingMutation(tx);
+  if (mutation === null) {
+    return { status: "refused" };
+  }
+  return { status: "ok", mutation };
+}
+
+/**
+ * Typed refusal for a present-but-refused pending mutation (the "refused"
+ * arm of `readPendingMutationStatus`). Accept must deny on this — never
+ * commit and never report success.
+ */
+export class PendingMutationRefusedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "PendingMutationRefusedError";
+  }
 }
 
 export interface ApplyMutationPorts {

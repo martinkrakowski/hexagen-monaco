@@ -12,7 +12,12 @@
  * - grant: remove-adapter / remove-dependency derive a MutationRef and pass
  *   checkMutationAgainstGrant exactly like the create kinds;
  * - effects: AdapterRemoved / DependencyRemoved publish only on removed=true;
- *   write-port failures surface; missing write-port methods refuse by name.
+ *   write-port failures surface; missing write-port methods refuse by name;
+ * - fail-closed accept (fix round 4): an own data property whose value is
+ *   `undefined` is kept by the snapshot, never a refusal; a present-but-
+ *   refused pending mutation denies the accept (typed refusal, trace line
+ *   recorded as denied, transaction never committed) — pinned end to end
+ *   through the `hexagen_accept_transaction` TOOL HANDLER.
  */
 import { describe, it } from "vitest";
 import assert from "node:assert/strict";
@@ -20,14 +25,28 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import yaml from "js-yaml";
+import { InMemoryTransactionManager } from "@hexagen/transaction-system";
 import { ManifestWriteAdapter } from "../../src/infrastructure/adapters/manifest-write.adapter.js";
 import {
   applyPendingManifestMutation,
+  PendingMutationRefusedError,
   readPendingMutation,
+  readPendingMutationStatus,
   PENDING_MANIFEST_MUTATION_KEY,
   type PendingRemoveAdapterInput,
   type PendingRemoveDependencyInput,
 } from "../../src/application/pending-manifest-mutation.js";
+import { AcceptTransactionToolUseCase } from "../../src/application/use-cases/accept-transaction-tool.use-case.js";
+import { CreateContextToolUseCase } from "../../src/application/use-cases/create-context-tool.use-case.js";
+import { ScaffoldModuleToolUseCase } from "../../src/application/use-cases/scaffold-module-tool.use-case.js";
+import { toolRegistry } from "../../src/infrastructure/adapters/tools/registry.js";
+import type { MCPServerAdapterDependencies } from "../../src/infrastructure/adapters/mcp-server.types.js";
+import type { GrantSignaturePort } from "../../src/application/ports/out/grant-signature.port.js";
+import type {
+  GrantMissingAppendInput,
+  TraceAppendInput,
+  TraceWritePort,
+} from "../../src/application/ports/out/trace-write.port.js";
 import {
   deriveMutationRef,
   checkMutationAgainstGrant,
@@ -1039,5 +1058,343 @@ describe("manifest write remove", () => {
         /ManifestWritePort\.removeDependency is not available/,
       );
     });
+  });
+});
+
+describe("pending-mutation snapshot keeps undefined data values (fail-closed fix, part a)", () => {
+  it("keeps an own data property whose value is undefined instead of refusing the whole mutation", () => {
+    // Tool handlers set optional fields this way (create-context always
+    // writes `description: a.description as string | undefined`), so this
+    // shape must never be a refusal.
+    const mutation = readPendingMutation(
+      minimalTx({
+        [PENDING_MANIFEST_MUTATION_KEY]: {
+          kind: "remove-adapter",
+          input: {
+            context_name: "billing",
+            adapter_name: "PaymentAdapter",
+            port_name: "PaymentPort",
+            description: undefined,
+          },
+        },
+      }),
+    );
+    assert.notEqual(
+      mutation,
+      null,
+      "an undefined-valued own data property must not be treated as a refusal",
+    );
+    if (mutation === null || mutation.kind !== "remove-adapter") return;
+    const input = mutation.input as unknown as Record<string, unknown>;
+    assert.equal(input.description, undefined);
+    assert.deepEqual(input.context_name, "billing");
+  });
+
+  it("keeps an explicit undefined array element instead of refusing the mutation", () => {
+    const mutation = readPendingMutation(
+      minimalTx({
+        [PENDING_MANIFEST_MUTATION_KEY]: {
+          kind: "remove-adapter",
+          input: {
+            context_name: "billing",
+            adapter_name: "PaymentAdapter",
+            port_name: "PaymentPort",
+            tags: ["a", undefined],
+          },
+        },
+      }),
+    );
+    assert.notEqual(mutation, null);
+    if (mutation === null || mutation.kind !== "remove-adapter") return;
+    const tags = (mutation.input as unknown as Record<string, unknown>)
+      .tags as unknown[];
+    assert.equal(tags.length, 2);
+    assert.equal(tags[0], "a");
+    assert.equal(tags[1], undefined);
+  });
+
+  it("exposes the three-case read: absent, refused, and ok", () => {
+    // absent — no pending key at all.
+    assert.deepEqual(readPendingMutationStatus(minimalTx({})), {
+      status: "absent",
+    });
+    // refused — key present, reader refuses (getter on input).
+    const hostile: Record<string, unknown> = { kind: "remove-adapter" };
+    Object.defineProperty(hostile, "input", {
+      enumerable: true,
+      get() {
+        throw new Error("input getter must never be invoked");
+      },
+    });
+    assert.deepEqual(
+      readPendingMutationStatus(
+        minimalTx({ [PENDING_MANIFEST_MUTATION_KEY]: hostile }),
+      ),
+      { status: "refused" },
+    );
+    // ok — a valid payload round-trips through the ok arm.
+    const ok = readPendingMutationStatus(
+      minimalTx({
+        [PENDING_MANIFEST_MUTATION_KEY]: {
+          kind: "remove-adapter",
+          input: {
+            context_name: "billing",
+            adapter_name: "PaymentAdapter",
+            port_name: "PaymentPort",
+          },
+        },
+      }),
+    );
+    assert.equal(ok.status, "ok");
+    if (ok.status === "ok") {
+      assert.equal(ok.mutation.kind, "remove-adapter");
+    }
+    // The typed refusal the accept path returns on the "refused" arm.
+    assert.equal(
+      new PendingMutationRefusedError("test").name,
+      "PendingMutationRefusedError",
+    );
+  });
+});
+
+describe("removeAdapter / removeDependency on a context or module missing the collection (fail-closed fix, part 2)", () => {
+  it("removeAdapter on a context with no infrastructure.adapters returns the typed not-found refusal, not 'must be an array'", async () => {
+    const manifest = {
+      version: "1.0",
+      bounded_contexts: [
+        {
+          name: "bare",
+          type: "core",
+          description: "",
+          // Port declared, but no infrastructure layer / adapters key at
+          // all — the adapters lookup must behave like an empty list.
+          layers: {
+            domain: {},
+            application: { ports: { in: [], out: ["PaymentPort"] } },
+          },
+        },
+      ],
+    };
+    await withTempWorkspace(manifest, async (workspaceRoot) => {
+      const result = await adapterFor(workspaceRoot).removeAdapter({
+        contextName: "bare",
+        adapterName: "MissingAdapter",
+        portName: "PaymentPort",
+      });
+      assert.equal(result.success, false);
+      if (result.success) return;
+      // Same refusal shape as a context whose adapters list exists but does
+      // not contain the item — never an "adapters ... must be an array" error.
+      assert.match(
+        msg(result.error),
+        /Adapter not found in context bare: MissingAdapter/,
+      );
+      assert.doesNotMatch(msg(result.error), /must be an array/);
+    });
+  });
+
+  it("removeDependency on a module with no depends_on returns the typed not-found refusal, not 'must be an array'", async () => {
+    // BASE_MANIFEST's "shipping" carries no depends_on key at all.
+    await withTempWorkspace(BASE_MANIFEST, async (workspaceRoot) => {
+      const result = await adapterFor(workspaceRoot).removeDependency({
+        sourceModule: "shipping",
+        targetModule: "billing",
+      });
+      assert.equal(result.success, false);
+      if (result.success) return;
+      assert.match(
+        msg(result.error),
+        /Dependency not found: shipping does not depend on billing/,
+      );
+      assert.doesNotMatch(msg(result.error), /must be an array/);
+    });
+  });
+});
+
+describe("accept fail-closed through the tool handler (fail-closed fix, part b)", () => {
+  const NOW = new Date("2026-11-25T12:00:00.000Z");
+
+  class TraceLineSpy implements TraceWritePort {
+    lines: Array<{ halt_reason: string; tool: string }> = [];
+    async appendGrantMissing(
+      input: GrantMissingAppendInput,
+    ): Promise<Result<void, Error>> {
+      this.lines.push({ halt_reason: "grant_missing", tool: input.tool });
+      return { success: true, value: undefined };
+    }
+    async appendLine(input: TraceAppendInput): Promise<Result<void, Error>> {
+      this.lines.push({
+        halt_reason: input.halt_reason,
+        tool: input.tool_call.name,
+      });
+      return { success: true, value: undefined };
+    }
+  }
+
+  class ScaffoldingOk implements ScaffoldingPort {
+    async scaffoldModule(): Promise<Result<{ filesCreated: string[] }>> {
+      return { success: true, value: { filesCreated: ["src/payments/index.ts"] } };
+    }
+    async createPort(): Promise<Result<{ fileCreated: string }>> {
+      throw new Error("createPort must not be called by these mutations");
+    }
+    async createAdapter(): Promise<Result<{ fileCreated: string }>> {
+      throw new Error("createAdapter must not be called by these mutations");
+    }
+    async deleteCreatedFiles(
+      paths: string[],
+    ): Promise<Result<{ deleted: string[] }>> {
+      return { success: true, value: { deleted: [...paths] } };
+    }
+  }
+
+  class AlwaysVerifiedSignature implements GrantSignaturePort {
+    async verify(): Promise<Result<boolean, Error>> {
+      return { success: true, value: true };
+    }
+  }
+
+  function handlerHarness() {
+    const tm = new InMemoryTransactionManager();
+    const write = new WriteSpy();
+    const trace = new TraceLineSpy();
+    const accept = new AcceptTransactionToolUseCase(
+      tm,
+      write,
+      new ScaffoldingOk(),
+      new EventBusFake(),
+      trace,
+      new AlwaysVerifiedSignature(),
+      () => NOW,
+    );
+    const deps = {
+      createContextToolUseCase: new CreateContextToolUseCase(tm),
+      scaffoldModuleToolUseCase: new ScaffoldModuleToolUseCase(tm),
+      acceptTransactionToolUseCase: accept,
+    } as unknown as MCPServerAdapterDependencies;
+    return { tm, write, trace, deps };
+  }
+
+  function acceptGrant(overrides: Partial<Grant> = {}): Grant {
+    return {
+      id: "grant-accept",
+      principal: "martin",
+      agent: "agent-1",
+      contexts: ["billing"],
+      paths: [MANIFEST_WRITE_PATH],
+      tools: [
+        "hexagen_create_context",
+        "hexagen_scaffold_module",
+        "hexagen_remove_dependency",
+      ],
+      mode: "write",
+      expires_at: "2099-01-01T00:00:00.000Z",
+      ...overrides,
+    };
+  }
+
+  async function proposeViaHandler(
+    tool: string,
+    args: Record<string, unknown>,
+    deps: MCPServerAdapterDependencies,
+  ): Promise<string> {
+    const proposal = await toolRegistry.get(tool)!.handler(args, deps);
+    assert.ok(!proposal.isError, `proposal failed: ${proposal.content[0]?.text}`);
+    const output = JSON.parse(proposal.content[0]!.text) as {
+      transactionId?: string;
+    };
+    assert.ok(output.transactionId, "proposal must carry a transactionId");
+    return output.transactionId!;
+  }
+
+  it("hexagen_create_context {name, type} with no description is APPLIED under an in-scope grant", async () => {
+    const { tm, write, trace, deps } = handlerHarness();
+    // The create-context handler always sets `description: undefined` on its
+    // input — exactly the shape that used to null the snapshot and fail open.
+    const txId = await proposeViaHandler(
+      "hexagen_create_context",
+      { name: "billing", type: "core" },
+      deps,
+    );
+    const result = await toolRegistry
+      .get("hexagen_accept_transaction")!
+      .handler({ transaction_id: txId, grant: acceptGrant() }, deps);
+    assert.ok(!result.isError, `accept failed: ${result.content[0]?.text}`);
+    assert.deepEqual(write.calls, ["registerBoundedContext"]);
+    assert.equal(trace.lines[0]?.halt_reason, "completed");
+    assert.equal(trace.lines[0]?.tool, "hexagen_create_context");
+    assert.equal(tm.get(txId)?.status, "committed");
+  });
+
+  it("the same mutation under an out-of-scope grant is DENIED and not applied", async () => {
+    const { tm, write, trace, deps } = handlerHarness();
+    const txId = await proposeViaHandler(
+      "hexagen_create_context",
+      { name: "billing", type: "core" },
+      deps,
+    );
+    const result = await toolRegistry
+      .get("hexagen_accept_transaction")!
+      .handler(
+        { transaction_id: txId, grant: acceptGrant({ contexts: ["elsewhere"] }) },
+        deps,
+      );
+    assert.equal(result.isError, true);
+    assert.match(String(result.content[0]?.text), /context 'billing'/);
+    assert.deepEqual(write.calls, [], "no write may escape a denied accept");
+    assert.equal(trace.lines[0]?.halt_reason, "grant_denied");
+    assert.equal(tm.get(txId)?.status, "pending");
+  });
+
+  it("hexagen_scaffold_module with context_type undefined is APPLIED under an in-scope grant", async () => {
+    const { tm, write, trace, deps } = handlerHarness();
+    const txId = await proposeViaHandler(
+      "hexagen_scaffold_module",
+      { name: "payments", layer: "domain" },
+      deps,
+    );
+    const result = await toolRegistry
+      .get("hexagen_accept_transaction")!
+      .handler(
+        { transaction_id: txId, grant: acceptGrant({ contexts: ["payments"], paths: [MANIFEST_WRITE_PATH, "packages/payments/"] }) },
+        deps,
+      );
+    assert.ok(!result.isError, `accept failed: ${result.content[0]?.text}`);
+    assert.deepEqual(write.calls, ["registerBoundedContext"]);
+    assert.equal(trace.lines[0]?.halt_reason, "completed");
+    assert.equal(tm.get(txId)?.status, "committed");
+  });
+
+  it("an oversized string on an existing kind is DENIED, never silently committed, and accept never reports success", async () => {
+    const { tm, write, trace, deps } = handlerHarness();
+    const tx = tm.begin("mcp:oversized", {
+      [PENDING_MANIFEST_MUTATION_KEY]: {
+        kind: "remove-dependency",
+        input: {
+          source_module: "x".repeat(5000),
+          target_module: "shipping",
+        },
+      },
+    });
+    const result = await toolRegistry
+      .get("hexagen_accept_transaction")!
+      .handler({ transaction_id: tx.id, grant: acceptGrant() }, deps);
+    assert.equal(
+      result.isError,
+      true,
+      "accept must never report success when a pending key was refused",
+    );
+    assert.match(
+      String(result.content[0]?.text),
+      /refused by the snapshot reader/,
+    );
+    assert.deepEqual(write.calls, [], "no write may escape a refused pending");
+    assert.equal(trace.lines[0]?.halt_reason, "grant_denied");
+    assert.notEqual(trace.lines[0]?.halt_reason, "completed");
+    assert.equal(
+      tm.get(tx.id)?.status,
+      "pending",
+      "the transaction must not be committed",
+    );
   });
 });

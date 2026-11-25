@@ -642,10 +642,17 @@ export class ManifestWriteAdapter implements ManifestWritePort {
         string,
         unknown
       >;
-      const adapters = assertRealArray(
-        infraLayer.adapters,
-        `adapters of context ${contextName}`,
-      ) as string[];
+      // A context with no infrastructure.adapters at all is treated like one
+      // with an empty list, so the missing adapter gets the same typed
+      // not-found refusal as a missing item — not "must be an array".
+      const adapters = (
+        infraLayer.adapters === undefined
+          ? []
+          : (assertRealArray(
+              infraLayer.adapters,
+              `adapters of context ${contextName}`,
+            ) as string[])
+      );
 
       if (!adapters.includes(adapterName)) {
         return {
@@ -722,10 +729,17 @@ export class ManifestWriteAdapter implements ManifestWritePort {
         };
       }
 
-      const dependsOn = assertRealArray(
-        source.depends_on,
-        `depends_on of module ${sourceModule}`,
-      ) as string[];
+      // A module with no depends_on at all is treated like one with an
+      // empty list, so the missing edge gets the same typed not-found
+      // refusal as a missing item — not "must be an array".
+      const dependsOn = (
+        source.depends_on === undefined
+          ? []
+          : (assertRealArray(
+              source.depends_on,
+              `depends_on of module ${sourceModule}`,
+            ) as string[])
+      );
 
       if (!dependsOn.includes(targetModule)) {
         return {
