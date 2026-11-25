@@ -35,6 +35,86 @@ export type PendingManifestMutation =
   | { kind: "remove-dependency"; input: PendingRemoveDependencyInput }
   | { kind: "scaffold-module"; input: ScaffoldModuleInput };
 
+// Hostile-input bounds for nested pending-mutation input snapshots. Both are
+// O(1) constants; string/array scans are O(length) bounded by these caps.
+const MAX_MUTATION_FIELD_LENGTH = 4096;
+const MAX_MUTATION_ARRAY_LENGTH = 256;
+const MAX_SNAPSHOT_DEPTH = 4;
+const POLLUTING_KEYS = new Set(["__proto__", "constructor", "prototype"]);
+
+/**
+ * Deep-snapshot an untrusted nested value into fresh plain data. Every read
+ * happens once, through own property descriptors — a getter is never
+ * invoked. Getters/setters, functions, symbols, oversized strings/arrays,
+ * polluting keys, and wrong-shaped objects are refused with null.
+ *
+ * Residual risk: a Proxy whose target is a plain object and whose traps
+ * forward consistently is indistinguishable from the target itself and is
+ * accepted (consistent-trap Proxy residual).
+ */
+function snapshotValue(value: unknown, depth: number): unknown | null {
+  if (value === null || typeof value === "boolean" || typeof value === "number") {
+    return value;
+  }
+  if (typeof value === "string") {
+    if (value.length > MAX_MUTATION_FIELD_LENGTH) return null;
+    return value;
+  }
+  if (depth >= MAX_SNAPSHOT_DEPTH) return null;
+  if (Array.isArray(value)) {
+    if (value.length > MAX_MUTATION_ARRAY_LENGTH) return null;
+    const out: unknown[] = [];
+    for (let i = 0; i < value.length; i++) {
+      if (!(i in value)) return null; // hole
+      const snap = snapshotValue(value[i], depth + 1);
+      if (snap === null && value[i] !== null) return null;
+      out.push(snap);
+    }
+    return out;
+  }
+  if (typeof value !== "object" || typeof value === "function") return null;
+  // Nested plain object: same discipline as the top-level input snapshot.
+  const source = value as Record<string, unknown>;
+  const proto = Object.getPrototypeOf(source);
+  if (proto !== Object.prototype && proto !== null) return null;
+  const out: Record<string, unknown> = {};
+  for (const key of Object.keys(source)) {
+    if (POLLUTING_KEYS.has(key)) return null;
+    const descriptor = Object.getOwnPropertyDescriptor(source, key);
+    if (!descriptor || typeof descriptor.get === "function" || typeof descriptor.set === "function") {
+      return null;
+    }
+    const snap = snapshotValue(descriptor.value, depth + 1);
+    if (snap === null && descriptor.value !== null) return null;
+    out[key] = snap;
+  }
+  return Object.freeze(out);
+}
+
+/**
+ * Snapshot the nested `input` record into a fresh plain frozen object, so
+ * grant approval (deriveMutationRef) and application (applyRemove*) read the
+ * exact same values — a getter returning an allowed context at approval time
+ * and a different one at apply time cannot split the check from the use.
+ * Returns null on any refusal (getter, polluting key, oversized string,
+ * non-plain object). O(fields × length), bounded by the caps above.
+ */
+function snapshotInput(input: unknown): Record<string, unknown> | null {
+  if (input === null || input === undefined || typeof input !== "object") {
+    return null;
+  }
+  if (Array.isArray(input)) return null;
+  const snapshot = snapshotValue(input, 0);
+  if (
+    snapshot === null ||
+    typeof snapshot !== "object" ||
+    Array.isArray(snapshot)
+  ) {
+    return null;
+  }
+  return snapshot as Record<string, unknown>;
+}
+
 export function readPendingMutation(
   tx: Transaction,
 ): PendingManifestMutation | null {
@@ -45,26 +125,28 @@ export function readPendingMutation(
   if (Array.isArray(raw)) return null;
   const record = raw as Record<string, unknown>;
   for (const key of Object.keys(record)) {
-    if (
-      key === "__proto__" ||
-      key === "constructor" ||
-      key === "prototype"
-    ) {
+    if (POLLUTING_KEYS.has(key)) {
       return null;
     }
   }
-  // Inspect own descriptors only — a getter is never invoked.
+  // Inspect own descriptors only — a getter is never invoked. `kind` and
+  // `input` must both be own data properties of the record itself.
   const kindDescriptor = Object.getOwnPropertyDescriptor(record, "kind");
-  if (kindDescriptor && typeof kindDescriptor.get === "function") {
+  if (!kindDescriptor || typeof kindDescriptor.get === "function") {
     return null;
   }
   const inputDescriptor = Object.getOwnPropertyDescriptor(record, "input");
-  if (inputDescriptor && typeof inputDescriptor.get === "function") {
+  if (!inputDescriptor || typeof inputDescriptor.get === "function") {
     return null;
   }
-  const kind = record.kind;
+  const kind = kindDescriptor.value;
   if (typeof kind !== "string") return null;
-  return raw as PendingManifestMutation;
+  const input = snapshotInput(inputDescriptor.value);
+  if (input === null) return null;
+  return Object.freeze({
+    kind,
+    input,
+  }) as unknown as PendingManifestMutation;
 }
 
 export interface ApplyMutationPorts {

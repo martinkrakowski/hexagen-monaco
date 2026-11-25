@@ -38,9 +38,31 @@ function assertPlainCommandObject(command: unknown): void {
       "Invalid command: expected a plain object with named fields.",
     );
   }
+  // Plain-prototype gate: only Object.prototype (or null) is accepted. An
+  // object inheriting from anything else (class instance, Object.create with
+  // a custom proto, Proxy over one) is refused BEFORE any field read, so an
+  // inherited getter is never triggered. O(1).
+  const proto = Object.getPrototypeOf(command);
+  if (proto !== Object.prototype && proto !== null) {
+    throw new Error(
+      "Invalid command: expected a plain object with named fields.",
+    );
+  }
   for (const key of Object.keys(command)) {
     if (PROTOTYPE_POLLUTING_KEYS.has(key)) {
       throw new Error(`Invalid command: prohibited key "${key}".`);
+    }
+  }
+  // Every field must be an own data property — a getter or setter on any own
+  // key is refused without invoking it (descriptor inspection only). O(fields).
+  for (const [key, descriptor] of Object.entries(
+    Object.getOwnPropertyDescriptors(command),
+  )) {
+    if (
+      typeof descriptor.get === "function" ||
+      typeof descriptor.set === "function"
+    ) {
+      throw new Error(`Invalid command: property "${key}" is a getter.`);
     }
   }
 }

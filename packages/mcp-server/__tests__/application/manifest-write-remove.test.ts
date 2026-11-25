@@ -675,6 +675,136 @@ describe("manifest write remove", () => {
       assert.notEqual(mutation, null);
       assert.equal(mutation?.kind, "remove-adapter");
     });
+
+    it("readPendingMutation refuses a nested input getter that returns an allowed context first and a different one second, without invoking it or writing", async () => {
+      // time-of-check/time-of-use: a getter on input.context_name could
+      // return "billing" (allowed by the grant) when approval reads it and
+      // "secret" when applyRemoveAdapter re-reads it. The reader must refuse
+      // it up front, never invoke it, and leave nothing to apply.
+      let getterRan = 0;
+      let call = 0;
+      const record: Record<string, unknown> = { kind: "remove-adapter" };
+      const input: Record<string, unknown> = {
+        adapter_name: "PaymentAdapter",
+        port_name: "PaymentPort",
+      };
+      Object.defineProperty(input, "context_name", {
+        enumerable: true,
+        get() {
+          getterRan++;
+          call++;
+          return call === 1 ? "billing" : "secret";
+        },
+      });
+      record.input = input;
+      const mutation = readPendingMutation(
+        minimalTx({ [PENDING_MANIFEST_MUTATION_KEY]: record }),
+      );
+      assert.equal(mutation, null, "split-reading getter must be refused");
+      assert.equal(getterRan, 0, "getter was invoked during read");
+      // Nothing to apply: the write port is never reached.
+      const write = new WriteSpy();
+      if (mutation !== null) {
+        await applyPendingManifestMutation(mutation, makePorts(write));
+      }
+      assert.deepEqual(write.calls, [], "a write escaped the refusal");
+    });
+
+    it("readPendingMutation refuses prototype-polluting keys on the nested input", () => {
+      for (const key of [PROTO_KEY, CONSTRUCTOR_KEY, PROTOTYPE_KEY]) {
+        const input: Record<string, unknown> = {
+          context_name: "billing",
+          adapter_name: "PaymentAdapter",
+          port_name: "PaymentPort",
+        };
+        Object.defineProperty(input, key, {
+          value: "polluted",
+          enumerable: true,
+          writable: true,
+          configurable: true,
+        });
+        assert.equal(
+          readPendingMutation(
+            minimalTx({
+              [PENDING_MANIFEST_MUTATION_KEY]: {
+                kind: "remove-adapter",
+                input,
+              },
+            }),
+          ),
+          null,
+          key,
+        );
+      }
+    });
+
+    it("readPendingMutation refuses an oversized string on the nested input", () => {
+      const mutation = readPendingMutation(
+        minimalTx({
+          [PENDING_MANIFEST_MUTATION_KEY]: {
+            kind: "remove-dependency",
+            input: {
+              source_module: "x".repeat(5000),
+              target_module: "shipping",
+            },
+          },
+        }),
+      );
+      assert.equal(mutation, null);
+    });
+
+    it("readPendingMutation returns a frozen plain snapshot, not the original input object", () => {
+      const original = {
+        context_name: "billing",
+        adapter_name: "PaymentAdapter",
+        port_name: "PaymentPort",
+      };
+      const mutation = readPendingMutation(
+        minimalTx({
+          [PENDING_MANIFEST_MUTATION_KEY]: {
+            kind: "remove-adapter",
+            input: original,
+          },
+        }),
+      );
+      assert.notEqual(mutation, null);
+      if (mutation === null || mutation.kind !== "remove-adapter") return;
+      // Snapshot, not alias: mutating the original afterwards cannot change
+      // what approval and application read.
+      assert.notEqual(mutation.input, original);
+      assert.equal(Object.isFrozen(mutation.input), true);
+      assert.deepEqual(mutation.input, original);
+    });
+
+    it("refuses a non-plain-prototype command (inherited getter never invoked)", async () => {
+      await withTempWorkspace(BASE_MANIFEST, async (workspaceRoot) => {
+        const adapter = adapterFor(workspaceRoot);
+        let getterRan = 0;
+        const proto = {} as Record<string, unknown>;
+        Object.defineProperty(proto, "contextName", {
+          enumerable: true,
+          get() {
+            getterRan++;
+            return "billing";
+          },
+        });
+        const command = Object.create(proto) as Record<string, unknown>;
+        // Valid own fields — the refusal must come from the prototype, and
+        // the inherited getter must never run.
+        command.adapterName = "PaymentAdapter";
+        command.portName = "PaymentPort";
+        const result = await adapter.removeAdapter(
+          command as unknown as Parameters<
+            ManifestWriteAdapter["removeAdapter"]
+          >[0],
+        );
+        assert.equal(result.success, false);
+        if (!result.success) {
+          assert.match(msg(result.error), /Invalid command/);
+        }
+        assert.equal(getterRan, 0, "inherited getter was invoked");
+      });
+    });
   });
 
   describe("grant approval for the new pending-mutation kinds", () => {
