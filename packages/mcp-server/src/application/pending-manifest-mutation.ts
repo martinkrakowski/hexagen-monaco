@@ -62,15 +62,28 @@ function snapshotValue(value: unknown, depth: number): unknown | null {
   }
   if (depth >= MAX_SNAPSHOT_DEPTH) return null;
   if (Array.isArray(value)) {
+    // Element-wise snapshot through own property descriptors: `i in value`
+    // passes for an accessor and `value[i]` would invoke the getter, so
+    // every index is inspected via getOwnPropertyDescriptor instead — a
+    // getter is never invoked. Holes and accessor entries are refused.
+    // Length is bounded by MAX_MUTATION_ARRAY_LENGTH (256) above, so this
+    // scan is O(min(length, 256)).
     if (value.length > MAX_MUTATION_ARRAY_LENGTH) return null;
     const out: unknown[] = [];
     for (let i = 0; i < value.length; i++) {
-      if (!(i in value)) return null; // hole
-      const snap = snapshotValue(value[i], depth + 1);
-      if (snap === null && value[i] !== null) return null;
+      const descriptor = Object.getOwnPropertyDescriptor(value, String(i));
+      if (!descriptor) return null; // hole
+      if (
+        typeof descriptor.get === "function" ||
+        typeof descriptor.set === "function"
+      ) {
+        return null; // accessor element
+      }
+      const snap = snapshotValue(descriptor.value, depth + 1);
+      if (snap === null && descriptor.value !== null) return null;
       out.push(snap);
     }
-    return out;
+    return Object.freeze(out);
   }
   if (typeof value !== "object" || typeof value === "function") return null;
   // Nested plain object: same discipline as the top-level input snapshot.
@@ -98,6 +111,11 @@ function snapshotValue(value: unknown, depth: number): unknown | null {
  * and a different one at apply time cannot split the check from the use.
  * Returns null on any refusal (getter, polluting key, oversized string,
  * non-plain object). O(fields × length), bounded by the caps above.
+ *
+ * Accepted residual (hostile-input rule): a Proxy whose traps forward
+ * consistently in every trap is indistinguishable from its plain target and
+ * is accepted. No Proxy detection is attempted — behaviour is unchanged for
+ * this input class by design.
  */
 function snapshotInput(input: unknown): Record<string, unknown> | null {
   if (input === null || input === undefined || typeof input !== "object") {

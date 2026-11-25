@@ -93,21 +93,74 @@ function assertNoGetter(source: object, key: string): void {
   }
 }
 
-// Real arrays only: Array.isArray (not array-likes), no holes. O(N) over the
-// collection, bounded by manifest size.
+// Real arrays only: Array.isArray (not array-likes). Element-wise discipline
+// mirrors the pending-mutation snapshot: `i in value` passes for an accessor
+// (then `value[i]` would run the getter), so every index is inspected through
+// `Object.getOwnPropertyDescriptor(arr, String(i))` — a hole or an
+// accessor/non-data entry is refused with a typed error, and a getter is
+// never invoked. Object elements must satisfy the same plain-object rules
+// (plain prototype, no accessor own property, no polluting key). The length
+// is bounded by MAX_COMMAND_ARRAY_LENGTH (4096), so the scan is
+// O(min(length, 4096)). Returns a frozen copy, not the caller's array.
+const MAX_COMMAND_ARRAY_LENGTH = 4096;
+
+function assertPlainArrayElement(
+  value: unknown,
+  index: number,
+  label: string,
+): void {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    return; // primitives and nested arrays are not object fields to inspect
+  }
+  const proto = Object.getPrototypeOf(value);
+  if (proto !== Object.prototype && proto !== null) {
+    throw new Error(
+      `${label}[${index}] must be a plain object, string, number, boolean or null.`,
+    );
+  }
+  const descriptors = Object.getOwnPropertyDescriptors(
+    value as Record<string, unknown>,
+  );
+  for (const [key, descriptor] of Object.entries(descriptors)) {
+    if (PROTOTYPE_POLLUTING_KEYS.has(key)) {
+      throw new Error(`${label}[${index}] must not contain the key "${key}".`);
+    }
+    if (
+      typeof descriptor.get === "function" ||
+      typeof descriptor.set === "function"
+    ) {
+      throw new Error(
+        `${label}[${index}].${key} must be a data property, not an accessor.`,
+      );
+    }
+  }
+}
+
 function assertRealArray(value: unknown, label: string): readonly unknown[] {
   if (!Array.isArray(value)) {
     throw new Error(`${label} must be an array.`);
   }
-  if (value.length > 0 && !(0 in value)) {
-    throw new Error(`${label} must not contain holes.`);
+  if (value.length > MAX_COMMAND_ARRAY_LENGTH) {
+    throw new Error(
+      `${label} exceeds maximum length of ${MAX_COMMAND_ARRAY_LENGTH}.`,
+    );
   }
   for (let i = 0; i < value.length; i++) {
-    if (!(i in value)) {
-      throw new Error(`${label} must not contain holes.`);
+    const descriptor = Object.getOwnPropertyDescriptor(value, String(i));
+    if (!descriptor) {
+      throw new Error(`${label} must not contain holes (index ${i}).`);
     }
+    if (
+      typeof descriptor.get === "function" ||
+      typeof descriptor.set === "function"
+    ) {
+      throw new Error(
+        `${label}[${i}] must be a data entry, not an accessor.`,
+      );
+    }
+    assertPlainArrayElement(descriptor.value, i, label);
   }
-  return value;
+  return Object.freeze([...value]);
 }
 
 /**

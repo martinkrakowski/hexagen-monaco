@@ -776,6 +776,74 @@ describe("manifest write remove", () => {
       assert.deepEqual(mutation.input, original);
     });
 
+    it("readPendingMutation refuses an array element that is a getter, without invoking it", () => {
+      let getterRuns = 0;
+      const tags: unknown[] = [];
+      Object.defineProperty(tags, "0", {
+        enumerable: true,
+        get() {
+          getterRuns++;
+          return "getter-value";
+        },
+      });
+      tags[1] = "plain";
+      const mutation = readPendingMutation(
+        minimalTx({
+          [PENDING_MANIFEST_MUTATION_KEY]: {
+            kind: "remove-adapter",
+            input: {
+              context_name: "billing",
+              adapter_name: "PaymentAdapter",
+              port_name: "PaymentPort",
+              tags,
+            },
+          },
+        }),
+      );
+      assert.equal(mutation, null, "accessor array element must be refused");
+      assert.equal(getterRuns, 0, "array element getter was invoked");
+    });
+
+    it("readPendingMutation snapshots a valid array element-wise and freezes the copy", () => {
+      const mutation = readPendingMutation(
+        minimalTx({
+          [PENDING_MANIFEST_MUTATION_KEY]: {
+            kind: "remove-adapter",
+            input: {
+              context_name: "billing",
+              adapter_name: "PaymentAdapter",
+              port_name: "PaymentPort",
+              tags: ["a", "b"],
+            },
+          },
+        }),
+      );
+      assert.notEqual(mutation, null);
+      if (mutation === null || mutation.kind !== "remove-adapter") return;
+      const tags = (mutation.input as unknown as Record<string, unknown>).tags;
+      assert.deepEqual(tags, ["a", "b"]);
+      assert.equal(Object.isFrozen(tags), true, "array snapshot is frozen");
+    });
+
+    it("readPendingMutation refuses an array with a hole", () => {
+      const tags: unknown[] = ["a", "b"];
+      delete tags[0]; // sparse array — index 0 is a hole
+      const mutation = readPendingMutation(
+        minimalTx({
+          [PENDING_MANIFEST_MUTATION_KEY]: {
+            kind: "remove-adapter",
+            input: {
+              context_name: "billing",
+              adapter_name: "PaymentAdapter",
+              port_name: "PaymentPort",
+              tags,
+            },
+          },
+        }),
+      );
+      assert.equal(mutation, null, "a hole must be refused");
+    });
+
     it("refuses a non-plain-prototype command (inherited getter never invoked)", async () => {
       await withTempWorkspace(BASE_MANIFEST, async (workspaceRoot) => {
         const adapter = adapterFor(workspaceRoot);
