@@ -1150,6 +1150,47 @@ describe("generateCodecTests refusals", () => {
     }
   });
 
+  it("does not enforce the byte budget on the discarded inner sample of a nullable contract whose inner sample exceeds MAX_SAMPLE_BYTES", () => {
+    // A nullable literal whose inner sample is a valid contract but whose
+    // serialized sample exceeds 8,192 bytes: the emitted sample is `null`
+    // (4 JSON bytes), so the discarded inner sample bytes must not be
+    // enforced — synthesis must return `null`, not TIMEOUT_OR_BUDGET.
+    assert.equal(
+      synthesizeValidSample(
+        { kind: "nullable", of: { kind: "literal", value: "y".repeat(8195) } },
+        "probe",
+      ),
+      null,
+    );
+    // The shared node budget is still enforced on the inner contract: a
+    // wide inner tree (4,161 schema nodes) blows MAX_CONTRACT_NODES even
+    // though its sample bytes are discarded.
+    const leafFields: Record<string, unknown> = {};
+    for (let i = 0; i < 64; i++) {
+      leafFields[`f${String(i).padStart(2, "0")}`] = { kind: "boolean" };
+    }
+    const wideFields: Record<string, unknown> = {};
+    for (let i = 0; i < 64; i++) {
+      wideFields[`g${String(i).padStart(2, "0")}`] = {
+        kind: "object",
+        exact: true,
+        fields: leafFields,
+      };
+    }
+    try {
+      synthesizeValidSample(
+        {
+          kind: "nullable",
+          of: { kind: "object", exact: true, fields: wideFields },
+        },
+        "probe",
+      );
+      assert.fail("expected TIMEOUT_OR_BUDGET for the over-budget inner tree");
+    } catch (thrown) {
+      expectErrCode(thrown, "TIMEOUT_OR_BUDGET");
+    }
+  });
+
   it("matches long quantified examples with an iterative matcher and refuses budget exhaustion with TIMEOUT_OR_BUDGET, never a RangeError", () => {
     // A long matching example against `a+` must still match: the bounded
     // matcher keeps its continuation state on the heap, so the JS call stack
@@ -1186,6 +1227,30 @@ describe("generateCodecTests refusals", () => {
         !(thrown instanceof RangeError),
         "the refusal must not be a RangeError",
       );
+    }
+  });
+
+  it("tries every alternation alternative under the step budget before refusing the example", () => {
+    // Backtracking must retain the choice point's remaining alternatives:
+    // for `a|b|c` with example "c", trying only `a` then `b` and giving up
+    // wrongly refused a valid example with MISSING_PATTERN_EXAMPLE.
+    assert.equal(
+      synthesizeValidSample(
+        { kind: "string", maxLength: 1, pattern: "a|b|c", example: "c" },
+        "probe",
+      ),
+      "c",
+    );
+    // The same example still refuses when it genuinely matches no
+    // alternative — the fix widens the search, not the acceptance.
+    try {
+      synthesizeValidSample(
+        { kind: "string", maxLength: 1, pattern: "a|b|c", example: "d" },
+        "probe",
+      );
+      assert.fail("expected MISSING_PATTERN_EXAMPLE for the non-matching 'd'");
+    } catch (thrown) {
+      expectErrCode(thrown, "MISSING_PATTERN_EXAMPLE");
     }
   });
 

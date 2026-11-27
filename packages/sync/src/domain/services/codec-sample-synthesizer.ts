@@ -247,6 +247,13 @@ export function validatePlainRecord(value: unknown): void {
 interface SynthesisBudget {
   nodes: number;
   bytes: number;
+  /**
+   * When true, byte charging is tracked but never enforced. Used for the
+   * discarded inner sample of a `nullable` node: its bytes are never
+   * serialized into the emitted sample, so only the node budget (shared
+   * with the outer tree) still applies to the inner contract.
+   */
+  discardBytes?: boolean;
 }
 
 function chargeNodes(budget: SynthesisBudget, path: string): void {
@@ -262,6 +269,7 @@ function chargeNodes(budget: SynthesisBudget, path: string): void {
 
 function chargeBytes(budget: SynthesisBudget, n: number, path: string): void {
   budget.bytes += n;
+  if (budget.discardBytes === true) return;
   if (budget.bytes > MAX_SAMPLE_BYTES) {
     throw new CodecTestGeneratorError(
       "TIMEOUT_OR_BUDGET",
@@ -900,6 +908,14 @@ export function matchesPatternBounded(
       stack = choice.frames;
       const alt = choice.alts.shift();
       if (alt === undefined) continue;
+      // Retain the choice point while any alternative remains untried, so
+      // backtracking later resumes THIS choice (e.g. the third arm of
+      // `a|b|c`) instead of discarding it after its first retry. Re-push
+      // before attempting the alternative so choices created while running
+      // that alternative sit above it, preserving most-recent-first order.
+      if (choice.alts.length > 0) {
+        choices.push(choice);
+      }
       if ("node" in alt) {
         cur = { node: alt.node, si: alt.si };
         return true;
@@ -1347,11 +1363,19 @@ function synthesizeNode(
           `nullable contract at ${path} is missing "of"`,
         );
       }
-      // Validate the inner node (it still charges the node budget) but emit
-      // the null sample — that is the deterministic valid value. The inner
-      // sample itself is discarded, so its bytes are charged against a
-      // scratch budget: only the emitted `null` (4 JSON bytes) counts.
-      const innerBudget: SynthesisBudget = { nodes: budget.nodes, bytes: 0 };
+      // Validate the inner node (it still charges the shared node budget)
+      // but emit the null sample — that is the deterministic valid value.
+      // The inner sample itself is discarded, so its bytes are tracked
+      // against a scratch budget with enforcement disabled: an inner
+      // contract whose hypothetical sample would exceed MAX_SAMPLE_BYTES
+      // is still a valid nullable inner contract, because only the emitted
+      // `null` (4 JSON bytes) is ever serialized. The shared node budget
+      // still bounds the inner traversal.
+      const innerBudget: SynthesisBudget = {
+        nodes: budget.nodes,
+        bytes: 0,
+        discardBytes: true,
+      };
       synthesizeNode(of, `${path}.of`, depth + 1, innerBudget);
       budget.nodes = innerBudget.nodes;
       chargeBytes(budget, 4, path);
