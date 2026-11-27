@@ -16,6 +16,7 @@ import { generateArchitectureFiles } from "./generators/architecture-files.js";
 import { generateApps } from "./generators/apps.js";
 import { generateEslintConfig } from "./generators/eslint.js";
 import { generateStubs } from "./generators/stubs.js";
+import { generateCodecs } from "./generators/codecs.js";
 import { generateCrossContext } from "./generators/cross-context.js";
 import { generateSharedKernel } from "./generators/shared-kernel.js";
 import { resetPortAnalysisMemo } from "./generators/port-analyzer.js";
@@ -159,6 +160,7 @@ export class SyncEngine {
     const tsconfigs = createEmptyResult();
     const eslint = createEmptyResult();
     const stubs = createEmptyResult();
+    const codecs = createEmptyResult();
 
     for (const module of modules) {
       const moduleName = module.name;
@@ -211,6 +213,12 @@ export class SyncEngine {
         config,
         this.report,
       );
+      const codecResult = await generateCodecs(
+        moduleDir,
+        moduleName,
+        config,
+        this.report,
+      );
 
       // B-1: collect failures per module, BEFORE mergeResult folds them into
       // the row aggregates (the merge keeps only the first error — counting
@@ -222,6 +230,7 @@ export class SyncEngine {
       this.noteFailure("src/index.ts", srcIndexResult);
       this.noteFailure("ESLint", eslintResult);
       this.noteFailure("Stubs", stubResult);
+      this.noteFailure("Codecs", codecResult);
 
       if (this.partialConfig.mode === "self-regen") {
         await reapLegacyFolders(moduleDir, config, this.report);
@@ -233,6 +242,7 @@ export class SyncEngine {
       mergeResult(tsconfigs, srcIndexResult);
       mergeResult(eslint, eslintResult);
       mergeResult(stubs, stubResult);
+      mergeResult(codecs, codecResult);
     }
 
     return {
@@ -243,13 +253,15 @@ export class SyncEngine {
       tsconfigs,
       eslint,
       stubs,
+      codecs,
       apps: createEmptyResult(),
       totalOps:
         barrels.totalOps +
         pkgs.totalOps +
         tsconfigs.totalOps +
         eslint.totalOps +
-        stubs.totalOps,
+        stubs.totalOps +
+        codecs.totalOps,
     };
   }
 
@@ -382,7 +394,7 @@ export class SyncEngine {
       this.noteFailure("Layers", layerResult);
 
       const coreResults = await this.generateCoreArtifacts();
-      const { pkgs, tsconfigs, eslint, stubs } = coreResults;
+      const { pkgs, tsconfigs, eslint, stubs, codecs } = coreResults;
       const firstPassBarrels = coreResults.barrels;
       const appsResult = await generateApps(this.fullConfig, this.report);
       this.noteFailure("Apps", appsResult);
@@ -442,6 +454,7 @@ export class SyncEngine {
         ["tsconfig.json", tsconfigs],
         ["ESLint", eslint],
         ["Stubs", stubs],
+        ["Codecs", codecs],
         ["Apps", appsResult],
       ];
       const runSummary: SyncRunSummary = {
