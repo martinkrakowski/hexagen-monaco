@@ -98,7 +98,10 @@ function makeManifest(options: ManifestOptions = {}): Manifest {
             folder: "src/application",
             subfolders: ["ports/in", "ports/out", "use-cases"],
           },
-          infrastructure: { folder: "src/infrastructure", subfolders: ["adapters"] },
+          infrastructure: {
+            folder: "src/infrastructure",
+            subfolders: ["adapters"],
+          },
         },
         packageJson: { protectedKeys: ["scripts"] },
       },
@@ -124,14 +127,14 @@ function makeManifest(options: ManifestOptions = {}): Manifest {
 }
 
 function expectErrCode(thrown: unknown, code: string): void {
-  assert.ok(thrown instanceof CodecTestGeneratorError, `expected a CodecTestGeneratorError, got ${String(thrown)}`);
+  assert.ok(
+    thrown instanceof CodecTestGeneratorError,
+    `expected a CodecTestGeneratorError, got ${String(thrown)}`,
+  );
   assert.equal(thrown.code, code);
 }
 
-function expectGenErrCode(
-  result: { error?: unknown },
-  code: string,
-): void {
+function expectGenErrCode(result: { error?: unknown }, code: string): void {
   assert.ok(result.error instanceof Error, "expected result.error to be set");
   assert.equal((result.error as { code?: string }).code, code);
   assert.ok(
@@ -181,11 +184,16 @@ describe("generateCodecTests refusals", () => {
       { inPorts: [{ name: "place-order", contracts: { request: {} } }] },
       {
         inPorts: [
-          { name: "place-order", contracts: { request: { kind: "object", fields: {} } } },
+          {
+            name: "place-order",
+            contracts: { request: { kind: "object", fields: {} } },
+          },
         ],
       },
       { codec: { runtimeModule: "bad module with spaces" } },
-      { inPorts: [{ name: "../evil", contracts: { request: SIMPLE_REQUEST } }] },
+      {
+        inPorts: [{ name: "../evil", contracts: { request: SIMPLE_REQUEST } }],
+      },
       { inPorts: [{ name: "", contracts: { request: SIMPLE_REQUEST } }] },
     ];
     for (const options of cases) {
@@ -405,10 +413,7 @@ describe("generateCodecTests refusals", () => {
     // null / undefined where a plain record is required (fields map).
     for (const fields of [null, undefined]) {
       try {
-        synthesizeValidSample(
-          { kind: "object", exact: true, fields },
-          "probe",
-        );
+        synthesizeValidSample({ kind: "object", exact: true, fields }, "probe");
         assert.fail("expected HOSTILE_INPUT for null/undefined fields");
       } catch (thrown) {
         expectErrCode(thrown, "HOSTILE_INPUT");
@@ -528,12 +533,7 @@ describe("generateCodecTests refusals", () => {
     );
     assert.equal(result.error, undefined);
     assert.deepEqual(result.created, [
-      path.join(
-        modulePath,
-        "__tests__",
-        "codecs",
-        "PlaceOrder.codec.test.ts",
-      ),
+      path.join(modulePath, "__tests__", "codecs", "PlaceOrder.codec.test.ts"),
     ]);
     const content = await fs.readFile(result.created[0], "utf8");
     assert.ok(
@@ -541,7 +541,8 @@ describe("generateCodecTests refusals", () => {
       "runtimeModule must default to @fleet/shared",
     );
     assert.ok(
-      content.includes('"qty"') === false && content.includes("VALID_SAMPLE = 0"),
+      content.includes('"qty"') === false &&
+        content.includes("VALID_SAMPLE = 0"),
       "an integer without min must synthesize 0",
     );
   });
@@ -552,7 +553,11 @@ describe("generateCodecTests refusals", () => {
 
   it("refuses contracts exceeding MAX_CONTRACT_FIELDS, global schema-node budget (deeply branching contract), or serialized-sample byte budget with TIMEOUT_OR_BUDGET without unbounded allocation", async () => {
     // 65 object fields > MAX_CONTRACT_FIELDS (64).
-    const wide: Record<string, unknown> = { kind: "object", exact: true, fields: {} };
+    const wide: Record<string, unknown> = {
+      kind: "object",
+      exact: true,
+      fields: {},
+    };
     for (let i = 0; i < 65; i++) {
       (wide.fields as Record<string, unknown>)[`f${i}`] = { kind: "boolean" };
     }
@@ -669,19 +674,13 @@ describe("generateCodecTests refusals", () => {
     assert.equal(synthesizeValidSample({ kind: "integer" }, "p"), 0);
     assert.equal(synthesizeValidSample({ kind: "number" }, "p"), 0);
     // Clamping: no min and a negative max -> max.
-    assert.equal(
-      synthesizeValidSample({ kind: "integer", max: -3 }, "p"),
-      -3,
-    );
+    assert.equal(synthesizeValidSample({ kind: "integer", max: -3 }, "p"), -3);
     assert.equal(synthesizeValidSample({ kind: "boolean" }, "p"), false);
     assert.equal(
       synthesizeValidSample({ kind: "enum", values: ["b", "a"] }, "p"),
       "b",
     );
-    assert.equal(
-      synthesizeValidSample({ kind: "literal", value: 7 }, "p"),
-      7,
-    );
+    assert.equal(synthesizeValidSample({ kind: "literal", value: 7 }, "p"), 7);
     assert.equal(
       synthesizeValidSample(
         { kind: "nullable", of: { kind: "string", maxLength: 3 } },
@@ -715,12 +714,17 @@ describe("generateCodecTests refusals", () => {
       ),
     );
     assert.equal(result.error, undefined);
-    assert.deepEqual(
-      result.created.map((p) => path.basename(p)).sort(),
-      ["NotifyEvents.codec.test.ts", "PlaceOrder.codec.test.ts"],
-    );
+    assert.deepEqual(result.created.map((p) => path.basename(p)).sort(), [
+      "NotifyEvents.codec.test.ts",
+      "PlaceOrder.codec.test.ts",
+    ]);
     const notify = await fs.readFile(
-      path.join(modulePath, "__tests__", "codecs", "NotifyEvents.codec.test.ts"),
+      path.join(
+        modulePath,
+        "__tests__",
+        "codecs",
+        "NotifyEvents.codec.test.ts",
+      ),
       "utf8",
     );
     assert.ok(
@@ -759,18 +763,24 @@ describe("generateCodecTests refusals", () => {
       ),
     );
     assert.ok(
-      content.includes('import { createPlaceOrderCodec } from "../../src/application/ports/place-order.codec.js"'),
+      content.includes(
+        'import { createPlaceOrderCodec } from "../../src/application/ports/place-order.codec.js"',
+      ),
     );
     assert.ok(
       content.includes("const env: CodecEnv = { isProxy: types.isProxy };"),
     );
     assert.ok(content.includes("describe.each(ADVERSARIAL_CORPUS)"));
     assert.ok(
-      content.includes("const res: DecodeResult<unknown> = codec.decode(entry.build());"),
+      content.includes(
+        "const res: DecodeResult<unknown> = codec.decode(entry.build());",
+      ),
     );
     assert.ok(content.includes("expect(res.ok).toBe(false);"));
     assert.ok(
-      content.includes("if (res.ok) expect(Object.isFrozen(res.value)).toBe(true);"),
+      content.includes(
+        "if (res.ok) expect(Object.isFrozen(res.value)).toBe(true);",
+      ),
     );
     // The synthesized valid sample is embedded for the round-trip test.
     assert.ok(content.includes('"qty": 0'));
@@ -850,7 +860,10 @@ describe("generateCodecTests refusals", () => {
     }
 
     it("records CodecTests ops and surfaces CodecTests failures in SyncRunSummary.errors", async () => {
-      fixtureRoot = await createFixture(["codec-test-target"], "hexagen-codec-engine-");
+      fixtureRoot = await createFixture(
+        ["codec-test-target"],
+        "hexagen-codec-engine-",
+      );
 
       // Baseline: no contract-bearing port -> no CodecTests op.
       const plainManifest = makeManifest({

@@ -218,7 +218,10 @@ export function validatePlainRecord(value: unknown): void {
     );
   }
   if (looksLikeProxy(value)) {
-    throw hostile("record", `refusing a Proxy where a plain record is required`);
+    throw hostile(
+      "record",
+      `refusing a Proxy where a plain record is required`,
+    );
   }
   let proto: unknown;
   try {
@@ -233,7 +236,10 @@ export function validatePlainRecord(value: unknown): void {
     );
   }
   if (Array.isArray(value)) {
-    throw hostile("record", `refusing an array where a plain record is required`);
+    throw hostile(
+      "record",
+      `refusing an array where a plain record is required`,
+    );
   }
 }
 
@@ -547,7 +553,14 @@ function parseAtom(p: PatternParser): PatternNode {
         `word boundaries are not supported in pattern at offset ${p.i}`,
       );
     }
-    if (e === "d" || e === "D" || e === "w" || e === "W" || e === "s" || e === "S") {
+    if (
+      e === "d" ||
+      e === "D" ||
+      e === "w" ||
+      e === "W" ||
+      e === "s" ||
+      e === "S"
+    ) {
       // parseClassEscape reads the character at p.i (the escape letter) and
       // consumes it.
       const item = parseClassEscape(p);
@@ -696,9 +709,7 @@ function matchNode(
   step(state);
   switch (node.t) {
     case "char":
-      return si < state.s.length && state.s[si] === node.ch
-        ? k(si + 1)
-        : false;
+      return si < state.s.length && state.s[si] === node.ch ? k(si + 1) : false;
     case "any":
       return si < state.s.length && state.s[si] !== "\n" ? k(si + 1) : false;
     case "class":
@@ -879,7 +890,9 @@ function synthesizeNode(
       }
       const sample: Record<string, unknown> = {};
       chargeBytes(budget, keys.length * 4 + 2, path);
-      for (const key of [...keys].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))) {
+      for (const key of [...keys].sort((a, b) =>
+        a < b ? -1 : a > b ? 1 : 0,
+      )) {
         let field = readOwnPlainProperty(fields, key);
         if (isPlainObjectSafe(field)) {
           const optional = readOwnPlainProperty(field, "optional");
@@ -887,7 +900,12 @@ function synthesizeNode(
             field = optional;
           }
         }
-        sample[key] = synthesizeNode(field, `${path}.${key}`, depth + 1, budget);
+        sample[key] = synthesizeNode(
+          field,
+          `${path}.${key}`,
+          depth + 1,
+          budget,
+        );
       }
       return sample;
     }
@@ -978,14 +996,20 @@ function synthesizeNode(
     case "number": {
       const min = readOwnPlainProperty(node, "min");
       const max = readOwnPlainProperty(node, "max");
-      if (min !== undefined && (typeof min !== "number" || !Number.isFinite(min))) {
+      if (
+        min !== undefined &&
+        (typeof min !== "number" || !Number.isFinite(min))
+      ) {
         throw new CodecTestGeneratorError(
           "MALFORMED_CONTRACT",
           path,
           `${kind} "min" at ${path} must be a finite number`,
         );
       }
-      if (max !== undefined && (typeof max !== "number" || !Number.isFinite(max))) {
+      if (
+        max !== undefined &&
+        (typeof max !== "number" || !Number.isFinite(max))
+      ) {
         throw new CodecTestGeneratorError(
           "MALFORMED_CONTRACT",
           path,
