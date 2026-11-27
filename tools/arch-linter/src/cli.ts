@@ -62,6 +62,7 @@ import {
   resolveFileHexagonalLayer,
 } from "./layer-purity-violation.js";
 import type { BaselineEntry, ViolationRecord } from "./ratchet-baseline.js";
+import { checkInPortUnknown } from "./in-port-unknown-violation.js";
 import {
   DEFAULT_BASELINE_RELATIVE_PATH,
   mergeSuppressionMetadata,
@@ -746,6 +747,27 @@ function checkArchitecturalIntegrity(): {
       // makes a declaration true.
       if (countsAsContextExportSource(filePath)) {
         for (const name of collectExportedNames(file)) exportedNames.add(name);
+
+        // ─── In-port unknown (D4, 2026-11-27) ─────────────────────────────
+        //
+        // An in-port whose method/call-signature parameter is `unknown`
+        // accepts anything at the type level — re-opening, in the contract
+        // itself, the hostile-input hole the generated codecs close in the
+        // body. Same production-surface gate as the registry above: tests,
+        // templates and co-located specs are not boundaries this repo owns.
+        // Findings flow into `errors`, so the ratchet baselines them like
+        // every other rule (fresh → exit 1, baselined → 0, corrupted
+        // baseline → exit 2).
+        for (const violation of checkInPortUnknown(file)) {
+          errors.push(
+            record(
+              violation.rule,
+              filePath,
+              violation.specifier,
+              violation.message,
+            ),
+          );
+        }
       }
 
       const isTestDbl = isTestDoubleOrTest(filePath);
@@ -1327,7 +1349,7 @@ function reportAndExit(
   // Never claim a check that did not run (RCA #8). The declaration rule is
   // opt-in, so it is named only when linter-config.yaml turned it on.
   logger.info(
-    "Architecture is compliant. Checked: cross-context imports (manifest depends_on + shared-kernel types + linter-config), layer rules (incl. cross-layer relative imports, node builtins in domain/application, npm packages in domain), subpath conventions, server markers, required communication" +
+    "Architecture is compliant. Checked: cross-context imports (manifest depends_on + shared-kernel types + linter-config), layer rules (incl. cross-layer relative imports, node builtins in domain/application, npm packages in domain), subpath conventions, server markers, required communication, in-port unknown check" +
       (ENFORCE_CONTEXT_DECLARATIONS
         ? ", context-declaration accuracy (declared ports/adapters name an exported symbol)."
         : "."),

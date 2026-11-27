@@ -189,6 +189,103 @@ describe("parseBaseline — fail closed", () => {
     assert.equal(parsed.entries[0]?.reason, "tracked debt");
     assert.equal(parsed.entries[0]?.expires, "2027-01-15");
   });
+
+  it("rejects extra top-level keys in baseline JSON", () => {
+    // Exactly `version` + `entries` — an added key is schema drift, not an
+    // extension, and a parser that ignored it would accept files no version
+    // of the linter can write or read back faithfully.
+    rejects(
+      '{"version":1,"entries":[],"schema":"drift"}',
+      /unexpected top-level key\(s\) 'schema'/,
+    );
+    rejects(
+      '{"version":1,"entries":[],"note":"sneaky"}',
+      /unexpected top-level key\(s\) 'note'/,
+    );
+    rejects(
+      '{"entries":[],"version":1,"extra":true,"another":true}',
+      /unexpected top-level key\(s\) 'extra', 'another'/,
+    );
+    // The exact allowed shape still parses (guard against over-firing).
+    const parsed = parseBaseline('{"version":1,"entries":[]}');
+    assert.deepEqual(parsed, { version: BASELINE_VERSION, entries: [] });
+  });
+
+  it("refuses reserved keys (__proto__, constructor, prototype) in baseline top-level and entry objects", () => {
+    // JSON.parse plants `__proto__` as an ordinary OWN property — the check
+    // must therefore run on own property names, and the error must name the
+    // key. __proto__ at the top level:
+    rejects(
+      '{"version":1,"entries":[],"__proto__":{"polluted":true}}',
+      /reserved key\(s\) '__proto__' at the top level/,
+    );
+    // …constructor and prototype too:
+    rejects(
+      '{"version":1,"entries":[],"constructor":null}',
+      /reserved key\(s\) 'constructor' at the top level/,
+    );
+    rejects(
+      '{"version":1,"entries":[],"prototype":{}}',
+      /reserved key\(s\) 'prototype' at the top level/,
+    );
+    // And on entry objects — this is where prototype pollution actually
+    // lands when the entry is later spread into a fresh object.
+    rejects(
+      '{"version":1,"entries":[{"rule":"r","file":"f.ts","specifier":"s","__proto__":{"polluted":true}}]}',
+      /entry 0 has reserved key\(s\) '__proto__'/,
+    );
+    rejects(
+      '{"version":1,"entries":[{"rule":"r","file":"f.ts","specifier":"s","constructor":null}]}',
+      /entry 0 has reserved key\(s\) 'constructor'/,
+    );
+    rejects(
+      '{"version":1,"entries":[{"rule":"r","file":"f.ts","specifier":"s","prototype":"x"}]}',
+      /entry 0 has reserved key\(s\) 'prototype'/,
+    );
+  });
+
+  it("rejects baseline files exceeding the maximum entry count or string field length bounds", () => {
+    // Entry count is explicitly bounded.
+    const tooManyEntries = `{"version":1,"entries":[${Array.from(
+      { length: 1001 },
+      () => '{"rule":"r","file":"f.ts","specifier":"s"}',
+    ).join(",")}]}`;
+    rejects(tooManyEntries, /'entries' has 1001 items, exceeding the maximum of/);
+    // So is every entry string field…
+    const longFile = "f".repeat(2049);
+    rejects(
+      `{"version":1,"entries":[{"rule":"r","file":"${longFile}","specifier":"s"}]}`,
+      /'file' exceeds the maximum length/,
+    );
+    const longRule = "r".repeat(2049);
+    rejects(
+      `{"version":1,"entries":[{"rule":"${longRule}","file":"f.ts","specifier":"s"}]}`,
+      /'rule' exceeds the maximum length/,
+    );
+    rejects(
+      `{"version":1,"entries":[{"rule":"r","file":"f.ts","specifier":"${"s".repeat(2049)}"}]}`,
+      /'specifier' exceeds the maximum length/,
+    );
+    // …including the suppression fields…
+    rejects(
+      `{"version":1,"entries":[{"rule":"r","file":"f.ts","specifier":"s","reason":"${"y".repeat(2049)}"}]}`,
+      /'reason' exceeds the maximum length/,
+    );
+    rejects(
+      `{"version":1,"entries":[{"rule":"r","file":"f.ts","specifier":"s","note":"${"y".repeat(2049)}"}]}`,
+      /'note' exceeds the maximum length/,
+    );
+    rejects(
+      `{"version":1,"entries":[{"rule":"r","file":"f.ts","specifier":"s","expires":"${"2".repeat(2049)}"}]}`,
+      /'expires' exceeds the maximum length/,
+    );
+    // …and the bounds are strict: exactly-at-limit values still parse.
+    const parsed = parseBaseline(
+      `{"version":1,"entries":[{"rule":"${"r".repeat(2048)}","file":"${"f".repeat(2048)}","specifier":"${"s".repeat(2048)}","reason":"${"y".repeat(2048)}"}]}`,
+    );
+    assert.equal(parsed.entries.length, 1);
+    assert.equal(parsed.entries[0]?.file.length, 2048);
+  });
 });
 
 describe("partitionAgainstBaseline", () => {

@@ -145,3 +145,13 @@ export {
 
 export type { LoggerPort } from "./logger.js";
 export { createConsoleLogger } from "./logger.js";
+
+export type {
+  InPortUnknownRule,
+  InPortUnknownViolation,
+} from "./in-port-unknown-violation.js";
+export {
+  IN_PORT_UNKNOWN_RULE,
+  isInPortFile,
+  checkInPortUnknown,
+} from "./in-port-unknown-violation.js";
