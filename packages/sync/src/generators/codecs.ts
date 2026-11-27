@@ -100,7 +100,11 @@ function readLayersConfig(
   const sync = readOwnDataProperty(gen.value, "sync", "generator.sync");
   if (!sync.success) return sync;
   if (sync.value === undefined) return ok(undefined);
-  const layers = readOwnDataProperty(sync.value, "layers", "generator.sync.layers");
+  const layers = readOwnDataProperty(
+    sync.value,
+    "layers",
+    "generator.sync.layers",
+  );
   if (!layers.success) return layers;
   return ok(layers.value as LayersConfig | undefined);
 }
@@ -116,14 +120,22 @@ async function emitCodecs(
 ): Promise<GeneratorResult> {
   const manifest: unknown = config.manifest;
 
-  const bcsResult = readOwnDataProperty(manifest, "bounded_contexts", "bounded_contexts");
+  const bcsResult = readOwnDataProperty(
+    manifest,
+    "bounded_contexts",
+    "bounded_contexts",
+  );
   if (!bcsResult.success) {
     result.error = bcsResult.error;
     return result;
   }
   if (bcsResult.value === undefined) return result; // no contexts — nothing to emit
 
-  const bcs = readDenseArray(bcsResult.value, MAX_BOUNDED_CONTEXTS, "bounded_contexts");
+  const bcs = readDenseArray(
+    bcsResult.value,
+    MAX_BOUNDED_CONTEXTS,
+    "bounded_contexts",
+  );
   if (!bcs.success) {
     result.error = bcs.error;
     return result;
@@ -132,7 +144,11 @@ async function emitCodecs(
   let context: unknown;
   let found = false;
   for (const rawContext of bcs.value) {
-    const nameResult = readOwnDataProperty(rawContext, "name", "bounded_contexts[].name");
+    const nameResult = readOwnDataProperty(
+      rawContext,
+      "name",
+      "bounded_contexts[].name",
+    );
     if (!nameResult.success) {
       result.error = nameResult.error;
       return result;
@@ -152,14 +168,22 @@ async function emitCodecs(
   }
   if (layersResult.value === undefined) return result;
 
-  const appResult = readOwnDataProperty(layersResult.value, "application", "layers.application");
+  const appResult = readOwnDataProperty(
+    layersResult.value,
+    "application",
+    "layers.application",
+  );
   if (!appResult.success) {
     result.error = appResult.error;
     return result;
   }
   if (appResult.value === undefined) return result;
 
-  const portsResult = readOwnDataProperty(appResult.value, "ports", "layers.application.ports");
+  const portsResult = readOwnDataProperty(
+    appResult.value,
+    "ports",
+    "layers.application.ports",
+  );
   if (!portsResult.success) {
     result.error = portsResult.error;
     return result;

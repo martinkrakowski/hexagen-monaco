@@ -235,7 +235,10 @@ export const ADVERSARIAL_CORPUS: readonly { id: string; input: unknown }[] = [
   },
   { id: "missing-key", input: { id: "abc", qty: 1, role: "user" } },
   { id: "wrong-type", input: { id: 5, qty: 1, role: "user", flag: true } },
-  { id: "out-of-bounds", input: { id: "abc", qty: 11, role: "user", flag: true } },
+  {
+    id: "out-of-bounds",
+    input: { id: "abc", qty: 11, role: "user", flag: true },
+  },
   {
     id: "pattern-mismatch",
     input: { id: "!!!", qty: 1, role: "user", flag: true },
@@ -317,7 +320,11 @@ describe("generateCodecs — emission and traversal", () => {
       ],
     });
     const moduleDir = path.join(fixtureRoot, "packages", "alpha");
-    const result = await generateCodecs(moduleDir, "alpha", makeConfig(fixtureRoot, manifest, logger));
+    const result = await generateCodecs(
+      moduleDir,
+      "alpha",
+      makeConfig(fixtureRoot, manifest, logger),
+    );
 
     expect(result.error).toBeUndefined();
     const emitted = path.join(
@@ -331,12 +338,8 @@ describe("generateCodecs — emission and traversal", () => {
     expect(content).toContain("export type PlaceOrderRequest = Validated<");
     expect(content).toContain("createPlaceOrderCodec");
     // Contractless port was skipped without error.
-    expect(
-      result.created.some((p) => p.includes("NoContracts")),
-    ).toBe(false);
-    expect(
-      result.created.some((p) => p.includes("Notify")),
-    ).toBe(false);
+    expect(result.created.some((p) => p.includes("NoContracts"))).toBe(false);
+    expect(result.created.some((p) => p.includes("Notify"))).toBe(false);
   });
 
   it("refuses sparse arrays with holes, accessor getters, and throwing Proxy traps in manifest ports with HOSTILE_INPUT", async () => {
@@ -344,11 +347,18 @@ describe("generateCodecs — emission and traversal", () => {
 
     // Sparse ports array (hole).
     const sparsePorts: unknown[] = new Array(2);
-    sparsePorts[1] = { name: "place-order", contracts: { request: REQUEST_SCHEMA } };
+    sparsePorts[1] = {
+      name: "place-order",
+      contracts: { request: REQUEST_SCHEMA },
+    };
     const sparseResult = await generateCodecs(
       path.join(fixtureRoot, "packages", "alpha"),
       "alpha",
-      makeConfig(fixtureRoot, makeManifest({ inPorts: sparsePorts }), createSpyLogger()),
+      makeConfig(
+        fixtureRoot,
+        makeManifest({ inPorts: sparsePorts }),
+        createSpyLogger(),
+      ),
     );
     expectErrCode(sparseResult, "HOSTILE_INPUT");
 
@@ -374,7 +384,7 @@ describe("generateCodecs — emission and traversal", () => {
 
     // Ports array whose `length` descriptor lookup throws (hostile Proxy trap).
     const trappingPorts = new Proxy(
-      [ { name: "place-order", contracts: { request: REQUEST_SCHEMA } } ],
+      [{ name: "place-order", contracts: { request: REQUEST_SCHEMA } }],
       {
         getOwnPropertyDescriptor() {
           throw new Error("trap");
@@ -418,7 +428,9 @@ describe("generateCodecs — emission and traversal", () => {
       makeConfig(
         fixtureRoot,
         makeManifest({
-          inPorts: [{ name: "place-order", contracts: { request: { kind: "string" } } }],
+          inPorts: [
+            { name: "place-order", contracts: { request: { kind: "string" } } },
+          ],
           codec: { runtimeModule: "@fleet/shared" },
         }),
         createSpyLogger(),
@@ -456,7 +468,9 @@ describe("generateCodecs — emission and traversal", () => {
 
   it("reports pending Codecs ops under check mode before write and zero ops after convergence", async () => {
     fixtureRoot = await createFixture(["alpha"]);
-    const manifest = makeManifest({ codec: { runtimeModule: "@fleet/shared" } });
+    const manifest = makeManifest({
+      codec: { runtimeModule: "@fleet/shared" },
+    });
 
     function engine(dryRun: boolean): SyncEngine {
       return new SyncEngine(
@@ -487,15 +501,17 @@ describe("generateCodecs — emission and traversal", () => {
 
     // Check mode AFTER convergence: zero Codecs ops.
     const after = await engine(true).run();
-    expect(
-      (after.files ?? []).filter((f) => f.generator === "Codecs"),
-    ).toEqual([]);
+    expect((after.files ?? []).filter((f) => f.generator === "Codecs")).toEqual(
+      [],
+    );
   });
 
   it("plans codec creation under dry-run without writing files", async () => {
     fixtureRoot = await createFixture(["alpha"]);
     const logger = createSpyLogger();
-    const manifest = makeManifest({ codec: { runtimeModule: "@fleet/shared" } });
+    const manifest = makeManifest({
+      codec: { runtimeModule: "@fleet/shared" },
+    });
     const moduleDir = path.join(fixtureRoot, "packages", "alpha");
     const result = await generateCodecs(
       moduleDir,
@@ -520,7 +536,9 @@ describe("generateCodecs — emission and traversal", () => {
   it("skips out-of-scope codec files when --only excludes the port path", async () => {
     fixtureRoot = await createFixture(["alpha"]);
     const logger = createSpyLogger();
-    const manifest = makeManifest({ codec: { runtimeModule: "@fleet/shared" } });
+    const manifest = makeManifest({
+      codec: { runtimeModule: "@fleet/shared" },
+    });
     const result = await generateCodecs(
       path.join(fixtureRoot, "packages", "alpha"),
       "alpha",
@@ -577,9 +595,10 @@ describe("generateCodecs — emission and traversal", () => {
     expect(imports[0]).toContain(runtimeModule);
 
     const mod = (await import(pathToFileURL(codecPath).href)) as {
-      createPlaceOrderCodec: (
-        env: { isProxy: (v: unknown) => boolean },
-      ) => { decode: (input: unknown) => unknown; schemaId: string };
+      createPlaceOrderCodec: (env: { isProxy: (v: unknown) => boolean }) => {
+        decode: (input: unknown) => unknown;
+        schemaId: string;
+      };
     };
     const env = { isProxy: () => false };
     const codec = mod.createPlaceOrderCodec(env);
@@ -596,7 +615,12 @@ describe("generateCodecs — emission and traversal", () => {
     }
 
     // DecodeResult refusal shape: { ok: false, reason, path }.
-    const refusal = codec.decode({ id: 5, qty: 1, role: "user", flag: true }) as {
+    const refusal = codec.decode({
+      id: 5,
+      qty: 1,
+      role: "user",
+      flag: true,
+    }) as {
       ok: false;
       reason: string;
       path: string | null;

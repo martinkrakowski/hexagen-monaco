@@ -41,7 +41,10 @@ describe("buildCodecSchema — refusals", () => {
       expectErr(buildCodecSchema(primitive, "t"), "MALFORMED_CONTRACT");
     }
     // A function is not a contract object either.
-    expectErr(buildCodecSchema(() => 1, "t"), "MALFORMED_CONTRACT");
+    expectErr(
+      buildCodecSchema(() => 1, "t"),
+      "MALFORMED_CONTRACT",
+    );
   });
 
   it("refuses accessor getters on contract and fields without invoking them", () => {
@@ -210,7 +213,10 @@ describe("buildCodecSchema — refusals", () => {
       "MALFORMED_CONTRACT",
     );
     expectErr(
-      buildCodecSchema({ kind: "array", maxItems: -2, items: { kind: "boolean" } }, "t"),
+      buildCodecSchema(
+        { kind: "array", maxItems: -2, items: { kind: "boolean" } },
+        "t",
+      ),
       "MALFORMED_CONTRACT",
     );
   });
@@ -248,7 +254,9 @@ describe("resolveRuntimeModule — refusals", () => {
       "MALFORMED_RUNTIME_MODULE",
     );
     expectErr(
-      resolveRuntimeModule({ codec: { runtimeModule: 'evil";\nimport x from "y' } }),
+      resolveRuntimeModule({
+        codec: { runtimeModule: 'evil";\nimport x from "y' },
+      }),
       "MALFORMED_RUNTIME_MODULE",
     );
     expectErr(
@@ -280,20 +288,14 @@ describe("resolveRuntimeModule — refusals", () => {
         return "@fleet/shared";
       },
     };
-    expectErr(
-      resolveRuntimeModule({ codec: hostileCodec }),
-      "HOSTILE_INPUT",
-    );
+    expectErr(resolveRuntimeModule({ codec: hostileCodec }), "HOSTILE_INPUT");
     expect(invoked).toBe(false);
 
     // Non-plain prototype for manifest.codec.
     class CodecCfg {
       runtimeModule = "@fleet/shared";
     }
-    expectErr(
-      resolveRuntimeModule({ codec: new CodecCfg() }),
-      "HOSTILE_INPUT",
-    );
+    expectErr(resolveRuntimeModule({ codec: new CodecCfg() }), "HOSTILE_INPUT");
 
     // Proxy whose descriptor trap throws.
     const throwing = new Proxy(
@@ -358,7 +360,11 @@ describe("buildCodecSchema — valid schemas", () => {
         fields: {
           id: { kind: "string", maxLength: 32, pattern: "^[a-z]+$" },
           qty: { kind: "integer", min: 0, max: 10 },
-          tags: { kind: "array", maxItems: 8, items: { kind: "string", maxLength: 16 } },
+          tags: {
+            kind: "array",
+            maxItems: 8,
+            items: { kind: "string", maxLength: 16 },
+          },
           role: { kind: "enum", values: ["admin", "user"] },
           flag: { kind: "boolean" },
           kind: { kind: "literal", value: "order" },
@@ -392,7 +398,8 @@ describe("buildCodecSchema — valid schemas", () => {
       "t",
     );
     expect(result.success).toBe(true);
-    if (result.success) expect(result.value).toEqual({ kind: "string", maxLength: 4 });
+    if (result.success)
+      expect(result.value).toEqual({ kind: "string", maxLength: 4 });
   });
 });
 
@@ -434,9 +441,7 @@ describe("renderCodecModule — deterministic fleet-v2 output", () => {
     expect(importLines[0]).toContain("createCodec");
 
     // Validated<...> branded request type.
-    expect(first).toContain(
-      "export type PlaceOrderRequest = Validated<",
-    );
+    expect(first).toContain("export type PlaceOrderRequest = Validated<");
 
     // Sorted keys (code-point order) in the emitted type AND schema literal:
     // a buggy unsorted render would place zebra before alpha.
@@ -458,9 +463,7 @@ describe("renderCodecModule — deterministic fleet-v2 output", () => {
     expect(first).toContain(
       "export function createPlaceOrderCodec(env: CodecEnv): Codec<",
     );
-    expect(first).toContain(
-      'createCodec<',
-    );
+    expect(first).toContain("createCodec<");
     expect(first).toContain('"alpha.PlaceOrder"');
     expect(first).toContain("as const satisfies CodecSchema");
   });

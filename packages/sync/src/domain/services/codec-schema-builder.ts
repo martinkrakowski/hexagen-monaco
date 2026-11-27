@@ -52,11 +52,7 @@ export class CodecGeneratorError extends Error {
   readonly code: CodecGeneratorErrorCode;
   readonly path: string;
 
-  constructor(
-    code: CodecGeneratorErrorCode,
-    path: string,
-    message: string,
-  ) {
+  constructor(code: CodecGeneratorErrorCode, path: string, message: string) {
     super(message);
     this.name = "CodecGeneratorError";
     this.code = code;
@@ -200,11 +196,7 @@ export function readDenseArray(
     );
   }
   const len = lenDesc.value;
-  if (
-    typeof len !== "number" ||
-    !Number.isSafeInteger(len) ||
-    len < 0
-  ) {
+  if (typeof len !== "number" || !Number.isSafeInteger(len) || len < 0) {
     return err(
       new CodecGeneratorError(
         "MALFORMED_CONTRACT",
@@ -295,7 +287,11 @@ export function resolveRuntimeModule(
   const codec = codecResult.value;
   if (codec === undefined) return ok(DEFAULT_RUNTIME_MODULE);
 
-  const modResult = readOwnDataProperty(codec, "runtimeModule", "codec.runtimeModule");
+  const modResult = readOwnDataProperty(
+    codec,
+    "runtimeModule",
+    "codec.runtimeModule",
+  );
   if (!modResult.success) return modResult;
   const mod = modResult.value;
   if (mod === undefined) return ok(DEFAULT_RUNTIME_MODULE);
@@ -406,7 +402,9 @@ function buildNode(
       // notion of it, so a contract carrying one would silently lose a rule.
       const hasMinLength = (() => {
         try {
-          return Object.getOwnPropertyDescriptor(node, "minLength") !== undefined;
+          return (
+            Object.getOwnPropertyDescriptor(node, "minLength") !== undefined
+          );
         } catch {
           return false;
         }
@@ -432,7 +430,11 @@ function buildNode(
           ),
         );
       }
-      if (typeof maxLength !== "number" || !Number.isSafeInteger(maxLength) || maxLength <= 0) {
+      if (
+        typeof maxLength !== "number" ||
+        !Number.isSafeInteger(maxLength) ||
+        maxLength <= 0
+      ) {
         return err(
           new CodecGeneratorError(
             "MALFORMED_CONTRACT",
@@ -471,7 +473,11 @@ function buildNode(
           ),
         );
       }
-      if (typeof maxItems !== "number" || !Number.isSafeInteger(maxItems) || maxItems <= 0) {
+      if (
+        typeof maxItems !== "number" ||
+        !Number.isSafeInteger(maxItems) ||
+        maxItems <= 0
+      ) {
         return err(
           new CodecGeneratorError(
             "MALFORMED_CONTRACT",
@@ -491,7 +497,12 @@ function buildNode(
           ),
         );
       }
-      const items = buildNode(itemsResult.value, `${path}.items`, depth + 1, counter);
+      const items = buildNode(
+        itemsResult.value,
+        `${path}.items`,
+        depth + 1,
+        counter,
+      );
       if (!items.success) return items;
       return ok({ kind: "array", items: items.value, maxItems });
     }
@@ -542,9 +553,18 @@ function buildNode(
       }
       const fields: Record<string, CodecSchemaLiteral> = {};
       for (const key of keys) {
-        const fieldResult = readOwnDataProperty(fieldsRaw, key, `${path}.${key}`);
+        const fieldResult = readOwnDataProperty(
+          fieldsRaw,
+          key,
+          `${path}.${key}`,
+        );
         if (!fieldResult.success) return fieldResult;
-        const built = buildNode(fieldResult.value, `${path}.${key}`, depth + 1, counter);
+        const built = buildNode(
+          fieldResult.value,
+          `${path}.${key}`,
+          depth + 1,
+          counter,
+        );
         if (!built.success) return built;
         fields[key] = built.value;
       }
@@ -635,7 +655,11 @@ function buildNode(
       // BOUND: readDenseArray refuses length > MAX_ENUM_VALUES (BOUNDS_EXCEEDED)
       // before iterating, holes (HOSTILE_INPUT) and array-likes
       // (MALFORMED_CONTRACT) before any value is trusted.
-      const dense = readDenseArray(valuesResult.value, MAX_ENUM_VALUES, `${path}.values`);
+      const dense = readDenseArray(
+        valuesResult.value,
+        MAX_ENUM_VALUES,
+        `${path}.values`,
+      );
       if (!dense.success) return dense;
       const values = dense.value;
       if (values.length < 1) {
@@ -735,9 +759,18 @@ export function buildCodecSchema(
   if (typeof rawContract === "object" && rawContract !== null) {
     const kindPeek = readOwnDataProperty(rawContract, "kind", pathPrefix);
     if (kindPeek.success && kindPeek.value === undefined) {
-      const requestPeek = readOwnDataProperty(rawContract, "request", pathPrefix);
+      const requestPeek = readOwnDataProperty(
+        rawContract,
+        "request",
+        pathPrefix,
+      );
       if (requestPeek.success && requestPeek.value !== undefined) {
-        return buildNode(requestPeek.value, `${pathPrefix}.request`, 1, counter);
+        return buildNode(
+          requestPeek.value,
+          `${pathPrefix}.request`,
+          1,
+          counter,
+        );
       }
     } else if (!kindPeek.success) {
       return kindPeek;
@@ -806,7 +839,9 @@ function renderSchemaLiteral(
       return `{ kind: "array", items: ${renderSchemaLiteral(schema.items, inner)}, maxItems: ${schema.maxItems} }`;
     case "string": {
       const pattern =
-        schema.pattern !== undefined ? `, pattern: ${JSON.stringify(schema.pattern)}` : "";
+        schema.pattern !== undefined
+          ? `, pattern: ${JSON.stringify(schema.pattern)}`
+          : "";
       return `{ kind: "string", maxLength: ${schema.maxLength}${pattern} }`;
     }
     case "integer":
