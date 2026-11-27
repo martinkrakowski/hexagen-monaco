@@ -1084,6 +1084,111 @@ describe("generateCodecTests refusals", () => {
     );
   });
 
+  it("charges the JSON size of false for boolean fields against the byte budget", () => {
+    // 64 boolean fields whose keys are 120 ASCII bytes each: the keys and
+    // separators alone charge 7,938 bytes, but the compact JSON sample
+    // ({"k…":false,…}) is 8,257 bytes. Each boolean value must be charged at
+    // its serialized size (5 bytes for `false`) so the object is refused.
+    const fields: Record<string, unknown> = {};
+    for (let i = 0; i < 64; i++) {
+      fields[`k${String(i).padStart(3, "0")}${"x".repeat(117)}`] = {
+        kind: "boolean",
+      };
+    }
+    try {
+      synthesizeValidSample({ kind: "object", exact: true, fields }, "probe");
+      assert.fail("expected TIMEOUT_OR_BUDGET for the 64-boolean object");
+    } catch (thrown) {
+      expectErrCode(thrown, "TIMEOUT_OR_BUDGET");
+    }
+    // One field fewer stays inside the budget (63 × 129 + 2 = 8,129 bytes):
+    // proves the refusal is the boolean charge crossing the boundary, not
+    // the shape itself.
+    const smaller: Record<string, unknown> = {};
+    for (const key of Object.keys(fields).slice(1)) {
+      smaller[key] = { kind: "boolean" };
+    }
+    assert.deepEqual(
+      synthesizeValidSample(
+        { kind: "object", exact: true, fields: smaller },
+        "probe",
+      ),
+      Object.keys(smaller)
+        .sort()
+        .reduce<Record<string, boolean>>((acc, key) => {
+          acc[key] = false;
+          return acc;
+        }, {}),
+    );
+  });
+
+  it("does not charge the discarded inner sample of a nullable contract against the byte budget", () => {
+    // `nullable` emits only `null` (4 JSON bytes). A string literal whose
+    // JSON size is exactly 8,192 bytes was refused because the discarded
+    // inner sample was charged first and the 4-byte null charge pushed the
+    // total over MAX_SAMPLE_BYTES — even though the emitted sample is `null`.
+    assert.equal(
+      synthesizeValidSample(
+        { kind: "nullable", of: { kind: "literal", value: "x".repeat(8190) } },
+        "probe",
+      ),
+      null,
+    );
+    // The inner contract is still validated (node budget, shape checks) —
+    // only its discarded sample bytes go uncharged.
+    try {
+      synthesizeValidSample(
+        {
+          kind: "nullable",
+          of: { kind: "object", exact: false, fields: {} },
+        },
+        "probe",
+      );
+      assert.fail("expected MALFORMED_CONTRACT for the bad inner node");
+    } catch (thrown) {
+      expectErrCode(thrown, "MALFORMED_CONTRACT");
+    }
+  });
+
+  it("matches long quantified examples with an iterative matcher and refuses budget exhaustion with TIMEOUT_OR_BUDGET, never a RangeError", () => {
+    // A long matching example against `a+` must still match: the bounded
+    // matcher keeps its continuation state on the heap, so the JS call stack
+    // is not consumed once per repetition.
+    assert.equal(
+      synthesizeValidSample(
+        {
+          kind: "string",
+          maxLength: 2000,
+          pattern: "a+",
+          example: "a".repeat(2000),
+        },
+        "probe",
+      ),
+      "a".repeat(2000),
+    );
+    // A far longer example exhausts the matching-step budget first; the
+    // refusal is the required TIMEOUT_OR_BUDGET, never a RangeError from a
+    // blown call stack.
+    try {
+      synthesizeValidSample(
+        {
+          kind: "string",
+          maxLength: 50_000,
+          pattern: "a+",
+          example: "a".repeat(50_000),
+        },
+        "probe",
+      );
+      assert.fail("expected TIMEOUT_OR_BUDGET for the 50,000-char example");
+    } catch (thrown) {
+      expectErrCode(thrown, "TIMEOUT_OR_BUDGET");
+      assert.ok(
+        !(thrown instanceof RangeError),
+        "the refusal must not be a RangeError",
+      );
+    }
+  });
+
   it("refuses detectable and revoked Proxies at array boundaries with HOSTILE_INPUT", async () => {
     // Detectable, non-throwing Proxy over an enum values array: reflection
     // would otherwise succeed through the traps.

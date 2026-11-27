@@ -760,78 +760,48 @@ function classMatches(
   return node.neg ? !matched : matched;
 }
 
-/** Continuation-passing bounded matcher: `k` receives the next index. */
-function matchNode(
-  node: PatternNode,
-  si: number,
-  state: MatchState,
-  k: (next: number) => boolean,
-): boolean {
-  step(state);
-  switch (node.t) {
-    case "char":
-      return si < state.s.length && state.s[si] === node.ch ? k(si + 1) : false;
-    case "any":
-      return si < state.s.length && state.s[si] !== "\n" ? k(si + 1) : false;
-    case "class":
-      return si < state.s.length && classMatches(node, state.s[si])
-        ? k(si + 1)
-        : false;
-    case "start":
-      return si === 0 ? k(si) : false;
-    case "end":
-      return si === state.s.length ? k(si) : false;
-    case "seq": {
-      const parts = node.parts;
-      const walk = (idx: number, pos: number): boolean => {
-        if (idx === parts.length) return k(pos);
-        return matchNode(parts[idx], pos, state, (next) => walk(idx + 1, next));
-      };
-      return walk(0, si);
-    }
-    case "alt":
-      for (const opt of node.opts) {
-        if (matchNode(opt, si, state, k)) return true;
-      }
-      return false;
-    case "quant":
-      return matchQuant(node, 0, si, state, k);
-  }
-}
-
-function matchQuant(
-  q: Extract<PatternNode, { t: "quant" }>,
-  count: number,
-  si: number,
-  state: MatchState,
-  k: (next: number) => boolean,
-): boolean {
-  step(state);
-  if (count < q.min) {
-    return matchNode(q.node, si, state, (next) => {
-      // An empty match cannot make progress toward `min`; refuse the loop.
-      if (next === si) return false;
-      return matchQuant(q, count + 1, next, state, k);
-    });
-  }
-  if (count < q.max) {
-    const more = matchNode(q.node, si, state, (next) =>
-      next === si ? false : matchQuant(q, count + 1, next, state, k),
-    );
-    if (more) return true;
-  }
-  return k(si);
-}
+/** Continuation frame of the iterative bounded matcher. */
+type QuantNode = Extract<PatternNode, { t: "quant" }>;
 
 /**
- * Bounded full-match check of `sample` against the pattern source. Never
- * constructs a native RegExp object for testing and never runs
- * `RegExp.test`/`exec` — matching is a bounded CPS walk over a parsed
- * subset (literals, `.`, classes, shorthands, groups, alternation,
- * quantifiers, anchors). Throws MALFORMED_CONTRACT for invalid syntax or
- * unsupported constructs, TIMEOUT_OR_BUDGET when the pattern-size or
- * matching-step budget is exhausted, and returns false when the sample does
- * not fully match.
+ * Frames are immutable: processing a frame pops it and pushes its successor,
+ * so a choice point restores the continuation state from a full snapshot of
+ * the stack taken when the choice was created (a length-based truncation
+ * would be wrong: a pop+push keeps the length while changing the content).
+ */
+type MatchFrame =
+  | { t: "seq"; parts: PatternNode[]; idx: number }
+  | { t: "quant"; q: QuantNode; count: number; p: number }
+  | { t: "quantRep"; q: QuantNode; count: number; p: number };
+
+/** A saved alternative: either another node to match, or "stop here". */
+type MatchAlt = { node: PatternNode; si: number } | { deliverP: number };
+
+/** The node currently being matched and the position to match it at. */
+interface MatchCursor {
+  node: PatternNode;
+  si: number;
+}
+
+interface MatchChoice {
+  /** Continuation-stack snapshot at the moment the choice was created. */
+  frames: MatchFrame[];
+  alts: MatchAlt[];
+}
+
+// Deliver outcomes for the matcher's main loop.
+const RESUME = 0; // `cur` was set — keep running.
+const DONE = 1; // the whole pattern matched.
+const FAIL = 2; // current path failed — backtrack.
+
+/**
+ * Iterative bounded matcher. The recursive CPS matcher it replaces recursed
+ * once per quantifier repetition, so a long matching example (e.g. `a+`
+ * against thousands of characters) exhausted the JavaScript call stack and
+ * surfaced as a `RangeError` before the step budget could run. The machine
+ * below keeps its continuation and backtrack state on the heap in explicitly
+ * bounded structures, so MAX_PATTERN_STEPS is always the first budget to
+ * blow — with the required TIMEOUT_OR_BUDGET refusal, never a RangeError.
  */
 export function matchesPatternBounded(
   pattern: string,
@@ -845,8 +815,166 @@ export function matchesPatternBounded(
     );
   }
   const ast = parsePatternOrThrow(pattern);
-  const state: MatchState = { s: sample, steps: 0 };
-  return matchNode(ast, 0, state, (end) => end === state.s.length);
+  const s = sample;
+  const state: MatchState = { s, steps: 0 };
+  let stack: MatchFrame[] = [];
+  const choices: MatchChoice[] = [];
+  let cur: MatchCursor | null = { node: ast, si: 0 };
+  let finished = false;
+
+  // Deliver a successful position `p` to the continuation stack.
+  const deliver = (p: number): number => {
+    for (;;) {
+      const frame = stack.pop();
+      if (frame === undefined) {
+        // Top-level continuation: the pattern matched iff the sample is
+        // fully consumed.
+        if (p === s.length) {
+          finished = true;
+          return DONE;
+        }
+        return FAIL;
+      }
+      switch (frame.t) {
+        case "seq": {
+          if (frame.idx < frame.parts.length) {
+            stack.push({ t: "seq", parts: frame.parts, idx: frame.idx + 1 });
+            cur = { node: frame.parts[frame.idx], si: p };
+            return RESUME;
+          }
+          break; // exhausted sequence tail: deliver p to the next frame
+        }
+        case "quant": {
+          step(state);
+          if (frame.count < frame.q.min) {
+            stack.push({
+              t: "quantRep",
+              q: frame.q,
+              count: frame.count,
+              p,
+            });
+            cur = { node: frame.q.node, si: p };
+            return RESUME;
+          }
+          if (frame.count < frame.q.max) {
+            // Greedy: try one more repetition, keeping "stop at p" as the
+            // backtrack alternative.
+            choices.push({
+              frames: stack.slice(),
+              alts: [{ deliverP: p }],
+            });
+            stack.push({
+              t: "quantRep",
+              q: frame.q,
+              count: frame.count,
+              p,
+            });
+            cur = { node: frame.q.node, si: p };
+            return RESUME;
+          }
+          break; // max reached: deliver p onward
+        }
+        case "quantRep": {
+          // An empty body match cannot make progress; refuse the loop.
+          if (frame.p === p) return FAIL;
+          stack.push({
+            t: "quant",
+            q: frame.q,
+            count: frame.count + 1,
+            p,
+          });
+          break; // deliver p to the quant frame
+        }
+      }
+    }
+  };
+
+  // Backtrack to the most recent choice point; false when none remain.
+  const backtrack = (): boolean => {
+    cur = null;
+    for (;;) {
+      const choice = choices.pop();
+      if (choice === undefined) return false;
+      // Restore the continuation stack exactly as it was when the choice
+      // was created (frames are immutable, so sharing them is safe).
+      stack = choice.frames;
+      const alt = choice.alts.shift();
+      if (alt === undefined) continue;
+      if ("node" in alt) {
+        cur = { node: alt.node, si: alt.si };
+        return true;
+      }
+      const r = deliver(alt.deliverP);
+      if (r === RESUME) return true;
+      if (r === DONE) return true; // finished flag is set
+      // FAIL: this alternative is exhausted too — keep backtracking.
+    }
+  };
+
+  for (;;) {
+    const active: MatchCursor | null = cur;
+    if (active === null) {
+      if (!backtrack()) return false;
+      if (finished) return true;
+      continue;
+    }
+    step(state);
+    const { node, si }: MatchCursor = active;
+    let outcome: number = FAIL;
+    switch (node.t) {
+      case "char":
+        outcome = si < s.length && s[si] === node.ch ? deliver(si + 1) : FAIL;
+        break;
+      case "any":
+        outcome = si < s.length && s[si] !== "\n" ? deliver(si + 1) : FAIL;
+        break;
+      case "class":
+        outcome =
+          si < s.length && classMatches(node, s[si]) ? deliver(si + 1) : FAIL;
+        break;
+      case "start":
+        outcome = si === 0 ? deliver(si) : FAIL;
+        break;
+      case "end":
+        outcome = si === s.length ? deliver(si) : FAIL;
+        break;
+      case "seq": {
+        if (node.parts.length === 0) {
+          outcome = deliver(si);
+        } else {
+          stack.push({ t: "seq", parts: node.parts, idx: 1 });
+          cur = { node: node.parts[0], si };
+          outcome = RESUME;
+        }
+        break;
+      }
+      case "alt": {
+        if (node.opts.length === 0) {
+          outcome = FAIL;
+        } else {
+          choices.push({
+            frames: stack.slice(),
+            alts: node.opts.slice(1).map((opt) => ({ node: opt, si })),
+          });
+          cur = { node: node.opts[0], si };
+          outcome = RESUME;
+        }
+        break;
+      }
+      case "quant": {
+        stack.push({ t: "quant", q: node, count: 0, p: si });
+        outcome = deliver(si);
+        break;
+      }
+    }
+    if (outcome === DONE) return true;
+    if (outcome === FAIL) {
+      if (!backtrack()) return false;
+      // backtrack() may complete the match through a saved "stop here"
+      // alternative that delivers to the top-level continuation.
+      if (finished) return true;
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1140,6 +1268,9 @@ function synthesizeNode(
       return value;
     }
     case "boolean":
+      // The serialized sample is `false` — 5 JSON bytes, charged like any
+      // other emitted value so wide boolean objects cannot dodge the budget.
+      chargeBytes(budget, 5, path);
       return false;
     case "enum": {
       const values = readOwnPlainProperty(node, "values");
@@ -1217,8 +1348,12 @@ function synthesizeNode(
         );
       }
       // Validate the inner node (it still charges the node budget) but emit
-      // the null sample — that is the deterministic valid value.
-      synthesizeNode(of, `${path}.of`, depth + 1, budget);
+      // the null sample — that is the deterministic valid value. The inner
+      // sample itself is discarded, so its bytes are charged against a
+      // scratch budget: only the emitted `null` (4 JSON bytes) counts.
+      const innerBudget: SynthesisBudget = { nodes: budget.nodes, bytes: 0 };
+      synthesizeNode(of, `${path}.of`, depth + 1, innerBudget);
+      budget.nodes = innerBudget.nodes;
       chargeBytes(budget, 4, path);
       return null;
     }
