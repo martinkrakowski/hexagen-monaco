@@ -40,6 +40,7 @@ import {
   MAX_PORTS_PER_CONTEXT,
   CodecTestGeneratorError,
   installIsProxyDetector,
+  looksLikeProxy,
   readOwnPlainProperty,
   synthesizeValidSample,
   validatePlainRecord,
@@ -54,8 +55,40 @@ installIsProxyDetector(types.isProxy);
 /** Default runtime module providing the fleet-v2 codec contract. */
 export const DEFAULT_RUNTIME_MODULE = "@fleet/shared";
 
-/** `runtimeModule` must be a safe package or relative specifier. */
-const RUNTIME_MODULE_PATTERN = /^[A-Za-z0-9@][A-Za-z0-9@/._-]*$/;
+/** Safe specifier characters shared by package and relative specifiers. */
+const SAFE_SPECIFIER_CHARS = /^[A-Za-z0-9@/._-]*$/;
+
+function malformedRuntimeModule(): CodecTestGeneratorError {
+  return new CodecTestGeneratorError(
+    "MALFORMED_CONTRACT",
+    "generator.codec.runtimeModule",
+    `generator.codec.runtimeModule must be a non-empty safe package or relative ("./…") specifier without whitespace or control characters`,
+  );
+}
+
+function validateRuntimeModule(value: unknown): string {
+  if (typeof value !== "string" || value.length === 0 || value.length > 256) {
+    throw malformedRuntimeModule();
+  }
+  // Package specifiers: first char alphanumeric or @ (never "." or "/").
+  // Relative specifiers: "./…" with non-empty, non-traversal segments.
+  if (value.startsWith("./")) {
+    const body = value.slice(2);
+    if (
+      !SAFE_SPECIFIER_CHARS.test(body) ||
+      body.split("/").some((seg) => seg === "" || seg === "." || seg === "..")
+    ) {
+      throw malformedRuntimeModule();
+    }
+  } else if (
+    !/^[A-Za-z0-9@]/.test(value) ||
+    !SAFE_SPECIFIER_CHARS.test(value) ||
+    value.split("/").some((seg) => seg === "" || seg === "." || seg === "..")
+  ) {
+    throw malformedRuntimeModule();
+  }
+  return value;
+}
 
 /** Port/module names must be safe path segments. */
 const SAFE_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
@@ -81,22 +114,6 @@ function validateSafeName(value: unknown, what: string): string {
     value.includes("..")
   ) {
     throw malformedName(what, value);
-  }
-  return value;
-}
-
-function validateRuntimeModule(value: unknown): string {
-  if (
-    typeof value !== "string" ||
-    value.length === 0 ||
-    value.length > 256 ||
-    !RUNTIME_MODULE_PATTERN.test(value)
-  ) {
-    throw new CodecTestGeneratorError(
-      "MALFORMED_CONTRACT",
-      "generator.codec.runtimeModule",
-      `generator.codec.runtimeModule must be a non-empty safe package or relative specifier without whitespace or control characters`,
-    );
   }
   return value;
 }
@@ -195,16 +212,40 @@ export async function generateCodecTests(
 function findBoundedContext(manifest: unknown, moduleName: string): unknown {
   const contexts = readOwnPlainProperty(manifest, "bounded_contexts");
   if (contexts === undefined) return undefined;
-  if (!Array.isArray(contexts)) {
+  // Detectable Proxies are refused BEFORE any reflection: getPrototypeOf,
+  // descriptor reads, `i in value` and `.length` would otherwise run Proxy
+  // traps.
+  if (looksLikeProxy(contexts)) {
+    throw new CodecTestGeneratorError(
+      "HOSTILE_INPUT",
+      "bounded_contexts",
+      `bounded_contexts is a detectable Proxy (Proxies are refused before reflection)`,
+    );
+  }
+  let isArray: boolean;
+  try {
+    isArray = Array.isArray(contexts);
+  } catch {
+    // A revoked Proxy can throw even from Array.isArray.
+    throw new CodecTestGeneratorError(
+      "HOSTILE_INPUT",
+      "bounded_contexts",
+      `reflection threw while inspecting bounded_contexts (revoked Proxy)`,
+    );
+  }
+  if (!isArray) {
     throw new CodecTestGeneratorError(
       "HOSTILE_INPUT",
       "bounded_contexts",
       `bounded_contexts must be a dense array`,
     );
   }
+  // Array.isArray succeeded; the reflection reads below still run inside
+  // their own trap-catching boundary against the (possibly Proxy) target.
+  const ctxArr = contexts as unknown[];
   let ctxLen: number;
   try {
-    ctxLen = contexts.length;
+    ctxLen = ctxArr.length;
   } catch {
     throw new CodecTestGeneratorError(
       "HOSTILE_INPUT",
@@ -222,7 +263,7 @@ function findBoundedContext(manifest: unknown, moduleName: string): unknown {
   for (let i = 0; i < ctxLen; i++) {
     let present: boolean;
     try {
-      present = i in contexts;
+      present = i in ctxArr;
     } catch {
       throw new CodecTestGeneratorError(
         "HOSTILE_INPUT",
@@ -241,7 +282,7 @@ function findBoundedContext(manifest: unknown, moduleName: string): unknown {
     // (readOwnPlainProperty would refuse the Array.prototype prototype).
     let desc: PropertyDescriptor | undefined;
     try {
-      desc = Object.getOwnPropertyDescriptor(contexts, String(i));
+      desc = Object.getOwnPropertyDescriptor(ctxArr, String(i));
     } catch {
       throw new CodecTestGeneratorError(
         "HOSTILE_INPUT",
@@ -271,7 +312,28 @@ function findBoundedContext(manifest: unknown, moduleName: string): unknown {
  * lengths) and `i in arr` for every index (refusing holes).
  */
 function readPortList(value: unknown, label: string): readonly unknown[] {
-  if (!Array.isArray(value)) {
+  // Detectable Proxies are refused BEFORE any reflection: getPrototypeOf,
+  // descriptor reads, `i in value` and `.length` would otherwise run Proxy
+  // traps.
+  if (looksLikeProxy(value)) {
+    throw new CodecTestGeneratorError(
+      "HOSTILE_INPUT",
+      label,
+      `${label} is a detectable Proxy (Proxies are refused before reflection)`,
+    );
+  }
+  let isArray: boolean;
+  try {
+    isArray = Array.isArray(value);
+  } catch {
+    // A revoked Proxy can throw even from Array.isArray.
+    throw new CodecTestGeneratorError(
+      "HOSTILE_INPUT",
+      label,
+      `reflection threw while inspecting ${label} (revoked Proxy)`,
+    );
+  }
+  if (!isArray) {
     throw new CodecTestGeneratorError(
       "HOSTILE_INPUT",
       label,

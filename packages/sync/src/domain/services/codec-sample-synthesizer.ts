@@ -50,7 +50,7 @@ export function installIsProxyDetector(fn: IsProxyDetector): void {
   isProxyDetector = fn;
 }
 
-function looksLikeProxy(value: unknown): boolean {
+export function looksLikeProxy(value: unknown): boolean {
   return isProxyDetector !== null && isProxyDetector(value);
 }
 
@@ -271,21 +271,82 @@ function chargeBytes(budget: SynthesisBudget, n: number, path: string): void {
   }
 }
 
+/**
+ * Exact UTF-8 byte length of `JSON.stringify(value)` for a string value,
+ * including the enclosing quotes and every escape sequence — the true
+ * serialized size of a string inside a JSON sample. Pure JS: the domain
+ * layer must not import node builtins.
+ */
+function jsonUtf8Length(value: string): number {
+  let total = 2; // enclosing quotes
+  let i = 0;
+  while (i < value.length) {
+    const cp = value.codePointAt(i) as number;
+    if (
+      cp === 0x08 ||
+      cp === 0x09 ||
+      cp === 0x0a ||
+      cp === 0x0c ||
+      cp === 0x0d
+    ) {
+      total += 2; // \b \t \n \f \r short escapes
+    } else if (cp < 0x20 || (cp >= 0xd800 && cp <= 0xdfff)) {
+      total += 6; // \uXXXX (JSON.stringify escapes lone surrogates too)
+    } else if (cp === 0x22 || cp === 0x5c) {
+      total += 2; // \" \\
+    } else if (cp < 0x7f) {
+      total += 1;
+    } else if (cp < 0x800) {
+      total += 2;
+    } else if (cp < 0x10000) {
+      total += 3;
+    } else {
+      total += 4;
+    }
+    i += cp > 0xffff ? 2 : 1;
+  }
+  return total;
+}
+
+/** Charge the actual UTF-8 size of the JSON-serialized string sample. */
+function chargeJsonString(
+  budget: SynthesisBudget,
+  value: string,
+  path: string,
+): void {
+  chargeBytes(budget, jsonUtf8Length(value), path);
+}
+
 /** Read an untrusted value as a dense array of bounded length. */
 function readBoundedDenseArray(
   value: unknown,
   maxLen: number,
   path: string,
 ): readonly unknown[] {
-  if (!Array.isArray(value)) {
+  // Detectable Proxies are refused BEFORE any reflection: getPrototypeOf,
+  // descriptor reads and `i in value` would otherwise run Proxy traps.
+  if (looksLikeProxy(value)) {
+    throw hostile(path, `refusing a Proxy array at ${path}`);
+  }
+  let isArray: boolean;
+  try {
+    isArray = Array.isArray(value);
+  } catch {
+    // A revoked Proxy can throw even from Array.isArray.
+    throw hostile(path, `reflection threw while inspecting the array`);
+  }
+  if (!isArray) {
     // Also covers array-likes ({ length: N }) and non-iterables.
     throw hostile(path, `expected a dense array at ${path}`);
   }
+  // Array.isArray succeeded; the reflection reads below still run inside
+  // their own trap-catching boundary against the (possibly Proxy) target.
+  const arr = value as unknown[];
   let proto: unknown;
   let lenDesc: PropertyDescriptor | undefined;
   try {
-    proto = Object.getPrototypeOf(value);
-    lenDesc = Object.getOwnPropertyDescriptor(value, "length");
+    proto = Object.getPrototypeOf(arr);
+    lenDesc = Object.getOwnPropertyDescriptor(arr, "length");
   } catch {
     throw hostile(path, `reflection threw while inspecting the array`);
   }
@@ -309,7 +370,7 @@ function readBoundedDenseArray(
   for (let i = 0; i < len; i++) {
     let present: boolean;
     try {
-      present = i in value;
+      present = i in arr;
     } catch {
       throw hostile(path, `reflection threw while probing index ${i}`);
     }
@@ -889,10 +950,14 @@ function synthesizeNode(
         );
       }
       const sample: Record<string, unknown> = {};
-      chargeBytes(budget, keys.length * 4 + 2, path);
+      // Braces, then the actual UTF-8 size of each JSON-serialized key with
+      // its colon/comma separators — charged per key, not approximated.
+      chargeBytes(budget, 2, path);
       for (const key of [...keys].sort((a, b) =>
         a < b ? -1 : a > b ? 1 : 0,
       )) {
+        chargeJsonString(budget, key, path);
+        chargeBytes(budget, 2, path); // ":" + ","
         let field = readOwnPlainProperty(fields, key);
         if (isPlainObjectSafe(field)) {
           const optional = readOwnPlainProperty(field, "optional");
@@ -972,24 +1037,47 @@ function synthesizeNode(
             `string "pattern" at ${path} must be a non-empty string`,
           );
         }
+        // Pattern syntax and size are validated BEFORE the example check so
+        // an invalid or over-budget pattern keeps its own error precedence
+        // even when the example is absent or not a string.
+        if (pattern.length > MAX_PATTERN_LENGTH) {
+          throw new CodecTestGeneratorError(
+            "TIMEOUT_OR_BUDGET",
+            "string.pattern",
+            `pattern size ${pattern.length} exceeds the budget (MAX_PATTERN_LENGTH = ${MAX_PATTERN_LENGTH})`,
+          );
+        }
+        parsePatternOrThrow(pattern);
         const example = readOwnPlainProperty(node, "example");
-        if (
-          example === undefined ||
-          typeof example !== "string" ||
-          !matchesPatternBounded(pattern, example)
-        ) {
+        if (example === undefined || typeof example !== "string") {
           throw new CodecTestGeneratorError(
             "MISSING_PATTERN_EXAMPLE",
             path,
             `pattern string at ${path} requires an explicit "example" matching the pattern`,
           );
         }
-        chargeBytes(budget, example.length, path);
+        if (!matchesPatternBounded(pattern, example)) {
+          throw new CodecTestGeneratorError(
+            "MISSING_PATTERN_EXAMPLE",
+            path,
+            `pattern string at ${path} requires an explicit "example" matching the pattern`,
+          );
+        }
+        if (example.length > maxLength) {
+          // The example is the emitted sample; one longer than the string's
+          // own maxLength is not a valid sample for the contract.
+          throw new CodecTestGeneratorError(
+            "MISSING_PATTERN_EXAMPLE",
+            path,
+            `pattern string "example" at ${path} is longer than the string bound maxLength (${maxLength}) and is not a valid sample`,
+          );
+        }
+        chargeJsonString(budget, example, path);
         return example;
       }
       // Deterministic minimal sample: "a".repeat(min(1, maxLength)) === "a"
       // for every accepted maxLength (>= 1).
-      chargeBytes(budget, 1, path);
+      chargeJsonString(budget, "a", path);
       return "a".repeat(Math.min(1, maxLength));
     }
     case "integer":
@@ -1027,6 +1115,27 @@ function synthesizeNode(
       if (min === undefined && max !== undefined && max < 0) {
         value = max; // 0 would violate the upper bound; clamp to max.
       }
+      if (kind === "integer") {
+        // Integer semantics: the emitted value must be an integer, so a
+        // fractional bound is rounded to the integer inside the bounds —
+        // and bounds containing no integer are refused.
+        if (min !== undefined) {
+          value = Math.ceil(min);
+          // Normalize -0 (e.g. ceil(-0.5)) to 0.
+          if (Object.is(value, -0)) value = 0;
+          if (max !== undefined && value > max) {
+            throw new CodecTestGeneratorError(
+              "UNSUPPORTED_NESTED_SHAPE",
+              path,
+              `integer bounds at ${path} contain no integer (min: ${min}, max: ${max})`,
+            );
+          }
+        } else if (max !== undefined && max < 0) {
+          value = Math.floor(max); // 0 would violate the upper bound
+        } else {
+          value = 0;
+        }
+      }
       chargeBytes(budget, String(value).length, path);
       return value;
     }
@@ -1063,7 +1172,7 @@ function synthesizeNode(
         }
       }
       const first = dense[0] as string;
-      chargeBytes(budget, first.length, path);
+      chargeJsonString(budget, first, path);
       return first;
     }
     case "literal": {
@@ -1087,7 +1196,15 @@ function synthesizeNode(
           `literal at ${path} must be a finite number`,
         );
       }
-      chargeBytes(budget, value === null ? 4 : String(value).length, path);
+      chargeBytes(
+        budget,
+        typeof value === "string"
+          ? jsonUtf8Length(value)
+          : value === null
+            ? 4
+            : String(value).length,
+        path,
+      );
       return value;
     }
     case "nullable": {

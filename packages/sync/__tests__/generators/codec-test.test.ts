@@ -913,6 +913,66 @@ describe("generateCodecTests refusals", () => {
         "CodecTests failure must surface in errors",
       );
     });
+
+    it("reports invalid module names in the engine's CodecTests traversal as typed failures instead of skipping silently", async () => {
+      fixtureRoot = await createFixture(
+        ["codec-test-target"],
+        "hexagen-codec-fix1-",
+      );
+      // A path-traversal module name used to be skipped silently — the run
+      // stayed green. It must now surface as a CodecTests failure.
+      const summary = await makeEngine(
+        fixtureRoot,
+        makeManifest({
+          extraContexts: [
+            {
+              name: "../evil",
+              type: "core",
+              layers: { application: { ports: { in: [], out: [] } } },
+            } as unknown as BoundedContext,
+          ],
+        }),
+        true,
+      ).run();
+      assert.ok(
+        summary.errors > 0,
+        "an invalid module name must surface as a CodecTests failure",
+      );
+    });
+
+    it("traverses manifest.bounded_contexts through the descriptor boundary in the engine path", async () => {
+      fixtureRoot = await createFixture(
+        ["codec-test-target"],
+        "hexagen-codec-fix1b-",
+      );
+      // A hostile accessor on manifest.bounded_contexts: the engine path must
+      // refuse it through the descriptor boundary (readOwnPlainProperty) and
+      // surface a typed CodecTests failure — without the fix, the raw
+      // `config.manifest.bounded_contexts` read returns [] silently.
+      let getterRan = false;
+      const manifest = makeManifest({
+        inPorts: [
+          { name: "place-order", contracts: { request: SIMPLE_REQUEST } },
+        ],
+      }) as unknown as Record<string, unknown>;
+      Object.defineProperty(manifest, "bounded_contexts", {
+        get() {
+          getterRan = true;
+          return [];
+        },
+        configurable: true,
+        enumerable: true,
+      });
+      const summary = await makeEngine(
+        fixtureRoot,
+        manifest as unknown as Manifest,
+        true,
+      ).run();
+      assert.ok(
+        summary.errors > 0,
+        "a hostile accessor on bounded_contexts must surface as a CodecTests failure",
+      );
+    });
   });
 
   // ---------------------------------------------------------------------------
@@ -966,6 +1026,198 @@ describe("generateCodecTests refusals", () => {
       assert.fail("expected TIMEOUT_OR_BUDGET for the backtracking pattern");
     } catch (thrown) {
       expectErrCode(thrown, "TIMEOUT_OR_BUDGET");
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // 16. Fix round 1 (review findings)
+  // ---------------------------------------------------------------------------
+
+  it("refuses a pattern example longer than maxLength (it is not a valid sample)", () => {
+    try {
+      synthesizeValidSample(
+        { kind: "string", maxLength: 1, pattern: "^a+$", example: "aa" },
+        "probe",
+      );
+      assert.fail("expected a refusal for the over-long example");
+    } catch (thrown) {
+      expectErrCode(thrown, "MISSING_PATTERN_EXAMPLE");
+    }
+    // The same example within the bound is accepted.
+    assert.equal(
+      synthesizeValidSample(
+        { kind: "string", maxLength: 2, pattern: "^a+$", example: "aa" },
+        "probe",
+      ),
+      "aa",
+    );
+  });
+
+  it("charges the actual UTF-8 size of the JSON-serialized sample against the byte budget", () => {
+    // 8191 ASCII characters: the JS string length (8191) passes the 8192
+    // budget but the serialized JSON literal (quotes included) is 8193 bytes.
+    try {
+      synthesizeValidSample(
+        { kind: "literal", value: "a".repeat(8191) },
+        "probe",
+      );
+      assert.fail("expected TIMEOUT_OR_BUDGET for the 8191-char literal");
+    } catch (thrown) {
+      expectErrCode(thrown, "TIMEOUT_OR_BUDGET");
+    }
+    // Non-ASCII: 4096 "é" characters have a JS length of 4096 but serialize
+    // to 8194 UTF-8 bytes.
+    try {
+      synthesizeValidSample(
+        { kind: "literal", value: "é".repeat(4096) },
+        "probe",
+      );
+      assert.fail("expected TIMEOUT_OR_BUDGET for the non-ASCII literal");
+    } catch (thrown) {
+      expectErrCode(thrown, "TIMEOUT_OR_BUDGET");
+    }
+    // The boundary itself stays accepted: an 8190-char literal serializes to
+    // 8192 bytes exactly.
+    assert.equal(
+      synthesizeValidSample({ kind: "literal", value: "a".repeat(8190) }, "p"),
+      "a".repeat(8190),
+    );
+  });
+
+  it("refuses detectable and revoked Proxies at array boundaries with HOSTILE_INPUT", async () => {
+    // Detectable, non-throwing Proxy over an enum values array: reflection
+    // would otherwise succeed through the traps.
+    try {
+      synthesizeValidSample(
+        { kind: "enum", values: new Proxy(["a"], {}) },
+        "probe",
+      );
+      assert.fail("expected HOSTILE_INPUT for the Proxy values array");
+    } catch (thrown) {
+      expectErrCode(thrown, "HOSTILE_INPUT");
+    }
+
+    // Same at the generator's ports-list boundary.
+    const proxyPorts = await generateCodecTests(
+      modulePath,
+      moduleName,
+      makeConfig(
+        workspaceRoot,
+        makeManifest({
+          inPorts: new Proxy(
+            [{ name: "place-order", contracts: { request: SIMPLE_REQUEST } }],
+            {},
+          ),
+        }),
+      ),
+    );
+    expectGenErrCode(proxyPorts, "HOSTILE_INPUT");
+
+    // A revoked Proxy throws even from Array.isArray — it must surface as
+    // HOSTILE_INPUT, not IO_FAILURE.
+    const { proxy, revoke } = Proxy.revocable([{ name: "p" }], {});
+    revoke();
+    const revoked = await generateCodecTests(
+      modulePath,
+      moduleName,
+      makeConfig(
+        workspaceRoot,
+        makeManifest({ inPorts: proxy as unknown as unknown[] }),
+      ),
+    );
+    expectGenErrCode(revoked, "HOSTILE_INPUT");
+  });
+
+  it("synthesizes integers inside fractional bounds and refuses bounds containing no integer", () => {
+    assert.equal(
+      synthesizeValidSample({ kind: "integer", min: 0.5, max: 5 }, "p"),
+      1,
+    );
+    assert.equal(
+      synthesizeValidSample({ kind: "integer", max: -0.5 }, "p"),
+      -1,
+    );
+    assert.equal(synthesizeValidSample({ kind: "integer", min: -0.5 }, "p"), 0);
+    try {
+      synthesizeValidSample({ kind: "integer", min: 0.5, max: 0.5 }, "p");
+      assert.fail(
+        "expected UNSUPPORTED_NESTED_SHAPE for integer bounds without an integer",
+      );
+    } catch (thrown) {
+      expectErrCode(thrown, "UNSUPPORTED_NESTED_SHAPE");
+    }
+    // Number contracts keep fractional samples.
+    assert.equal(synthesizeValidSample({ kind: "number", min: 0.5 }, "p"), 0.5);
+  });
+
+  it("validates pattern syntax and size before the example check (error precedence)", () => {
+    // Invalid pattern WITHOUT an example: was MISSING_PATTERN_EXAMPLE, must
+    // now be MALFORMED_CONTRACT.
+    try {
+      synthesizeValidSample(
+        { kind: "string", maxLength: 64, pattern: "[a-" },
+        "probe",
+      );
+      assert.fail("expected MALFORMED_CONTRACT");
+    } catch (thrown) {
+      expectErrCode(thrown, "MALFORMED_CONTRACT");
+    }
+    // Oversized pattern WITHOUT an example: TIMEOUT_OR_BUDGET.
+    try {
+      synthesizeValidSample(
+        {
+          kind: "string",
+          maxLength: 400,
+          pattern: `^a{1,10}${"b".repeat(300)}$`,
+        },
+        "probe",
+      );
+      assert.fail("expected TIMEOUT_OR_BUDGET");
+    } catch (thrown) {
+      expectErrCode(thrown, "TIMEOUT_OR_BUDGET");
+    }
+    // A missing example with a VALID pattern is still MISSING_PATTERN_EXAMPLE.
+    try {
+      synthesizeValidSample(
+        { kind: "string", maxLength: 8, pattern: "^[a-z]+$" },
+        "probe",
+      );
+      assert.fail("expected MISSING_PATTERN_EXAMPLE");
+    } catch (thrown) {
+      expectErrCode(thrown, "MISSING_PATTERN_EXAMPLE");
+    }
+  });
+
+  it("accepts safe relative runtimeModule specifiers and still refuses traversal", async () => {
+    const result = await generateCodecTests(
+      modulePath,
+      moduleName,
+      makeConfig(
+        workspaceRoot,
+        makeManifest({
+          codec: { runtimeModule: "./runtime" },
+          inPorts: [
+            { name: "place-order", contracts: { request: SIMPLE_REQUEST } },
+          ],
+        }),
+      ),
+    );
+    assert.equal(result.error, undefined);
+    const content = await fs.readFile(result.created[0], "utf8");
+    assert.ok(
+      content.includes('from "./runtime"'),
+      "a safe relative specifier must be accepted",
+    );
+    for (const bad of ["../evil", "a/../b", "./", "./..", ".hidden"]) {
+      const res = await generateCodecTests(
+        modulePath,
+        moduleName,
+        makeConfig(
+          workspaceRoot,
+          makeManifest({ codec: { runtimeModule: bad } }),
+        ),
+      );
+      expectGenErrCode(res, "MALFORMED_CONTRACT");
     }
   });
 });
