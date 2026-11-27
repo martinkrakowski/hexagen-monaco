@@ -126,6 +126,20 @@ function makeFail(
   });
 }
 
+/**
+ * `Array.isArray` that never throws (H1 review round 2). A revoked Proxy makes
+ * every operation — including `Array.isArray` — throw a TypeError; callers use
+ * the `"hostile"` sentinel to produce a typed HOSTILE_INPUT refusal instead of
+ * letting the throw escape the trust boundary.
+ */
+export function safeIsArray(value: unknown): boolean | "hostile" {
+  try {
+    return Array.isArray(value);
+  } catch {
+    return "hostile";
+  }
+}
+
 function isPlainObject(
   raw: unknown,
   fail: Fail,
@@ -136,7 +150,14 @@ function isPlainObject(
       "expected a plain object, got null, undefined, a primitive, or an array",
     );
   }
-  if (Array.isArray(raw)) {
+  const arrayCheck = safeIsArray(raw);
+  if (arrayCheck === "hostile") {
+    return fail(
+      "HOSTILE_INPUT",
+      "array inspection threw (revoked or hostile proxy)",
+    );
+  }
+  if (arrayCheck) {
     return fail("MALFORMED_CONTRACT", "arrays are not valid contract nodes");
   }
   let proto: object | null;
@@ -255,7 +276,14 @@ function validatePortContractNode(
       "expected a contract node object, got null, undefined, or a primitive",
     );
   }
-  if (Array.isArray(raw)) {
+  const nodeArrayCheck = safeIsArray(raw);
+  if (nodeArrayCheck === "hostile") {
+    return fail(
+      "HOSTILE_INPUT",
+      "array inspection threw (revoked or hostile proxy)",
+    );
+  }
+  if (nodeArrayCheck) {
     return fail(
       "MALFORMED_CONTRACT",
       "arrays are not valid contract nodes",
@@ -346,11 +374,21 @@ function validatePortContractNode(
         return fail("UNSUPPORTED_SHAPE", "object contract is missing `fields`");
       }
       const fields = fieldsRead.value;
+      const fieldsArrayCheck =
+        fields === null || fields === undefined || typeof fields !== "object"
+          ? false
+          : safeIsArray(fields);
+      if (fieldsArrayCheck === "hostile") {
+        return fail(
+          "HOSTILE_INPUT",
+          "array inspection on `fields` threw (revoked or hostile proxy)",
+        );
+      }
       if (
         fields === null ||
         fields === undefined ||
         typeof fields !== "object" ||
-        Array.isArray(fields)
+        fieldsArrayCheck
       ) {
         return fail(
           "UNSUPPORTED_SHAPE",
@@ -405,7 +443,17 @@ function validatePortContractNode(
           }
           const childPath = `${contractPath}.fields.${fieldName}`;
           const child = desc.value;
-          if (child === null || typeof child !== "object" || Array.isArray(child)) {
+          const childArrayCheck =
+            child === null || typeof child !== "object"
+              ? false
+              : safeIsArray(child);
+          if (childArrayCheck === "hostile") {
+            return fieldFail(
+              "HOSTILE_INPUT",
+              "array inspection on the field value threw (revoked or hostile proxy)",
+            );
+          }
+          if (child === null || typeof child !== "object" || childArrayCheck) {
             return fieldFail(
               "MALFORMED_CONTRACT",
               "field value must be a contract node or an `{ optional }` wrapper",
@@ -791,7 +839,7 @@ function readOwnData(
  */
 function inspectDenseArray(
   value: unknown,
-): { kind: "dense" } | { kind: "not-array" } | { kind: "hostile"; message: string } {
+): { kind: "dense"; length: number } | { kind: "not-array" } | { kind: "hostile"; message: string } {
   try {
     if (!Array.isArray(value)) {
       return { kind: "not-array" };
@@ -805,9 +853,37 @@ function inspectDenseArray(
         };
       }
     }
-    return { kind: "dense" };
+    return { kind: "dense", length };
   } catch (err) {
     return { kind: "hostile", message: `array inspection threw: ${String(err)}` };
+  }
+}
+
+/**
+ * Read one element of an already-inspected dense array by index via its OWN
+ * property descriptor (H1 review round 2). Never invokes a getter (an accessor
+ * index is reported as `error`) and never runs a custom `Symbol.iterator` —
+ * iteration over hostile arrays must not go through user-defined iteration.
+ */
+function readDenseElement(
+  arr: unknown[],
+  index: number,
+): { value: unknown } | { error: string } {
+  try {
+    const desc = Object.getOwnPropertyDescriptor(arr, String(index));
+    if (desc === undefined) {
+      return { error: `missing own data descriptor at index ${index}` };
+    }
+    if (desc.get !== undefined || desc.set !== undefined) {
+      return {
+        error: `index ${index} is an accessor; getters are never invoked`,
+      };
+    }
+    return { value: desc.value };
+  } catch (err) {
+    return {
+      error: `descriptor inspection at index ${index} threw: ${String(err)}`,
+    };
   }
 }
 
@@ -879,7 +955,15 @@ export function validateManifestPortContracts(
   if (contextsShape.kind !== "dense") {
     return { ok: true };
   }
-  for (const context of contexts as unknown[]) {
+  const contextsList = contexts as unknown[];
+  // Indexed descriptor loop (round 2): a `for...of` here would dispatch to a
+  // custom `Symbol.iterator` and run an index accessor; neither may execute.
+  for (let ci = 0; ci < contextsShape.length; ci += 1) {
+    const contextRead = readDenseElement(contextsList, ci);
+    if ("error" in contextRead) {
+      return hostile("<unnamed>", "bounded_contexts", contextRead.error);
+    }
+    const context = contextRead.value;
     if (context === null || typeof context !== "object") {
       continue;
     }
@@ -963,7 +1047,14 @@ export function validateManifestPortContracts(
       if (listShape.kind !== "dense") {
         continue;
       }
-      for (const port of list as unknown[]) {
+      const listArr = list as unknown[];
+      // Indexed descriptor loop (round 2): see the contexts loop above.
+      for (let pi = 0; pi < listShape.length; pi += 1) {
+        const portRead = readDenseElement(listArr, pi);
+        if ("error" in portRead) {
+          return hostile("<unnamed>", `ports.${direction}`, portRead.error);
+        }
+        const port = portRead.value;
         if (port === null || typeof port !== "object") {
           continue;
         }

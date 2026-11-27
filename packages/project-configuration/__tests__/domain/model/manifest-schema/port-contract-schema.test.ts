@@ -491,6 +491,56 @@ describe("validatePortContract", () => {
       "contracts.request",
     );
   });
+
+  it("a revoked Proxy as contract node, contract field and port definition returns HOSTILE_INPUT without throwing", () => {
+    const { proxy, revoke } = Proxy.revocable({}, {});
+    revoke();
+
+    // As a contract node: Array.isArray must never escape its guard.
+    let result = validatePortContract({ request: proxy }, PORT);
+    assert.equal(result.ok, false);
+    assert.equal(
+      (result as { error?: PortContractValidationError }).error?.code,
+      "HOSTILE_INPUT",
+    );
+
+    // As a contract field value.
+    result = validatePortContract(
+      {
+        request: {
+          kind: "object",
+          exact: true,
+          fields: { f: proxy },
+        },
+      },
+      PORT,
+    );
+    assert.equal(result.ok, false);
+    assert.equal(
+      (result as { error?: PortContractValidationError }).error?.code,
+      "HOSTILE_INPUT",
+    );
+
+    // As a port definition through PortDefinitionSchema.safeParse: the
+    // revoked proxy is the port's `contracts` value, which reaches
+    // validatePortContract via descriptor inspection and must come back as a
+    // typed HOSTILE_INPUT issue, never a throw. (A revoked proxy as the raw
+    // parse input itself is refused inside Zod's own getParsedType before any
+    // preprocess runs — outside this module's trust boundary.)
+    const parsed = PortDefinitionSchema.safeParse({
+      name: "p",
+      contracts: proxy,
+    });
+    assert.equal(parsed.success, false);
+    if (!parsed.success) {
+      assert.ok(
+        parsed.error.issues.some((issue) =>
+          issue.message.includes("HOSTILE_INPUT"),
+        ),
+        `expected HOSTILE_INPUT, got ${JSON.stringify(parsed.error.issues)}`,
+      );
+    }
+  });
 });
 
 describe("validateManifestPortContracts", () => {
@@ -590,6 +640,67 @@ describe("validateManifestPortContracts", () => {
     assert.ok(error instanceof PortContractValidationError);
     assert.equal(error.code, "HOSTILE_INPUT");
     assert.match(error.contractPath, /ports\.out/);
+  });
+
+  it("validateManifestPortContracts refuses an array index accessor and ignores a custom iterator that would skip an invalid port", () => {
+    // An accessor at index 0 of the ports array: the descriptor is read
+    // without ever invoking the getter, and the array is refused.
+    let indexGetterRan = false;
+    const accessorPorts: unknown[] = [];
+    Object.defineProperty(accessorPorts, "0", {
+      get() {
+        indexGetterRan = true;
+        return { name: "HiddenBadPort", contracts: { request: {} } };
+      },
+      enumerable: true,
+      configurable: true,
+    });
+    accessorPorts.length = 1;
+    const accessorResult = validateManifestPortContracts({
+      bounded_contexts: [
+        {
+          name: "ctx",
+          layers: { application: { ports: { out: accessorPorts } } },
+        },
+      ],
+    });
+    assert.equal(accessorResult.ok, false, "an index accessor must be refused");
+    const accessorError = (accessorResult as { error: PortContractValidationError })
+      .error;
+    assert.ok(accessorError instanceof PortContractValidationError);
+    assert.equal(accessorError.code, "HOSTILE_INPUT");
+    assert.equal(indexGetterRan, false, "the index getter was invoked");
+
+    // A custom Symbol.iterator that skips the invalid port: iteration must be
+    // index-descriptor-based, so the invalid port is still found.
+    let iteratorRan = false;
+    const badPort = {
+      name: "BadPort",
+      contracts: { request: { kind: "string" } }, // missing maxLength
+    };
+    const goodPort = { name: "GoodPort" };
+    const ports = [badPort, goodPort];
+    Object.defineProperty(ports, Symbol.iterator, {
+      *value() {
+        iteratorRan = true;
+        yield goodPort; // skips badPort entirely
+      },
+      enumerable: false,
+      configurable: true,
+    });
+    const result = validateManifestPortContracts({
+      bounded_contexts: [
+        {
+          name: "ctx",
+          layers: { application: { ports: { out: ports } } },
+        },
+      ],
+    });
+    assert.equal(iteratorRan, false, "the custom iterator was invoked");
+    assert.equal(result.ok, false, "the skipped invalid port must be found");
+    const error = (result as { error: PortContractValidationError }).error;
+    assert.ok(error instanceof PortContractValidationError);
+    assert.equal(error.portName, "BadPort");
   });
 });
 

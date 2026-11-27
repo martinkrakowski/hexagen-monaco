@@ -3,6 +3,7 @@ import { boundedContextTypeSchema } from "@hexagen/shared";
 import {
   validatePortContract,
   CodecGeneratorBlockSchema,
+  safeIsArray,
 } from "./port-contract-schema";
 
 /**
@@ -93,7 +94,18 @@ export const RelationshipSchema = z.object({
 export const PortDefinitionSchema = z
   .preprocess(
     (raw, ctx) => {
-      if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
+      // `Array.isArray` can throw on a revoked proxy (round 2) — route the
+      // hostility through a typed HOSTILE_INPUT issue, never a throw.
+      const arrayCheck = safeIsArray(raw);
+      if (arrayCheck === "hostile") {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["contracts"],
+          message: `HOSTILE_INPUT: array inspection threw (revoked or hostile proxy)`,
+        });
+        return z.NEVER;
+      }
+      if (raw === null || typeof raw !== "object" || arrayCheck) {
         // Not a port object at all — let the inner z.object produce its own
         // typed type-error; nothing here can invoke a getter.
         return raw;
@@ -135,6 +147,23 @@ export const PortDefinitionSchema = z
         }
       }
       if (contractsDesc !== undefined) {
+        // A revoked Proxy as the contracts value: Zod's own `getParsedType`
+        // would run `Array.isArray` on it during the inner object parse and
+        // throw. Inspect it here, inside the guarded boundary, and refuse it
+        // as HOSTILE_INPUT instead of ever handing it to Zod internals.
+        const contractsArrayCheck = safeIsArray(contractsDesc.value);
+        if (
+          contractsDesc.value !== null &&
+          typeof contractsDesc.value === "object" &&
+          contractsArrayCheck === "hostile"
+        ) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["contracts"],
+            message: `HOSTILE_INPUT: array inspection on "contracts" threw (revoked or hostile proxy)`,
+          });
+          return z.NEVER;
+        }
         copy.contracts = contractsDesc.value;
       }
       return copy;
