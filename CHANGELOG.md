@@ -9,6 +9,28 @@ Release notes for the co-published `@hexagen-monaco/sync` and
 (F1 preflight, #432): a merged bump blocks deploys until it is published. That
 is the guard working, not a fault to bypass.
 
+## 0.17.0
+
+**Typed port contracts and generated hostile-input codecs.** A manifest port may
+now declare `contracts`, and `hexagen sync` emits a codec and an adversarial
+test for each such port, written against the runtime module named by
+`codec.runtimeModule` (default `@fleet/shared`). `hexagen-lint` gains the
+`in-port-unknown` rule behind a ratchet baseline.
+
+**Minor, not patch.** One new optional manifest field, two new generators and one
+new lint rule. Ports without `contracts` produce no new output, and existing
+projects see the new lint findings only as ratcheted baseline entries.
+
+### `hexagen sync`
+
+- Port schema and loader validation accept typed `contracts` per port (#920).
+- Emits `<PortName>.codec.ts` per contract-bearing port (#921, #922).
+- Emits `<PortName>.codec.test.ts`, an adversarial corpus test with a bounded sample synthesizer (#924).
+
+### `hexagen-lint`
+
+- New `in-port-unknown` rule: an application in-port may not accept `unknown`. Existing findings are suppressed through `.architecture/arch-lint-baseline.json` and ratcheted down; baseline parsing now refuses unknown keys, reserved keys and over-long fields (#923).
+
 ## 0.16.0
 
 **Faster `hexagen sync`, and drift a caller can act on.** On a large consumer
