@@ -16,7 +16,12 @@ export interface DomainLayer {
 export type PortContractField =
   | {
       kind: "object";
-      exact: true;
+      /**
+       * Optional but, when present, must be `true`: the runtime contract
+       * validator (validatePortContract) accepts objects with `exact`
+       * omitted, so the static type mirrors that (H1 review round 1).
+       */
+      exact?: true;
       fields: Record<string, PortContractField | { optional: PortContractField }>;
     }
   | { kind: "array"; items: PortContractField; maxItems: number }

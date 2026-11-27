@@ -955,4 +955,94 @@ describe("mergeSplitManifest port-contract validation (H1)", () => {
     const result = await mergeSplitManifest(dir, manifestPath);
     assert.equal(result.bounded_contexts![0].name, "ctx");
   });
+
+  it("mergeSplitManifest refuses an invalid contract in a split context file", async () => {
+    const dir = await setupDir();
+    const archDir = join(dir, ".architecture");
+    const contextsDir = join(archDir, "contexts", "core", "ctx-c");
+    await mkdir(contextsDir, { recursive: true });
+
+    const indexYaml = [
+      `version: '2.0'`,
+      `description: split contract fixture`,
+      `system: split-bad-system`,
+      `scope: split-bad-scope`,
+      `bounded_contexts:`,
+      `  - name: ctx-c`,
+      `    type: core`,
+      `    file: contexts/core/ctx-c/context.yaml`,
+    ].join("\n");
+
+    const contextYaml = [
+      `name: ctx-c`,
+      `type: core`,
+      `layers:`,
+      `  application:`,
+      `    ports:`,
+      `      out:`,
+      `        - name: SplitBadPort`,
+      `          contracts:`,
+      `            request:`,
+      `              kind: string`,
+    ].join("\n");
+
+    await writeFile(join(archDir, "manifest.yaml"), indexYaml, "utf-8");
+    await writeFile(join(contextsDir, "context.yaml"), contextYaml, "utf-8");
+
+    await assert.rejects(
+      () => mergeSplitManifest(dir, join(archDir, "manifest.yaml")),
+      (err: unknown) => {
+        assert.ok(err instanceof PortContractValidationError);
+        assert.equal(err.code, "MISSING_BOUND");
+        assert.equal(err.portName, "SplitBadPort");
+        assert.match(err.contractPath, /contracts\.request/);
+        return true;
+      },
+    );
+  });
+
+  it("mergeSplitManifest accepts a valid contract in a split context file", async () => {
+    const dir = await setupDir();
+    const archDir = join(dir, ".architecture");
+    const contextsDir = join(archDir, "contexts", "core", "ctx-d");
+    await mkdir(contextsDir, { recursive: true });
+
+    const indexYaml = [
+      `version: '2.0'`,
+      `description: split contract fixture`,
+      `system: split-ok-system`,
+      `scope: split-ok-scope`,
+      `bounded_contexts:`,
+      `  - name: ctx-d`,
+      `    type: core`,
+      `    file: contexts/core/ctx-d/context.yaml`,
+    ].join("\n");
+
+    const contextYaml = [
+      `name: ctx-d`,
+      `type: core`,
+      `layers:`,
+      `  application:`,
+      `    ports:`,
+      `      out:`,
+      `        - name: SplitOkPort`,
+      `          contracts:`,
+      `            request:`,
+      `              kind: object`,
+      `              exact: true`,
+      `              fields:`,
+      `                id:`,
+      `                  kind: integer`,
+      `                  min: 0`,
+    ].join("\n");
+
+    await writeFile(join(archDir, "manifest.yaml"), indexYaml, "utf-8");
+    await writeFile(join(contextsDir, "context.yaml"), contextYaml, "utf-8");
+
+    const result = await mergeSplitManifest(
+      dir,
+      join(archDir, "manifest.yaml"),
+    );
+    assert.ok(result.bounded_contexts!.some((c) => c.name === "ctx-d"));
+  });
 });

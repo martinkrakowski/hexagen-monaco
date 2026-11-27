@@ -77,20 +77,83 @@ export const RelationshipSchema = z.object({
   notes: z.string().optional(),
 });
 
+/**
+ * BLOCKER guard (H1 review round 1): a bare `z.object({ contracts: ... })`
+ * makes Zod itself read `contracts` through a getter during key lookup,
+ * BEFORE `.superRefine` descriptor inspection runs. The `z.preprocess` below
+ * intercepts the raw input first: it reads the OWN `contracts` descriptor,
+ * refuses an accessor (HOSTILE_INPUT) without ever invoking it, and hands the
+ * inner object a plain-data copy built from own data descriptors only —
+ * `name`/`owner` are copied the same way so no getter anywhere on the port
+ * object fires. Presence semantics are preserved: a present own data
+ * `contracts` key (even with value `undefined`) is copied as-is, so the
+ * `superRefine` below still turns it into MALFORMED_CONTRACT, while an absent
+ * key passes untouched.
+ */
 export const PortDefinitionSchema = z
-  .object({
-    name: z.string(),
-    owner: z.string().optional(),
-    // Declared as `z.unknown()` WITHOUT `.optional()` semantics relied on for
-    // presence: the presence check happens in `superRefine` below via
-    // `Object.getOwnPropertyDescriptor(port, "contracts")` only — never
-    // `port.contracts` — so a present own `contracts` property whose value is
-    // `undefined` is MALFORMED, while an absent key passes untouched. The deep
-    // validation itself lives in validatePortContract (port-contract-schema.ts)
-    // so Zod never parses untrusted `contracts:` data before descriptor
-    // inspection runs.
-    contracts: z.unknown().optional(),
-  })
+  .preprocess(
+    (raw, ctx) => {
+      if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
+        // Not a port object at all — let the inner z.object produce its own
+        // typed type-error; nothing here can invoke a getter.
+        return raw;
+      }
+      let contractsDesc: PropertyDescriptor | undefined;
+      try {
+        contractsDesc = Object.getOwnPropertyDescriptor(raw, "contracts");
+      } catch {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["contracts"],
+          message: `HOSTILE_INPUT: descriptor inspection on "contracts" threw`,
+        });
+        return z.NEVER;
+      }
+      if (
+        contractsDesc !== undefined &&
+        (contractsDesc.get !== undefined || contractsDesc.set !== undefined)
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["contracts"],
+          message: `HOSTILE_INPUT: "contracts" is an accessor; getters are never invoked`,
+        });
+        return z.NEVER;
+      }
+      const copy: Record<string, unknown> = {};
+      for (const key of ["name", "owner"] as const) {
+        try {
+          const desc = Object.getOwnPropertyDescriptor(raw, key);
+          // Accessors and thrown traps on name/owner are ignored here: the
+          // inner z.object then reports the missing/invalid `name` as a
+          // typed issue — never a throw.
+          if (desc !== undefined && desc.get === undefined && desc.set === undefined) {
+            copy[key] = desc.value;
+          }
+        } catch {
+          // Fall through: the key is simply not copied.
+        }
+      }
+      if (contractsDesc !== undefined) {
+        copy.contracts = contractsDesc.value;
+      }
+      return copy;
+    },
+    z.object({
+      name: z.string(),
+      owner: z.string().optional(),
+      // Declared as `z.unknown()` WITHOUT `.optional()` semantics relied on for
+      // presence: the presence check happens in `superRefine` below via
+      // `Object.getOwnPropertyDescriptor(port, "contracts")` only — never
+      // `port.contracts` — so a present own `contracts` property whose value is
+      // `undefined` is MALFORMED, while an absent key passes untouched. The deep
+      // validation itself lives in validatePortContract (port-contract-schema.ts)
+      // so Zod never parses untrusted `contracts:` data before descriptor
+      // inspection runs. The preprocess above guarantees this object only ever
+      // sees plain data.
+      contracts: z.unknown().optional(),
+    }),
+  )
   .superRefine((val, ctx) => {
     let desc: PropertyDescriptor | undefined;
     try {

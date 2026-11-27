@@ -9,7 +9,7 @@ import {
   MAX_CONTRACT_FIELDS,
   MAX_CONTRACT_NODES,
 } from "../../../../src/domain/model/manifest-schema/port-contract-schema";
-import { PortDefinitionSchema } from "../../../../src/domain/model/manifest-schema/manifest-schema";
+import { PortDefinitionSchema, GeneratorBlockSchema } from "../../../../src/domain/model/manifest-schema/manifest-schema";
 
 const PORT = "MyPort";
 
@@ -454,6 +454,32 @@ describe("validatePortContract", () => {
     );
   });
 
+  it("refuses a revoked Proxy and a Proxy array whose length trap throws with HOSTILE_INPUT", () => {
+    const { proxy, revoke } = Proxy.revocable({}, {});
+    revoke();
+    assertError(
+      validatePortContract({ request: { kind: "enum", values: proxy } }, PORT),
+      "HOSTILE_INPUT",
+      "contracts.request",
+    );
+    const throwingLength = new Proxy(["a", "b"], {
+      get(target, key, receiver) {
+        if (key === "length") {
+          throw new TypeError("length trap");
+        }
+        return Reflect.get(target, key, receiver);
+      },
+    });
+    assertError(
+      validatePortContract(
+        { request: { kind: "enum", values: throwingLength } },
+        PORT,
+      ),
+      "HOSTILE_INPUT",
+      "contracts.request",
+    );
+  });
+
   it("refuses an enum.values array above MAX_CONTRACT_FIELDS with MAX_FIELDS_EXCEEDED", () => {
     const values: string[] = [];
     for (let i = 0; i < MAX_CONTRACT_FIELDS + 1; i += 1) {
@@ -529,9 +555,58 @@ describe("validateManifestPortContracts", () => {
     };
     assert.deepEqual(validateManifestPortContracts(manifest), { ok: true });
   });
+  it("validateManifestPortContracts refuses a hostile manifest accessor with HOSTILE_INPUT", () => {
+    const result = validateManifestPortContracts({
+      get bounded_contexts() {
+        return [
+          {
+            name: "ctx",
+            layers: { application: { ports: { out: [{ name: "P" }] } } },
+          },
+        ];
+      },
+    });
+    assert.equal(result.ok, false, "an accessor must never be read");
+    const error = (result as { error: PortContractValidationError }).error;
+    assert.ok(error instanceof PortContractValidationError);
+    assert.equal(error.code, "HOSTILE_INPUT");
+    assert.match(error.contractPath, /bounded_contexts/);
+  });
+
+  it("validateManifestPortContracts refuses a sparse ports array with HOSTILE_INPUT", () => {
+    const sparse = [{ name: "GoodPort" }];
+    // Hole at index 1: length 3 with only index 0 present.
+    sparse.length = 3;
+    const result = validateManifestPortContracts({
+      bounded_contexts: [
+        {
+          name: "ctx",
+          layers: { application: { ports: { out: sparse } } },
+        },
+      ],
+    });
+    assert.equal(result.ok, false, "a sparse ports array must be refused");
+    const error = (result as { error: PortContractValidationError }).error;
+    assert.ok(error instanceof PortContractValidationError);
+    assert.equal(error.code, "HOSTILE_INPUT");
+    assert.match(error.contractPath, /ports\.out/);
+  });
 });
 
 describe("CodecGeneratorBlockSchema", () => {
+  it("GeneratorBlockSchema accepts and defaults generator.codec.runtimeModule", () => {
+    // Parsed through the full generator block, not just the codec sub-schema.
+    assert.deepEqual(GeneratorBlockSchema.parse({ codec: {} }), {
+      codec: { runtimeModule: "@fleet/shared" },
+    });
+    assert.deepEqual(
+      GeneratorBlockSchema.parse({ codec: { runtimeModule: "@custom/x" } }),
+      { codec: { runtimeModule: "@custom/x" } },
+    );
+    assert.throws(() => GeneratorBlockSchema.parse({ codec: { runtimeModule: "" } }));
+    assert.throws(() => GeneratorBlockSchema.parse({ codec: { runtimeModule: 42 } }));
+  });
+
   it("defaults generator.codec.runtimeModule to '@fleet/shared' when codec is {} and omits codec when absent", () => {
     assert.deepEqual(CodecGeneratorBlockSchema.parse({}), {
       runtimeModule: DEFAULT_CODEC_RUNTIME_MODULE,
@@ -554,6 +629,27 @@ describe("CodecGeneratorBlockSchema", () => {
 });
 
 describe("PortDefinitionSchema contracts integration", () => {
+  it("PortDefinitionSchema refuses a contracts getter without invoking it", () => {
+    let getterRan = false;
+    const input = {
+      name: "p",
+      get contracts() {
+        getterRan = true;
+        return { request: { kind: "boolean" } };
+      },
+    };
+    const result = PortDefinitionSchema.safeParse(input);
+    assert.equal(result.success, false, "an accessor must be refused");
+    if (!result.success) {
+      const messages = result.error.issues.map((issue) => issue.message);
+      assert.ok(
+        messages.some((message) => message.includes("HOSTILE_INPUT")),
+        `expected HOSTILE_INPUT in ${JSON.stringify(messages)}`,
+      );
+    }
+    assert.equal(getterRan, false, "the getter must never be invoked");
+  });
+
   it("refuses an explicit contracts: undefined with MALFORMED_CONTRACT", () => {
     const result = PortDefinitionSchema.safeParse({
       name: "p",

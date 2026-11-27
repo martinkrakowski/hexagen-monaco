@@ -584,10 +584,18 @@ function validatePortContractNode(
       }
       const list = values.value;
       // Non-array iterables, non-iterables, and array-likes are refused here;
-      // only genuine dense string arrays are accepted.
+      // only genuine dense string arrays are accepted. `Array.isArray` can
+      // throw on a revoked proxy and the `length` read can throw on a proxy
+      // with a hostile get trap — both are caught and mapped to HOSTILE_INPUT
+      // (H1 review round 1). The length is cached so later loop reads never
+      // touch the hostile object again.
       let isArray: boolean;
+      let arrayLength = 0;
       try {
         isArray = Array.isArray(list);
+        if (isArray) {
+          arrayLength = (list as unknown[]).length;
+        }
       } catch (err) {
         return fail(
           "HOSTILE_INPUT",
@@ -602,19 +610,19 @@ function validatePortContractNode(
       }
       const arr = list as unknown[];
       // Enormous lengths are refused in O(1), BEFORE any index iteration.
-      if (arr.length > MAX_CONTRACT_FIELDS) {
+      if (arrayLength > MAX_CONTRACT_FIELDS) {
         return fail(
           "MAX_FIELDS_EXCEEDED",
           `enum \`values\` exceeds MAX_CONTRACT_FIELDS (${MAX_CONTRACT_FIELDS})`,
         );
       }
-      if (arr.length === 0) {
+      if (arrayLength === 0) {
         return fail(
           "UNSUPPORTED_SHAPE",
           "enum `values` must be a non-empty array of strings",
         );
       }
-      for (let i = 0; i < arr.length; i += 1) {
+      for (let i = 0; i < arrayLength; i += 1) {
         try {
           const desc = Object.getOwnPropertyDescriptor(arr, i);
           if (desc === undefined) {
@@ -750,107 +758,250 @@ export function validatePortContract(
  *
  * Cost: O(C * P) contexts-and-ports with O(MAX_CONTRACT_NODES) per contract.
  */
+/**
+ * Descriptor-based own-property read. Never invokes getters (accessors are
+ * reported as `error`) and never lets a proxy trap escape (thrown traps are
+ * reported as `error`).
+ */
+function readOwnData(
+  value: object,
+  key: string,
+): { present: boolean; value?: unknown; error?: string } {
+  try {
+    const desc = Object.getOwnPropertyDescriptor(value, key);
+    if (desc === undefined) {
+      return { present: false };
+    }
+    if (desc.get !== undefined || desc.set !== undefined) {
+      return { present: false, error: "accessor; getters are never invoked" };
+    }
+    return { present: true, value: desc.value };
+  } catch (err) {
+    return {
+      present: false,
+      error: `reflection threw: ${String(err)}`,
+    };
+  }
+}
+
+/**
+ * `Array.isArray` plus a density check. A revoked proxy throws inside
+ * `Array.isArray`; a sparse array has holes — both are hostile. A dense
+ * genuine array is reported as dense; anything else as not-an-array.
+ */
+function inspectDenseArray(
+  value: unknown,
+): { kind: "dense" } | { kind: "not-array" } | { kind: "hostile"; message: string } {
+  try {
+    if (!Array.isArray(value)) {
+      return { kind: "not-array" };
+    }
+    const length = value.length;
+    for (let i = 0; i < length; i += 1) {
+      if (!(i in value)) {
+        return {
+          kind: "hostile",
+          message: `sparse array (hole at index ${i})`,
+        };
+      }
+    }
+    return { kind: "dense" };
+  } catch (err) {
+    return { kind: "hostile", message: `array inspection threw: ${String(err)}` };
+  }
+}
+
+function hostile(
+  portName: string,
+  contractPath: string,
+  message: string,
+): PortContractValidationResult {
+  return {
+    ok: false,
+    error: new PortContractValidationError("HOSTILE_INPUT", portName, contractPath, message),
+  };
+}
+
+/**
+ * Walk every application-layer port of every bounded context in a manifest
+ * (raw parsed YAML or a validated manifest — both are plain data) and validate
+ * each declared `contracts:` block. Ports without a `contracts` own property
+ * pass untouched; domain-layer ports are never visited.
+ *
+ * H1 review round 1: every property read (manifest, bounded_contexts, layers,
+ * port lists, port names) goes through descriptor reads wrapped in try/catch —
+ * a getter, a throwing proxy trap, or a non-dense array yields HOSTILE_INPUT,
+ * never `{ ok: true }` and never a throw.
+ *
+ * Cost: O(C * P) contexts-and-ports with O(MAX_CONTRACT_NODES) per contract.
+ */
 export function validateManifestPortContracts(
   manifest: unknown,
 ): PortContractValidationResult {
-  if (manifest === null || typeof manifest !== "object" || Array.isArray(manifest)) {
+  if (manifest === null || typeof manifest !== "object") {
     return { ok: true };
   }
-  let contexts: unknown;
-  try {
-    contexts = (manifest as Record<string, unknown>).bounded_contexts;
-  } catch {
+  // `Array.isArray` can throw on a revoked proxy — never let it escape.
+  const manifestShape = inspectDenseArray(manifest);
+  if (manifestShape.kind === "hostile") {
+    return hostile(
+      "<unnamed>",
+      "manifest",
+      manifestShape.message,
+    );
+  }
+  if (manifestShape.kind === "dense") {
     return { ok: true };
   }
-  if (!Array.isArray(contexts)) {
+  const boundedContextsRead = readOwnData(
+    manifest as object,
+    "bounded_contexts",
+  );
+  if (boundedContextsRead.error !== undefined) {
+    return hostile(
+      "<unnamed>",
+      "manifest.bounded_contexts",
+      boundedContextsRead.error,
+    );
+  }
+  if (!boundedContextsRead.present) {
     return { ok: true };
   }
-  for (const context of contexts) {
-    if (context === null || typeof context !== "object" || Array.isArray(context)) {
+  const contexts = boundedContextsRead.value;
+  const contextsShape = inspectDenseArray(contexts);
+  if (contextsShape.kind === "hostile") {
+    return hostile(
+      "<unnamed>",
+      "manifest.bounded_contexts",
+      contextsShape.message,
+    );
+  }
+  if (contextsShape.kind !== "dense") {
+    return { ok: true };
+  }
+  for (const context of contexts as unknown[]) {
+    if (context === null || typeof context !== "object") {
       continue;
     }
-    let ports: unknown;
-    try {
-      const layers = (context as Record<string, unknown>).layers;
-      if (layers === null || typeof layers !== "object") {
-        continue;
-      }
-      const application = (layers as Record<string, unknown>).application;
-      if (application === null || typeof application !== "object") {
-        continue;
-      }
-      ports = (application as Record<string, unknown>).ports;
-    } catch {
-      return {
-        ok: false,
-        error: new PortContractValidationError(
-          "HOSTILE_INPUT",
-          "<unnamed>",
-          "bounded_contexts",
-          "reflection over the context's layers threw",
-        ),
-      };
+    const contextShape = inspectDenseArray(context);
+    if (contextShape.kind === "hostile") {
+      return hostile(
+        "<unnamed>",
+        "bounded_contexts",
+        contextShape.message,
+      );
     }
-    if (ports === null || typeof ports !== "object" || Array.isArray(ports)) {
+    if (contextShape.kind === "dense") {
+      continue;
+    }
+    const layersRead = readOwnData(context, "layers");
+    if (layersRead.error !== undefined) {
+      return hostile(
+        "<unnamed>",
+        "bounded_contexts.layers",
+        layersRead.error,
+      );
+    }
+    if (!layersRead.present) {
+      continue;
+    }
+    const layers = layersRead.value;
+    if (layers === null || typeof layers !== "object") {
+      continue;
+    }
+    const applicationRead = readOwnData(layers, "application");
+    if (applicationRead.error !== undefined) {
+      return hostile(
+        "<unnamed>",
+        "bounded_contexts.layers.application",
+        applicationRead.error,
+      );
+    }
+    if (!applicationRead.present) {
+      continue;
+    }
+    const application = applicationRead.value;
+    if (application === null || typeof application !== "object") {
+      continue;
+    }
+    const portsRead = readOwnData(application, "ports");
+    if (portsRead.error !== undefined) {
+      return hostile(
+        "<unnamed>",
+        "bounded_contexts.layers.application.ports",
+        portsRead.error,
+      );
+    }
+    if (!portsRead.present) {
+      continue;
+    }
+    const ports = portsRead.value;
+    if (ports === null || typeof ports !== "object") {
       continue;
     }
     for (const direction of ["in", "out"] as const) {
-      let list: unknown;
-      try {
-        list = (ports as Record<string, unknown>)[direction];
-      } catch {
-        return {
-          ok: false,
-          error: new PortContractValidationError(
-            "HOSTILE_INPUT",
-            "<unnamed>",
-            `ports.${direction}`,
-            "reflection over the port list threw",
-          ),
-        };
+      const listRead = readOwnData(ports, direction);
+      if (listRead.error !== undefined) {
+        return hostile(
+          "<unnamed>",
+          `ports.${direction}`,
+          listRead.error,
+        );
       }
-      if (!Array.isArray(list)) {
+      if (!listRead.present) {
         continue;
       }
-      for (const port of list) {
-        if (port === null || typeof port !== "object" || Array.isArray(port)) {
+      const list = listRead.value;
+      const listShape = inspectDenseArray(list);
+      if (listShape.kind === "hostile") {
+        return hostile(
+          "<unnamed>",
+          `ports.${direction}`,
+          listShape.message,
+        );
+      }
+      if (listShape.kind !== "dense") {
+        continue;
+      }
+      for (const port of list as unknown[]) {
+        if (port === null || typeof port !== "object") {
           continue;
         }
-        let desc: PropertyDescriptor | undefined;
-        try {
-          desc = Object.getOwnPropertyDescriptor(port, "contracts");
-        } catch {
-          return {
-            ok: false,
-            error: new PortContractValidationError(
-              "HOSTILE_INPUT",
-              typeof (port as Record<string, unknown>).name === "string"
-                ? ((port as Record<string, unknown>).name as string)
-                : "<unnamed>",
-              "contracts",
-              "descriptor inspection on the port's `contracts` threw",
-            ),
-          };
+        const portShape = inspectDenseArray(port);
+        if (portShape.kind === "hostile") {
+          return hostile(
+            "<unnamed>",
+            `ports.${direction}`,
+            portShape.message,
+          );
         }
-        if (desc === undefined) {
+        if (portShape.kind === "dense") {
           continue;
+        }
+        const portNameRead = readOwnData(port, "name");
+        if (portNameRead.error !== undefined) {
+          return hostile(
+            "<unnamed>",
+            `ports.${direction}[name]`,
+            portNameRead.error,
+          );
         }
         const portName =
-          typeof (port as Record<string, unknown>).name === "string"
-            ? ((port as Record<string, unknown>).name as string)
+          portNameRead.present && typeof portNameRead.value === "string"
+            ? portNameRead.value
             : "<unnamed>";
-        if (desc.get !== undefined || desc.set !== undefined) {
-          return {
-            ok: false,
-            error: new PortContractValidationError(
-              "HOSTILE_INPUT",
-              portName,
-              "contracts",
-              "`contracts` is an accessor; getters are never invoked",
-            ),
-          };
+        const contractsRead = readOwnData(port, "contracts");
+        if (contractsRead.error !== undefined) {
+          return hostile(
+            portName,
+            "contracts",
+            contractsRead.error,
+          );
         }
-        const result = validatePortContract(desc.value, portName);
+        if (!contractsRead.present) {
+          continue;
+        }
+        const result = validatePortContract(contractsRead.value, portName);
         if (!result.ok) {
           return result;
         }
