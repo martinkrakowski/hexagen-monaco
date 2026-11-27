@@ -8,6 +8,7 @@ export interface GeneratorResults {
   tsconfigs: GeneratorResult;
   eslint: GeneratorResult;
   stubs: GeneratorResult;
+  codecs: GeneratorResult;
   apps: GeneratorResult;
   totalOps: number;
 }
