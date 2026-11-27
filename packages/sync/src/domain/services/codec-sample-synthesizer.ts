@@ -25,7 +25,7 @@
 // - readOwnPlainProperty / validatePlainRecord: O(1) — one trap-catching
 //   descriptor read; no enumeration.
 // - synthesizeValidSample: O(N) in schema nodes, bounded by
-//   MAX_CONTRACT_DEPTH = 8, MAX_CONTRACT_FIELDS = 64 fields per object,
+//   MAX_SAMPLE_CONTRACT_DEPTH = 8, MAX_CONTRACT_FIELDS = 64 fields per object,
 //   MAX_CONTRACT_NODES schema nodes across the ENTIRE contract, and a
 //   serialized-sample byte budget (MAX_SAMPLE_BYTES) — every overflow is
 //   refused with TIMEOUT_OR_BUDGET BEFORE unbounded traversal or allocation.
@@ -85,7 +85,7 @@ export class CodecTestGeneratorError extends Error {
 /** Hard traversal bounds (see the module-header cost bounds). */
 export const MAX_PORTS_PER_CONTEXT = 64;
 export const MAX_BOUNDED_CONTEXTS = 64;
-export const MAX_CONTRACT_DEPTH = 8;
+export const MAX_SAMPLE_CONTRACT_DEPTH = 8;
 export const MAX_CONTRACT_FIELDS = 64;
 export const MAX_CONTRACT_NODES = 512;
 export const MAX_SAMPLE_BYTES = 8192;
@@ -1014,11 +1014,11 @@ function synthesizeNode(
   depth: number,
   budget: SynthesisBudget,
 ): unknown {
-  if (depth > MAX_CONTRACT_DEPTH) {
+  if (depth > MAX_SAMPLE_CONTRACT_DEPTH) {
     throw new CodecTestGeneratorError(
       "UNSUPPORTED_NESTED_SHAPE",
       path,
-      `contract nesting exceeds MAX_CONTRACT_DEPTH (${MAX_CONTRACT_DEPTH}) at ${path}`,
+      `contract nesting exceeds MAX_SAMPLE_CONTRACT_DEPTH (${MAX_SAMPLE_CONTRACT_DEPTH}) at ${path}`,
     );
   }
   // Precedence 1 (HOSTILE_INPUT) runs before the null/primitive check of

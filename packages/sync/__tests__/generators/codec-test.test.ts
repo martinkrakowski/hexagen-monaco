@@ -276,8 +276,8 @@ describe("generateCodecTests refusals", () => {
   // 4. UNSUPPORTED_NESTED_SHAPE
   // ---------------------------------------------------------------------------
 
-  it("refuses unsupported nested shapes, depth exceeding MAX_CONTRACT_DEPTH, or inverted numeric bounds (min > max) with UNSUPPORTED_NESTED_SHAPE", () => {
-    // Depth 9: nested exact objects one level past MAX_CONTRACT_DEPTH (8).
+  it("refuses unsupported nested shapes, depth exceeding MAX_SAMPLE_CONTRACT_DEPTH, or inverted numeric bounds (min > max) with UNSUPPORTED_NESTED_SHAPE", () => {
+    // Depth 9: nested exact objects one level past MAX_SAMPLE_CONTRACT_DEPTH (8).
     let deep: Record<string, unknown> = { kind: "boolean" };
     for (let i = 0; i < 9; i++) {
       deep = { kind: "object", exact: true, fields: { f: deep } };
