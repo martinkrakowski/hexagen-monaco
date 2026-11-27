@@ -32,7 +32,10 @@ describe("isInPortFile", () => {
   it("ignores files outside ports/in and non-exported interfaces", () => {
     // Path scope first: a file is checkable ONLY under /ports/in/.
     assert.equal(isInPortFile("/ctx/src/domain/thing.ts"), false);
-    assert.equal(isInPortFile("/ctx/src/application/ports/out/thing.port.ts"), false);
+    assert.equal(
+      isInPortFile("/ctx/src/application/ports/out/thing.port.ts"),
+      false,
+    );
     assert.equal(isInPortFile("/ctx/src/application/ports/in/thing.js"), false);
     // Windows separators normalize.
     assert.equal(
@@ -87,8 +90,14 @@ describe("isInPortFile", () => {
       "/ctx/src/application/ports/in/other.in-port.ts",
       `export interface OtherInPort { send(req: unknown): Promise<void>; }`,
     );
-    assert.equal(isInPortFile("/ctx/src/application/ports/in/thing.port.ts"), true);
-    assert.equal(isInPortFile("/ctx/src/application/ports/in/other.in-port.ts"), true);
+    assert.equal(
+      isInPortFile("/ctx/src/application/ports/in/thing.port.ts"),
+      true,
+    );
+    assert.equal(
+      isInPortFile("/ctx/src/application/ports/in/other.in-port.ts"),
+      true,
+    );
 
     const portViolations = checkInPortUnknown(port);
     assert.equal(portViolations.length, 1);

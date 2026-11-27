@@ -250,7 +250,10 @@ describe("parseBaseline — fail closed", () => {
       { length: 1001 },
       () => '{"rule":"r","file":"f.ts","specifier":"s"}',
     ).join(",")}]}`;
-    rejects(tooManyEntries, /'entries' has 1001 items, exceeding the maximum of/);
+    rejects(
+      tooManyEntries,
+      /'entries' has 1001 items, exceeding the maximum of/,
+    );
     // So is every entry string field…
     const longFile = "f".repeat(2049);
     rejects(

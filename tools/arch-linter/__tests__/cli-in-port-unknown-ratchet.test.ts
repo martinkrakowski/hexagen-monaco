@@ -52,14 +52,12 @@ const BASELINE_PATH = ".architecture/arch-lint-baseline.json";
 
 /** The offending in-port: an exported interface method typed `unknown`. */
 const VIOLATING_PORT = {
-  "packages/billing/src/application/ports/in/charge.port.ts":
-    `export interface ChargePort { charge(req: unknown): Promise<void>; }\n`,
+  "packages/billing/src/application/ports/in/charge.port.ts": `export interface ChargePort { charge(req: unknown): Promise<void>; }\n`,
 };
 
 /** Same file, typed — what the port looks like after the fix lands. */
 const TYPED_PORT = {
-  "packages/billing/src/application/ports/in/charge.port.ts":
-    `export interface ChargePort { charge(req: { orderId: string }): Promise<void>; }\n`,
+  "packages/billing/src/application/ports/in/charge.port.ts": `export interface ChargePort { charge(req: { orderId: string }): Promise<void>; }\n`,
 };
 
 /** The baseline key the linter emits for VIOLATING_PORT. */
@@ -212,7 +210,10 @@ describe("hexagen-lint — in-port-unknown ratchet (D4)", () => {
       const entry = baseline.entries.find(
         (e: { rule: string }) => e.rule === "in-port-unknown",
       );
-      assert.ok(entry, `no in-port-unknown entry seeded: ${JSON.stringify(baseline)}`);
+      assert.ok(
+        entry,
+        `no in-port-unknown entry seeded: ${JSON.stringify(baseline)}`,
+      );
       assert.equal(
         entry.file,
         "packages/billing/src/application/ports/in/charge.port.ts",
@@ -257,7 +258,11 @@ describe("hexagen-lint — in-port-unknown ratchet (D4)", () => {
         );
         // The stale entry is named so the PR that fixed the port deletes its
         // own entry (ADR-0054 §1 review-enforced burn-down).
-        assert.match(r.stdout + r.stderr, /charge\.port\.ts/, describeResult(r));
+        assert.match(
+          r.stdout + r.stderr,
+          /charge\.port\.ts/,
+          describeResult(r),
+        );
         assert.match(
           r.stdout + r.stderr,
           /Architecture is compliant/,

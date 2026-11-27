@@ -31,7 +31,13 @@
  *
  * Pure module: no `console.*`, no `process.*`, no filesystem I/O.
  */
-import { SyntaxKind, type MethodSignature, type ParameterDeclaration, type SourceFile, type Type } from "ts-morph";
+import {
+  SyntaxKind,
+  type MethodSignature,
+  type ParameterDeclaration,
+  type SourceFile,
+  type Type,
+} from "ts-morph";
 
 /** Stable rule id. Part of the baseline key — renaming invalidates entries. */
 export const IN_PORT_UNKNOWN_RULE = "in-port-unknown" as const;
@@ -224,7 +230,9 @@ function inspectAliasSignatures(
  * not on the `Signature` wrapper itself, so probe duck-typed and refuse
  * anything else rather than assume.
  */
-function parametersOf(declaration: unknown): ParameterDeclaration[] | undefined {
+function parametersOf(
+  declaration: unknown,
+): ParameterDeclaration[] | undefined {
   if (
     declaration === null ||
     typeof declaration !== "object" ||

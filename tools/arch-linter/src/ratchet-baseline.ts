@@ -286,9 +286,7 @@ function parseBaselineEntry(entry: unknown, index: number): BaselineEntry {
     if (typeof candidate[field] !== "string") {
       throw new Error(`entry ${index} has no string '${field}'`);
     }
-    if (
-      (candidate[field] as string).length > MAX_BASELINE_FIELD_LENGTH
-    ) {
+    if ((candidate[field] as string).length > MAX_BASELINE_FIELD_LENGTH) {
       throw new Error(
         `entry ${index} '${field}' exceeds the maximum length of ${MAX_BASELINE_FIELD_LENGTH}`,
       );
