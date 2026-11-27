@@ -46,6 +46,37 @@ export const BASELINE_ENTRY_FIELDS = [
  */
 export const LEGACY_NOTE_FIELD = "note";
 
+/**
+ * JSON-origin bounds (D1, lane H4). The baseline is data read from disk, so
+ * like every JSON-origin artifact it needs an explicit SCHEMA with bounds —
+ * not Proxy detection, which only applies at in-process boundaries. A baseline
+ * with a million entries or an unbounded `reason` is either a mistake or
+ * something hostile: either way, refuse instead of degrading.
+ */
+export const MAX_BASELINE_ENTRIES = 1000;
+export const MAX_BASELINE_FIELD_LENGTH = 2048;
+
+/**
+ * Keys an object parsed from baseline JSON must never carry (top level or
+ * per entry). Checked against `Object.getOwnPropertyNames`, because
+ * `JSON.parse` plants `__proto__` as an ordinary own property (the prototype
+ * setter is not invoked) — a `key in obj` or `Object.keys` miss is possible on
+ * non-enumerable shapes, but own property names are exhaustive.
+ */
+export const RESERVED_BASELINE_KEYS: readonly string[] = [
+  "__proto__",
+  "constructor",
+  "prototype",
+];
+
+const RESERVED_KEYS_SET = new Set(RESERVED_BASELINE_KEYS);
+
+function reservedKeysOf(object: object): string[] {
+  return Object.getOwnPropertyNames(object).filter((key) =>
+    RESERVED_KEYS_SET.has(key),
+  );
+}
+
 export type BaselineEntryField = (typeof BASELINE_ENTRY_FIELDS)[number];
 
 export interface BaselineEntry {
@@ -145,6 +176,24 @@ export function parseBaseline(text: string): BaselineFile {
     throw new Error("expected a JSON object at the top level");
   }
   const obj = raw as { version?: unknown; entries?: unknown };
+  // Exact-key schema, before anything else touches the object: the top level
+  // is `version` + `entries` and NOTHING else. A missing-key check alone would
+  // let an extra key smuggle schema drift through silently.
+  const topKeys = Object.getOwnPropertyNames(obj);
+  const reservedTop = topKeys.filter((key) => RESERVED_KEYS_SET.has(key));
+  if (reservedTop.length > 0) {
+    throw new Error(
+      `baseline has reserved key(s) ${reservedTop.map((k) => `'${k}'`).join(", ")} at the top level`,
+    );
+  }
+  const extraTop = topKeys.filter(
+    (key) => key !== "version" && key !== "entries",
+  );
+  if (extraTop.length > 0) {
+    throw new Error(
+      `unexpected top-level key(s) ${extraTop.map((k) => boundedKeyName(k)).join(", ")} (allowed: 'version', 'entries')`,
+    );
+  }
   if (typeof obj.version !== "number") {
     throw new Error("missing numeric 'version'");
   }
@@ -156,10 +205,31 @@ export function parseBaseline(text: string): BaselineFile {
   if (!Array.isArray(obj.entries)) {
     throw new Error("missing 'entries' array");
   }
+  if (obj.entries.length > MAX_BASELINE_ENTRIES) {
+    throw new Error(
+      `'entries' has ${obj.entries.length} items, exceeding the maximum of ${MAX_BASELINE_ENTRIES}`,
+    );
+  }
   const entries: BaselineEntry[] = obj.entries.map((entry, index) =>
     parseBaselineEntry(entry, index),
   );
   return { version: obj.version, entries };
+}
+
+/**
+ * Raw JSON key names never flow verbatim into an error message: a key can be
+ * very long (error-line flooding) or full of control characters (terminal
+ * escape injection). `boundedKeyName` truncates and renders it through
+ * `JSON.stringify`, which escapes every non-printable character, so what the
+ * diagnostic echoes is always bounded and inert.
+ */
+const MAX_KEY_LENGTH_IN_ERROR = 64;
+function boundedKeyName(key: string): string {
+  const truncated =
+    key.length > MAX_KEY_LENGTH_IN_ERROR
+      ? `${key.slice(0, MAX_KEY_LENGTH_IN_ERROR)}…`
+      : key;
+  return JSON.stringify(truncated);
 }
 
 const EXPIRES_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
@@ -212,15 +282,30 @@ function parseBaselineEntry(entry: unknown, index: number): BaselineEntry {
     ...BASELINE_ENTRY_FIELDS,
     LEGACY_NOTE_FIELD,
   ]);
-  const unknown = Object.keys(candidate).filter((key) => !allowed.has(key));
+  // Own property names, not `Object.keys`/`in`: JSON-parsed `__proto__` is an
+  // ordinary own property, but the exact enumeration method matters for
+  // non-JSON callers and the reserved check must hold for them too.
+  const names = Object.getOwnPropertyNames(candidate);
+  const reserved = names.filter((key) => RESERVED_KEYS_SET.has(key));
+  if (reserved.length > 0) {
+    throw new Error(
+      `entry ${index} has reserved key(s) ${reserved.map((k) => `'${k}'`).join(", ")}`,
+    );
+  }
+  const unknown = names.filter((key) => !allowed.has(key));
   if (unknown.length > 0) {
     throw new Error(
-      `entry ${index} has unknown field(s) ${unknown.map((k) => `'${k}'`).join(", ")} (allowed: ${[...BASELINE_ENTRY_FIELDS, LEGACY_NOTE_FIELD].join(", ")})`,
+      `entry ${index} has unknown field(s) ${unknown.map((k) => boundedKeyName(k)).join(", ")} (allowed: ${[...BASELINE_ENTRY_FIELDS, LEGACY_NOTE_FIELD].join(", ")})`,
     );
   }
   for (const field of ["rule", "file", "specifier"] as const) {
     if (typeof candidate[field] !== "string") {
       throw new Error(`entry ${index} has no string '${field}'`);
+    }
+    if ((candidate[field] as string).length > MAX_BASELINE_FIELD_LENGTH) {
+      throw new Error(
+        `entry ${index} '${field}' exceeds the maximum length of ${MAX_BASELINE_FIELD_LENGTH}`,
+      );
     }
   }
   const parsed: BaselineEntry = {
@@ -235,16 +320,44 @@ function parseBaselineEntry(entry: unknown, index: number): BaselineEntry {
     ) {
       throw new Error(`entry ${index} has empty or non-string 'reason'`);
     }
+    if (candidate.reason.length > MAX_BASELINE_FIELD_LENGTH) {
+      throw new Error(
+        `entry ${index} 'reason' exceeds the maximum length of ${MAX_BASELINE_FIELD_LENGTH}`,
+      );
+    }
     parsed.reason = candidate.reason;
-  } else if ("note" in candidate) {
-    if (typeof candidate.note !== "string" || candidate.note.trim() === "") {
+  }
+  // The legacy `note` field is validated (type, content, length) whenever it
+  // is present — not only when it takes precedence. A hostile or accidental
+  // over-limit `note` next to a valid `reason` would otherwise bypass the
+  // bound that every other string field is held to.
+  if ("note" in candidate) {
+    if (
+      !("reason" in candidate) &&
+      (typeof candidate.note !== "string" || candidate.note.trim() === "")
+    ) {
       throw new Error(`entry ${index} has empty or non-string 'note'`);
     }
-    parsed.reason = candidate.note;
+    if (typeof candidate.note !== "string") {
+      throw new Error(`entry ${index} has non-string 'note'`);
+    }
+    if (candidate.note.length > MAX_BASELINE_FIELD_LENGTH) {
+      throw new Error(
+        `entry ${index} 'note' exceeds the maximum length of ${MAX_BASELINE_FIELD_LENGTH}`,
+      );
+    }
+    if (!("reason" in candidate)) {
+      parsed.reason = candidate.note;
+    }
   }
   if ("expires" in candidate) {
     if (typeof candidate.expires !== "string") {
       throw new Error(`entry ${index} has non-string 'expires'`);
+    }
+    if (candidate.expires.length > MAX_BASELINE_FIELD_LENGTH) {
+      throw new Error(
+        `entry ${index} 'expires' exceeds the maximum length of ${MAX_BASELINE_FIELD_LENGTH}`,
+      );
     }
     parseExpiresDate(candidate.expires);
     parsed.expires = candidate.expires;
