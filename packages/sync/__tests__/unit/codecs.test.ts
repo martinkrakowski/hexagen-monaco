@@ -145,9 +145,18 @@ function decodeValue(schema, input, path, env) {
         }
         const out = {};
         for (const key of Object.keys(schema.fields)) {
+          // Read through the own data descriptor only: accessor properties are
+          // refused WITHOUT invoking the getter (no side effects may run).
+          const desc = Object.getOwnPropertyDescriptor(input, key);
+          if (desc === undefined) {
+            return fail("missing-key", [...path, key]);
+          }
+          if ("get" in desc || "set" in desc) {
+            return fail("not-plain-data", [...path, key]);
+          }
           const decoded = decodeValue(
             schema.fields[key],
-            input[key],
+            desc.value,
             [...path, key],
             env,
           );
@@ -160,10 +169,31 @@ function decodeValue(schema, input, path, env) {
       }
       case "array": {
         if (!Array.isArray(input)) return fail("wrong-type", path);
-        if (input.length > schema.maxItems) return fail("out-of-bounds", path);
+        // Never touch input.length via an ordinary property read — the
+        // length comes from its own data descriptor (accessors refused
+        // without invoking them).
+        const lenDesc = Object.getOwnPropertyDescriptor(input, "length");
+        if (
+          lenDesc === undefined ||
+          "get" in lenDesc ||
+          "set" in lenDesc ||
+          typeof lenDesc.value !== "number"
+        ) {
+          return fail("not-plain-data", path);
+        }
+        if (lenDesc.value > schema.maxItems) return fail("out-of-bounds", path);
         const items = [];
-        for (let i = 0; i < input.length; i++) {
-          const decoded = decodeValue(schema.items, input[i], [...path, String(i)], env);
+        for (let i = 0; i < lenDesc.value; i++) {
+          const itemDesc = Object.getOwnPropertyDescriptor(input, String(i));
+          if (itemDesc === undefined || "get" in itemDesc || "set" in itemDesc) {
+            return fail("not-plain-data", [...path, String(i)]);
+          }
+          const decoded = decodeValue(
+            schema.items,
+            itemDesc.value,
+            [...path, String(i)],
+            env,
+          );
           if (!decoded.ok) return decoded;
           items.push(decoded.value);
         }
@@ -224,6 +254,10 @@ export function createCodec(schemaId, schema, env) {
 // Test-side adversarial suite (H1 double)
 // ---------------------------------------------------------------------------
 
+// Incremented by the throwing-getter corpus fixture's getter — the corpus
+// test asserts it stays 0 (the no-getter-execution safety rule).
+let getterSideEffects = 0;
+
 export const ADVERSARIAL_CORPUS: readonly { id: string; input: unknown }[] = [
   { id: "not-an-object", input: 42 },
   { id: "null-input", input: null },
@@ -257,6 +291,9 @@ export const ADVERSARIAL_CORPUS: readonly { id: string; input: unknown }[] = [
     id: "throwing-getter",
     input: {
       get id() {
+        // Side effect observable from this test's scope: the no-getter-
+        // execution rule forbids the runtime double from tripping this.
+        getterSideEffects += 1;
         throw new Error("getter must not crash the codec");
       },
       qty: 1,
@@ -615,6 +652,9 @@ describe("generateCodecs — emission and traversal", () => {
     const outcomes = runAdversarialCorpus(codec, env, (id) => thrown.push(id));
     // A codec crash is not a refusal — none may have occurred.
     expect(thrown).toEqual([]);
+    // No-getter-execution rule: the throwing getter's side effect must never
+    // have run — the double refuses accessor properties without invoking them.
+    expect(getterSideEffects).toBe(0);
     expect(outcomes.map((o) => o.id).sort()).toEqual(
       ADVERSARIAL_CORPUS.map((e) => e.id).sort(),
     );

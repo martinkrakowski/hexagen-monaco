@@ -166,6 +166,52 @@ export function readOwnDataProperty(
 }
 
 /**
+ * Distinguish an ABSENT own property from an own DATA property whose value is
+ * `undefined` — `readOwnDataProperty` returns `ok(undefined)` for both, so
+ * callers that must reject any specified property (e.g. `minLength`) use this.
+ * Cost: O(1) — one trap-catching descriptor read.
+ */
+export function hasOwnDataProperty(
+  obj: unknown,
+  key: string,
+  path: string,
+): Result<boolean, CodecGeneratorError> {
+  const plain = isPlainObjectSafe(obj, path);
+  if (!plain.success) return plain;
+  if (!plain.value) {
+    return err(
+      new CodecGeneratorError(
+        "HOSTILE_INPUT",
+        path,
+        `expected a plain object at ${path}, got non-plain or non-object value`,
+      ),
+    );
+  }
+  if (POLLUTING_KEYS.has(key)) {
+    return err(
+      new CodecGeneratorError(
+        "PROTOTYPE_POLLUTION",
+        path,
+        `refusing prototype-polluting key "${key}" at ${path}`,
+      ),
+    );
+  }
+  let desc: PropertyDescriptor | undefined;
+  try {
+    desc = Object.getOwnPropertyDescriptor(obj, key);
+  } catch {
+    return err(
+      new CodecGeneratorError(
+        "HOSTILE_INPUT",
+        path,
+        `reflection threw while reading "${key}" at ${path} (hostile Proxy trap)`,
+      ),
+    );
+  }
+  return ok(desc !== undefined);
+}
+
+/**
  * Read an untrusted value as a DENSE array. Never touches `val.length` via an
  * ordinary property read (that would invoke a Proxy `get` trap outside the
  * boundary); the length comes from its own data descriptor. Cost: O(len) with
@@ -432,7 +478,12 @@ function buildNode(
       // only when asked for "minLength" is HOSTILE_INPUT, never "absent".
       const minLengthResult = readOwnDataProperty(node, "minLength", path);
       if (!minLengthResult.success) return minLengthResult;
-      if (minLengthResult.value !== undefined) {
+      // readOwnDataProperty yields `undefined` both for an ABSENT property and
+      // an own data property whose value is undefined — distinguish them, so
+      // `{ kind: "string", maxLength: 5, minLength: undefined }` is refused.
+      const hasMinLength = hasOwnDataProperty(node, "minLength", path);
+      if (!hasMinLength.success) return hasMinLength;
+      if (hasMinLength.value) {
         return err(
           new CodecGeneratorError(
             "UNSUPPORTED_SHAPE",
@@ -563,6 +614,38 @@ function buildNode(
             "MALFORMED_CONTRACT",
             path,
             `object at ${path} is missing a plain-object "fields"`,
+          ),
+        );
+      }
+      // Bounded own-key enumeration: a `for...in` scan is a lazy iterator, so
+      // counting own enumerable keys with an early return refuses an enormous
+      // field count BEFORE `Object.getOwnPropertyNames` materializes the full
+      // key list (unbounded allocation). Getters are never invoked by a
+      // `for...in`; trap throws remain HOSTILE_INPUT. Non-enumerable own keys
+      // are not seen by `for...in` — they are still caught by the exhaustive
+      // `getOwnPropertyNames` count check below.
+      let enumerableOwnKeys = 0;
+      try {
+        for (const key in fieldsRaw) {
+          if (Object.prototype.hasOwnProperty.call(fieldsRaw, key)) {
+            enumerableOwnKeys += 1;
+            if (enumerableOwnKeys > MAX_OBJECT_FIELDS) {
+              return err(
+                new CodecGeneratorError(
+                  "BOUNDS_EXCEEDED",
+                  path,
+                  `object at ${path} exceeds MAX_OBJECT_FIELDS (${MAX_OBJECT_FIELDS}) before key materialization`,
+                ),
+              );
+            }
+          }
+        }
+      } catch {
+        return err(
+          new CodecGeneratorError(
+            "HOSTILE_INPUT",
+            path,
+            `reflection threw while enumerating fields at ${path}`,
           ),
         );
       }
@@ -743,6 +826,17 @@ function buildNode(
           ),
         );
       }
+      // NaN and Infinity would render as `null` via JSON.stringify, silently
+      // changing the contract's literal value and generated type.
+      if (typeof value === "number" && !Number.isFinite(value)) {
+        return err(
+          new CodecGeneratorError(
+            "MALFORMED_CONTRACT",
+            path,
+            `literal at ${path} must be a finite number (NaN and Infinity are refused)`,
+          ),
+        );
+      }
       return ok({ kind: "literal", value });
     }
     case "nullable": {
@@ -803,7 +897,10 @@ export function buildCodecSchema(
         "request",
         pathPrefix,
       );
-      if (requestPeek.success && requestPeek.value !== undefined) {
+      // A failed descriptor read for `request` (accessor or throwing Proxy
+      // trap) is HOSTILE_INPUT — never fall through to UNKNOWN_TYPE.
+      if (!requestPeek.success) return requestPeek;
+      if (requestPeek.value !== undefined) {
         return buildNode(
           requestPeek.value,
           `${pathPrefix}.request`,

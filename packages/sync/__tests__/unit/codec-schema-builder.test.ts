@@ -237,6 +237,86 @@ describe("buildCodecSchema — refusals", () => {
       "UNSUPPORTED_SHAPE",
     );
   });
+
+  it("refuses a specified minLength own property with value undefined as UNSUPPORTED_SHAPE", () => {
+    // readOwnDataProperty yields `undefined` for both an absent property and an
+    // own data property whose value is undefined — the absence must not be
+    // confused with a specified `minLength: undefined`.
+    expectErr(
+      buildCodecSchema(
+        { kind: "string", maxLength: 5, minLength: undefined },
+        "t",
+      ),
+      "UNSUPPORTED_SHAPE",
+    );
+  });
+
+  it("refuses non-finite numeric literal values with MALFORMED_CONTRACT", () => {
+    // NaN and Infinity would render as `null` via JSON.stringify, silently
+    // changing the contract's literal value and generated type.
+    expectErr(
+      buildCodecSchema({ kind: "literal", value: NaN }, "t"),
+      "MALFORMED_CONTRACT",
+    );
+    expectErr(
+      buildCodecSchema({ kind: "literal", value: Infinity }, "t"),
+      "MALFORMED_CONTRACT",
+    );
+    expectErr(
+      buildCodecSchema({ kind: "literal", value: -Infinity }, "t"),
+      "MALFORMED_CONTRACT",
+    );
+    // Finite numbers and the other literal primitives still build.
+    expect(buildCodecSchema({ kind: "literal", value: 1 }, "t").success).toBe(
+      true,
+    );
+  });
+
+  it("bounds own-key field enumeration with BOUNDS_EXCEEDED before materializing the key list", () => {
+    // Plain over-limit object: refused regardless of enumeration strategy.
+    const fields: Record<string, unknown> = {};
+    for (let i = 0; i < MAX_OBJECT_FIELDS + 1; i++) {
+      fields[`f${i}`] = { kind: "boolean" };
+    }
+    expectErr(
+      buildCodecSchema({ kind: "object", exact: true, fields }, "t"),
+      "BOUNDS_EXCEEDED",
+    );
+
+    // Mutation pin for the bounded pre-scan: the field enumeration below must
+    // consult per-key descriptors (the lazy `for...in` scan), so a Proxy that
+    // succeeds at ownKeys (getOwnPropertyNames) but throws on every
+    // getOwnPropertyDescriptor is refused with HOSTILE_INPUT — the old
+    // unmaterialized-key path reported BOUNDS_EXCEEDED without ever looking
+    // at a descriptor.
+    const target: Record<string, unknown> = { kind: "object", exact: true };
+    const hostileFields: Record<string, unknown> = {};
+    for (let i = 0; i < MAX_OBJECT_FIELDS + 1; i++) {
+      hostileFields[`f${i}`] = { kind: "boolean" };
+    }
+    target.fields = new Proxy(hostileFields, {
+      getOwnPropertyDescriptor() {
+        throw new Error("descriptor trap");
+      },
+    });
+    expectErr(buildCodecSchema(target, "t"), "HOSTILE_INPUT");
+  });
+
+  it("propagates HOSTILE_INPUT when the wrapper request property read fails instead of reporting UNKNOWN_TYPE", () => {
+    // An accessor (or throwing Proxy trap) on the wrapper's `request`
+    // property must surface as HOSTILE_INPUT — never fall through to
+    // building the wrapper as a schema and reporting UNKNOWN_TYPE.
+    let getterInvoked = false;
+    const hostileWrapper: object = {
+      get request() {
+        getterInvoked = true;
+        return { kind: "string", maxLength: 4 };
+      },
+    };
+    const result = buildCodecSchema(hostileWrapper, "t");
+    expectErr(result, "HOSTILE_INPUT");
+    expect(getterInvoked).toBe(false);
+  });
 });
 
 describe("resolveRuntimeModule — refusals", () => {
