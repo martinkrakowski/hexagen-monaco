@@ -251,9 +251,19 @@ describe("SyncEngine — path-traversal defense (dry-run)", () => {
       `path-traversal target must NOT exist: ${escapedDir}`,
     );
 
+    // H3 fix round 1: the engine's CodecTests traversal reports invalid
+    // module names as typed failures instead of skipping silently — the run
+    // must NOT read as a success.
+    assert.ok(
+      messagesAt(logger, "error").some((m) =>
+        m.includes("generator failure(s)"),
+      ),
+    );
     assert.ok(
       messagesAt(logger, "info").some((m) =>
-        m.includes("Sync completed successfully"),
+        m.includes(
+          "CodecTests : 0 created, 0 updated, 0 deleted, 0 unchanged, 0 skipped",
+        ),
       ),
     );
   });

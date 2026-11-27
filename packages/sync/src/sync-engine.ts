@@ -17,9 +17,17 @@ import { generateApps } from "./generators/apps.js";
 import { generateEslintConfig } from "./generators/eslint.js";
 import { generateStubs } from "./generators/stubs.js";
 import { generateCodecs } from "./generators/codecs.js";
+import { generateCodecTests } from "./generators/codec-test.js";
 import { generateCrossContext } from "./generators/cross-context.js";
 import { generateSharedKernel } from "./generators/shared-kernel.js";
 import { resetPortAnalysisMemo } from "./generators/port-analyzer.js";
+import {
+  MAX_BOUNDED_CONTEXTS,
+  CodecTestGeneratorError,
+  looksLikeProxy,
+  readOwnPlainProperty,
+  validatePlainRecord,
+} from "./domain/services/codec-sample-synthesizer.js";
 import {
   buildDriftFiles,
   createEmptyResult,
@@ -265,6 +273,171 @@ export class SyncEngine {
     };
   }
 
+  /**
+   * Lane H3: emit the adversarial codec tests under `<moduleDir>/__tests__/codecs/`
+   * for every contract-bearing port. Mirrors the generateCoreArtifacts
+   * per-module loop and failure discipline: each module's result is noted via
+   * noteFailure("CodecTests", ...) BEFORE mergeResult folds it (merge keeps
+   * only the first error), and the merged row feeds the run summary.
+   */
+  private async generateCodecTestArtifacts(): Promise<GeneratorResult> {
+    const config = this.getConfig();
+    const { logger } = config;
+    const codecTests = createEmptyResult();
+
+    // Report one typed CodecTests failure (noted BEFORE mergeResult, mirroring
+    // the per-module loop) and stop the traversal.
+    const fail = (error: CodecTestGeneratorError): GeneratorResult => {
+      const failure = createEmptyResult();
+      failure.error = error;
+      failure.summary = `CodecTests failed: [${error.code}] ${error.message}`;
+      this.noteFailure("CodecTests", failure);
+      mergeResult(codecTests, failure);
+      return codecTests;
+    };
+
+    // Bounded descriptor-based traversal of manifest.bounded_contexts: the
+    // engine path must never touch raw accessors before the generator's
+    // safe readers run, and invalid module names must surface as typed
+    // CodecTests failures instead of being skipped silently.
+    let contexts: unknown;
+    try {
+      contexts = readOwnPlainProperty(config.manifest, "bounded_contexts");
+    } catch (thrown) {
+      return fail(
+        thrown instanceof CodecTestGeneratorError
+          ? thrown
+          : new CodecTestGeneratorError(
+              "HOSTILE_INPUT",
+              "bounded_contexts",
+              thrown instanceof Error ? thrown.message : String(thrown),
+            ),
+      );
+    }
+    if (contexts === undefined) return codecTests;
+    let isArray: boolean;
+    try {
+      isArray = Array.isArray(contexts);
+    } catch {
+      return fail(
+        new CodecTestGeneratorError(
+          "HOSTILE_INPUT",
+          "bounded_contexts",
+          `reflection threw while inspecting bounded_contexts (revoked Proxy)`,
+        ),
+      );
+    }
+    if (!isArray || looksLikeProxy(contexts)) {
+      return fail(
+        new CodecTestGeneratorError(
+          "HOSTILE_INPUT",
+          "bounded_contexts",
+          `bounded_contexts must be a dense non-Proxy array`,
+        ),
+      );
+    }
+    let ctxLen: number;
+    try {
+      ctxLen = (contexts as unknown[]).length;
+    } catch {
+      return fail(
+        new CodecTestGeneratorError(
+          "HOSTILE_INPUT",
+          "bounded_contexts",
+          `reflection threw while reading the length of bounded_contexts`,
+        ),
+      );
+    }
+    if (ctxLen > MAX_BOUNDED_CONTEXTS) {
+      return fail(
+        new CodecTestGeneratorError(
+          "HOSTILE_INPUT",
+          "bounded_contexts",
+          `bounded_contexts has ${ctxLen} entries, exceeding MAX_BOUNDED_CONTEXTS (${MAX_BOUNDED_CONTEXTS})`,
+        ),
+      );
+    }
+    for (let i = 0; i < ctxLen; i++) {
+      let desc: PropertyDescriptor | undefined;
+      try {
+        desc = Object.getOwnPropertyDescriptor(contexts, String(i));
+      } catch {
+        return fail(
+          new CodecTestGeneratorError(
+            "HOSTILE_INPUT",
+            `bounded_contexts[${i}]`,
+            `reflection threw while reading index ${i} of bounded_contexts`,
+          ),
+        );
+      }
+      if (!desc || desc.get !== undefined || desc.set !== undefined) {
+        return fail(
+          new CodecTestGeneratorError(
+            "HOSTILE_INPUT",
+            `bounded_contexts[${i}]`,
+            `missing or accessor entry at index ${i} of bounded_contexts`,
+          ),
+        );
+      }
+      const entry = desc.value;
+      try {
+        validatePlainRecord(entry);
+      } catch (thrown) {
+        return fail(
+          thrown instanceof CodecTestGeneratorError
+            ? thrown
+            : new CodecTestGeneratorError(
+                "HOSTILE_INPUT",
+                `bounded_contexts[${i}]`,
+                thrown instanceof Error ? thrown.message : String(thrown),
+              ),
+        );
+      }
+      let moduleName: unknown;
+      try {
+        moduleName = readOwnPlainProperty(entry, "name");
+      } catch (thrown) {
+        return fail(
+          thrown instanceof CodecTestGeneratorError
+            ? thrown
+            : new CodecTestGeneratorError(
+                "HOSTILE_INPUT",
+                `bounded_contexts[${i}].name`,
+                thrown instanceof Error ? thrown.message : String(thrown),
+              ),
+        );
+      }
+      if (
+        typeof moduleName !== "string" ||
+        moduleName.length === 0 ||
+        moduleName.includes("..") ||
+        moduleName.includes("/") ||
+        moduleName.startsWith(".")
+      ) {
+        // Invalid module names are a typed CodecTests failure — never a
+        // silent skip.
+        return fail(
+          new CodecTestGeneratorError(
+            "MALFORMED_CONTRACT",
+            `bounded_contexts[${i}].name`,
+            `bounded context at index ${i} has an invalid module name (non-string, empty, or a path-traversal shape)`,
+          ),
+        );
+      }
+      const moduleDir = path.join(this.workspaceRoot, "packages", moduleName);
+      logger.info(`Generating codec tests for module: ${moduleName}`);
+      const codecTestResult = await generateCodecTests(
+        moduleDir,
+        moduleName,
+        config,
+        this.report,
+      );
+      this.noteFailure("CodecTests", codecTestResult);
+      mergeResult(codecTests, codecTestResult);
+    }
+    return codecTests;
+  }
+
   async run(): Promise<SyncRunSummary> {
     resetPortAnalysisMemo();
     const { logger, dryRun, allowDirty, mode } = this.partialConfig;
@@ -394,6 +567,9 @@ export class SyncEngine {
       this.noteFailure("Layers", layerResult);
 
       const coreResults = await this.generateCoreArtifacts();
+      // Lane H3: adversarial codec tests (after the H2 codecs so the emitted
+      // imports resolve against freshly generated codec modules).
+      const codecTests = await this.generateCodecTestArtifacts();
       const { pkgs, tsconfigs, eslint, stubs, codecs } = coreResults;
       const firstPassBarrels = coreResults.barrels;
       const appsResult = await generateApps(this.fullConfig, this.report);
@@ -455,6 +631,7 @@ export class SyncEngine {
         ["ESLint", eslint],
         ["Stubs", stubs],
         ["Codecs", codecs],
+        ["CodecTests", codecTests],
         ["Apps", appsResult],
       ];
       const runSummary: SyncRunSummary = {
