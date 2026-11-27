@@ -14,6 +14,7 @@ import { describe, it } from "vitest";
 import assert from "node:assert/strict";
 import {
   BASELINE_VERSION,
+  MAX_BASELINE_FIELD_LENGTH,
   mergeSuppressionMetadata,
   parseBaseline,
   partitionAgainstBaseline,
@@ -148,8 +149,38 @@ describe("parseBaseline — fail closed", () => {
   it("rejects unknown entry fields instead of silently dropping them", () => {
     rejects(
       '{"version":1,"entries":[{"rule":"r","file":"f.ts","specifier":"s","extra":"informal"}]}',
-      /unknown field\(s\) 'extra'/,
+      /unknown field\(s\) "extra"/,
     );
+    // A very long or control-character-laden key name is rendered bounded and
+    // escaped — it is echoed for diagnosis, never verbatim into the terminal.
+    const hostileKey = `${"x".repeat(40)}\\u001b[2J\\u0007`;
+    const longKey = "k".repeat(300);
+    const err = (text: string): unknown => {
+      try {
+        parseBaseline(text);
+      } catch (e) {
+        return e;
+      }
+      return null;
+    };
+    const hostileError = err(
+      `{"version":1,"entries":[{"rule":"r","file":"f.ts","specifier":"s","${hostileKey}":true}]}`,
+    );
+    assert.ok(hostileError instanceof Error);
+    // Escaped: no raw control bytes survive into the message…
+    assert.doesNotMatch(hostileError.message, /\u001b|\u0007/);
+    // …and the key name is truncated to the fixed bound (plus the marker).
+    assert.ok(
+      hostileError.message.length <
+        hostileKey.length + "entry 0 has unknown field(s) ".length + 128,
+      hostileError.message,
+    );
+    assert.match(hostileError.message, /\\u001b/);
+    const longError = err(
+      `{"version":1,"entries":[{"rule":"r","file":"f.ts","specifier":"s","${longKey}":true}]}`,
+    );
+    assert.ok(longError instanceof Error);
+    assert.doesNotMatch(longError.message, new RegExp(longKey.slice(64)));
   });
 
   it("treats legacy 'note' as reason so origin/main baselines still parse", () => {
@@ -163,6 +194,28 @@ describe("parseBaseline — fail closed", () => {
   it("prefers reason when both reason and legacy note are present", () => {
     const parsed = parseBaseline(
       '{"version":1,"entries":[{"rule":"r","file":"f.ts","specifier":"s","reason":"canonical","note":"legacy"}]}',
+    );
+    assert.equal(parsed.entries[0]?.reason, "canonical");
+  });
+
+  it("rejects an over-limit note even when a valid reason is present", () => {
+    // `reason` taking precedence must NOT mean `note` escapes the bounds that
+    // every other string field is held to — the bound is per-field, not
+    // per-precedence.
+    const longNote = "n".repeat(MAX_BASELINE_FIELD_LENGTH + 1);
+    rejects(
+      `{"version":1,"entries":[{"rule":"r","file":"f.ts","specifier":"s","reason":"canonical","note":"${longNote}"}]}`,
+      /'note' exceeds the maximum length/,
+    );
+    // …and the type bound holds too: a non-string note next to a valid reason
+    // is still refused, even though reason would win the precedence fight.
+    rejects(
+      '{"version":1,"entries":[{"rule":"r","file":"f.ts","specifier":"s","reason":"canonical","note":42}]}',
+      /'note'$/,
+    );
+    // Exactly-at-limit note next to a valid reason still parses.
+    const parsed = parseBaseline(
+      `{"version":1,"entries":[{"rule":"r","file":"f.ts","specifier":"s","reason":"canonical","note":"${"n".repeat(MAX_BASELINE_FIELD_LENGTH)}"}]}`,
     );
     assert.equal(parsed.entries[0]?.reason, "canonical");
   });
@@ -196,16 +249,28 @@ describe("parseBaseline — fail closed", () => {
     // of the linter can write or read back faithfully.
     rejects(
       '{"version":1,"entries":[],"schema":"drift"}',
-      /unexpected top-level key\(s\) 'schema'/,
+      /unexpected top-level key\(s\) "schema"/,
     );
     rejects(
       '{"version":1,"entries":[],"note":"sneaky"}',
-      /unexpected top-level key\(s\) 'note'/,
+      /unexpected top-level key\(s\) "note"/,
     );
     rejects(
       '{"entries":[],"version":1,"extra":true,"another":true}',
-      /unexpected top-level key\(s\) 'extra', 'another'/,
+      /unexpected top-level key\(s\) "extra", "another"/,
     );
+    // A very long or control-character-laden top-level key is echoed only
+    // bounded and escaped — the raw name never reaches the terminal.
+    const hostileTopKey = `${"z".repeat(40)}\\u001b[2J\\u0007`;
+    try {
+      parseBaseline(`{"version":1,"entries":[],"${hostileTopKey}":null}`);
+      assert.fail("expected the extra top-level key to be rejected");
+    } catch (e) {
+      assert.ok(e instanceof Error);
+      assert.doesNotMatch(e.message, /\u001b|\u0007/);
+      assert.match(e.message, /\\u001b/);
+      assert.ok(e.message.length < hostileTopKey.length + 128, e.message);
+    }
     // The exact allowed shape still parses (guard against over-firing).
     const parsed = parseBaseline('{"version":1,"entries":[]}');
     assert.deepEqual(parsed, { version: BASELINE_VERSION, entries: [] });

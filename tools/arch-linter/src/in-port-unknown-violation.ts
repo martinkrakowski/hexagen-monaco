@@ -107,6 +107,22 @@ export function checkInPortUnknown(file: SourceFile): InPortUnknownViolation[] {
       try {
         if (!iface.isExported()) continue;
         const ifaceName = iface.getName();
+        // Call signatures (`export interface Port { (req: unknown): void }`)
+        // are interface members too — `getMethods()` never returns them, and a
+        // checker-level walk of the interface type would also surface the
+        // method signatures below, so only the bare call signatures are
+        // inspected here to keep exactly one emission per offending signature.
+        try {
+          inspectCallSignaturesOnType(
+            iface.getType(),
+            `in-port '${ifaceName}'`,
+            ifaceName,
+            filePath,
+            push,
+          );
+        } catch {
+          // Checker trap on the interface type — skip this facet.
+        }
         for (const method of iface.getMethods()) {
           const methodName = safeName(() => method.getName());
           for (const param of method.getParameters()) {
@@ -172,26 +188,16 @@ function inspectAliasSignatures(
   if (type === undefined) return;
 
   // Call signatures (function-type aliases, and `{ (req: T): R }` literals).
+  // The object-literal `{ (req: unknown): void }` alias form and the interface
+  // form share this walk.
   try {
-    for (const signature of type.getCallSignatures()) {
-      let declaration: unknown;
-      try {
-        declaration = signature.getDeclaration();
-      } catch {
-        continue;
-      }
-      const params = parametersOf(declaration);
-      if (params === undefined) continue;
-      for (const param of params) {
-        if (!parameterAcceptsUnknown(param)) continue;
-        const paramName = safeName(() => param.getName());
-        // A call signature has no name of its own — the alias IS the name.
-        push(
-          `${aliasName}:${paramName}`,
-          `in-port type alias '${aliasName}' accepts 'unknown' — ${aliasName} call-signature parameter '${paramName}' must use a typed/Validated request contract (${filePath})`,
-        );
-      }
-    }
+    inspectCallSignaturesOnType(
+      type,
+      `in-port type alias '${aliasName}'`,
+      aliasName,
+      filePath,
+      push,
+    );
   } catch {
     // Checker trap on the call-signature list — skip this facet.
   }
@@ -221,6 +227,49 @@ function inspectAliasSignatures(
     }
   } catch {
     // Checker trap on the property list — skip this facet.
+  }
+}
+
+/**
+ * Call signatures on one type — shared by exported type aliases (function-type
+ * and object-literal aliases) and exported interfaces (whose call-signature
+ * members `getMethods()` never returns).
+ *
+ * Every checker call is guarded — a type whose signatures cannot be resolved
+ * contributes nothing, and is not fatal.
+ */
+function inspectCallSignaturesOnType(
+  type: Type | undefined,
+  subject: string,
+  name: string,
+  filePath: string,
+  push: (specifier: string, message: string) => void,
+): void {
+  if (type === undefined) return;
+
+  try {
+    for (const signature of type.getCallSignatures()) {
+      let declaration: unknown;
+      try {
+        declaration = signature.getDeclaration();
+      } catch {
+        continue;
+      }
+      const params = parametersOf(declaration);
+      if (params === undefined) continue;
+      for (const param of params) {
+        if (!parameterAcceptsUnknown(param)) continue;
+        const paramName = safeName(() => param.getName());
+        // A call signature has no name of its own — the enclosing interface
+        // or alias IS the name.
+        push(
+          `${name}:${paramName}`,
+          `${subject} accepts 'unknown' — ${name} call-signature parameter '${paramName}' must use a typed/Validated request contract (${filePath})`,
+        );
+      }
+    }
+  } catch {
+    // Checker trap on the call-signature list — skip this facet.
   }
 }
 

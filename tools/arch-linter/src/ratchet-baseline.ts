@@ -191,7 +191,7 @@ export function parseBaseline(text: string): BaselineFile {
   );
   if (extraTop.length > 0) {
     throw new Error(
-      `unexpected top-level key(s) ${extraTop.map((k) => `'${k}'`).join(", ")} (allowed: 'version', 'entries')`,
+      `unexpected top-level key(s) ${extraTop.map((k) => boundedKeyName(k)).join(", ")} (allowed: 'version', 'entries')`,
     );
   }
   if (typeof obj.version !== "number") {
@@ -214,6 +214,22 @@ export function parseBaseline(text: string): BaselineFile {
     parseBaselineEntry(entry, index),
   );
   return { version: obj.version, entries };
+}
+
+/**
+ * Raw JSON key names never flow verbatim into an error message: a key can be
+ * very long (error-line flooding) or full of control characters (terminal
+ * escape injection). `boundedKeyName` truncates and renders it through
+ * `JSON.stringify`, which escapes every non-printable character, so what the
+ * diagnostic echoes is always bounded and inert.
+ */
+const MAX_KEY_LENGTH_IN_ERROR = 64;
+function boundedKeyName(key: string): string {
+  const truncated =
+    key.length > MAX_KEY_LENGTH_IN_ERROR
+      ? `${key.slice(0, MAX_KEY_LENGTH_IN_ERROR)}…`
+      : key;
+  return JSON.stringify(truncated);
 }
 
 const EXPIRES_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
@@ -279,7 +295,7 @@ function parseBaselineEntry(entry: unknown, index: number): BaselineEntry {
   const unknown = names.filter((key) => !allowed.has(key));
   if (unknown.length > 0) {
     throw new Error(
-      `entry ${index} has unknown field(s) ${unknown.map((k) => `'${k}'`).join(", ")} (allowed: ${[...BASELINE_ENTRY_FIELDS, LEGACY_NOTE_FIELD].join(", ")})`,
+      `entry ${index} has unknown field(s) ${unknown.map((k) => boundedKeyName(k)).join(", ")} (allowed: ${[...BASELINE_ENTRY_FIELDS, LEGACY_NOTE_FIELD].join(", ")})`,
     );
   }
   for (const field of ["rule", "file", "specifier"] as const) {
@@ -310,16 +326,29 @@ function parseBaselineEntry(entry: unknown, index: number): BaselineEntry {
       );
     }
     parsed.reason = candidate.reason;
-  } else if ("note" in candidate) {
-    if (typeof candidate.note !== "string" || candidate.note.trim() === "") {
+  }
+  // The legacy `note` field is validated (type, content, length) whenever it
+  // is present — not only when it takes precedence. A hostile or accidental
+  // over-limit `note` next to a valid `reason` would otherwise bypass the
+  // bound that every other string field is held to.
+  if ("note" in candidate) {
+    if (
+      !("reason" in candidate) &&
+      (typeof candidate.note !== "string" || candidate.note.trim() === "")
+    ) {
       throw new Error(`entry ${index} has empty or non-string 'note'`);
+    }
+    if (typeof candidate.note !== "string") {
+      throw new Error(`entry ${index} has non-string 'note'`);
     }
     if (candidate.note.length > MAX_BASELINE_FIELD_LENGTH) {
       throw new Error(
         `entry ${index} 'note' exceeds the maximum length of ${MAX_BASELINE_FIELD_LENGTH}`,
       );
     }
-    parsed.reason = candidate.note;
+    if (!("reason" in candidate)) {
+      parsed.reason = candidate.note;
+    }
   }
   if ("expires" in candidate) {
     if (typeof candidate.expires !== "string") {

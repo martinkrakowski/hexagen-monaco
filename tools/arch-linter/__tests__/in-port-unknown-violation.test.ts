@@ -146,6 +146,33 @@ export interface MyInPort { run(req: MyReq): Promise<void>; }`,
     assert.match(v.message, /request\.port\.ts/);
   });
 
+  it("flags an exported in-port interface with a call-signature member typed unknown", () => {
+    // `export interface Port { (req: unknown): void }` has NO method —
+    // `getMethods()` returns nothing, so only a call-signature walk can catch
+    // this shape. Without that walk the rule reports no violation at all.
+    const file = sourceFile(
+      "/ctx/src/application/ports/in/handler.port.ts",
+      `export interface HandlerPort { (req: unknown): void; }`,
+    );
+    const violations = checkInPortUnknown(file);
+    assert.equal(violations.length, 1);
+    const v = violations[0];
+    assert.ok(v, "expected exactly one violation");
+    assert.equal(v.rule, "in-port-unknown");
+    // A call signature has no name of its own: `<InterfaceName>:<param>`.
+    assert.equal(v.specifier, "HandlerPort:req");
+    assert.match(v.message, /HandlerPort/);
+    assert.match(v.message, /\breq\b/);
+    assert.match(v.message, /handler\.port\.ts/);
+
+    // The mirror-image clean case emits nothing (no false positives).
+    const clean = sourceFile(
+      "/ctx/src/application/ports/in/clean-handler.port.ts",
+      `export interface CleanHandlerPort { (req: { id: string }): void; }`,
+    );
+    assert.deepEqual(checkInPortUnknown(clean), []);
+  });
+
   it("flags an exported in-port type alias with a parameter typed unknown", () => {
     // Function-type alias — a bare call signature.
     const fnAlias = sourceFile(
