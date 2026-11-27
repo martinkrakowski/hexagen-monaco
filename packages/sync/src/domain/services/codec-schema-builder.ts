@@ -79,23 +79,51 @@ export const MAX_TOTAL_NODES = 512;
  */
 export const DEFAULT_RUNTIME_MODULE = "@fleet/shared";
 
-function isPlainObject(value: unknown): boolean {
-  if (typeof value !== "object" || value === null) return false;
-  const proto = Object.getPrototypeOf(value);
-  return proto === Object.prototype || proto === null;
+/**
+ * Plainness check with the prototype read INSIDE the trap-catching boundary:
+ * a Proxy whose `getPrototypeOf` trap throws must surface as HOSTILE_INPUT
+ * (never escape as an exception) — it is answered here, through the same
+ * typed-Result channel as every other reflection read.
+ */
+function isPlainObjectSafe(
+  value: unknown,
+  path: string,
+): Result<boolean, CodecGeneratorError> {
+  let proto: unknown;
+  try {
+    proto =
+      typeof value === "object" && value !== null
+        ? Object.getPrototypeOf(value)
+        : undefined;
+  } catch {
+    return err(
+      new CodecGeneratorError(
+        "HOSTILE_INPUT",
+        path,
+        `reflection threw while reading the prototype at ${path} (hostile Proxy trap)`,
+      ),
+    );
+  }
+  return ok(
+    typeof value === "object" &&
+      value !== null &&
+      (proto === Object.prototype || proto === null),
+  );
 }
 
 /**
  * Read ONE own data property from untrusted input without ever invoking
- * accessors. Cost: O(1) — a plainness check, a Set lookup and one descriptor
- * read inside a trap-catching boundary.
+ * accessors. Cost: O(1) — a plainness check (itself trap-catching), a Set
+ * lookup and one descriptor read inside a trap-catching boundary.
  */
 export function readOwnDataProperty(
   obj: unknown,
   key: string,
   path: string,
 ): Result<unknown, CodecGeneratorError> {
-  if (!isPlainObject(obj)) {
+  const plain = isPlainObjectSafe(obj, path);
+  if (!plain.success) return plain;
+  if (!plain.value) {
     return err(
       new CodecGeneratorError(
         "HOSTILE_INPUT",
@@ -400,16 +428,11 @@ function buildNode(
     case "string": {
       // minLength is deliberately unsupported: the runtime contract has no
       // notion of it, so a contract carrying one would silently lose a rule.
-      const hasMinLength = (() => {
-        try {
-          return (
-            Object.getOwnPropertyDescriptor(node, "minLength") !== undefined
-          );
-        } catch {
-          return false;
-        }
-      })();
-      if (hasMinLength) {
+      // The check goes through the descriptor boundary: a Proxy that throws
+      // only when asked for "minLength" is HOSTILE_INPUT, never "absent".
+      const minLengthResult = readOwnDataProperty(node, "minLength", path);
+      if (!minLengthResult.success) return minLengthResult;
+      if (minLengthResult.value !== undefined) {
         return err(
           new CodecGeneratorError(
             "UNSUPPORTED_SHAPE",
@@ -521,7 +544,7 @@ function buildNode(
       const fieldsResult = readOwnDataProperty(node, "fields", path);
       if (!fieldsResult.success) return fieldsResult;
       const fieldsRaw = fieldsResult.value;
-      if (fieldsRaw === undefined || !isPlainObject(fieldsRaw)) {
+      if (fieldsRaw === undefined) {
         return err(
           new CodecGeneratorError(
             "MALFORMED_CONTRACT",
@@ -530,9 +553,25 @@ function buildNode(
           ),
         );
       }
+      // The plainness check is trap-catching: a Proxy whose getPrototypeOf
+      // trap throws is HOSTILE_INPUT, never an escaping reflection error.
+      const fieldsPlain = isPlainObjectSafe(fieldsRaw, path);
+      if (!fieldsPlain.success) return fieldsPlain;
+      if (!fieldsPlain.value) {
+        return err(
+          new CodecGeneratorError(
+            "MALFORMED_CONTRACT",
+            path,
+            `object at ${path} is missing a plain-object "fields"`,
+          ),
+        );
+      }
+      // Enumerate ALL own string keys (Object.keys would silently omit
+      // non-enumerable own field schemas — a contract carrying one would
+      // lose that field's validation). Reflection throws are HOSTILE_INPUT.
       let keys: string[];
       try {
-        keys = Object.keys(fieldsRaw as Record<string, unknown>);
+        keys = Object.getOwnPropertyNames(fieldsRaw as Record<string, unknown>);
       } catch {
         return err(
           new CodecGeneratorError(

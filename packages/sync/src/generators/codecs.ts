@@ -22,7 +22,11 @@ import {
   type WriteStatus,
 } from "../results.js";
 import type { ReportRecorder } from "../domain/types.js";
-import { ok, type Result } from "../domain/services/codec-schema-builder.js";
+import {
+  ok,
+  err,
+  type Result,
+} from "../domain/services/codec-schema-builder.js";
 import {
   resolveEmissionDir,
   type LayersConfig,
@@ -50,24 +54,27 @@ export async function generateCodecs(
 ): Promise<GeneratorResult> {
   const result = createEmptyResult();
 
-  const runtimeModuleResult = resolveRuntimeModule(config.manifest);
-  if (!runtimeModuleResult.success) {
-    result.error = runtimeModuleResult.error;
-    return result;
-  }
-  const runtimeModule = runtimeModuleResult.value;
-
-  // Layer-folder configuration lives under generator.sync.layers — read it
-  // through the same descriptor boundary; absence falls back to the
-  // conventional dirs inside resolveEmissionDir.
-  const layersResult = readLayersConfig(config.manifest);
-  if (!layersResult.success) {
-    result.error = layersResult.error;
-    return result;
-  }
-  const layersConfig = layersResult.value;
-
   try {
+    // Runtime-module and layer resolution also read untrusted manifest data —
+    // keep them inside the same boundary so any typed refusal (or, as a last
+    // resort, any escape) becomes result.error, never a thrown abort.
+    const runtimeModuleResult = resolveRuntimeModule(config.manifest);
+    if (!runtimeModuleResult.success) {
+      result.error = runtimeModuleResult.error;
+      return result;
+    }
+    const runtimeModule = runtimeModuleResult.value;
+
+    // Layer-folder configuration lives under generator.sync.layers — read it
+    // through the same descriptor boundary; absence falls back to the
+    // conventional dirs inside resolveEmissionDir.
+    const layersResult = readLayersConfig(config.manifest);
+    if (!layersResult.success) {
+      result.error = layersResult.error;
+      return result;
+    }
+    const layersConfig = layersResult.value;
+
     return await emitCodecs(
       moduleDir,
       moduleName,
@@ -91,6 +98,15 @@ export async function generateCodecs(
   }
 }
 
+/**
+ * Read `generator.sync.layers` WITHOUT ever letting `resolveEmissionDir`
+ * perform ordinary property reads on the untrusted object: `layers.application`
+ * and `layers.application.folder` are copied through own data descriptors
+ * (accessors and throwing traps are refused by `readOwnDataProperty`), and
+ * only the sanitized copy reaches `resolveEmissionDir`. Values the resolver
+ * would reject anyway (non-string folders) are dropped, preserving the
+ * `src/<layer>` fallback for them.
+ */
 function readLayersConfig(
   manifest: unknown,
 ): Result<LayersConfig | undefined, CodecGeneratorError> {
@@ -106,7 +122,38 @@ function readLayersConfig(
     "generator.sync.layers",
   );
   if (!layers.success) return layers;
-  return ok(layers.value as LayersConfig | undefined);
+  const layersRaw = layers.value;
+  if (layersRaw === undefined) return ok(undefined);
+
+  // Copy the ONLY shape resolveEmissionDir touches for codec emission:
+  // `application.folder`. Accessors on `application` or `folder` are refused
+  // here — before resolveEmissionDir is ever called.
+  const app = readOwnDataProperty(
+    layersRaw,
+    "application",
+    "generator.sync.layers.application",
+  );
+  if (!app.success) return app;
+  if (app.value === undefined) return ok({});
+  const folder = readOwnDataProperty(
+    app.value,
+    "folder",
+    "generator.sync.layers.application.folder",
+  );
+  if (!folder.success) return folder;
+  const folderValue = folder.value;
+  if (folderValue !== undefined && typeof folderValue !== "string") {
+    return err(
+      new CodecGeneratorError(
+        "HOSTILE_INPUT",
+        "generator.sync.layers.application.folder",
+        `layer "folder" at generator.sync.layers.application.folder is not a string`,
+      ),
+    );
+  }
+  return ok({
+    application: { folder: folderValue as string | undefined },
+  } as LayersConfig);
 }
 
 async function emitCodecs(

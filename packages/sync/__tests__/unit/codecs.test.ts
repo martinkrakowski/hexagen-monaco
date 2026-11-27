@@ -284,15 +284,20 @@ const CORPUS_EXPECT_REFUSED = new Set(
 
 export function runAdversarialCorpus(
   codec: { decode: (input: unknown) => unknown },
-  _env: { isProxy: (value: unknown) => boolean },
+  env: { isProxy: (value: unknown) => boolean },
+  onThrown?: (id: string, thrown: unknown) => void,
 ): readonly { id: string; refused: boolean }[] {
   return ADVERSARIAL_CORPUS.map((entry) => {
     let refused: boolean;
     try {
       const result = codec.decode(entry.input) as { ok: boolean };
       refused = !result.ok;
-    } catch {
-      refused = true;
+    } catch (thrown) {
+      // A throw is NOT a refusal — the test title promises refusals happen
+      // "without throwing". Report the thrown outcome separately and mark the
+      // entry as not refused so a crashing codec fails the corpus assertions.
+      onThrown?.(entry.id, thrown);
+      refused = false;
     }
     return { id: entry.id, refused };
   });
@@ -606,12 +611,32 @@ describe("generateCodecs — emission and traversal", () => {
 
     // No corpus entry makes the runner throw; every hostile entry is refused,
     // the valid entry decodes.
-    const outcomes = runAdversarialCorpus(codec, env);
+    const thrown: string[] = [];
+    const outcomes = runAdversarialCorpus(codec, env, (id) => thrown.push(id));
+    // A codec crash is not a refusal — none may have occurred.
+    expect(thrown).toEqual([]);
     expect(outcomes.map((o) => o.id).sort()).toEqual(
       ADVERSARIAL_CORPUS.map((e) => e.id).sort(),
     );
     for (const outcome of outcomes) {
       expect(outcome.refused).toBe(CORPUS_EXPECT_REFUSED.has(outcome.id));
+    }
+
+    // Every corpus refusal is a DecodeResult { ok: false, reason, path } —
+    // asserted directly rather than inferred from caught exceptions.
+    for (const entry of ADVERSARIAL_CORPUS) {
+      if (entry.id === "valid") continue;
+      const result = codec.decode(entry.input) as {
+        ok: boolean;
+        reason?: unknown;
+        path?: unknown;
+      };
+      expect(result.ok, entry.id).toBe(false);
+      expect(typeof result.reason, entry.id).toBe("string");
+      expect(
+        result.path === null || typeof result.path === "string",
+        entry.id,
+      ).toBe(true);
     }
 
     // DecodeResult refusal shape: { ok: false, reason, path }.
@@ -638,5 +663,65 @@ describe("generateCodecs — emission and traversal", () => {
     }) as { ok: true; value: Record<string, unknown> };
     expect(okResult.ok).toBe(true);
     expect(Object.isFrozen(okResult.value)).toBe(true);
+  });
+});
+
+describe("fix round 1 — sanitized layers config", () => {
+  let fixtureRoot: string | null = null;
+
+  afterEach(async () => {
+    await removeFixture(fixtureRoot);
+    fixtureRoot = null;
+  });
+
+  it("refuses accessor getters and descriptor-throwing Proxy traps on generator.sync.layers application/folder with HOSTILE_INPUT without invoking them", async () => {
+    fixtureRoot = await createFixture(["alpha"]);
+    const moduleDir = path.join(fixtureRoot, "packages", "alpha");
+
+    // Accessor on `folder`: the getter must never run, and the value must
+    // never be read through ordinary property access inside the resolver.
+    let getterInvoked = false;
+    const accessorManifest = makeManifest();
+    (
+      (accessorManifest as unknown as Record<string, unknown>).generator as {
+        sync: { layers: unknown };
+      }
+    ).sync.layers = {
+      application: {
+        get folder() {
+          getterInvoked = true;
+          return "src/app";
+        },
+      },
+    };
+    const accessorResult = await generateCodecs(
+      moduleDir,
+      "alpha",
+      makeConfig(fixtureRoot, accessorManifest, createSpyLogger()),
+    );
+    expectErrCode(accessorResult, "HOSTILE_INPUT");
+    expect(getterInvoked).toBe(false);
+
+    // A Proxy that throws only when asked for the `application` DESCRIPTOR:
+    // ordinary property reads would succeed silently, so only the sanitized
+    // descriptor path refuses it — before resolveEmissionDir is ever called.
+    const layersTarget = { application: { folder: "src/app" } };
+    const proxyManifest = makeManifest();
+    (
+      (proxyManifest as unknown as Record<string, unknown>).generator as {
+        sync: { layers: unknown };
+      }
+    ).sync.layers = new Proxy(layersTarget, {
+      getOwnPropertyDescriptor(_target, key) {
+        if (key === "application") throw new Error("application trap");
+        return Object.getOwnPropertyDescriptor(layersTarget, key);
+      },
+    });
+    const proxyResult = await generateCodecs(
+      moduleDir,
+      "alpha",
+      makeConfig(fixtureRoot, proxyManifest, createSpyLogger()),
+    );
+    expectErrCode(proxyResult, "HOSTILE_INPUT");
   });
 });

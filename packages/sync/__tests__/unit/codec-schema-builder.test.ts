@@ -474,3 +474,90 @@ describe("renderCodecModule — deterministic fleet-v2 output", () => {
     expect(other).toContain("CancelOrderRequest");
   });
 });
+
+describe("fix round 1 — hostile-input regressions", () => {
+  it("refuses a Proxy whose getPrototypeOf trap throws with HOSTILE_INPUT instead of escaping reflection", () => {
+    const hostile = new Proxy(
+      {},
+      {
+        getPrototypeOf() {
+          throw new Error("getPrototypeOf trap");
+        },
+      },
+    );
+
+    // readOwnDataProperty: the plainness check itself must be trap-catching.
+    const propResult = readOwnDataProperty(hostile, "kind", "t");
+    expect(propResult.success).toBe(false);
+    expect((propResult as { error?: { code: string } }).error?.code).toBe(
+      "HOSTILE_INPUT",
+    );
+
+    // resolveRuntimeModule: manifest reading must convert the same trap.
+    const modResult = resolveRuntimeModule(hostile);
+    expect(modResult.success).toBe(false);
+    expect((modResult as { error?: { code: string } }).error?.code).toBe(
+      "HOSTILE_INPUT",
+    );
+
+    // buildCodecSchema: a throwing getPrototypeOf trap anywhere in the
+    // contract tree is refused, never thrown out of the builder.
+    expect(() => buildCodecSchema(hostile, "t")).not.toThrow();
+    const schemaResult = buildCodecSchema(hostile, "t");
+    expect(schemaResult.success).toBe(false);
+    expect((schemaResult as { error?: { code: string } }).error?.code).toBe(
+      "HOSTILE_INPUT",
+    );
+  });
+
+  it("refuses a Proxy that throws only when asked for the minLength descriptor with HOSTILE_INPUT (not treated as absent)", () => {
+    // A valid string schema EXCEPT the minLength descriptor read throws.
+    const target: Record<string, unknown> = {
+      kind: "string",
+      maxLength: 8,
+    };
+    const hostile = new Proxy(target, {
+      getOwnPropertyDescriptor(_t, key) {
+        if (key === "minLength") throw new Error("minLength trap");
+        return Object.getOwnPropertyDescriptor(target, key);
+      },
+    });
+    const result = buildCodecSchema(hostile, "t");
+    expect(result.success).toBe(false);
+    expect((result as { error?: { code: string } }).error?.code).toBe(
+      "HOSTILE_INPUT",
+    );
+  });
+
+  it("processes non-enumerable own field schemas instead of silently omitting them", () => {
+    const fields: Record<string, unknown> = {
+      visible: { kind: "string", maxLength: 4 },
+    };
+    Object.defineProperty(fields, "hidden", {
+      value: { kind: "integer", min: 0, max: 5 },
+      enumerable: false,
+      writable: true,
+      configurable: true,
+    });
+    const result = buildCodecSchema(
+      {
+        kind: "object",
+        exact: true,
+        fields,
+      },
+      "t",
+    );
+    expect(result.success).toBe(true);
+    const schema = (result as { value: { fields: Record<string, unknown> } })
+      .value;
+    // The non-enumerable field made it into the emitted schema…
+    expect(schema.fields).toHaveProperty("hidden");
+    expect(schema.fields.hidden).toEqual({
+      kind: "integer",
+      min: 0,
+      max: 5,
+    });
+    // …and the field-count bound still counts it.
+    expect(Object.keys(schema.fields)).toHaveLength(2);
+  });
+});
