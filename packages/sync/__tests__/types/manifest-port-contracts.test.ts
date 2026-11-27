@@ -23,7 +23,11 @@ describe("manifest port-contract TypeScript types", () => {
       fields: {
         id: { kind: "integer", min: 0 },
         name: { kind: "string", maxLength: 32 },
-        tags: { kind: "array", items: { kind: "string", maxLength: 8 }, maxItems: 10 },
+        tags: {
+          kind: "array",
+          items: { kind: "string", maxLength: 8 },
+          maxItems: 10,
+        },
         flag: { kind: "boolean" },
         role: { kind: "enum", values: ["admin", "member"] },
         mode: { kind: "literal", value: "fixed" },

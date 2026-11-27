@@ -9,7 +9,10 @@ import {
   MAX_CONTRACT_FIELDS,
   MAX_CONTRACT_NODES,
 } from "../../../../src/domain/model/manifest-schema/port-contract-schema";
-import { PortDefinitionSchema, GeneratorBlockSchema } from "../../../../src/domain/model/manifest-schema/manifest-schema";
+import {
+  PortDefinitionSchema,
+  GeneratorBlockSchema,
+} from "../../../../src/domain/model/manifest-schema/manifest-schema";
 
 const PORT = "MyPort";
 
@@ -73,7 +76,9 @@ describe("validatePortContract", () => {
           request: {
             kind: "object",
             exact: true,
-            fields: { a: { optional: { kind: "string", maxLength: 5 }, other: 1 } },
+            fields: {
+              a: { optional: { kind: "string", maxLength: 5 }, other: 1 },
+            },
           },
         },
         PORT,
@@ -149,10 +154,7 @@ describe("validatePortContract", () => {
       "contracts.request",
     );
     assertError(
-      validatePortContract(
-        { request: { kind: "array", maxItems: 3 } },
-        PORT,
-      ),
+      validatePortContract({ request: { kind: "array", maxItems: 3 } }, PORT),
       "UNSUPPORTED_SHAPE",
       "contracts.request",
     );
@@ -338,14 +340,15 @@ describe("validatePortContract", () => {
 
     class NotPlain {}
     assertError(
-      validatePortContract(
-        Object.create(NotPlain.prototype) as object,
-        PORT,
-      ),
+      validatePortContract(Object.create(NotPlain.prototype) as object, PORT),
       "HOSTILE_INPUT",
       "contracts",
     );
-    assertError(validatePortContract(new Map(), PORT), "HOSTILE_INPUT", "contracts");
+    assertError(
+      validatePortContract(new Map(), PORT),
+      "HOSTILE_INPUT",
+      "contracts",
+    );
 
     // A getter on a `fields` entry is refused too, without invoking it.
     let fieldInvoked = false;
@@ -386,14 +389,21 @@ describe("validatePortContract", () => {
       "HOSTILE_INPUT",
       "contracts.request",
     );
-    assertError(validatePortContract(hostile, PORT), "HOSTILE_INPUT", "contracts");
+    assertError(
+      validatePortContract(hostile, PORT),
+      "HOSTILE_INPUT",
+      "contracts",
+    );
   });
 
   it("refuses an array hole, a non-array iterable or non-iterable enum.values, and an enormous array-like length with HOSTILE_INPUT", () => {
     const withHole: string[] = ["a", "b"];
     withHole.length = 4; // indexes 2 and 3 are holes
     assertError(
-      validatePortContract({ request: { kind: "enum", values: withHole } }, PORT),
+      validatePortContract(
+        { request: { kind: "enum", values: withHole } },
+        PORT,
+      ),
       "HOSTILE_INPUT",
       "contracts.request",
     );
@@ -424,7 +434,9 @@ describe("validatePortContract", () => {
   });
 
   it("accepts a contract with exact omitted and with exact true", () => {
-    ok(validatePortContract({ request: { kind: "string", maxLength: 5 } }, PORT));
+    ok(
+      validatePortContract({ request: { kind: "string", maxLength: 5 } }, PORT),
+    );
     ok(
       validatePortContract(
         { request: { kind: "object", exact: true, fields: {} } },
@@ -440,7 +452,11 @@ describe("validatePortContract", () => {
             fields: {
               id: { kind: "integer", min: 0 },
               name: { kind: "string", maxLength: 32, pattern: "^[a-z]+$" },
-              tags: { kind: "array", items: { kind: "string", maxLength: 8 }, maxItems: 10 },
+              tags: {
+                kind: "array",
+                items: { kind: "string", maxLength: 8 },
+                maxItems: 10,
+              },
               flag: { kind: "boolean" },
               role: { kind: "enum", values: ["admin", "member"] },
               mode: { kind: "literal", value: "fixed" },
@@ -665,8 +681,9 @@ describe("validateManifestPortContracts", () => {
       ],
     });
     assert.equal(accessorResult.ok, false, "an index accessor must be refused");
-    const accessorError = (accessorResult as { error: PortContractValidationError })
-      .error;
+    const accessorError = (
+      accessorResult as { error: PortContractValidationError }
+    ).error;
     assert.ok(accessorError instanceof PortContractValidationError);
     assert.equal(accessorError.code, "HOSTILE_INPUT");
     assert.equal(indexGetterRan, false, "the index getter was invoked");
@@ -714,8 +731,12 @@ describe("CodecGeneratorBlockSchema", () => {
       GeneratorBlockSchema.parse({ codec: { runtimeModule: "@custom/x" } }),
       { codec: { runtimeModule: "@custom/x" } },
     );
-    assert.throws(() => GeneratorBlockSchema.parse({ codec: { runtimeModule: "" } }));
-    assert.throws(() => GeneratorBlockSchema.parse({ codec: { runtimeModule: 42 } }));
+    assert.throws(() =>
+      GeneratorBlockSchema.parse({ codec: { runtimeModule: "" } }),
+    );
+    assert.throws(() =>
+      GeneratorBlockSchema.parse({ codec: { runtimeModule: 42 } }),
+    );
   });
 
   it("defaults generator.codec.runtimeModule to '@fleet/shared' when codec is {} and omits codec when absent", () => {
@@ -766,7 +787,11 @@ describe("PortDefinitionSchema contracts integration", () => {
       name: "p",
       contracts: undefined,
     });
-    assert.equal(result.success, false, "explicit contracts: undefined must fail");
+    assert.equal(
+      result.success,
+      false,
+      "explicit contracts: undefined must fail",
+    );
     if (!result.success) {
       const messages = result.error.issues.map((issue) => issue.message);
       assert.ok(
@@ -813,7 +838,8 @@ describe("cost bounds", () => {
     assert.equal(result.ok, false);
     const error = (result as { error: PortContractValidationError }).error;
     assert.ok(
-      error.code === "MAX_NODES_EXCEEDED" || error.code === "MAX_FIELDS_EXCEEDED",
+      error.code === "MAX_NODES_EXCEEDED" ||
+        error.code === "MAX_FIELDS_EXCEEDED",
       `expected a budget refusal, got ${error.code}`,
     );
     assert.ok(MAX_CONTRACT_NODES === 1024);

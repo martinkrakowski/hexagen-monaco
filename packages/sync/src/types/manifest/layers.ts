@@ -22,7 +22,10 @@ export type PortContractField =
        * omitted, so the static type mirrors that (H1 review round 1).
        */
       exact?: true;
-      fields: Record<string, PortContractField | { optional: PortContractField }>;
+      fields: Record<
+        string,
+        PortContractField | { optional: PortContractField }
+      >;
     }
   | { kind: "array"; items: PortContractField; maxItems: number }
   | { kind: "string"; maxLength: number; pattern?: string }

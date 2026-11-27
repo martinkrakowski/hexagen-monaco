@@ -139,7 +139,11 @@ export const PortDefinitionSchema = z
           // Accessors and thrown traps on name/owner are ignored here: the
           // inner z.object then reports the missing/invalid `name` as a
           // typed issue — never a throw.
-          if (desc !== undefined && desc.get === undefined && desc.set === undefined) {
+          if (
+            desc !== undefined &&
+            desc.get === undefined &&
+            desc.set === undefined
+          ) {
             copy[key] = desc.value;
           }
         } catch {

@@ -106,15 +106,15 @@ interface NodeBudget {
   nodesRemaining: number;
 }
 
-type Fail = (code: PortContractErrorCode, message: string) => {
+type Fail = (
+  code: PortContractErrorCode,
+  message: string,
+) => {
   ok: false;
   error: PortContractValidationError;
 };
 
-function makeFail(
-  portName: string,
-  contractPath: string,
-): Fail {
+function makeFail(portName: string, contractPath: string): Fail {
   return (code, message) => ({
     ok: false,
     error: new PortContractValidationError(
@@ -182,7 +182,9 @@ function isPlainObject(
 function ownKeys(
   raw: object,
   fail: Fail,
-): { names: string[]; symbols: symbol[] } | { error: PortContractValidationError } {
+):
+  | { names: string[]; symbols: symbol[] }
+  | { error: PortContractValidationError } {
   try {
     const names = Object.getOwnPropertyNames(raw);
     const symbols = Object.getOwnPropertySymbols(raw);
@@ -284,10 +286,7 @@ function validatePortContractNode(
     );
   }
   if (nodeArrayCheck) {
-    return fail(
-      "MALFORMED_CONTRACT",
-      "arrays are not valid contract nodes",
-    );
+    return fail("MALFORMED_CONTRACT", "arrays are not valid contract nodes");
   }
   if (depth > MAX_CONTRACT_DEPTH) {
     return fail(
@@ -611,10 +610,7 @@ function validatePortContractNode(
         max.present &&
         (min.value as number) > (max.value as number)
       ) {
-        return fail(
-          "UNSUPPORTED_SHAPE",
-          "`min` must be <= `max`",
-        );
+        return fail("UNSUPPORTED_SHAPE", "`min` must be <= `max`");
       }
       return { ok: true };
     }
@@ -777,10 +773,7 @@ export function validatePortContract(
     }
   }
   if (!keys.names.includes("request")) {
-    return fail(
-      "MALFORMED_CONTRACT",
-      "contracts block is missing `request`",
-    );
+    return fail("MALFORMED_CONTRACT", "contracts block is missing `request`");
   }
   const request = readOwnKey(contracts as object, "request", keys.names, fail);
   if ("error" in request) {
@@ -839,7 +832,10 @@ function readOwnData(
  */
 function inspectDenseArray(
   value: unknown,
-): { kind: "dense"; length: number } | { kind: "not-array" } | { kind: "hostile"; message: string } {
+):
+  | { kind: "dense"; length: number }
+  | { kind: "not-array" }
+  | { kind: "hostile"; message: string } {
   try {
     if (!Array.isArray(value)) {
       return { kind: "not-array" };
@@ -855,7 +851,10 @@ function inspectDenseArray(
     }
     return { kind: "dense", length };
   } catch (err) {
-    return { kind: "hostile", message: `array inspection threw: ${String(err)}` };
+    return {
+      kind: "hostile",
+      message: `array inspection threw: ${String(err)}`,
+    };
   }
 }
 
@@ -894,7 +893,12 @@ function hostile(
 ): PortContractValidationResult {
   return {
     ok: false,
-    error: new PortContractValidationError("HOSTILE_INPUT", portName, contractPath, message),
+    error: new PortContractValidationError(
+      "HOSTILE_INPUT",
+      portName,
+      contractPath,
+      message,
+    ),
   };
 }
 
@@ -920,11 +924,7 @@ export function validateManifestPortContracts(
   // `Array.isArray` can throw on a revoked proxy — never let it escape.
   const manifestShape = inspectDenseArray(manifest);
   if (manifestShape.kind === "hostile") {
-    return hostile(
-      "<unnamed>",
-      "manifest",
-      manifestShape.message,
-    );
+    return hostile("<unnamed>", "manifest", manifestShape.message);
   }
   if (manifestShape.kind === "dense") {
     return { ok: true };
@@ -969,22 +969,14 @@ export function validateManifestPortContracts(
     }
     const contextShape = inspectDenseArray(context);
     if (contextShape.kind === "hostile") {
-      return hostile(
-        "<unnamed>",
-        "bounded_contexts",
-        contextShape.message,
-      );
+      return hostile("<unnamed>", "bounded_contexts", contextShape.message);
     }
     if (contextShape.kind === "dense") {
       continue;
     }
     const layersRead = readOwnData(context, "layers");
     if (layersRead.error !== undefined) {
-      return hostile(
-        "<unnamed>",
-        "bounded_contexts.layers",
-        layersRead.error,
-      );
+      return hostile("<unnamed>", "bounded_contexts.layers", layersRead.error);
     }
     if (!layersRead.present) {
       continue;
@@ -1026,11 +1018,7 @@ export function validateManifestPortContracts(
     for (const direction of ["in", "out"] as const) {
       const listRead = readOwnData(ports, direction);
       if (listRead.error !== undefined) {
-        return hostile(
-          "<unnamed>",
-          `ports.${direction}`,
-          listRead.error,
-        );
+        return hostile("<unnamed>", `ports.${direction}`, listRead.error);
       }
       if (!listRead.present) {
         continue;
@@ -1038,11 +1026,7 @@ export function validateManifestPortContracts(
       const list = listRead.value;
       const listShape = inspectDenseArray(list);
       if (listShape.kind === "hostile") {
-        return hostile(
-          "<unnamed>",
-          `ports.${direction}`,
-          listShape.message,
-        );
+        return hostile("<unnamed>", `ports.${direction}`, listShape.message);
       }
       if (listShape.kind !== "dense") {
         continue;
@@ -1060,11 +1044,7 @@ export function validateManifestPortContracts(
         }
         const portShape = inspectDenseArray(port);
         if (portShape.kind === "hostile") {
-          return hostile(
-            "<unnamed>",
-            `ports.${direction}`,
-            portShape.message,
-          );
+          return hostile("<unnamed>", `ports.${direction}`, portShape.message);
         }
         if (portShape.kind === "dense") {
           continue;
@@ -1083,11 +1063,7 @@ export function validateManifestPortContracts(
             : "<unnamed>";
         const contractsRead = readOwnData(port, "contracts");
         if (contractsRead.error !== undefined) {
-          return hostile(
-            portName,
-            "contracts",
-            contractsRead.error,
-          );
+          return hostile(portName, "contracts", contractsRead.error);
         }
         if (!contractsRead.present) {
           continue;
