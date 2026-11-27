@@ -17,6 +17,7 @@ import { generateApps } from "./generators/apps.js";
 import { generateEslintConfig } from "./generators/eslint.js";
 import { generateStubs } from "./generators/stubs.js";
 import { generateCodecs } from "./generators/codecs.js";
+import { generateCodecTests } from "./generators/codec-test.js";
 import { generateCrossContext } from "./generators/cross-context.js";
 import { generateSharedKernel } from "./generators/shared-kernel.js";
 import { resetPortAnalysisMemo } from "./generators/port-analyzer.js";
@@ -265,6 +266,43 @@ export class SyncEngine {
     };
   }
 
+  /**
+   * Lane H3: emit the adversarial codec tests under `<moduleDir>/__tests__/codecs/`
+   * for every contract-bearing port. Mirrors the generateCoreArtifacts
+   * per-module loop and failure discipline: each module's result is noted via
+   * noteFailure("CodecTests", ...) BEFORE mergeResult folds it (merge keeps
+   * only the first error), and the merged row feeds the run summary.
+   */
+  private async generateCodecTestArtifacts(): Promise<GeneratorResult> {
+    const config = this.getConfig();
+    const { logger } = config;
+    const modules = config.manifest.bounded_contexts ?? [];
+
+    const codecTests = createEmptyResult();
+    for (const module of modules) {
+      const moduleName = module.name;
+      if (
+        !moduleName ||
+        moduleName.includes("..") ||
+        moduleName.includes("/") ||
+        moduleName.startsWith(".")
+      ) {
+        continue;
+      }
+      const moduleDir = path.join(this.workspaceRoot, "packages", moduleName);
+      logger.info(`Generating codec tests for module: ${moduleName}`);
+      const codecTestResult = await generateCodecTests(
+        moduleDir,
+        moduleName,
+        config,
+        this.report,
+      );
+      this.noteFailure("CodecTests", codecTestResult);
+      mergeResult(codecTests, codecTestResult);
+    }
+    return codecTests;
+  }
+
   async run(): Promise<SyncRunSummary> {
     resetPortAnalysisMemo();
     const { logger, dryRun, allowDirty, mode } = this.partialConfig;
@@ -394,6 +432,9 @@ export class SyncEngine {
       this.noteFailure("Layers", layerResult);
 
       const coreResults = await this.generateCoreArtifacts();
+      // Lane H3: adversarial codec tests (after the H2 codecs so the emitted
+      // imports resolve against freshly generated codec modules).
+      const codecTests = await this.generateCodecTestArtifacts();
       const { pkgs, tsconfigs, eslint, stubs, codecs } = coreResults;
       const firstPassBarrels = coreResults.barrels;
       const appsResult = await generateApps(this.fullConfig, this.report);
@@ -455,6 +496,7 @@ export class SyncEngine {
         ["ESLint", eslint],
         ["Stubs", stubs],
         ["Codecs", codecs],
+        ["CodecTests", codecTests],
         ["Apps", appsResult],
       ];
       const runSummary: SyncRunSummary = {
