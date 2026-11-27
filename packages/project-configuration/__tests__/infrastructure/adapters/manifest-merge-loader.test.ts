@@ -8,6 +8,7 @@ import {
   isIndexManifest,
   mergeSplitManifest,
 } from "../../../src/infrastructure/adapters/manifest-merge-loader.js";
+import { PortContractValidationError } from "../../../src/domain/model/manifest-schema/port-contract-schema.js";
 
 describe("isIndexManifest", () => {
   it("returns true for valid index manifest with version 2.0 and bounded_contexts with .file", () => {
@@ -825,5 +826,133 @@ describe("mergeSplitManifest schemaVersion gate (PR-C1)", () => {
         return true;
       },
     );
+  });
+});
+
+describe("mergeSplitManifest port-contract validation (H1)", () => {
+  let tmpDir: string;
+
+  afterEach(async () => {
+    if (tmpDir) {
+      await rm(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  async function setupDir(): Promise<string> {
+    const dir = await mkdtemp(join(tmpdir(), "mml-contract-test-"));
+    tmpDir = dir;
+    return dir;
+  }
+
+  it("refuses duplicate field keys in a port contract during manifest load", async () => {
+    const dir = await setupDir();
+    const archDir = join(dir, ".architecture");
+    await mkdir(archDir, { recursive: true });
+
+    const manifestYaml = [
+      `system: dup-system`,
+      `scope: dup-scope`,
+      `bounded_contexts:`,
+      `  - name: ctx`,
+      `    type: core`,
+      `    layers:`,
+      `      application:`,
+      `        ports:`,
+      `          out:`,
+      `            - name: TypedPort`,
+      `              contracts:`,
+      `                request:`,
+      `                  kind: object`,
+      `                  exact: true`,
+      `                  fields:`,
+      `                    a:`,
+      `                      kind: string`,
+      `                      maxLength: 5`,
+      `                    a:`,
+      `                      kind: string`,
+      `                      maxLength: 5`,
+    ].join("\n");
+
+    const manifestPath = join(archDir, "manifest.yaml");
+    await writeFile(manifestPath, manifestYaml, "utf-8");
+
+    await assert.rejects(
+      () => mergeSplitManifest(dir, manifestPath),
+      (err: unknown) => {
+        assert.ok(err instanceof Error);
+        assert.match(err.message, /duplicated mapping key/);
+        return true;
+      },
+    );
+  });
+
+  it("mergeSplitManifest refuses a port contract missing an explicit string bound with PortContractValidationError naming the port and path", async () => {
+    const dir = await setupDir();
+    const archDir = join(dir, ".architecture");
+    await mkdir(archDir, { recursive: true });
+
+    const manifestYaml = [
+      `system: bound-system`,
+      `scope: bound-scope`,
+      `bounded_contexts:`,
+      `  - name: ctx`,
+      `    type: core`,
+      `    layers:`,
+      `      application:`,
+      `        ports:`,
+      `          in:`,
+      `            - name: UnboundedPort`,
+      `              contracts:`,
+      `                request:`,
+      `                  kind: string`,
+    ].join("\n");
+
+    const manifestPath = join(archDir, "manifest.yaml");
+    await writeFile(manifestPath, manifestYaml, "utf-8");
+
+    await assert.rejects(
+      () => mergeSplitManifest(dir, manifestPath),
+      (err: unknown) => {
+        assert.ok(err instanceof PortContractValidationError);
+        assert.equal(err.code, "MISSING_BOUND");
+        assert.equal(err.portName, "UnboundedPort");
+        assert.match(err.contractPath, /contracts\.request/);
+        return true;
+      },
+    );
+  });
+
+  it("mergeSplitManifest accepts a port without contracts and a port with a valid contracts block", async () => {
+    const dir = await setupDir();
+    const archDir = join(dir, ".architecture");
+    await mkdir(archDir, { recursive: true });
+
+    const manifestYaml = [
+      `system: ok-system`,
+      `scope: ok-scope`,
+      `bounded_contexts:`,
+      `  - name: ctx`,
+      `    type: core`,
+      `    layers:`,
+      `      application:`,
+      `        ports:`,
+      `          in:`,
+      `            - PlainPort`,
+      `            - name: TypedPort`,
+      `              contracts:`,
+      `                request:`,
+      `                  kind: object`,
+      `                  exact: true`,
+      `                  fields:`,
+      `                    id:`,
+      `                      kind: integer`,
+      `                      min: 0`,
+    ].join("\n");
+
+    const manifestPath = join(archDir, "manifest.yaml");
+    await writeFile(manifestPath, manifestYaml, "utf-8");
+
+    const result = await mergeSplitManifest(dir, manifestPath);
+    assert.equal(result.bounded_contexts![0].name, "ctx");
   });
 });

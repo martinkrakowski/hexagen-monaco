@@ -1,6 +1,8 @@
 export type {
   DomainLayer,
   PortDefinition,
+  PortContractField,
+  PortContract,
   LegacyOrNewPort,
   ApplicationPorts,
   ApplicationLayer,
@@ -52,6 +54,7 @@ export type {
   PackageJsonConfig,
   SyncConfig,
   GeneratorConfig,
+  CodecGeneratorConfig,
 } from "./generator.js";
 
 export type {

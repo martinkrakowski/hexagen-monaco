@@ -1,8 +1,9 @@
 import type { BoundedContext } from "./bounded-context.js";
-import type { LegacyOrNewPort } from "./layers.js";
 import type { Manifest } from "./manifest.js";
 
-export function portName(port: LegacyOrNewPort): string {
+export function portName(
+  port: string | { name: string; owner?: string; contracts?: unknown },
+): string {
   return typeof port === "string" ? port : port.name;
 }
 

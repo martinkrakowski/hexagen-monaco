@@ -1,5 +1,9 @@
 import { z } from "zod";
 import { boundedContextTypeSchema } from "@hexagen/shared";
+import {
+  validatePortContract,
+  CodecGeneratorBlockSchema,
+} from "./port-contract-schema";
 
 /**
  * Wraps a Zod enum so validation is case-insensitive. LLM-generated manifests
@@ -73,10 +77,54 @@ export const RelationshipSchema = z.object({
   notes: z.string().optional(),
 });
 
-export const PortDefinitionSchema = z.object({
-  name: z.string(),
-  owner: z.string().optional(),
-});
+export const PortDefinitionSchema = z
+  .object({
+    name: z.string(),
+    owner: z.string().optional(),
+    // Declared as `z.unknown()` WITHOUT `.optional()` semantics relied on for
+    // presence: the presence check happens in `superRefine` below via
+    // `Object.getOwnPropertyDescriptor(port, "contracts")` only — never
+    // `port.contracts` — so a present own `contracts` property whose value is
+    // `undefined` is MALFORMED, while an absent key passes untouched. The deep
+    // validation itself lives in validatePortContract (port-contract-schema.ts)
+    // so Zod never parses untrusted `contracts:` data before descriptor
+    // inspection runs.
+    contracts: z.unknown().optional(),
+  })
+  .superRefine((val, ctx) => {
+    let desc: PropertyDescriptor | undefined;
+    try {
+      desc = Object.getOwnPropertyDescriptor(val, "contracts");
+    } catch {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["contracts"],
+        message: `HOSTILE_INPUT: descriptor inspection on "contracts" threw`,
+      });
+      return;
+    }
+    if (desc === undefined) {
+      // Absent own property: port without contracts — valid.
+      return;
+    }
+    if (desc.get !== undefined || desc.set !== undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["contracts"],
+        message: `HOSTILE_INPUT: "contracts" is an accessor; getters are never invoked`,
+      });
+      return;
+    }
+    const portName = typeof val.name === "string" ? val.name : "<unnamed>";
+    const result = validatePortContract(desc.value, portName);
+    if (!result.ok) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["contracts"],
+        message: result.error.message,
+      });
+    }
+  });
 
 export const LegacyOrNewPortSchema = z.union([
   z.string(),
@@ -220,7 +268,12 @@ export const CrossContextEdgeSchema = z.object({
  * previous `z.record(z.unknown())` did.
  */
 export const GeneratorBlockSchema = z
-  .object({ name: z.string().min(1).optional() })
+  .object({
+    name: z.string().min(1).optional(),
+    // Typed codec block (H1). When present without `runtimeModule`, the
+    // runtime module defaults to "@fleet/shared" (CodecGeneratorBlockSchema).
+    codec: CodecGeneratorBlockSchema.optional(),
+  })
   .passthrough();
 
 export const IndexManifestSchema = z
