@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { CodecGeneratorBlockSchema } from "../manifest-schema/port-contract-schema";
 
 /**
  * Shape of `.architecture/workspace.config.yaml` — the side-car that
@@ -40,6 +41,9 @@ const GeneratorConfigSchema = z
     name: z.string().min(1).optional(),
     version: z.string().optional(),
     sync: GeneratorSyncSchema.optional(),
+    // Typed codec block (H1): `runtimeModule` defaults to "@fleet/shared" when
+    // `codec` is present without it; `codec` stays undefined when absent.
+    codec: CodecGeneratorBlockSchema.optional(),
   })
   .passthrough();
 

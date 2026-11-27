@@ -62,6 +62,18 @@ export { HEXAGEN_GENERATOR_NAME } from "./domain/model/manifest-schema/generator
 export { WorkspaceConfigSchema } from "./domain/model/workspace-config/workspace-config.schema";
 export type { WorkspaceConfig } from "./domain/model/workspace-config/workspace-config.schema";
 export { isIndexManifest } from "./domain/model/manifest-schema/index.js";
+// Re-export typed port-contract validation (H1)
+export {
+  PortContractValidationError,
+  validatePortContract,
+  validateManifestPortContracts,
+  CodecGeneratorBlockSchema,
+  DEFAULT_CODEC_RUNTIME_MODULE,
+  MAX_CONTRACT_DEPTH,
+  MAX_CONTRACT_FIELDS,
+  MAX_CONTRACT_NODES,
+  PORT_CONTRACT_KINDS,
+} from "./domain/model/manifest-schema/port-contract-schema";
 // Re-export manifest-diff utilities
 export type {
   ManifestDiff,

@@ -8,9 +8,42 @@ export interface DomainLayer {
   };
 }
 
+/**
+ * One field-kind node of a typed port contract, matching the downstream
+ * `@fleet/shared` `CodecSchema` kinds. Objects are always exact; `enum.values`
+ * is dense; bounds (`maxLength`, `maxItems`) are explicit positive integers.
+ */
+export type PortContractField =
+  | {
+      kind: "object";
+      /**
+       * Optional but, when present, must be `true`: the runtime contract
+       * validator (validatePortContract) accepts objects with `exact`
+       * omitted, so the static type mirrors that (H1 review round 1).
+       */
+      exact?: true;
+      fields: Record<
+        string,
+        PortContractField | { optional: PortContractField }
+      >;
+    }
+  | { kind: "array"; items: PortContractField; maxItems: number }
+  | { kind: "string"; maxLength: number; pattern?: string }
+  | { kind: "integer" | "number"; min?: number; max?: number }
+  | { kind: "boolean" }
+  | { kind: "enum"; values: readonly string[] }
+  | { kind: "literal"; value: string | number | boolean | null }
+  | { kind: "nullable"; of: PortContractField };
+
+/** Typed request shape of a port: `{ request: PortContractField }` exactly. */
+export interface PortContract {
+  request: PortContractField;
+}
+
 export interface PortDefinition {
   name: string;
   owner?: string;
+  contracts?: PortContract;
 }
 
 export type LegacyOrNewPort = string | PortDefinition;

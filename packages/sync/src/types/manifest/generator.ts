@@ -50,9 +50,15 @@ export interface SyncConfig {
   apps?: import("./apps.js").AppsGeneratorConfig;
 }
 
+/** Typed codec generator block; runtimeModule defaults to "@fleet/shared". */
+export interface CodecGeneratorConfig {
+  runtimeModule?: string;
+}
+
 export interface GeneratorConfig {
   /** Identity marker; "@hexagen-monaco/sync" when hexagen wrote the manifest. Absent = legacy. */
   name?: string;
   version?: string;
   sync?: SyncConfig;
+  codec?: CodecGeneratorConfig;
 }

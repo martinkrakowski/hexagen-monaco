@@ -8,6 +8,7 @@ import {
   BoundedContextSchema,
   AppSchema,
 } from "../../domain/model/manifest-schema/manifest-schema.js";
+import { validateManifestPortContracts } from "../../domain/model/manifest-schema/port-contract-schema.js";
 import type {
   Manifest,
   ManifestBoundedContext,
@@ -120,6 +121,15 @@ export async function mergeSplitManifest(
       description:
         (parsed as Manifest).description ?? "Auto-generated manifest",
     };
+    // Validate every application port's `contracts:` block on the RAW parsed
+    // YAML BEFORE the Zod parse: the contract validator inspects property
+    // descriptors and must own the error surface — a failure throws the typed
+    // PortContractValidationError naming the port and path, never silently
+    // skipped and never masked as an unrelated Zod issue.
+    const contractCheck = validateManifestPortContracts(manifestData);
+    if (!contractCheck.ok) {
+      throw contractCheck.error;
+    }
     const validated = ManifestSchema.parse(manifestData);
     return validated as Manifest;
   }
@@ -238,6 +248,15 @@ export async function mergeSplitManifest(
     }
 
     const contextParsed = yaml.load(contextContent);
+    // Same trust boundary as the flat path: validate `contracts:` blocks on
+    // the raw parsed context BEFORE BoundedContextSchema so the failure is the
+    // typed PortContractValidationError naming the port and path.
+    const contextContractCheck = validateManifestPortContracts({
+      bounded_contexts: [contextParsed],
+    });
+    if (!contextContractCheck.ok) {
+      throw contextContractCheck.error;
+    }
     const contextResult = BoundedContextSchema.safeParse(contextParsed);
 
     if (!contextResult.success) {
