@@ -617,19 +617,17 @@ function buildNode(
           ),
         );
       }
-      // Bounded own-key enumeration: a `for...in` scan is a lazy iterator, so
-      // counting own enumerable keys with an early return refuses an enormous
-      // field count BEFORE `Object.getOwnPropertyNames` materializes the full
-      // key list (unbounded allocation). Getters are never invoked by a
-      // `for...in`; trap throws remain HOSTILE_INPUT. Non-enumerable own keys
-      // are not seen by `for...in` — they are still caught by the exhaustive
-      // `getOwnPropertyNames` count check below.
-      let enumerableOwnKeys = 0;
+      // Bounded own-key enumeration at the trust boundary: a `for...in` scan
+      // is a lazy iterator, so counting own enumerable keys with an early
+      // return refuses an enormous field count BEFORE any key list is
+      // materialized (unbounded allocation). Getters are never invoked by a
+      // `for...in`; trap throws remain HOSTILE_INPUT.
+      const enumerableKeys: string[] = [];
       try {
         for (const key in fieldsRaw) {
           if (Object.prototype.hasOwnProperty.call(fieldsRaw, key)) {
-            enumerableOwnKeys += 1;
-            if (enumerableOwnKeys > MAX_OBJECT_FIELDS) {
+            enumerableKeys.push(key);
+            if (enumerableKeys.length > MAX_OBJECT_FIELDS) {
               return err(
                 new CodecGeneratorError(
                   "BOUNDS_EXCEEDED",
@@ -649,9 +647,13 @@ function buildNode(
           ),
         );
       }
-      // Enumerate ALL own string keys (Object.keys would silently omit
-      // non-enumerable own field schemas — a contract carrying one would
-      // lose that field's validation). Reflection throws are HOSTILE_INPUT.
+      // Non-enumerable own keys cannot be counted cheaply (no reflection API
+      // enumerates them lazily), so a fields object carrying any is refused
+      // outright: JSON-origin manifests never have them, and materializing
+      // `getOwnPropertyNames` for such an object would allocate an unbounded
+      // key list before the field-count bound could be enforced. Their
+      // presence is detected by comparing the own-enumerable count from the
+      // bounded pre-scan with the total own-key count.
       let keys: string[];
       try {
         keys = Object.getOwnPropertyNames(fieldsRaw as Record<string, unknown>);
@@ -661,6 +663,15 @@ function buildNode(
             "HOSTILE_INPUT",
             path,
             `reflection threw while enumerating fields at ${path}`,
+          ),
+        );
+      }
+      if (keys.length !== enumerableKeys.length) {
+        return err(
+          new CodecGeneratorError(
+            "HOSTILE_INPUT",
+            path,
+            `object at ${path} carries non-enumerable own properties on "fields" (count cannot be established cheaply)`,
           ),
         );
       }

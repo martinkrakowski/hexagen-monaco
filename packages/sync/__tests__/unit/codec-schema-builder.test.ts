@@ -609,7 +609,11 @@ describe("fix round 1 — hostile-input regressions", () => {
     );
   });
 
-  it("processes non-enumerable own field schemas instead of silently omitting them", () => {
+  it("refuses non-enumerable own field schemas with HOSTILE_INPUT (count cannot be established cheaply)", () => {
+    // JSON-origin manifests never carry non-enumerable own properties, and no
+    // reflection API enumerates them lazily — so the trust boundary refuses a
+    // fields object carrying ANY, detected as a mismatch between the bounded
+    // for...in enumerable pre-scan and the total own-key count.
     const fields: Record<string, unknown> = {
       visible: { kind: "string", maxLength: 4 },
     };
@@ -619,25 +623,28 @@ describe("fix round 1 — hostile-input regressions", () => {
       writable: true,
       configurable: true,
     });
-    const result = buildCodecSchema(
-      {
-        kind: "object",
-        exact: true,
-        fields,
-      },
-      "t",
+    expectErr(
+      buildCodecSchema({ kind: "object", exact: true, fields }, "t"),
+      "HOSTILE_INPUT",
     );
-    expect(result.success).toBe(true);
-    const schema = (result as { value: { fields: Record<string, unknown> } })
-      .value;
-    // The non-enumerable field made it into the emitted schema…
-    expect(schema.fields).toHaveProperty("hidden");
-    expect(schema.fields.hidden).toEqual({
-      kind: "integer",
-      min: 0,
-      max: 5,
-    });
-    // …and the field-count bound still counts it.
-    expect(Object.keys(schema.fields)).toHaveLength(2);
+  });
+
+  it("refuses a fields object exceeding MAX_OBJECT_FIELDS via non-enumerable own keys with HOSTILE_INPUT before the key list is trusted", () => {
+    // > MAX_OBJECT_FIELDS non-enumerable own keys are invisible to the
+    // for...in pre-scan; the pre-scan/enumerated-count comparison must refuse
+    // them rather than materializing and processing the full key list.
+    const fields: Record<string, unknown> = {};
+    for (let i = 0; i < MAX_OBJECT_FIELDS + 1; i++) {
+      Object.defineProperty(fields, `h${i}`, {
+        value: { kind: "boolean" },
+        enumerable: false,
+        writable: true,
+        configurable: true,
+      });
+    }
+    expectErr(
+      buildCodecSchema({ kind: "object", exact: true, fields }, "t"),
+      "HOSTILE_INPUT",
+    );
   });
 });
