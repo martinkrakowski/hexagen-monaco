@@ -7,6 +7,7 @@
 // hostile path AND at least one positive behaviour elsewhere in the file).
 
 import { describe, expect, it } from "vitest";
+import { types } from "node:util";
 import {
   buildCodecSchema,
   readDenseArray,
@@ -32,17 +33,23 @@ function expectErr(
 
 describe("buildCodecSchema — refusals", () => {
   it("refuses null and undefined contract inputs with MALFORMED_CONTRACT", () => {
-    expectErr(buildCodecSchema(null, "t"), "MALFORMED_CONTRACT");
-    expectErr(buildCodecSchema(undefined, "t"), "MALFORMED_CONTRACT");
+    expectErr(buildCodecSchema(null, "t", types.isProxy), "MALFORMED_CONTRACT");
+    expectErr(
+      buildCodecSchema(undefined, "t", types.isProxy),
+      "MALFORMED_CONTRACT",
+    );
   });
 
   it("refuses primitive values as a contract object with MALFORMED_CONTRACT", () => {
     for (const primitive of [42, "str", true, Symbol("s"), 0n]) {
-      expectErr(buildCodecSchema(primitive, "t"), "MALFORMED_CONTRACT");
+      expectErr(
+        buildCodecSchema(primitive, "t", types.isProxy),
+        "MALFORMED_CONTRACT",
+      );
     }
     // A function is not a contract object either.
     expectErr(
-      buildCodecSchema(() => 1, "t"),
+      buildCodecSchema(() => 1, "t", types.isProxy),
       "MALFORMED_CONTRACT",
     );
   });
@@ -55,7 +62,7 @@ describe("buildCodecSchema — refusals", () => {
         return "string";
       },
     };
-    const result = buildCodecSchema(hostileContract, "t");
+    const result = buildCodecSchema(hostileContract, "t", types.isProxy);
     expectErr(result, "HOSTILE_INPUT");
     expect(invoked).toBe(false);
 
@@ -69,7 +76,7 @@ describe("buildCodecSchema — refusals", () => {
         return {};
       },
     };
-    expectErr(buildCodecSchema(contract, "t"), "HOSTILE_INPUT");
+    expectErr(buildCodecSchema(contract, "t", types.isProxy), "HOSTILE_INPUT");
     expect(fieldGetterInvoked).toBe(false);
   });
 
@@ -83,13 +90,19 @@ describe("buildCodecSchema — refusals", () => {
         },
       },
     );
-    expectErr(buildCodecSchema(throwingProxy, "t"), "HOSTILE_INPUT");
+    expectErr(
+      buildCodecSchema(throwingProxy, "t", types.isProxy),
+      "HOSTILE_INPUT",
+    );
 
     // Non-plain prototype (class instance) is refused too.
     class NotPlain {
       kind = "string";
     }
-    expectErr(buildCodecSchema(new NotPlain(), "t"), "HOSTILE_INPUT");
+    expectErr(
+      buildCodecSchema(new NotPlain(), "t", types.isProxy),
+      "HOSTILE_INPUT",
+    );
   });
 
   it("refuses prototype-polluting keys in object fields with PROTOTYPE_POLLUTION", () => {
@@ -100,7 +113,7 @@ describe("buildCodecSchema — refusals", () => {
       const contract = JSON.parse(
         `{"kind":"object","exact":true,"fields":{"legit":{"kind":"boolean"},"${key}":{"kind":"boolean"}}}`,
       ) as unknown;
-      const result = buildCodecSchema(contract, "t");
+      const result = buildCodecSchema(contract, "t", types.isProxy);
       expectErr(result, "PROTOTYPE_POLLUTION");
     }
   });
@@ -110,15 +123,21 @@ describe("buildCodecSchema — refusals", () => {
     sparse[1] = "a";
     sparse[2] = "b";
     const contract = { kind: "enum", values: sparse };
-    expectErr(buildCodecSchema(contract, "t"), "HOSTILE_INPUT");
+    expectErr(buildCodecSchema(contract, "t", types.isProxy), "HOSTILE_INPUT");
   });
 
   it("refuses array-like objects where an array is expected with MALFORMED_CONTRACT", () => {
     const arrayLike = { length: 2, 0: "a", 1: "b" };
     const contract = { kind: "enum", values: arrayLike };
-    expectErr(buildCodecSchema(contract, "t"), "MALFORMED_CONTRACT");
+    expectErr(
+      buildCodecSchema(contract, "t", types.isProxy),
+      "MALFORMED_CONTRACT",
+    );
     // Also directly through the dense-array reader.
-    expectErr(readDenseArray(arrayLike, 64, "p"), "MALFORMED_CONTRACT");
+    expectErr(
+      readDenseArray(arrayLike, 64, "p", types.isProxy),
+      "MALFORMED_CONTRACT",
+    );
   });
 
   it("refuses enormous enum lengths and over-deep contracts with BOUNDS_EXCEEDED", () => {
@@ -127,14 +146,17 @@ describe("buildCodecSchema — refusals", () => {
       kind: "enum",
       values: Array.from({ length: MAX_ENUM_VALUES + 1 }, (_, i) => `v${i}`),
     };
-    expectErr(buildCodecSchema(hugeEnum, "t"), "BOUNDS_EXCEEDED");
+    expectErr(
+      buildCodecSchema(hugeEnum, "t", types.isProxy),
+      "BOUNDS_EXCEEDED",
+    );
 
     // Over-deep: 17 nested objects > MAX_CONTRACT_DEPTH.
     let node: object = { kind: "boolean" };
     for (let i = 0; i < MAX_CONTRACT_DEPTH + 1; i++) {
       node = { kind: "object", exact: true, fields: { a: node } };
     }
-    expectErr(buildCodecSchema(node, "t"), "BOUNDS_EXCEEDED");
+    expectErr(buildCodecSchema(node, "t", types.isProxy), "BOUNDS_EXCEEDED");
   });
 
   it("refuses object contracts exceeding MAX_OBJECT_FIELDS with BOUNDS_EXCEEDED", () => {
@@ -143,7 +165,11 @@ describe("buildCodecSchema — refusals", () => {
       fields[`f${i}`] = { kind: "boolean" };
     }
     expectErr(
-      buildCodecSchema({ kind: "object", exact: true, fields }, "t"),
+      buildCodecSchema(
+        { kind: "object", exact: true, fields },
+        "t",
+        types.isProxy,
+      ),
       "BOUNDS_EXCEEDED",
     );
   });
@@ -160,21 +186,38 @@ describe("buildCodecSchema — refusals", () => {
       root[`g${i}`] = { kind: "object", exact: true, fields: { ...leaf } };
     }
     expectErr(
-      buildCodecSchema({ kind: "object", exact: true, fields: root }, "t"),
+      buildCodecSchema(
+        { kind: "object", exact: true, fields: root },
+        "t",
+        types.isProxy,
+      ),
       "BOUNDS_EXCEEDED",
     );
   });
 
   it("refuses unknown contract type with UNKNOWN_TYPE", () => {
-    expectErr(buildCodecSchema({ kind: "wibble" }, "t"), "UNKNOWN_TYPE");
+    expectErr(
+      buildCodecSchema({ kind: "wibble" }, "t", types.isProxy),
+      "UNKNOWN_TYPE",
+    );
     // Non-string kind is not a known type either.
-    expectErr(buildCodecSchema({ kind: 42 }, "t"), "UNKNOWN_TYPE");
+    expectErr(
+      buildCodecSchema({ kind: 42 }, "t", types.isProxy),
+      "UNKNOWN_TYPE",
+    );
   });
 
   it("refuses string without maxLength and array without maxItems with MISSING_BOUND", () => {
-    expectErr(buildCodecSchema({ kind: "string" }, "t"), "MISSING_BOUND");
     expectErr(
-      buildCodecSchema({ kind: "array", items: { kind: "boolean" } }, "t"),
+      buildCodecSchema({ kind: "string" }, "t", types.isProxy),
+      "MISSING_BOUND",
+    );
+    expectErr(
+      buildCodecSchema(
+        { kind: "array", items: { kind: "boolean" } },
+        "t",
+        types.isProxy,
+      ),
       "MISSING_BOUND",
     );
   });
@@ -182,40 +225,45 @@ describe("buildCodecSchema — refusals", () => {
   it("refuses invalid min/max bounds and non-safe-integer length bounds with MALFORMED_CONTRACT", () => {
     // min > max on integer and number.
     expectErr(
-      buildCodecSchema({ kind: "integer", min: 5, max: 3 }, "t"),
+      buildCodecSchema({ kind: "integer", min: 5, max: 3 }, "t", types.isProxy),
       "MALFORMED_CONTRACT",
     );
     expectErr(
-      buildCodecSchema({ kind: "number", min: 5, max: 3 }, "t"),
+      buildCodecSchema({ kind: "number", min: 5, max: 3 }, "t", types.isProxy),
       "MALFORMED_CONTRACT",
     );
     // NaN / Infinity on number bounds.
     expectErr(
-      buildCodecSchema({ kind: "number", min: Number.NaN }, "t"),
+      buildCodecSchema({ kind: "number", min: Number.NaN }, "t", types.isProxy),
       "MALFORMED_CONTRACT",
     );
     expectErr(
-      buildCodecSchema({ kind: "number", max: Number.POSITIVE_INFINITY }, "t"),
+      buildCodecSchema(
+        { kind: "number", max: Number.POSITIVE_INFINITY },
+        "t",
+        types.isProxy,
+      ),
       "MALFORMED_CONTRACT",
     );
     // Non-safe-integer bound on integer.
     expectErr(
-      buildCodecSchema({ kind: "integer", min: 1.5 }, "t"),
+      buildCodecSchema({ kind: "integer", min: 1.5 }, "t", types.isProxy),
       "MALFORMED_CONTRACT",
     );
     // Present-but-invalid (non-safe-integer / non-positive) length bounds.
     expectErr(
-      buildCodecSchema({ kind: "string", maxLength: 1.5 }, "t"),
+      buildCodecSchema({ kind: "string", maxLength: 1.5 }, "t", types.isProxy),
       "MALFORMED_CONTRACT",
     );
     expectErr(
-      buildCodecSchema({ kind: "string", maxLength: 0 }, "t"),
+      buildCodecSchema({ kind: "string", maxLength: 0 }, "t", types.isProxy),
       "MALFORMED_CONTRACT",
     );
     expectErr(
       buildCodecSchema(
         { kind: "array", maxItems: -2, items: { kind: "boolean" } },
         "t",
+        types.isProxy,
       ),
       "MALFORMED_CONTRACT",
     );
@@ -223,17 +271,25 @@ describe("buildCodecSchema — refusals", () => {
 
   it("refuses unsupported nested shapes, non-exact objects, and string minLength with UNSUPPORTED_SHAPE", () => {
     for (const kind of ["union", "tuple", "record", "any", "unknown"]) {
-      expectErr(buildCodecSchema({ kind }, "t"), "UNSUPPORTED_SHAPE");
+      expectErr(
+        buildCodecSchema({ kind }, "t", types.isProxy),
+        "UNSUPPORTED_SHAPE",
+      );
     }
     expectErr(
       buildCodecSchema(
         { kind: "object", exact: false, fields: { a: { kind: "boolean" } } },
         "t",
+        types.isProxy,
       ),
       "UNSUPPORTED_SHAPE",
     );
     expectErr(
-      buildCodecSchema({ kind: "string", maxLength: 5, minLength: 1 }, "t"),
+      buildCodecSchema(
+        { kind: "string", maxLength: 5, minLength: 1 },
+        "t",
+        types.isProxy,
+      ),
       "UNSUPPORTED_SHAPE",
     );
   });
@@ -246,6 +302,7 @@ describe("buildCodecSchema — refusals", () => {
       buildCodecSchema(
         { kind: "string", maxLength: 5, minLength: undefined },
         "t",
+        types.isProxy,
       ),
       "UNSUPPORTED_SHAPE",
     );
@@ -255,21 +312,30 @@ describe("buildCodecSchema — refusals", () => {
     // NaN and Infinity would render as `null` via JSON.stringify, silently
     // changing the contract's literal value and generated type.
     expectErr(
-      buildCodecSchema({ kind: "literal", value: NaN }, "t"),
+      buildCodecSchema({ kind: "literal", value: NaN }, "t", types.isProxy),
       "MALFORMED_CONTRACT",
     );
     expectErr(
-      buildCodecSchema({ kind: "literal", value: Infinity }, "t"),
+      buildCodecSchema(
+        { kind: "literal", value: Infinity },
+        "t",
+        types.isProxy,
+      ),
       "MALFORMED_CONTRACT",
     );
     expectErr(
-      buildCodecSchema({ kind: "literal", value: -Infinity }, "t"),
+      buildCodecSchema(
+        { kind: "literal", value: -Infinity },
+        "t",
+        types.isProxy,
+      ),
       "MALFORMED_CONTRACT",
     );
     // Finite numbers and the other literal primitives still build.
-    expect(buildCodecSchema({ kind: "literal", value: 1 }, "t").success).toBe(
-      true,
-    );
+    expect(
+      buildCodecSchema({ kind: "literal", value: 1 }, "t", types.isProxy)
+        .success,
+    ).toBe(true);
   });
 
   it("bounds own-key field enumeration with BOUNDS_EXCEEDED before materializing the key list", () => {
@@ -279,7 +345,11 @@ describe("buildCodecSchema — refusals", () => {
       fields[`f${i}`] = { kind: "boolean" };
     }
     expectErr(
-      buildCodecSchema({ kind: "object", exact: true, fields }, "t"),
+      buildCodecSchema(
+        { kind: "object", exact: true, fields },
+        "t",
+        types.isProxy,
+      ),
       "BOUNDS_EXCEEDED",
     );
 
@@ -299,7 +369,7 @@ describe("buildCodecSchema — refusals", () => {
         throw new Error("descriptor trap");
       },
     });
-    expectErr(buildCodecSchema(target, "t"), "HOSTILE_INPUT");
+    expectErr(buildCodecSchema(target, "t", types.isProxy), "HOSTILE_INPUT");
   });
 
   it("propagates HOSTILE_INPUT when the wrapper request property read fails instead of reporting UNKNOWN_TYPE", () => {
@@ -313,7 +383,7 @@ describe("buildCodecSchema — refusals", () => {
         return { kind: "string", maxLength: 4 };
       },
     };
-    const result = buildCodecSchema(hostileWrapper, "t");
+    const result = buildCodecSchema(hostileWrapper, "t", types.isProxy);
     expectErr(result, "HOSTILE_INPUT");
     expect(getterInvoked).toBe(false);
   });
@@ -322,29 +392,36 @@ describe("buildCodecSchema — refusals", () => {
 describe("resolveRuntimeModule — refusals", () => {
   it("refuses malformed codec.runtimeModule with MALFORMED_RUNTIME_MODULE", () => {
     expectErr(
-      resolveRuntimeModule({ codec: { runtimeModule: 42 } }),
+      resolveRuntimeModule({ codec: { runtimeModule: 42 } }, types.isProxy),
       "MALFORMED_RUNTIME_MODULE",
     );
     expectErr(
-      resolveRuntimeModule({ codec: { runtimeModule: "" } }),
+      resolveRuntimeModule({ codec: { runtimeModule: "" } }, types.isProxy),
       "MALFORMED_RUNTIME_MODULE",
     );
     expectErr(
-      resolveRuntimeModule({ codec: { runtimeModule: "x".repeat(257) } }),
+      resolveRuntimeModule(
+        { codec: { runtimeModule: "x".repeat(257) } },
+        types.isProxy,
+      ),
       "MALFORMED_RUNTIME_MODULE",
     );
     expectErr(
-      resolveRuntimeModule({
-        codec: { runtimeModule: 'evil";\nimport x from "y' },
-      }),
+      resolveRuntimeModule(
+        { codec: { runtimeModule: 'evil";\nimport x from "y' } },
+        types.isProxy,
+      ),
       "MALFORMED_RUNTIME_MODULE",
     );
     expectErr(
-      resolveRuntimeModule({ codec: { runtimeModule: "a\nb" } }),
+      resolveRuntimeModule({ codec: { runtimeModule: "a\nb" } }, types.isProxy),
       "MALFORMED_RUNTIME_MODULE",
     );
     expectErr(
-      resolveRuntimeModule({ codec: { runtimeModule: "a\u0000b" } }),
+      resolveRuntimeModule(
+        { codec: { runtimeModule: "a\u0000b" } },
+        types.isProxy,
+      ),
       "MALFORMED_RUNTIME_MODULE",
     );
   });
@@ -358,7 +435,10 @@ describe("resolveRuntimeModule — refusals", () => {
         return { runtimeModule: "@fleet/shared" };
       },
     };
-    expectErr(resolveRuntimeModule(hostileManifest), "HOSTILE_INPUT");
+    expectErr(
+      resolveRuntimeModule(hostileManifest, types.isProxy),
+      "HOSTILE_INPUT",
+    );
     expect(invoked).toBe(false);
 
     // Accessor on `runtimeModule` itself.
@@ -368,14 +448,20 @@ describe("resolveRuntimeModule — refusals", () => {
         return "@fleet/shared";
       },
     };
-    expectErr(resolveRuntimeModule({ codec: hostileCodec }), "HOSTILE_INPUT");
+    expectErr(
+      resolveRuntimeModule({ codec: hostileCodec }, types.isProxy),
+      "HOSTILE_INPUT",
+    );
     expect(invoked).toBe(false);
 
     // Non-plain prototype for manifest.codec.
     class CodecCfg {
       runtimeModule = "@fleet/shared";
     }
-    expectErr(resolveRuntimeModule({ codec: new CodecCfg() }), "HOSTILE_INPUT");
+    expectErr(
+      resolveRuntimeModule({ codec: new CodecCfg() }, types.isProxy),
+      "HOSTILE_INPUT",
+    );
 
     // Proxy whose descriptor trap throws.
     const throwing = new Proxy(
@@ -386,15 +472,18 @@ describe("resolveRuntimeModule — refusals", () => {
         },
       },
     );
-    expectErr(resolveRuntimeModule({ codec: throwing }), "HOSTILE_INPUT");
+    expectErr(
+      resolveRuntimeModule({ codec: throwing }, types.isProxy),
+      "HOSTILE_INPUT",
+    );
   });
 
   it("defaults to @fleet/shared when codec or runtimeModule is absent", () => {
-    expect(resolveRuntimeModule({})).toEqual({
+    expect(resolveRuntimeModule({}, types.isProxy)).toEqual({
       success: true,
       value: "@fleet/shared",
     });
-    expect(resolveRuntimeModule({ codec: {} })).toEqual({
+    expect(resolveRuntimeModule({ codec: {} }, types.isProxy)).toEqual({
       success: true,
       value: "@fleet/shared",
     });
@@ -403,14 +492,20 @@ describe("resolveRuntimeModule — refusals", () => {
 
 describe("readOwnDataProperty / readDenseArray — shared boundary helpers", () => {
   it("readOwnDataProperty refuses non-plain objects and returns own data values", () => {
-    expectErr(readOwnDataProperty("nope", "a", "p"), "HOSTILE_INPUT");
-    expectErr(readOwnDataProperty(null, "a", "p"), "HOSTILE_INPUT");
-    expect(readOwnDataProperty({ a: 1 }, "a", "p")).toEqual({
+    expectErr(
+      readOwnDataProperty("nope", "a", "p", types.isProxy),
+      "HOSTILE_INPUT",
+    );
+    expectErr(
+      readOwnDataProperty(null, "a", "p", types.isProxy),
+      "HOSTILE_INPUT",
+    );
+    expect(readOwnDataProperty({ a: 1 }, "a", "p", types.isProxy)).toEqual({
       success: true,
       value: 1,
     });
     // Absent key reads as undefined, not an error.
-    expect(readOwnDataProperty({}, "missing", "p")).toEqual({
+    expect(readOwnDataProperty({}, "missing", "p", types.isProxy)).toEqual({
       success: true,
       value: undefined,
     });
@@ -423,11 +518,14 @@ describe("readOwnDataProperty / readDenseArray — shared boundary helpers", () 
         throw new Error("getter MUST NOT be invoked");
       },
     });
-    expectErr(readDenseArray(accessorArray, 10, "p"), "HOSTILE_INPUT");
+    expectErr(
+      readDenseArray(accessorArray, 10, "p", types.isProxy),
+      "HOSTILE_INPUT",
+    );
 
     const huge: number[] = [];
     Object.defineProperty(huge, "length", { value: 1e9 });
-    expectErr(readDenseArray(huge, 64, "p"), "BOUNDS_EXCEEDED");
+    expectErr(readDenseArray(huge, 64, "p", types.isProxy), "BOUNDS_EXCEEDED");
   });
 });
 
@@ -453,6 +551,7 @@ describe("buildCodecSchema — valid schemas", () => {
         },
       },
       "t",
+      types.isProxy,
     );
     expect(result.success).toBe(true);
     if (result.success) {
@@ -476,6 +575,7 @@ describe("buildCodecSchema — valid schemas", () => {
     const result = buildCodecSchema(
       { request: { kind: "string", maxLength: 4 } },
       "t",
+      types.isProxy,
     );
     expect(result.success).toBe(true);
     if (result.success)
@@ -495,6 +595,7 @@ describe("renderCodecModule — deterministic fleet-v2 output", () => {
       },
     },
     "t",
+    types.isProxy,
   );
   if (!schema.success) throw new Error("fixture schema must build");
 
@@ -567,14 +668,14 @@ describe("fix round 1 — hostile-input regressions", () => {
     );
 
     // readOwnDataProperty: the plainness check itself must be trap-catching.
-    const propResult = readOwnDataProperty(hostile, "kind", "t");
+    const propResult = readOwnDataProperty(hostile, "kind", "t", types.isProxy);
     expect(propResult.success).toBe(false);
     expect((propResult as { error?: { code: string } }).error?.code).toBe(
       "HOSTILE_INPUT",
     );
 
     // resolveRuntimeModule: manifest reading must convert the same trap.
-    const modResult = resolveRuntimeModule(hostile);
+    const modResult = resolveRuntimeModule(hostile, types.isProxy);
     expect(modResult.success).toBe(false);
     expect((modResult as { error?: { code: string } }).error?.code).toBe(
       "HOSTILE_INPUT",
@@ -582,8 +683,8 @@ describe("fix round 1 — hostile-input regressions", () => {
 
     // buildCodecSchema: a throwing getPrototypeOf trap anywhere in the
     // contract tree is refused, never thrown out of the builder.
-    expect(() => buildCodecSchema(hostile, "t")).not.toThrow();
-    const schemaResult = buildCodecSchema(hostile, "t");
+    expect(() => buildCodecSchema(hostile, "t", types.isProxy)).not.toThrow();
+    const schemaResult = buildCodecSchema(hostile, "t", types.isProxy);
     expect(schemaResult.success).toBe(false);
     expect((schemaResult as { error?: { code: string } }).error?.code).toBe(
       "HOSTILE_INPUT",
@@ -602,7 +703,7 @@ describe("fix round 1 — hostile-input regressions", () => {
         return Object.getOwnPropertyDescriptor(target, key);
       },
     });
-    const result = buildCodecSchema(hostile, "t");
+    const result = buildCodecSchema(hostile, "t", types.isProxy);
     expect(result.success).toBe(false);
     expect((result as { error?: { code: string } }).error?.code).toBe(
       "HOSTILE_INPUT",
@@ -624,7 +725,11 @@ describe("fix round 1 — hostile-input regressions", () => {
       configurable: true,
     });
     expectErr(
-      buildCodecSchema({ kind: "object", exact: true, fields }, "t"),
+      buildCodecSchema(
+        { kind: "object", exact: true, fields },
+        "t",
+        types.isProxy,
+      ),
       "HOSTILE_INPUT",
     );
   });
@@ -643,7 +748,11 @@ describe("fix round 1 — hostile-input regressions", () => {
       });
     }
     expectErr(
-      buildCodecSchema({ kind: "object", exact: true, fields }, "t"),
+      buildCodecSchema(
+        { kind: "object", exact: true, fields },
+        "t",
+        types.isProxy,
+      ),
       "HOSTILE_INPUT",
     );
   });

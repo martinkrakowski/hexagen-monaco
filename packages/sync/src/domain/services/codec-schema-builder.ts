@@ -17,6 +17,8 @@
 // - renderCodecModule: O(N log F), N <= 512 nodes, F <= 64 fields per object
 //   (deterministic code-point key sorting).
 
+import type { IsProxyDetector } from "./proxy-detector.js";
+
 /**
  * Local Result variant with E pinned to CodecGeneratorError (domain/result's
  * `ok` hardcodes E = Error, which is not assignable to the narrower error
@@ -80,6 +82,56 @@ export const MAX_TOTAL_NODES = 512;
 export const DEFAULT_RUNTIME_MODULE = "@fleet/shared";
 
 /**
+ * Fail-closed Proxy gate (Lane HXS1). MUST be invoked BEFORE any reflection
+ * (Object.getPrototypeOf, Object.getOwnPropertyDescriptor, `in`,
+ * Array.isArray, `.length`) on a value that may be hostile. For a non-null
+ * object or function value:
+ *
+ * - a missing / non-function detector is a refusal (FAIL CLOSED — without a
+ *   detector we cannot distinguish a transparent Proxy from plain data, so
+ *   every object is refused),
+ * - a detector that returns true is a refusal,
+ * - a detector that THROWS is a refusal too (never trusted as "not a Proxy").
+ *
+ * Primitives (including `null`) pass through untouched and keep the existing
+ * checks. Returns `null` when traversal may proceed.
+ */
+function proxyGate(
+  value: unknown,
+  path: string,
+  isProxy: IsProxyDetector | undefined,
+): CodecGeneratorError | null {
+  if (
+    value === null ||
+    (typeof value !== "object" && typeof value !== "function")
+  ) {
+    return null;
+  }
+  if (typeof isProxy !== "function") {
+    return new CodecGeneratorError(
+      "HOSTILE_INPUT",
+      path,
+      `no proxy detector supplied; refusing an object at ${path}`,
+    );
+  }
+  let refused: boolean;
+  try {
+    refused = isProxy(value) === true;
+  } catch {
+    // A throwing detector is treated as a refusal — fail closed.
+    refused = true;
+  }
+  if (refused) {
+    return new CodecGeneratorError(
+      "HOSTILE_INPUT",
+      path,
+      `refusing a Proxy at ${path}`,
+    );
+  }
+  return null;
+}
+
+/**
  * Plainness check with the prototype read INSIDE the trap-catching boundary:
  * a Proxy whose `getPrototypeOf` trap throws must surface as HOSTILE_INPUT
  * (never escape as an exception) — it is answered here, through the same
@@ -88,7 +140,11 @@ export const DEFAULT_RUNTIME_MODULE = "@fleet/shared";
 function isPlainObjectSafe(
   value: unknown,
   path: string,
+  isProxy: IsProxyDetector | undefined,
 ): Result<boolean, CodecGeneratorError> {
+  // Fail-closed Proxy gate BEFORE the prototype read (Lane HXS1).
+  const gate = proxyGate(value, path, isProxy);
+  if (gate) return err(gate);
   let proto: unknown;
   try {
     proto =
@@ -120,8 +176,12 @@ export function readOwnDataProperty(
   obj: unknown,
   key: string,
   path: string,
+  isProxy?: IsProxyDetector,
 ): Result<unknown, CodecGeneratorError> {
-  const plain = isPlainObjectSafe(obj, path);
+  // Fail-closed Proxy gate BEFORE the plainness check / descriptor read.
+  const gate = proxyGate(obj, path, isProxy);
+  if (gate) return err(gate);
+  const plain = isPlainObjectSafe(obj, path, isProxy);
   if (!plain.success) return plain;
   if (!plain.value) {
     return err(
@@ -175,8 +235,12 @@ export function hasOwnDataProperty(
   obj: unknown,
   key: string,
   path: string,
+  isProxy?: IsProxyDetector,
 ): Result<boolean, CodecGeneratorError> {
-  const plain = isPlainObjectSafe(obj, path);
+  // Fail-closed Proxy gate BEFORE the plainness check / descriptor read.
+  const gate = proxyGate(obj, path, isProxy);
+  if (gate) return err(gate);
+  const plain = isPlainObjectSafe(obj, path, isProxy);
   if (!plain.success) return plain;
   if (!plain.value) {
     return err(
@@ -222,7 +286,11 @@ export function readDenseArray(
   val: unknown,
   maxLen: number,
   path: string,
+  isProxy?: IsProxyDetector,
 ): Result<readonly unknown[], CodecGeneratorError> {
+  // Fail-closed Proxy gate BEFORE Array.isArray / prototype / length reads.
+  const gate = proxyGate(val, path, isProxy);
+  if (gate) return err(gate);
   let isArray: boolean;
   let proto: unknown;
   let lenDesc: PropertyDescriptor | undefined;
@@ -355,8 +423,9 @@ export type CodecSchemaLiteral =
  */
 export function resolveRuntimeModule(
   manifest: unknown,
+  isProxy?: IsProxyDetector,
 ): Result<string, CodecGeneratorError> {
-  const codecResult = readOwnDataProperty(manifest, "codec", "codec");
+  const codecResult = readOwnDataProperty(manifest, "codec", "codec", isProxy);
   if (!codecResult.success) return codecResult;
   const codec = codecResult.value;
   if (codec === undefined) return ok(DEFAULT_RUNTIME_MODULE);
@@ -365,6 +434,7 @@ export function resolveRuntimeModule(
     codec,
     "runtimeModule",
     "codec.runtimeModule",
+    isProxy,
   );
   if (!modResult.success) return modResult;
   const mod = modResult.value;
@@ -425,6 +495,7 @@ function buildNode(
   path: string,
   depth: number,
   counter: NodeCounter,
+  isProxy: IsProxyDetector | undefined,
 ): Result<CodecSchemaLiteral, CodecGeneratorError> {
   if (depth > MAX_CONTRACT_DEPTH) {
     return err(
@@ -456,7 +527,7 @@ function buildNode(
     );
   }
 
-  const kindResult = readOwnDataProperty(node, "kind", path);
+  const kindResult = readOwnDataProperty(node, "kind", path, isProxy);
   if (!kindResult.success) return kindResult;
   const kind = kindResult.value;
 
@@ -476,12 +547,17 @@ function buildNode(
       // notion of it, so a contract carrying one would silently lose a rule.
       // The check goes through the descriptor boundary: a Proxy that throws
       // only when asked for "minLength" is HOSTILE_INPUT, never "absent".
-      const minLengthResult = readOwnDataProperty(node, "minLength", path);
+      const minLengthResult = readOwnDataProperty(
+        node,
+        "minLength",
+        path,
+        isProxy,
+      );
       if (!minLengthResult.success) return minLengthResult;
       // readOwnDataProperty yields `undefined` both for an ABSENT property and
       // an own data property whose value is undefined — distinguish them, so
       // `{ kind: "string", maxLength: 5, minLength: undefined }` is refused.
-      const hasMinLength = hasOwnDataProperty(node, "minLength", path);
+      const hasMinLength = hasOwnDataProperty(node, "minLength", path, isProxy);
       if (!hasMinLength.success) return hasMinLength;
       if (hasMinLength.value) {
         return err(
@@ -492,7 +568,7 @@ function buildNode(
           ),
         );
       }
-      const maxResult = readOwnDataProperty(node, "maxLength", path);
+      const maxResult = readOwnDataProperty(node, "maxLength", path, isProxy);
       if (!maxResult.success) return maxResult;
       const maxLength = maxResult.value;
       if (maxLength === undefined) {
@@ -517,7 +593,7 @@ function buildNode(
           ),
         );
       }
-      const patternResult = readOwnDataProperty(node, "pattern", path);
+      const patternResult = readOwnDataProperty(node, "pattern", path, isProxy);
       if (!patternResult.success) return patternResult;
       const pattern = patternResult.value;
       if (pattern === undefined) {
@@ -535,7 +611,7 @@ function buildNode(
       return ok({ kind: "string", maxLength, pattern });
     }
     case "array": {
-      const maxResult = readOwnDataProperty(node, "maxItems", path);
+      const maxResult = readOwnDataProperty(node, "maxItems", path, isProxy);
       if (!maxResult.success) return maxResult;
       const maxItems = maxResult.value;
       if (maxItems === undefined) {
@@ -560,7 +636,7 @@ function buildNode(
           ),
         );
       }
-      const itemsResult = readOwnDataProperty(node, "items", path);
+      const itemsResult = readOwnDataProperty(node, "items", path, isProxy);
       if (!itemsResult.success) return itemsResult;
       if (itemsResult.value === undefined) {
         return err(
@@ -576,12 +652,13 @@ function buildNode(
         `${path}.items`,
         depth + 1,
         counter,
+        isProxy,
       );
       if (!items.success) return items;
       return ok({ kind: "array", items: items.value, maxItems });
     }
     case "object": {
-      const exactResult = readOwnDataProperty(node, "exact", path);
+      const exactResult = readOwnDataProperty(node, "exact", path, isProxy);
       if (!exactResult.success) return exactResult;
       if (exactResult.value !== undefined && exactResult.value !== true) {
         return err(
@@ -592,7 +669,7 @@ function buildNode(
           ),
         );
       }
-      const fieldsResult = readOwnDataProperty(node, "fields", path);
+      const fieldsResult = readOwnDataProperty(node, "fields", path, isProxy);
       if (!fieldsResult.success) return fieldsResult;
       const fieldsRaw = fieldsResult.value;
       if (fieldsRaw === undefined) {
@@ -606,7 +683,7 @@ function buildNode(
       }
       // The plainness check is trap-catching: a Proxy whose getPrototypeOf
       // trap throws is HOSTILE_INPUT, never an escaping reflection error.
-      const fieldsPlain = isPlainObjectSafe(fieldsRaw, path);
+      const fieldsPlain = isPlainObjectSafe(fieldsRaw, path, isProxy);
       if (!fieldsPlain.success) return fieldsPlain;
       if (!fieldsPlain.value) {
         return err(
@@ -690,6 +767,7 @@ function buildNode(
           fieldsRaw,
           key,
           `${path}.${key}`,
+          isProxy,
         );
         if (!fieldResult.success) return fieldResult;
         const built = buildNode(
@@ -697,6 +775,7 @@ function buildNode(
           `${path}.${key}`,
           depth + 1,
           counter,
+          isProxy,
         );
         if (!built.success) return built;
         fields[key] = built.value;
@@ -708,9 +787,9 @@ function buildNode(
       const out: { kind: "integer" | "number"; min?: number; max?: number } = {
         kind,
       };
-      const minResult = readOwnDataProperty(node, "min", path);
+      const minResult = readOwnDataProperty(node, "min", path, isProxy);
       if (!minResult.success) return minResult;
-      const maxResult = readOwnDataProperty(node, "max", path);
+      const maxResult = readOwnDataProperty(node, "max", path, isProxy);
       if (!maxResult.success) return maxResult;
       const min = minResult.value;
       const max = maxResult.value;
@@ -774,7 +853,7 @@ function buildNode(
     case "boolean":
       return ok({ kind: "boolean" });
     case "enum": {
-      const valuesResult = readOwnDataProperty(node, "values", path);
+      const valuesResult = readOwnDataProperty(node, "values", path, isProxy);
       if (!valuesResult.success) return valuesResult;
       if (valuesResult.value === undefined) {
         return err(
@@ -792,6 +871,7 @@ function buildNode(
         valuesResult.value,
         MAX_ENUM_VALUES,
         `${path}.values`,
+        isProxy,
       );
       if (!dense.success) return dense;
       const values = dense.value;
@@ -820,7 +900,7 @@ function buildNode(
       return ok({ kind: "enum", values: strs });
     }
     case "literal": {
-      const valueResult = readOwnDataProperty(node, "value", path);
+      const valueResult = readOwnDataProperty(node, "value", path, isProxy);
       if (!valueResult.success) return valueResult;
       const value = valueResult.value;
       if (
@@ -851,7 +931,7 @@ function buildNode(
       return ok({ kind: "literal", value });
     }
     case "nullable": {
-      const ofResult = readOwnDataProperty(node, "of", path);
+      const ofResult = readOwnDataProperty(node, "of", path, isProxy);
       if (!ofResult.success) return ofResult;
       if (ofResult.value === undefined) {
         return err(
@@ -862,7 +942,13 @@ function buildNode(
           ),
         );
       }
-      const of = buildNode(ofResult.value, `${path}.of`, depth + 1, counter);
+      const of = buildNode(
+        ofResult.value,
+        `${path}.of`,
+        depth + 1,
+        counter,
+        isProxy,
+      );
       if (!of.success) return of;
       return ok({ kind: "nullable", of: of.value });
     }
@@ -894,6 +980,7 @@ function buildNode(
 export function buildCodecSchema(
   rawContract: unknown,
   pathPrefix: string = "contract",
+  isProxy?: IsProxyDetector,
 ): Result<CodecSchemaLiteral, CodecGeneratorError> {
   const counter: NodeCounter = { count: 0 };
 
@@ -901,12 +988,18 @@ export function buildCodecSchema(
   // unwrap through the same descriptor boundary; a schema literal never has
   // a `kind` but a `request` key, so the two shapes are unambiguous.
   if (typeof rawContract === "object" && rawContract !== null) {
-    const kindPeek = readOwnDataProperty(rawContract, "kind", pathPrefix);
+    const kindPeek = readOwnDataProperty(
+      rawContract,
+      "kind",
+      pathPrefix,
+      isProxy,
+    );
     if (kindPeek.success && kindPeek.value === undefined) {
       const requestPeek = readOwnDataProperty(
         rawContract,
         "request",
         pathPrefix,
+        isProxy,
       );
       // A failed descriptor read for `request` (accessor or throwing Proxy
       // trap) is HOSTILE_INPUT — never fall through to UNKNOWN_TYPE.
@@ -917,13 +1010,14 @@ export function buildCodecSchema(
           `${pathPrefix}.request`,
           1,
           counter,
+          isProxy,
         );
       }
     } else if (!kindPeek.success) {
       return kindPeek;
     }
   }
-  return buildNode(rawContract, pathPrefix, 1, counter);
+  return buildNode(rawContract, pathPrefix, 1, counter, isProxy);
 }
 
 // ---------------------------------------------------------------------------

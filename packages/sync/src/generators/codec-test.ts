@@ -34,23 +34,27 @@ import {
   type WriteStatus,
 } from "../results.js";
 import type { ReportRecorder } from "../domain/types.js";
-import { toPascalCaseIdentifier } from "../domain/services/name-normalizer.js";
+import { normalizeStubName } from "./stubs.js";
+import { DEFAULT_NAMING } from "../domain/stub-templates.js";
 import {
   MAX_BOUNDED_CONTEXTS,
   MAX_PORTS_PER_CONTEXT,
   CodecTestGeneratorError,
-  installIsProxyDetector,
-  looksLikeProxy,
   readOwnPlainProperty,
   synthesizeValidSample,
   validatePlainRecord,
 } from "../domain/services/codec-sample-synthesizer.js";
+import type { IsProxyDetector } from "../domain/services/proxy-detector.js";
+import {
+  resolveEmissionDir,
+  type LayersConfig,
+} from "../domain/services/layer-dir-resolver.js";
 
-// Composition seam for the domain layer's proxy-detection port: the domain
+// Explicit injection of the domain layer's proxy-detection port: the domain
 // module must not import Node builtins (arch-lint node-builtin-in-layer), so
-// util.types.isProxy is installed here at module load — every production
-// entry into the synthesizer goes through this generator.
-installIsProxyDetector(types.isProxy);
+// this generator (infrastructure) imports util.types.isProxy from
+// "node:util" and passes it explicitly into every domain entry point below.
+const isProxyDetector: IsProxyDetector = types.isProxy;
 
 /** Default runtime module providing the fleet-v2 codec contract. */
 export const DEFAULT_RUNTIME_MODULE = "@fleet/shared";
@@ -123,13 +127,48 @@ function validateSafeName(value: unknown, what: string): string {
  * boundary, defaulting to "@fleet/shared" when absent at any level.
  */
 function resolveRuntimeModuleSafe(manifest: unknown): string {
-  const gen = readOwnPlainProperty(manifest, "generator");
+  const gen = readOwnPlainProperty(manifest, "generator", isProxyDetector);
   if (gen === undefined) return DEFAULT_RUNTIME_MODULE;
-  const sync = readOwnPlainProperty(gen, "codec");
+  const sync = readOwnPlainProperty(gen, "codec", isProxyDetector);
   if (sync === undefined) return DEFAULT_RUNTIME_MODULE;
-  const runtimeModule = readOwnPlainProperty(sync, "runtimeModule");
+  const runtimeModule = readOwnPlainProperty(
+    sync,
+    "runtimeModule",
+    isProxyDetector,
+  );
   if (runtimeModule === undefined) return DEFAULT_RUNTIME_MODULE;
   return validateRuntimeModule(runtimeModule);
+}
+
+/**
+ * Read `generator.sync.layers` through the descriptor boundary and shape the
+ * ONLY data `resolveEmissionDir` touches for codec emission (`application.folder`)
+ * — the same sanitized-copy rule codecs.ts applies, so the emitted test's
+ * import specifier always points at the directory codecs.ts actually writes.
+ * Accessors and non-string folders are refused BEFORE the resolver runs.
+ */
+function readLayersConfigSafe(
+  manifest: unknown,
+  isProxy: IsProxyDetector,
+): LayersConfig {
+  const gen = readOwnPlainProperty(manifest, "generator", isProxy);
+  if (gen === undefined) return {};
+  const sync = readOwnPlainProperty(gen, "sync", isProxy);
+  if (sync === undefined) return {};
+  const layers = readOwnPlainProperty(sync, "layers", isProxy);
+  if (layers === undefined) return {};
+  const application = readOwnPlainProperty(layers, "application", isProxy);
+  if (application === undefined) return {};
+  const folder = readOwnPlainProperty(application, "folder", isProxy);
+  if (folder === undefined) return {};
+  if (typeof folder !== "string") {
+    throw new CodecTestGeneratorError(
+      "HOSTILE_INPUT",
+      "generator.sync.layers.application.folder",
+      `layer "folder" at generator.sync.layers.application.folder is not a string`,
+    );
+  }
+  return { application: { folder } } as LayersConfig;
 }
 
 export async function generateCodecTests(
@@ -144,24 +183,34 @@ export async function generateCodecTests(
     validateSafeName(moduleName, "moduleName");
 
     const manifest: unknown = config.manifest;
-    const context = findBoundedContext(manifest, moduleName);
+    const context = findBoundedContext(manifest, moduleName, isProxyDetector);
     if (context === undefined) return result; // context not declared — nothing to emit
 
     const runtimeModule = resolveRuntimeModuleSafe(manifest);
+    const layersConfig = readLayersConfigSafe(manifest, isProxyDetector);
 
-    const layers = readOwnPlainProperty(context, "layers");
+    const layers = readOwnPlainProperty(context, "layers", isProxyDetector);
     if (layers === undefined) return result;
-    const application = readOwnPlainProperty(layers, "application");
+    const application = readOwnPlainProperty(
+      layers,
+      "application",
+      isProxyDetector,
+    );
     if (application === undefined) return result;
-    const ports = readOwnPlainProperty(application, "ports");
+    const ports = readOwnPlainProperty(application, "ports", isProxyDetector);
     if (ports === undefined) return result;
 
     for (const direction of ["in", "out"] as const) {
-      const directionPorts = readOwnPlainProperty(ports, direction);
+      const directionPorts = readOwnPlainProperty(
+        ports,
+        direction,
+        isProxyDetector,
+      );
       if (directionPorts === undefined) continue;
       const portList = readPortList(
         directionPorts,
         `layers.application.ports.${direction}`,
+        isProxyDetector,
       );
       for (const port of portList) {
         await emitPortCodecTest(
@@ -170,9 +219,11 @@ export async function generateCodecTests(
           moduleDir,
           moduleName,
           runtimeModule,
+          layersConfig,
           config,
           report,
           result,
+          isProxyDetector,
         );
         if (result.error) return result; // first failure wins, failed-soft
       }
@@ -209,13 +260,17 @@ export async function generateCodecTests(
  * MAX_BOUNDED_CONTEXTS; sparse holes, array-likes, non-plain entries and
  * hostile names are refused with HOSTILE_INPUT / MALFORMED_CONTRACT.
  */
-function findBoundedContext(manifest: unknown, moduleName: string): unknown {
-  const contexts = readOwnPlainProperty(manifest, "bounded_contexts");
+function findBoundedContext(
+  manifest: unknown,
+  moduleName: string,
+  isProxy: IsProxyDetector,
+): unknown {
+  const contexts = readOwnPlainProperty(manifest, "bounded_contexts", isProxy);
   if (contexts === undefined) return undefined;
   // Detectable Proxies are refused BEFORE any reflection: getPrototypeOf,
   // descriptor reads, `i in value` and `.length` would otherwise run Proxy
   // traps.
-  if (looksLikeProxy(contexts)) {
+  if (isProxy(contexts)) {
     throw new CodecTestGeneratorError(
       "HOSTILE_INPUT",
       "bounded_contexts",
@@ -298,8 +353,8 @@ function findBoundedContext(manifest: unknown, moduleName: string): unknown {
       );
     }
     const entry = desc.value;
-    validatePlainRecord(entry);
-    const name = readOwnPlainProperty(entry, "name");
+    validatePlainRecord(entry, isProxy);
+    const name = readOwnPlainProperty(entry, "name", isProxy);
     if (name === undefined) continue;
     if (name === moduleName) return entry;
   }
@@ -311,11 +366,15 @@ function findBoundedContext(manifest: unknown, moduleName: string): unknown {
  * and non-iterables), `length <= MAX_PORTS_PER_CONTEXT` (refusing enormous
  * lengths) and `i in arr` for every index (refusing holes).
  */
-function readPortList(value: unknown, label: string): readonly unknown[] {
+function readPortList(
+  value: unknown,
+  label: string,
+  isProxy: IsProxyDetector,
+): readonly unknown[] {
   // Detectable Proxies are refused BEFORE any reflection: getPrototypeOf,
   // descriptor reads, `i in value` and `.length` would otherwise run Proxy
   // traps.
-  if (looksLikeProxy(value)) {
+  if (isProxy(value)) {
     throw new CodecTestGeneratorError(
       "HOSTILE_INPUT",
       label,
@@ -427,9 +486,11 @@ async function emitPortCodecTest(
   moduleDir: string,
   moduleName: string,
   runtimeModule: string,
+  layersConfig: LayersConfig,
   config: SyncConfig,
   report: ReportRecorder | undefined,
   result: GeneratorResult,
+  isProxy: IsProxyDetector,
 ): Promise<void> {
   const label = `${moduleName}.ports.${direction}[]`;
 
@@ -440,8 +501,8 @@ async function emitPortCodecTest(
     return;
   }
 
-  validatePlainRecord(port);
-  const rawName = readOwnPlainProperty(port, "name");
+  validatePlainRecord(port, isProxy);
+  const rawName = readOwnPlainProperty(port, "name", isProxy);
   if (rawName === undefined) {
     throw new CodecTestGeneratorError(
       "MALFORMED_CONTRACT",
@@ -451,11 +512,11 @@ async function emitPortCodecTest(
   }
   validateSafeName(rawName, `${label}.name`);
 
-  const contracts = readOwnPlainProperty(port, "contracts");
+  const contracts = readOwnPlainProperty(port, "contracts", isProxy);
   if (contracts === undefined) return; // contractless port — skip
-  validatePlainRecord(contracts);
+  validatePlainRecord(contracts, isProxy);
 
-  const request = readOwnPlainProperty(contracts, "request");
+  const request = readOwnPlainProperty(contracts, "request", isProxy);
   if (request === undefined) {
     throw new CodecTestGeneratorError(
       "MALFORMED_CONTRACT",
@@ -466,21 +527,42 @@ async function emitPortCodecTest(
 
   const portLabel = `${moduleName}.${direction}.${validateSafeName(rawName, `${label}.name`)}`;
   const rawPortName = validateSafeName(rawName, `${label}.name`);
-  const sample = synthesizeValidSample(request, portLabel);
+  const sample = synthesizeValidSample(request, portLabel, isProxy);
 
-  const portName = toPascalCaseIdentifier(
-    rawPortName.replace(/\.(in|out)-port\.ts$/, ""),
+  // Same normalization codecs.ts applies, so the emitted test imports the
+  // exact `<PortPascalName>.codec.ts` (and `create<PortPascalName>Codec`)
+  // that codecs.ts writes, whatever the port entry's file suffix.
+  const portName = normalizeStubName(
+    rawPortName,
+    direction === "in" ? DEFAULT_NAMING.inPort : DEFAULT_NAMING.outPort,
   );
-  const portFileBase = rawPortName.replace(/\.ts$/, "");
   const filePath = path.join(
     moduleDir,
     "__tests__",
     "codecs",
     `${portName}.codec.test.ts`,
   );
+  // The emitted test's import must point at the file codecs.ts actually
+  // writes: `<PortPascalName>.codec.ts` under resolveEmissionDir(module
+  // layers, `application/ports/${direction}`). The relative specifier is
+  // derived from the test file's own directory, never hardcoded.
+  const subdir = resolveEmissionDir(
+    layersConfig,
+    `application/ports/${direction}`,
+  );
+  const testDir = path.join(moduleDir, "__tests__", "codecs");
+  const codecFile = path.join(moduleDir, subdir, `${portName}.codec.ts`);
+  const relImport = path
+    .relative(testDir, codecFile)
+    .split(path.sep)
+    .join("/")
+    .replace(/\.ts$/, ".js");
+  const codecImportSpecifier = relImport.startsWith(".")
+    ? relImport
+    : `./${relImport}`;
   const content = renderCodecTest({
     portName,
-    portFileBase,
+    codecImportSpecifier,
     runtimeModule,
     sample,
   });
@@ -505,7 +587,8 @@ async function emitPortCodecTest(
 
 export interface RenderCodecTestInput {
   portName: string;
-  portFileBase: string;
+  /** Import specifier (with .js) resolving to the emitted `<PortName>.codec.ts`. */
+  codecImportSpecifier: string;
   runtimeModule: string;
   sample: unknown;
 }
@@ -516,12 +599,12 @@ export interface RenderCodecTestInput {
  * (idempotent re-runs land on "unchanged").
  */
 export function renderCodecTest(input: RenderCodecTestInput): string {
-  const { portName, portFileBase, runtimeModule, sample } = input;
+  const { portName, codecImportSpecifier, runtimeModule, sample } = input;
   return `// @generated by @hexagen/sync
 import { describe, it, expect } from "vitest";
 import { types } from "node:util";
 import { ADVERSARIAL_CORPUS, type CodecEnv, type DecodeResult } from ${JSON.stringify(runtimeModule)};
-import { create${portName}Codec } from "../../src/application/ports/${portFileBase}.codec.js";
+import { create${portName}Codec } from ${JSON.stringify(codecImportSpecifier)};
 
 const env: CodecEnv = { isProxy: types.isProxy };
 const codec = create${portName}Codec(env);
@@ -529,10 +612,80 @@ const codec = create${portName}Codec(env);
 const VALID_SAMPLE = ${JSON.stringify(sample, null, 2)} as const;
 
 describe.each(ADVERSARIAL_CORPUS)("${portName} codec refuses adversarial entries", (entry) => {
-  it("refuses the adversarial entry", () => {
+  it("refuses the adversarial entry with a non-empty refusal reason", () => {
     const res: DecodeResult<unknown> = codec.decode(entry.build());
     expect(res.ok).toBe(false);
+    if (!res.ok) {
+      expect(typeof res.reason).toBe("string");
+      expect(res.reason.length).toBeGreaterThan(0);
+    }
   });
+});
+
+it("refuses a real Proxy before its traps ever run, and refuses a trap-throwing Proxy without throwing", () => {
+  // Every observed trap increments its counter; each handler otherwise
+  // forwards to the default behaviour. If the codec reflected on the Proxy,
+  // the counters would move.
+  const traps = {
+    getPrototypeOf: 0,
+    getOwnPropertyDescriptor: 0,
+    get: 0,
+    has: 0,
+    ownKeys: 0,
+  };
+  const target = {};
+  const counted = new Proxy(target, {
+    getPrototypeOf(t) {
+      traps.getPrototypeOf += 1;
+      return Object.getPrototypeOf(t);
+    },
+    getOwnPropertyDescriptor(t, key) {
+      traps.getOwnPropertyDescriptor += 1;
+      return Object.getOwnPropertyDescriptor(t, key);
+    },
+    get(t, key, receiver) {
+      traps.get += 1;
+      return Reflect.get(t, key, receiver);
+    },
+    has(t, key) {
+      traps.has += 1;
+      return Reflect.has(t, key);
+    },
+    ownKeys(t) {
+      traps.ownKeys += 1;
+      return Reflect.ownKeys(t);
+    },
+  });
+
+  const res: DecodeResult<unknown> = codec.decode(counted);
+  expect(res.ok).toBe(false);
+  if (!res.ok) {
+    // The runtime module owns the reason names: the fleet-v2 runtime says
+    // "proxy", plain runtimes may say "not-plain-data".
+    expect(["proxy", "not-plain-data"]).toContain(res.reason);
+  }
+  expect(Object.values(traps).every((count) => count === 0)).toBe(true);
+
+  // A Proxy whose traps throw must be refused without the throw escaping.
+  const throwing = new Proxy(target, {
+    getPrototypeOf() {
+      throw new Error("trap");
+    },
+    getOwnPropertyDescriptor() {
+      throw new Error("trap");
+    },
+    get() {
+      throw new Error("trap");
+    },
+    has() {
+      throw new Error("trap");
+    },
+    ownKeys() {
+      throw new Error("trap");
+    },
+  });
+  const refused: DecodeResult<unknown> = codec.decode(throwing);
+  expect(refused.ok).toBe(false);
 });
 
 it("decodes the synthesized valid sample and freezes the value", () => {

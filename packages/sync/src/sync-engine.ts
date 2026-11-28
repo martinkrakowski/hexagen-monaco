@@ -24,10 +24,10 @@ import { resetPortAnalysisMemo } from "./generators/port-analyzer.js";
 import {
   MAX_BOUNDED_CONTEXTS,
   CodecTestGeneratorError,
-  looksLikeProxy,
   readOwnPlainProperty,
   validatePlainRecord,
 } from "./domain/services/codec-sample-synthesizer.js";
+import type { IsProxyDetector } from "./domain/services/proxy-detector.js";
 import {
   buildDriftFiles,
   createEmptyResult,
@@ -37,7 +37,7 @@ import {
 import type { Manifest } from "./types/manifest.js";
 import { ensureDependenciesBuilt } from "./preflight.js";
 import { exec } from "node:child_process";
-import { promisify } from "node:util";
+import { promisify, types } from "node:util";
 import {
   type GeneratorResults,
   mergeResult,
@@ -51,6 +51,11 @@ import {
 } from "./sync-engine-init.js";
 
 const execAsync = promisify(exec);
+
+// Explicit injection of the domain layer's proxy-detection port (Lane HXS1):
+// the engine (infrastructure) passes util.types.isProxy into every domain
+// safe-read call on the untrusted manifest.
+const isProxyDetector: IsProxyDetector = types.isProxy;
 
 export interface SyncEngineOptions {
   targetRoot?: string;
@@ -302,7 +307,11 @@ export class SyncEngine {
     // CodecTests failures instead of being skipped silently.
     let contexts: unknown;
     try {
-      contexts = readOwnPlainProperty(config.manifest, "bounded_contexts");
+      contexts = readOwnPlainProperty(
+        config.manifest,
+        "bounded_contexts",
+        isProxyDetector,
+      );
     } catch (thrown) {
       return fail(
         thrown instanceof CodecTestGeneratorError
@@ -315,6 +324,24 @@ export class SyncEngine {
       );
     }
     if (contexts === undefined) return codecTests;
+    // Fail-closed Proxy gate BEFORE Array.isArray and `.length`: reflection
+    // on a Proxy would run its traps outside the boundary (Lane HXS1). A
+    // detector that throws is a refusal too.
+    let proxyRefused: boolean;
+    try {
+      proxyRefused = isProxyDetector(contexts) === true;
+    } catch {
+      proxyRefused = true;
+    }
+    if (proxyRefused) {
+      return fail(
+        new CodecTestGeneratorError(
+          "HOSTILE_INPUT",
+          "bounded_contexts",
+          `bounded_contexts is a detectable Proxy (Proxies are refused before reflection)`,
+        ),
+      );
+    }
     let isArray: boolean;
     try {
       isArray = Array.isArray(contexts);
@@ -327,7 +354,7 @@ export class SyncEngine {
         ),
       );
     }
-    if (!isArray || looksLikeProxy(contexts)) {
+    if (!isArray) {
       return fail(
         new CodecTestGeneratorError(
           "HOSTILE_INPUT",
@@ -381,7 +408,7 @@ export class SyncEngine {
       }
       const entry = desc.value;
       try {
-        validatePlainRecord(entry);
+        validatePlainRecord(entry, isProxyDetector);
       } catch (thrown) {
         return fail(
           thrown instanceof CodecTestGeneratorError
@@ -395,7 +422,7 @@ export class SyncEngine {
       }
       let moduleName: unknown;
       try {
-        moduleName = readOwnPlainProperty(entry, "name");
+        moduleName = readOwnPlainProperty(entry, "name", isProxyDetector);
       } catch (thrown) {
         return fail(
           thrown instanceof CodecTestGeneratorError
