@@ -34,6 +34,7 @@
 //   through unrestricted native RegExp.test.
 
 import type { IsProxyDetector } from "./proxy-detector.js";
+import { safeEcho } from "./codec-echo.js";
 
 /**
  * Proxy-detection port (arch-lint `node-builtin-in-layer`): the domain layer
@@ -148,42 +149,48 @@ export function readOwnPlainProperty(
 ): unknown {
   if (obj === null || typeof obj !== "object") {
     throw hostile(
-      key,
-      `expected a plain object to read "${key}" from, got ${
+      safeEcho(key),
+      `expected a plain object to read "${safeEcho(key)}" from, got ${
         obj === null ? "null" : typeof obj
       }`,
     );
   }
   // Fail-closed Proxy gate BEFORE the prototype read / descriptor read.
-  gateProxy(obj, key, isProxy);
+  gateProxy(obj, safeEcho(key), isProxy);
   let proto: unknown;
   try {
     proto = Object.getPrototypeOf(obj);
   } catch {
     throw hostile(
-      key,
+      safeEcho(key),
       `reflection threw while reading the prototype (hostile Proxy trap)`,
     );
   }
   if (proto !== Object.prototype && proto !== null) {
-    throw hostile(key, `non-plain prototype while reading "${key}"`);
+    throw hostile(
+      safeEcho(key),
+      `non-plain prototype while reading "${safeEcho(key)}"`,
+    );
   }
   if (POLLUTING_KEYS.has(key)) {
-    throw hostile(key, `refusing prototype-polluting key "${key}"`);
+    throw hostile(
+      safeEcho(key),
+      `refusing prototype-polluting key "${safeEcho(key)}"`,
+    );
   }
   let desc: PropertyDescriptor | undefined;
   try {
     desc = Object.getOwnPropertyDescriptor(obj, key);
   } catch {
     throw hostile(
-      key,
-      `reflection threw while reading "${key}" (hostile Proxy trap)`,
+      safeEcho(key),
+      `reflection threw while reading "${safeEcho(key)}" (hostile Proxy trap)`,
     );
   }
   if (desc && (desc.get !== undefined || desc.set !== undefined)) {
     throw hostile(
-      key,
-      `refusing accessor property "${key}" (getters are never invoked)`,
+      safeEcho(key),
+      `refusing accessor property "${safeEcho(key)}" (getters are never invoked)`,
     );
   }
   return desc?.value;
@@ -200,31 +207,43 @@ export function hasOwnPlainProperty(
 ): boolean {
   if (obj === null || typeof obj !== "object") {
     throw hostile(
-      key,
-      `expected a plain object to test "${key}" on, got ${
+      safeEcho(key),
+      `expected a plain object to test "${safeEcho(key)}" on, got ${
         obj === null ? "null" : typeof obj
       }`,
     );
   }
   // Fail-closed Proxy gate BEFORE the prototype read / descriptor read.
-  gateProxy(obj, key, isProxy);
+  gateProxy(obj, safeEcho(key), isProxy);
   let proto: unknown;
   try {
     proto = Object.getPrototypeOf(obj);
   } catch {
-    throw hostile(key, `reflection threw while reading the prototype`);
+    throw hostile(
+      safeEcho(key),
+      `reflection threw while reading the prototype`,
+    );
   }
   if (proto !== Object.prototype && proto !== null) {
-    throw hostile(key, `non-plain prototype while testing "${key}"`);
+    throw hostile(
+      safeEcho(key),
+      `non-plain prototype while testing "${safeEcho(key)}"`,
+    );
   }
   if (POLLUTING_KEYS.has(key)) {
-    throw hostile(key, `refusing prototype-polluting key "${key}"`);
+    throw hostile(
+      safeEcho(key),
+      `refusing prototype-polluting key "${safeEcho(key)}"`,
+    );
   }
   let desc: PropertyDescriptor | undefined;
   try {
     desc = Object.getOwnPropertyDescriptor(obj, key);
   } catch {
-    throw hostile(key, `reflection threw while testing "${key}"`);
+    throw hostile(
+      safeEcho(key),
+      `reflection threw while testing "${safeEcho(key)}"`,
+    );
   }
   return desc !== undefined;
 }
@@ -1114,7 +1133,10 @@ function synthesizeNode(
       }
       for (const key of keys) {
         if (POLLUTING_KEYS.has(key)) {
-          throw hostile(path, `prototype-polluting field key "${key}"`);
+          throw hostile(
+            path,
+            `prototype-polluting field key "${safeEcho(key)}"`,
+          );
         }
       }
       if (keys.length > MAX_CONTRACT_FIELDS) {
@@ -1142,7 +1164,7 @@ function synthesizeNode(
         }
         sample[key] = synthesizeNode(
           field,
-          `${path}.${key}`,
+          `${path}.${safeEcho(key)}`,
           depth + 1,
           budget,
           isProxy,
@@ -1269,7 +1291,7 @@ function synthesizeNode(
         throw new CodecTestGeneratorError(
           "MALFORMED_CONTRACT",
           path,
-          `${kind} "min" at ${path} must be a finite number`,
+          `${safeEcho(kind)} "min" at ${path} must be a finite number`,
         );
       }
       if (
@@ -1279,7 +1301,7 @@ function synthesizeNode(
         throw new CodecTestGeneratorError(
           "MALFORMED_CONTRACT",
           path,
-          `${kind} "max" at ${path} must be a finite number`,
+          `${safeEcho(kind)} "max" at ${path} must be a finite number`,
         );
       }
       if (min !== undefined && max !== undefined && min > max) {
@@ -1420,7 +1442,7 @@ function synthesizeNode(
       throw new CodecTestGeneratorError(
         "UNKNOWN_TYPE",
         path,
-        `unknown contract kind "${kind}" at ${path}`,
+        `unknown contract kind "${safeEcho(kind)}" at ${path}`,
       );
   }
 }

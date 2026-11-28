@@ -660,9 +660,8 @@ it("refuses a real Proxy before its traps ever run, and refuses a trap-throwing 
   const res: DecodeResult<unknown> = codec.decode(counted);
   expect(res.ok).toBe(false);
   if (!res.ok) {
-    // The runtime module owns the reason names: the fleet-v2 runtime says
-    // "proxy", plain runtimes may say "not-plain-data".
-    expect(["proxy", "not-plain-data"]).toContain(res.reason);
+    // One canonical refusal reason for a Proxy.
+    expect(res.reason).toBe("not-plain-data");
   }
   expect(Object.values(traps).every((count) => count === 0)).toBe(true);
 
