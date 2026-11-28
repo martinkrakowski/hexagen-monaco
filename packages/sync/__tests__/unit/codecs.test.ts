@@ -608,7 +608,11 @@ describe("generateCodecs — emission and traversal", () => {
     await fs.mkdir(runtimeDir, { recursive: true });
     await fs.writeFile(
       path.join(runtimeDir, "package.json"),
-      JSON.stringify({ name: runtimeModule, type: "module", main: "index.mjs" }),
+      JSON.stringify({
+        name: runtimeModule,
+        type: "module",
+        main: "index.mjs",
+      }),
       "utf8",
     );
     await fs.writeFile(

@@ -167,10 +167,16 @@ export function readOwnPlainProperty(
     );
   }
   if (proto !== Object.prototype && proto !== null) {
-    throw hostile(safeEcho(key), `non-plain prototype while reading "${safeEcho(key)}"`);
+    throw hostile(
+      safeEcho(key),
+      `non-plain prototype while reading "${safeEcho(key)}"`,
+    );
   }
   if (POLLUTING_KEYS.has(key)) {
-    throw hostile(safeEcho(key), `refusing prototype-polluting key "${safeEcho(key)}"`);
+    throw hostile(
+      safeEcho(key),
+      `refusing prototype-polluting key "${safeEcho(key)}"`,
+    );
   }
   let desc: PropertyDescriptor | undefined;
   try {
@@ -213,19 +219,31 @@ export function hasOwnPlainProperty(
   try {
     proto = Object.getPrototypeOf(obj);
   } catch {
-    throw hostile(safeEcho(key), `reflection threw while reading the prototype`);
+    throw hostile(
+      safeEcho(key),
+      `reflection threw while reading the prototype`,
+    );
   }
   if (proto !== Object.prototype && proto !== null) {
-    throw hostile(safeEcho(key), `non-plain prototype while testing "${safeEcho(key)}"`);
+    throw hostile(
+      safeEcho(key),
+      `non-plain prototype while testing "${safeEcho(key)}"`,
+    );
   }
   if (POLLUTING_KEYS.has(key)) {
-    throw hostile(safeEcho(key), `refusing prototype-polluting key "${safeEcho(key)}"`);
+    throw hostile(
+      safeEcho(key),
+      `refusing prototype-polluting key "${safeEcho(key)}"`,
+    );
   }
   let desc: PropertyDescriptor | undefined;
   try {
     desc = Object.getOwnPropertyDescriptor(obj, key);
   } catch {
-    throw hostile(safeEcho(key), `reflection threw while testing "${safeEcho(key)}"`);
+    throw hostile(
+      safeEcho(key),
+      `reflection threw while testing "${safeEcho(key)}"`,
+    );
   }
   return desc !== undefined;
 }
@@ -1115,7 +1133,10 @@ function synthesizeNode(
       }
       for (const key of keys) {
         if (POLLUTING_KEYS.has(key)) {
-          throw hostile(path, `prototype-polluting field key "${safeEcho(key)}"`);
+          throw hostile(
+            path,
+            `prototype-polluting field key "${safeEcho(key)}"`,
+          );
         }
       }
       if (keys.length > MAX_CONTRACT_FIELDS) {
