@@ -9,6 +9,14 @@ Release notes for the co-published `@hexagen-monaco/sync` and
 (F1 preflight, #432): a merged bump blocks deploys until it is published. That
 is the guard working, not a fault to bypass.
 
+## 0.17.1
+
+**Hardened codec input handling.** `hexagen sync` now takes its proxy detector
+by injection instead of a process-global installer, consults it before any
+reflection on a value, and refuses when none is supplied. The generated codec
+test asserts refusal reasons and covers a real Proxy, and it now imports the
+emitted codec file under its emitted name.
+
 ## 0.17.0
 
 **Typed port contracts and generated hostile-input codecs.** A manifest port may
