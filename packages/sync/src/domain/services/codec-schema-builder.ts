@@ -460,6 +460,7 @@ export function resolveRuntimeModule(
   if (
     !/^[A-Za-z0-9@]/.test(mod) ||
     !/^[A-Za-z0-9@/._-]*$/.test(mod) ||
+    (mod.startsWith("@") && !/^@[^/]+\/[^/]+/.test(mod)) ||
     mod.split("/").some((seg) => seg === "" || seg === "." || seg === "..")
   ) {
     return err(

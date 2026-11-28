@@ -19,6 +19,7 @@ import {
   MAX_ENUM_VALUES,
   MAX_OBJECT_FIELDS,
 } from "../../src/domain/services/codec-schema-builder.js";
+import { safeEcho } from "../../src/domain/services/codec-echo.js";
 import {
   readOwnPlainProperty,
   MAX_ARRAY_ITEMS_BOUND,
@@ -478,6 +479,7 @@ describe("synthesizer — bounded echo of an untrusted key", () => {
     expect(error.path.length).toBeLessThan(200);
     expect(error.message).not.toMatch(/[\r\n]/);
     expect(error.message.length).toBeLessThan(300);
+    expect(safeEcho("a\u0085b\u009bc")).toBe("abc");
   });
 });
 
@@ -517,6 +519,8 @@ describe("resolveRuntimeModule — refusals", () => {
       ".hidden",
       "a//b",
       "a/../b",
+      "@scope",
+      "@/pkg",
     ]) {
       expectErr(
         resolveRuntimeModule({ codec: { runtimeModule: bad } }, types.isProxy),

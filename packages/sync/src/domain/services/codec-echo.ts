@@ -13,7 +13,7 @@ export function safeEcho(value: unknown): string {
   let out = "";
   for (let i = 0; i < text.length && out.length < MAX_ECHO_LENGTH; i++) {
     const code = text.charCodeAt(i);
-    if (code < 0x20 || code === 0x7f || code === 0x2028 || code === 0x2029) {
+    if (code < 0x20 || (code >= 0x7f && code <= 0x9f) || code === 0x2028 || code === 0x2029) {
       continue;
     }
     out += text[i];
