@@ -29,7 +29,6 @@ import { types } from "node:util";
 import { generateCodecTests } from "../../src/generators/codec-test.js";
 import {
   CodecTestGeneratorError,
-  installIsProxyDetector,
   synthesizeValidSample,
 } from "../../src/domain/services/codec-sample-synthesizer.js";
 import { SyncEngine } from "../../src/sync-engine.js";
@@ -53,10 +52,9 @@ const silentLogger: LoggerPort = {
   errorWithException: () => {},
 };
 
-// Direct synthesizer calls bypass the generator's module-load seam, so the
-// tests install the real detector (util.types.isProxy) themselves — the same
-// wiring production gets through src/generators/codec-test.ts.
-installIsProxyDetector(types.isProxy);
+// Direct synthesizer calls inject the real detector (util.types.isProxy)
+// explicitly — the same wiring production gets through
+// src/generators/codec-test.ts. There is NO process-global detector anymore.
 
 function makeConfig(workspaceRoot: string, manifest: Manifest): SyncConfig {
   return {
@@ -248,7 +246,7 @@ describe("generateCodecTests refusals", () => {
     ];
     for (const contract of cases) {
       try {
-        synthesizeValidSample(contract, "probe");
+        synthesizeValidSample(contract, "probe", types.isProxy);
         assert.fail(`expected MISSING_BOUND for ${JSON.stringify(contract)}`);
       } catch (thrown) {
         expectErrCode(thrown, "MISSING_BOUND");
@@ -292,7 +290,7 @@ describe("generateCodecTests refusals", () => {
     ];
     for (const [contract, label] of cases) {
       try {
-        synthesizeValidSample(contract, "probe");
+        synthesizeValidSample(contract, "probe", types.isProxy);
         assert.fail(`expected UNSUPPORTED_NESTED_SHAPE for ${label}`);
       } catch (thrown) {
         expectErrCode(thrown, "UNSUPPORTED_NESTED_SHAPE");
@@ -322,7 +320,7 @@ describe("generateCodecTests refusals", () => {
     ];
     for (const contract of cases) {
       try {
-        synthesizeValidSample(contract, "probe");
+        synthesizeValidSample(contract, "probe", types.isProxy);
         assert.fail("expected MISSING_PATTERN_EXAMPLE");
       } catch (thrown) {
         expectErrCode(thrown, "MISSING_PATTERN_EXAMPLE");
@@ -347,7 +345,7 @@ describe("generateCodecTests refusals", () => {
       },
     };
     try {
-      synthesizeValidSample(getterContract, "probe");
+      synthesizeValidSample(getterContract, "probe", types.isProxy);
       assert.fail("expected HOSTILE_INPUT for the getter contract");
     } catch (thrown) {
       expectErrCode(thrown, "HOSTILE_INPUT");
@@ -364,7 +362,7 @@ describe("generateCodecTests refusals", () => {
       },
     };
     try {
-      synthesizeValidSample(getterValues, "probe");
+      synthesizeValidSample(getterValues, "probe", types.isProxy);
       assert.fail("expected HOSTILE_INPUT for the getter values");
     } catch (thrown) {
       expectErrCode(thrown, "HOSTILE_INPUT");
@@ -376,6 +374,7 @@ describe("generateCodecTests refusals", () => {
       synthesizeValidSample(
         new Proxy({ kind: "string", maxLength: 5 }, {}),
         "probe",
+        types.isProxy,
       );
       assert.fail("expected HOSTILE_INPUT for the Proxy");
     } catch (thrown) {
@@ -392,7 +391,7 @@ describe("generateCodecTests refusals", () => {
       },
     );
     try {
-      synthesizeValidSample(trapping, "probe");
+      synthesizeValidSample(trapping, "probe", types.isProxy);
       assert.fail("expected HOSTILE_INPUT for the trap-throwing Proxy");
     } catch (thrown) {
       expectErrCode(thrown, "HOSTILE_INPUT");
@@ -404,7 +403,7 @@ describe("generateCodecTests refusals", () => {
       maxLength = 5;
     }
     try {
-      synthesizeValidSample(new NotPlain(), "probe");
+      synthesizeValidSample(new NotPlain(), "probe", types.isProxy);
       assert.fail("expected HOSTILE_INPUT for the non-plain prototype");
     } catch (thrown) {
       expectErrCode(thrown, "HOSTILE_INPUT");
@@ -413,7 +412,11 @@ describe("generateCodecTests refusals", () => {
     // null / undefined where a plain record is required (fields map).
     for (const fields of [null, undefined]) {
       try {
-        synthesizeValidSample({ kind: "object", exact: true, fields }, "probe");
+        synthesizeValidSample(
+          { kind: "object", exact: true, fields },
+          "probe",
+          types.isProxy,
+        );
         assert.fail("expected HOSTILE_INPUT for null/undefined fields");
       } catch (thrown) {
         expectErrCode(thrown, "HOSTILE_INPUT");
@@ -434,7 +437,7 @@ describe("generateCodecTests refusals", () => {
     // Non-iterable / array-like where an array is required (enum values).
     for (const values of [{ length: 1, 0: "a" }, new Map(), "abc", 7]) {
       try {
-        synthesizeValidSample({ kind: "enum", values }, "probe");
+        synthesizeValidSample({ kind: "enum", values }, "probe", types.isProxy);
         assert.fail("expected HOSTILE_INPUT for the non-array values");
       } catch (thrown) {
         expectErrCode(thrown, "HOSTILE_INPUT");
@@ -445,7 +448,11 @@ describe("generateCodecTests refusals", () => {
     const holey: unknown[] = new Array(2);
     holey[1] = "a";
     try {
-      synthesizeValidSample({ kind: "enum", values: holey }, "probe");
+      synthesizeValidSample(
+        { kind: "enum", values: holey },
+        "probe",
+        types.isProxy,
+      );
       assert.fail("expected HOSTILE_INPUT for the array hole");
     } catch (thrown) {
       expectErrCode(thrown, "HOSTILE_INPUT");
@@ -470,7 +477,7 @@ describe("generateCodecTests refusals", () => {
       '{"kind":"object","exact":true,"fields":{"__proto__":{"kind":"boolean"}}}',
     ) as Record<string, unknown>;
     try {
-      synthesizeValidSample(polluting, "probe");
+      synthesizeValidSample(polluting, "probe", types.isProxy);
       assert.fail("expected HOSTILE_INPUT for the polluting key");
     } catch (thrown) {
       expectErrCode(thrown, "HOSTILE_INPUT");
@@ -562,7 +569,7 @@ describe("generateCodecTests refusals", () => {
       (wide.fields as Record<string, unknown>)[`f${i}`] = { kind: "boolean" };
     }
     try {
-      synthesizeValidSample(wide, "probe");
+      synthesizeValidSample(wide, "probe", types.isProxy);
       assert.fail("expected TIMEOUT_OR_BUDGET for the wide contract");
     } catch (thrown) {
       expectErrCode(thrown, "TIMEOUT_OR_BUDGET");
@@ -584,7 +591,7 @@ describe("generateCodecTests refusals", () => {
       };
     }
     try {
-      synthesizeValidSample(branching, "probe");
+      synthesizeValidSample(branching, "probe", types.isProxy);
       assert.fail("expected TIMEOUT_OR_BUDGET for the branching contract");
     } catch (thrown) {
       expectErrCode(thrown, "TIMEOUT_OR_BUDGET");
@@ -635,8 +642,8 @@ describe("generateCodecTests refusals", () => {
         a: { kind: "string", maxLength: 5 },
       },
     };
-    const first = synthesizeValidSample(contract, "probe");
-    const second = synthesizeValidSample(contract, "probe");
+    const first = synthesizeValidSample(contract, "probe", types.isProxy);
+    const second = synthesizeValidSample(contract, "probe", types.isProxy);
     assert.deepEqual(second, first, "synthesis must be deterministic");
     assert.deepEqual(first, {
       a: "a",
@@ -650,41 +657,71 @@ describe("generateCodecTests refusals", () => {
 
     // Each kind individually.
     assert.deepEqual(
-      synthesizeValidSample({ kind: "object", exact: true, fields: {} }, "p"),
+      synthesizeValidSample(
+        { kind: "object", exact: true, fields: {} },
+        "p",
+        types.isProxy,
+      ),
       {},
     );
     assert.deepEqual(
       synthesizeValidSample(
         { kind: "array", items: { kind: "boolean" }, maxItems: 4 },
         "p",
+        types.isProxy,
       ),
       [false],
     );
     assert.equal(
-      synthesizeValidSample({ kind: "string", maxLength: 5 }, "p"),
+      synthesizeValidSample(
+        { kind: "string", maxLength: 5 },
+        "p",
+        types.isProxy,
+      ),
       "a",
     );
     assert.equal(
       synthesizeValidSample(
         { kind: "string", maxLength: 8, pattern: "^[a-z]+$", example: "abc" },
         "p",
+        types.isProxy,
       ),
       "abc",
     );
-    assert.equal(synthesizeValidSample({ kind: "integer" }, "p"), 0);
-    assert.equal(synthesizeValidSample({ kind: "number" }, "p"), 0);
-    // Clamping: no min and a negative max -> max.
-    assert.equal(synthesizeValidSample({ kind: "integer", max: -3 }, "p"), -3);
-    assert.equal(synthesizeValidSample({ kind: "boolean" }, "p"), false);
     assert.equal(
-      synthesizeValidSample({ kind: "enum", values: ["b", "a"] }, "p"),
+      synthesizeValidSample({ kind: "integer" }, "p", types.isProxy),
+      0,
+    );
+    assert.equal(
+      synthesizeValidSample({ kind: "number" }, "p", types.isProxy),
+      0,
+    );
+    // Clamping: no min and a negative max -> max.
+    assert.equal(
+      synthesizeValidSample({ kind: "integer", max: -3 }, "p", types.isProxy),
+      -3,
+    );
+    assert.equal(
+      synthesizeValidSample({ kind: "boolean" }, "p", types.isProxy),
+      false,
+    );
+    assert.equal(
+      synthesizeValidSample(
+        { kind: "enum", values: ["b", "a"] },
+        "p",
+        types.isProxy,
+      ),
       "b",
     );
-    assert.equal(synthesizeValidSample({ kind: "literal", value: 7 }, "p"), 7);
+    assert.equal(
+      synthesizeValidSample({ kind: "literal", value: 7 }, "p", types.isProxy),
+      7,
+    );
     assert.equal(
       synthesizeValidSample(
         { kind: "nullable", of: { kind: "string", maxLength: 3 } },
         "p",
+        types.isProxy,
       ),
       null,
     );
@@ -764,8 +801,9 @@ describe("generateCodecTests refusals", () => {
     );
     assert.ok(
       content.includes(
-        'import { createPlaceOrderCodec } from "../../src/application/ports/place-order.codec.js"',
+        'import { createPlaceOrderCodec } from "../../src/application/ports/in/PlaceOrder.codec.js"',
       ),
+      "the emitted import must point at the file codecs.ts writes (Pascal name, resolved emission dir)",
     );
     assert.ok(
       content.includes("const env: CodecEnv = { isProxy: types.isProxy };"),
@@ -973,6 +1011,53 @@ describe("generateCodecTests refusals", () => {
         "a hostile accessor on bounded_contexts must surface as a CodecTests failure",
       );
     });
+
+    it("refuses a real Proxy at the engine's bounded_contexts read BEFORE Array.isArray or .length run any trap", async () => {
+      fixtureRoot = await createFixture(
+        ["codec-test-target"],
+        "hexagen-codec-engine-proxy-",
+      );
+      const counters = {
+        getPrototypeOf: 0,
+        getOwnPropertyDescriptor: 0,
+        has: 0,
+        ownKeys: 0,
+      };
+      const manifest = makeManifest() as unknown as Record<string, unknown>;
+      manifest.bounded_contexts = new Proxy([], {
+        getPrototypeOf(t) {
+          counters.getPrototypeOf += 1;
+          return Object.getPrototypeOf(t);
+        },
+        getOwnPropertyDescriptor(t, key) {
+          counters.getOwnPropertyDescriptor += 1;
+          return Object.getOwnPropertyDescriptor(t, key);
+        },
+        has(t, key) {
+          counters.has += 1;
+          return Reflect.has(t, key);
+        },
+        ownKeys(t) {
+          counters.ownKeys += 1;
+          return Reflect.ownKeys(t);
+        },
+      });
+      const summary = await makeEngine(
+        fixtureRoot,
+        manifest as unknown as Manifest,
+        true,
+      ).run();
+      assert.ok(
+        summary.errors > 0,
+        "a Proxy bounded_contexts must surface as a CodecTests failure",
+      );
+      assert.deepEqual(counters, {
+        getPrototypeOf: 0,
+        getOwnPropertyDescriptor: 0,
+        has: 0,
+        ownKeys: 0,
+      });
+    });
   });
 
   // ---------------------------------------------------------------------------
@@ -991,6 +1076,7 @@ describe("generateCodecTests refusals", () => {
             example: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab",
           },
           "probe",
+          types.isProxy,
         );
         assert.fail(`expected MALFORMED_CONTRACT for pattern ${pattern}`);
       } catch (thrown) {
@@ -1004,6 +1090,7 @@ describe("generateCodecTests refusals", () => {
       synthesizeValidSample(
         { kind: "string", maxLength: 400, pattern: oversized, example: "a" },
         "probe",
+        types.isProxy,
       );
       assert.fail("expected TIMEOUT_OR_BUDGET for the oversized pattern");
     } catch (thrown) {
@@ -1022,6 +1109,7 @@ describe("generateCodecTests refusals", () => {
           example: `${"a".repeat(40)}b`,
         },
         "probe",
+        types.isProxy,
       );
       assert.fail("expected TIMEOUT_OR_BUDGET for the backtracking pattern");
     } catch (thrown) {
@@ -1038,6 +1126,7 @@ describe("generateCodecTests refusals", () => {
       synthesizeValidSample(
         { kind: "string", maxLength: 1, pattern: "^a+$", example: "aa" },
         "probe",
+        types.isProxy,
       );
       assert.fail("expected a refusal for the over-long example");
     } catch (thrown) {
@@ -1048,6 +1137,7 @@ describe("generateCodecTests refusals", () => {
       synthesizeValidSample(
         { kind: "string", maxLength: 2, pattern: "^a+$", example: "aa" },
         "probe",
+        types.isProxy,
       ),
       "aa",
     );
@@ -1060,6 +1150,7 @@ describe("generateCodecTests refusals", () => {
       synthesizeValidSample(
         { kind: "literal", value: "a".repeat(8191) },
         "probe",
+        types.isProxy,
       );
       assert.fail("expected TIMEOUT_OR_BUDGET for the 8191-char literal");
     } catch (thrown) {
@@ -1071,6 +1162,7 @@ describe("generateCodecTests refusals", () => {
       synthesizeValidSample(
         { kind: "literal", value: "é".repeat(4096) },
         "probe",
+        types.isProxy,
       );
       assert.fail("expected TIMEOUT_OR_BUDGET for the non-ASCII literal");
     } catch (thrown) {
@@ -1079,7 +1171,11 @@ describe("generateCodecTests refusals", () => {
     // The boundary itself stays accepted: an 8190-char literal serializes to
     // 8192 bytes exactly.
     assert.equal(
-      synthesizeValidSample({ kind: "literal", value: "a".repeat(8190) }, "p"),
+      synthesizeValidSample(
+        { kind: "literal", value: "a".repeat(8190) },
+        "p",
+        types.isProxy,
+      ),
       "a".repeat(8190),
     );
   });
@@ -1096,7 +1192,11 @@ describe("generateCodecTests refusals", () => {
       };
     }
     try {
-      synthesizeValidSample({ kind: "object", exact: true, fields }, "probe");
+      synthesizeValidSample(
+        { kind: "object", exact: true, fields },
+        "probe",
+        types.isProxy,
+      );
       assert.fail("expected TIMEOUT_OR_BUDGET for the 64-boolean object");
     } catch (thrown) {
       expectErrCode(thrown, "TIMEOUT_OR_BUDGET");
@@ -1112,6 +1212,7 @@ describe("generateCodecTests refusals", () => {
       synthesizeValidSample(
         { kind: "object", exact: true, fields: smaller },
         "probe",
+        types.isProxy,
       ),
       Object.keys(smaller)
         .sort()
@@ -1131,6 +1232,7 @@ describe("generateCodecTests refusals", () => {
       synthesizeValidSample(
         { kind: "nullable", of: { kind: "literal", value: "x".repeat(8190) } },
         "probe",
+        types.isProxy,
       ),
       null,
     );
@@ -1143,6 +1245,7 @@ describe("generateCodecTests refusals", () => {
           of: { kind: "object", exact: false, fields: {} },
         },
         "probe",
+        types.isProxy,
       );
       assert.fail("expected MALFORMED_CONTRACT for the bad inner node");
     } catch (thrown) {
@@ -1159,6 +1262,7 @@ describe("generateCodecTests refusals", () => {
       synthesizeValidSample(
         { kind: "nullable", of: { kind: "literal", value: "y".repeat(8195) } },
         "probe",
+        types.isProxy,
       ),
       null,
     );
@@ -1184,6 +1288,7 @@ describe("generateCodecTests refusals", () => {
           of: { kind: "object", exact: true, fields: wideFields },
         },
         "probe",
+        types.isProxy,
       );
       assert.fail("expected TIMEOUT_OR_BUDGET for the over-budget inner tree");
     } catch (thrown) {
@@ -1204,6 +1309,7 @@ describe("generateCodecTests refusals", () => {
           example: "a".repeat(2000),
         },
         "probe",
+        types.isProxy,
       ),
       "a".repeat(2000),
     );
@@ -1219,6 +1325,7 @@ describe("generateCodecTests refusals", () => {
           example: "a".repeat(50_000),
         },
         "probe",
+        types.isProxy,
       );
       assert.fail("expected TIMEOUT_OR_BUDGET for the 50,000-char example");
     } catch (thrown) {
@@ -1238,6 +1345,7 @@ describe("generateCodecTests refusals", () => {
       synthesizeValidSample(
         { kind: "string", maxLength: 1, pattern: "a|b|c", example: "c" },
         "probe",
+        types.isProxy,
       ),
       "c",
     );
@@ -1247,6 +1355,7 @@ describe("generateCodecTests refusals", () => {
       synthesizeValidSample(
         { kind: "string", maxLength: 1, pattern: "a|b|c", example: "d" },
         "probe",
+        types.isProxy,
       );
       assert.fail("expected MISSING_PATTERN_EXAMPLE for the non-matching 'd'");
     } catch (thrown) {
@@ -1261,6 +1370,7 @@ describe("generateCodecTests refusals", () => {
       synthesizeValidSample(
         { kind: "enum", values: new Proxy(["a"], {}) },
         "probe",
+        types.isProxy,
       );
       assert.fail("expected HOSTILE_INPUT for the Proxy values array");
     } catch (thrown) {
@@ -1300,16 +1410,27 @@ describe("generateCodecTests refusals", () => {
 
   it("synthesizes integers inside fractional bounds and refuses bounds containing no integer", () => {
     assert.equal(
-      synthesizeValidSample({ kind: "integer", min: 0.5, max: 5 }, "p"),
+      synthesizeValidSample(
+        { kind: "integer", min: 0.5, max: 5 },
+        "p",
+        types.isProxy,
+      ),
       1,
     );
     assert.equal(
-      synthesizeValidSample({ kind: "integer", max: -0.5 }, "p"),
+      synthesizeValidSample({ kind: "integer", max: -0.5 }, "p", types.isProxy),
       -1,
     );
-    assert.equal(synthesizeValidSample({ kind: "integer", min: -0.5 }, "p"), 0);
+    assert.equal(
+      synthesizeValidSample({ kind: "integer", min: -0.5 }, "p", types.isProxy),
+      0,
+    );
     try {
-      synthesizeValidSample({ kind: "integer", min: 0.5, max: 0.5 }, "p");
+      synthesizeValidSample(
+        { kind: "integer", min: 0.5, max: 0.5 },
+        "p",
+        types.isProxy,
+      );
       assert.fail(
         "expected UNSUPPORTED_NESTED_SHAPE for integer bounds without an integer",
       );
@@ -1317,7 +1438,10 @@ describe("generateCodecTests refusals", () => {
       expectErrCode(thrown, "UNSUPPORTED_NESTED_SHAPE");
     }
     // Number contracts keep fractional samples.
-    assert.equal(synthesizeValidSample({ kind: "number", min: 0.5 }, "p"), 0.5);
+    assert.equal(
+      synthesizeValidSample({ kind: "number", min: 0.5 }, "p", types.isProxy),
+      0.5,
+    );
   });
 
   it("validates pattern syntax and size before the example check (error precedence)", () => {
@@ -1327,6 +1451,7 @@ describe("generateCodecTests refusals", () => {
       synthesizeValidSample(
         { kind: "string", maxLength: 64, pattern: "[a-" },
         "probe",
+        types.isProxy,
       );
       assert.fail("expected MALFORMED_CONTRACT");
     } catch (thrown) {
@@ -1341,6 +1466,7 @@ describe("generateCodecTests refusals", () => {
           pattern: `^a{1,10}${"b".repeat(300)}$`,
         },
         "probe",
+        types.isProxy,
       );
       assert.fail("expected TIMEOUT_OR_BUDGET");
     } catch (thrown) {
@@ -1351,6 +1477,7 @@ describe("generateCodecTests refusals", () => {
       synthesizeValidSample(
         { kind: "string", maxLength: 8, pattern: "^[a-z]+$" },
         "probe",
+        types.isProxy,
       );
       assert.fail("expected MISSING_PATTERN_EXAMPLE");
     } catch (thrown) {
@@ -1389,5 +1516,305 @@ describe("generateCodecTests refusals", () => {
       );
       expectGenErrCode(res, "MALFORMED_CONTRACT");
     }
+  });
+
+  // ---------------------------------------------------------------------------
+  // 17. HXS1 — fail-closed injection, trap counters, emitted-test upgrades
+  // ---------------------------------------------------------------------------
+
+  function countingProxy(target: unknown, counters: Record<string, number>) {
+    return new Proxy(target as object, {
+      getPrototypeOf(t) {
+        counters.getPrototypeOf += 1;
+        return Object.getPrototypeOf(t);
+      },
+      getOwnPropertyDescriptor(t, key) {
+        counters.getOwnPropertyDescriptor += 1;
+        return Object.getOwnPropertyDescriptor(t, key);
+      },
+      has(t, key) {
+        counters.has += 1;
+        return Reflect.has(t, key);
+      },
+      ownKeys(t) {
+        counters.ownKeys += 1;
+        return Reflect.ownKeys(t);
+      },
+      get(t, key, receiver) {
+        counters.get += 1;
+        return Reflect.get(t, key, receiver);
+      },
+    });
+  }
+
+  it("refuses a Proxy at manifest.bounded_contexts (generator entry) with every trap counter still at 0", async () => {
+    const counters = {
+      getPrototypeOf: 0,
+      getOwnPropertyDescriptor: 0,
+      has: 0,
+      ownKeys: 0,
+      get: 0,
+    };
+    const manifest = makeManifest() as unknown as Record<string, unknown>;
+    manifest.bounded_contexts = countingProxy([], counters);
+    const result = await generateCodecTests(
+      modulePath,
+      moduleName,
+      makeConfig(workspaceRoot, manifest as unknown as Manifest),
+    );
+    expectGenErrCode(result, "HOSTILE_INPUT");
+    assert.deepEqual(counters, {
+      getPrototypeOf: 0,
+      getOwnPropertyDescriptor: 0,
+      has: 0,
+      ownKeys: 0,
+      get: 0,
+    });
+  });
+
+  it("fails closed: with NO detector an ordinary plain-object contract is refused, while the primitive-only path keeps its ordinary refusal", () => {
+    try {
+      synthesizeValidSample(SIMPLE_REQUEST, "probe");
+      assert.fail("expected the fail-closed refusal");
+    } catch (thrown) {
+      expectErrCode(thrown, "HOSTILE_INPUT");
+      assert.match(
+        (thrown as Error).message,
+        /no proxy detector supplied/,
+        "the refusal must be the fail-closed gate, not ordinary validation",
+      );
+    }
+    // A primitive never reaches the fail-closed gate: the existing
+    // plain-record check refuses it with the ordinary malformed-contract
+    // refusal, not the fail-closed HOSTILE_INPUT message.
+    try {
+      synthesizeValidSample(42, "probe");
+      assert.fail("expected the ordinary primitive refusal");
+    } catch (thrown) {
+      expectErrCode(thrown, "MALFORMED_CONTRACT");
+      assert.doesNotMatch(
+        (thrown as Error).message,
+        /no proxy detector supplied/,
+      );
+    }
+  });
+
+  it("refuses a real Proxy at the generator entry (ports list) with injected detector and zero trap invocations, object and array shapes", async () => {
+    // Object shape: a Proxy wrapping the whole ports array.
+    const arrayCounters = {
+      getPrototypeOf: 0,
+      getOwnPropertyDescriptor: 0,
+      has: 0,
+      ownKeys: 0,
+      get: 0,
+    };
+    const arrayResult = await generateCodecTests(
+      modulePath,
+      moduleName,
+      makeConfig(
+        workspaceRoot,
+        makeManifest({
+          inPorts: countingProxy(
+            [{ name: "place-order", contracts: { request: SIMPLE_REQUEST } }],
+            arrayCounters,
+          ) as unknown as unknown[],
+        }),
+      ),
+    );
+    expectGenErrCode(arrayResult, "HOSTILE_INPUT");
+    assert.deepEqual(arrayCounters, {
+      getPrototypeOf: 0,
+      getOwnPropertyDescriptor: 0,
+      has: 0,
+      ownKeys: 0,
+      get: 0,
+    });
+
+    // Object shape: a Proxy as an individual port entry.
+    const portCounters = {
+      getPrototypeOf: 0,
+      getOwnPropertyDescriptor: 0,
+      has: 0,
+      ownKeys: 0,
+      get: 0,
+    };
+    const portResult = await generateCodecTests(
+      modulePath,
+      moduleName,
+      makeConfig(
+        workspaceRoot,
+        makeManifest({
+          inPorts: [
+            countingProxy(
+              { name: "place-order", contracts: { request: SIMPLE_REQUEST } },
+              portCounters,
+            ),
+          ],
+        }),
+      ),
+    );
+    expectGenErrCode(portResult, "HOSTILE_INPUT");
+    assert.deepEqual(portCounters, {
+      getPrototypeOf: 0,
+      getOwnPropertyDescriptor: 0,
+      has: 0,
+      ownKeys: 0,
+      get: 0,
+    });
+  });
+
+  it("emits a corpus test that asserts the refusal reason and a real-Proxy test with trap counters", async () => {
+    const result = await generateCodecTests(
+      modulePath,
+      moduleName,
+      makeConfig(
+        workspaceRoot,
+        makeManifest({
+          inPorts: [
+            { name: "place-order", contracts: { request: SIMPLE_REQUEST } },
+          ],
+        }),
+      ),
+    );
+    assert.equal(result.error, undefined);
+    const content = await fs.readFile(result.created[0], "utf8");
+    // Reason assertions in the corpus test.
+    assert.ok(
+      content.includes('expect(typeof res.reason).toBe("string")'),
+      "the corpus test must assert the refusal reason is a string",
+    );
+    assert.ok(
+      content.includes("expect(res.reason.length).toBeGreaterThan(0);"),
+      "the corpus test must assert the refusal reason is non-empty",
+    );
+    // Real-Proxy test: counting traps, reason allow-list, zero-trap invariant,
+    // and a throwing-trap Proxy refused without throwing.
+    assert.ok(content.includes("new Proxy(target, {"));
+    assert.ok(content.includes('["proxy", "not-plain-data"]'));
+    assert.ok(
+      content.includes(
+        "const refused: DecodeResult<unknown> = codec.decode(throwing);",
+      ),
+    );
+    assert.ok(content.includes("types.isProxy"));
+    // Determinism: rendering the same inputs again is byte-identical.
+    const second = await generateCodecTests(
+      modulePath,
+      moduleName,
+      makeConfig(
+        workspaceRoot,
+        makeManifest({
+          inPorts: [
+            { name: "place-order", contracts: { request: SIMPLE_REQUEST } },
+          ],
+        }),
+      ),
+    );
+    assert.deepEqual(second.created, [], "no re-creation on a converged tree");
+  });
+
+  it("emits an import specifier that resolves to the codec file codecs.ts writes (default and configured application folder)", async () => {
+    // Default layout: application folder src/application.
+    const result = await generateCodecTests(
+      modulePath,
+      moduleName,
+      makeConfig(
+        workspaceRoot,
+        makeManifest({
+          inPorts: [
+            { name: "place-order", contracts: { request: SIMPLE_REQUEST } },
+          ],
+        }),
+      ),
+    );
+    assert.equal(result.error, undefined);
+    const testFile = result.created[0];
+    const content = await fs.readFile(testFile, "utf8");
+    const match = content.match(
+      /import \{ createPlaceOrderCodec \} from "([^"]+)"/,
+    );
+    assert.ok(match, "the emitted test must import the codec factory");
+    const specifier = match![1];
+    // The specifier must be relative and resolve (from the emitted test's
+    // directory) to exactly the path codecs.ts writes.
+    assert.ok(specifier.startsWith("."));
+    const resolved = path.resolve(path.dirname(testFile), specifier);
+    // The emitted specifier is the .js twin of the .ts file codecs.ts writes.
+    assert.equal(
+      resolved,
+      path.join(
+        modulePath,
+        "src",
+        "application",
+        "ports",
+        "in",
+        "PlaceOrder.codec.js",
+      ),
+    );
+    // Both files exist side by side: create the codec module at the resolved
+    // path and confirm the specifier points at it on disk.
+    await fs.mkdir(path.dirname(resolved), { recursive: true });
+    await fs.writeFile(resolved, "// codec\n", "utf8");
+    await fs.access(resolved);
+
+    // Configured application folder: the import must follow the SAME
+    // resolveEmissionDir rules, not a hardcoded src/application.
+    const configuredManifest = makeManifest({
+      inPorts: [
+        { name: "place-order", contracts: { request: SIMPLE_REQUEST } },
+      ],
+    }) as unknown as Record<string, unknown>;
+    (
+      configuredManifest.generator as {
+        sync: { layers: { application: { folder: string } } };
+      }
+    ).sync.layers.application.folder = "src/app";
+    const configuredResult = await generateCodecTests(
+      modulePath,
+      moduleName,
+      makeConfig(workspaceRoot, configuredManifest as unknown as Manifest),
+    );
+    assert.equal(configuredResult.error, undefined);
+    const configuredTestFile = path.join(
+      modulePath,
+      "__tests__",
+      "codecs",
+      "PlaceOrder.codec.test.ts",
+    );
+    const configuredContent = await fs.readFile(configuredTestFile, "utf8");
+    assert.ok(
+      configuredContent.includes(
+        'import { createPlaceOrderCodec } from "../../src/app/ports/in/PlaceOrder.codec.js"',
+      ),
+      "a configured application folder must be honoured in the emitted import",
+    );
+  });
+
+  it("leaves no process-global detector symbols in src (installIsProxyDetector / looksLikeProxy are gone)", async () => {
+    const { readdir } = await import("node:fs/promises");
+    const srcRoot = path.resolve(__dirname, "..", "..", "src");
+    const offenders: string[] = [];
+    async function walk(dir: string): Promise<void> {
+      for (const entry of await readdir(dir, { withFileTypes: true })) {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          await walk(full);
+        } else if (entry.name.endsWith(".ts")) {
+          const text = await fs.readFile(full, "utf8");
+          if (
+            text.includes("installIsProxyDetector") ||
+            text.includes("looksLikeProxy")
+          ) {
+            offenders.push(path.relative(srcRoot, full));
+          }
+        }
+      }
+    }
+    await walk(srcRoot);
+    assert.deepEqual(
+      offenders,
+      [],
+      "no installIsProxyDetector / looksLikeProxy symbol may remain in src",
+    );
   });
 });

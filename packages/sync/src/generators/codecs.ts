@@ -13,6 +13,7 @@
 
 import fs from "node:fs/promises";
 import path from "node:path";
+import { types } from "node:util";
 import type { SyncConfig } from "../config.js";
 import { isInScope, safeWriteFileAtomic } from "../fs-utils.js";
 import {
@@ -41,6 +42,13 @@ import {
 } from "../domain/services/codec-schema-builder.js";
 import { normalizeStubName } from "./stubs.js";
 import { DEFAULT_NAMING } from "../domain/stub-templates.js";
+import type { IsProxyDetector } from "../domain/services/proxy-detector.js";
+
+// Explicit injection of the domain layer's proxy-detection port (Lane HXS1):
+// the domain schema builder must not import Node builtins, so this
+// generator (infrastructure) imports util.types.isProxy and passes it
+// explicitly into every schema-builder entry point below.
+const isProxyDetector: IsProxyDetector = types.isProxy;
 
 /** Hard traversal bounds for the manifest walk (see header cost bound). */
 export const MAX_BOUNDED_CONTEXTS = 64;
@@ -58,7 +66,10 @@ export async function generateCodecs(
     // Runtime-module and layer resolution also read untrusted manifest data —
     // keep them inside the same boundary so any typed refusal (or, as a last
     // resort, any escape) becomes result.error, never a thrown abort.
-    const runtimeModuleResult = resolveRuntimeModule(config.manifest);
+    const runtimeModuleResult = resolveRuntimeModule(
+      config.manifest,
+      isProxyDetector,
+    );
     if (!runtimeModuleResult.success) {
       result.error = runtimeModuleResult.error;
       return result;
@@ -68,7 +79,7 @@ export async function generateCodecs(
     // Layer-folder configuration lives under generator.sync.layers — read it
     // through the same descriptor boundary; absence falls back to the
     // conventional dirs inside resolveEmissionDir.
-    const layersResult = readLayersConfig(config.manifest);
+    const layersResult = readLayersConfig(config.manifest, isProxyDetector);
     if (!layersResult.success) {
       result.error = layersResult.error;
       return result;
@@ -83,6 +94,7 @@ export async function generateCodecs(
       result,
       runtimeModule,
       layersConfig,
+      isProxyDetector,
     );
   } catch (thrown) {
     // Failed-soft generator contract (B-1): a thrown traversal error (e.g. a
@@ -109,17 +121,24 @@ export async function generateCodecs(
  */
 function readLayersConfig(
   manifest: unknown,
+  isProxy: IsProxyDetector,
 ): Result<LayersConfig | undefined, CodecGeneratorError> {
-  const gen = readOwnDataProperty(manifest, "generator", "generator");
+  const gen = readOwnDataProperty(manifest, "generator", "generator", isProxy);
   if (!gen.success) return gen;
   if (gen.value === undefined) return ok(undefined);
-  const sync = readOwnDataProperty(gen.value, "sync", "generator.sync");
+  const sync = readOwnDataProperty(
+    gen.value,
+    "sync",
+    "generator.sync",
+    isProxy,
+  );
   if (!sync.success) return sync;
   if (sync.value === undefined) return ok(undefined);
   const layers = readOwnDataProperty(
     sync.value,
     "layers",
     "generator.sync.layers",
+    isProxy,
   );
   if (!layers.success) return layers;
   const layersRaw = layers.value;
@@ -132,6 +151,7 @@ function readLayersConfig(
     layersRaw,
     "application",
     "generator.sync.layers.application",
+    isProxy,
   );
   if (!app.success) return app;
   if (app.value === undefined) return ok({});
@@ -139,6 +159,7 @@ function readLayersConfig(
     app.value,
     "folder",
     "generator.sync.layers.application.folder",
+    isProxy,
   );
   if (!folder.success) return folder;
   const folderValue = folder.value;
@@ -164,6 +185,7 @@ async function emitCodecs(
   result: GeneratorResult,
   runtimeModule: string,
   layersConfig: LayersConfig | undefined,
+  isProxy: IsProxyDetector,
 ): Promise<GeneratorResult> {
   const manifest: unknown = config.manifest;
 
@@ -171,6 +193,7 @@ async function emitCodecs(
     manifest,
     "bounded_contexts",
     "bounded_contexts",
+    isProxy,
   );
   if (!bcsResult.success) {
     result.error = bcsResult.error;
@@ -182,6 +205,7 @@ async function emitCodecs(
     bcsResult.value,
     MAX_BOUNDED_CONTEXTS,
     "bounded_contexts",
+    isProxy,
   );
   if (!bcs.success) {
     result.error = bcs.error;
@@ -195,6 +219,7 @@ async function emitCodecs(
       rawContext,
       "name",
       "bounded_contexts[].name",
+      isProxy,
     );
     if (!nameResult.success) {
       result.error = nameResult.error;
@@ -208,7 +233,12 @@ async function emitCodecs(
   }
   if (!found) return result; // context not declared — nothing to emit
 
-  const layersResult = readOwnDataProperty(context, "layers", "layers");
+  const layersResult = readOwnDataProperty(
+    context,
+    "layers",
+    "layers",
+    isProxy,
+  );
   if (!layersResult.success) {
     result.error = layersResult.error;
     return result;
@@ -219,6 +249,7 @@ async function emitCodecs(
     layersResult.value,
     "application",
     "layers.application",
+    isProxy,
   );
   if (!appResult.success) {
     result.error = appResult.error;
@@ -230,6 +261,7 @@ async function emitCodecs(
     appResult.value,
     "ports",
     "layers.application.ports",
+    isProxy,
   );
   if (!portsResult.success) {
     result.error = portsResult.error;
@@ -242,6 +274,7 @@ async function emitCodecs(
       portsResult.value,
       direction,
       `layers.application.ports.${direction}`,
+      isProxy,
     );
     if (!dirResult.success) {
       result.error = dirResult.error;
@@ -253,6 +286,7 @@ async function emitCodecs(
       dirResult.value,
       MAX_PORTS_PER_DIRECTION,
       `layers.application.ports.${direction}`,
+      isProxy,
     );
     if (!ports.success) {
       result.error = ports.error;
@@ -275,6 +309,7 @@ async function emitCodecs(
         config,
         report,
         result,
+        isProxy,
       );
       if (!emitted) return result; // result.error already set
     }
@@ -297,6 +332,7 @@ async function emitPortCodec(
   config: SyncConfig,
   report: ReportRecorder | undefined,
   result: GeneratorResult,
+  isProxy: IsProxyDetector,
 ): Promise<boolean> {
   // String port entries (legacy name-only form) declare no contracts.
   if (typeof port === "string") return true;
@@ -305,6 +341,7 @@ async function emitPortCodec(
     port,
     "contracts",
     `${moduleName}.ports.${direction}[].contracts`,
+    isProxy,
   );
   if (!contractsResult.success) {
     result.error = contractsResult.error;
@@ -317,6 +354,7 @@ async function emitPortCodec(
     port,
     "name",
     `${moduleName}.ports.${direction}[].name`,
+    isProxy,
   );
   if (!nameResult.success) {
     result.error = nameResult.error;
@@ -341,6 +379,7 @@ async function emitPortCodec(
   const schemaResult = buildCodecSchema(
     contractsResult.value,
     `${moduleName}.${portPascalName}`,
+    isProxy,
   );
   if (!schemaResult.success) {
     // Never silently skip a malformed contract — surface and stop.

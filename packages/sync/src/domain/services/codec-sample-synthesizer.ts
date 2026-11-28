@@ -8,12 +8,12 @@
 // input refuses null/undefined where a plain record is required, non-iterable
 // values, array holes, wrong primitives, getters (accessors are NEVER
 // invoked — they are refused through their own property descriptor),
-// detectable Proxies (`util.types.isProxy`) and reflection/trap throws (the
-// reflection reads run inside try/catch and map throws to HOSTILE_INPUT),
-// array-likes, enormous lengths, and prototype-polluting keys — each with a
-// typed error, never a pass. No promise is made about transparent Proxies
-// that neither trigger `util.types.isProxy` nor throw during reflection; that
-// is not detectable in pure JS.
+// detectable Proxies (the injected `IsProxyDetector`) and reflection/trap
+// throws (the reflection reads run inside try/catch and map throws to
+// HOSTILE_INPUT), array-likes, enormous lengths, and prototype-polluting
+// keys — each with a typed error, never a pass. No promise is made about
+// transparent Proxies that neither trigger the injected detector nor throw
+// during reflection; that is not detectable in pure JS.
 //
 // Error-code precedence (deterministic, see the lane brief):
 //   1. HOSTILE_INPUT   2. MALFORMED_CONTRACT   3. TIMEOUT_OR_BUDGET
@@ -33,25 +33,49 @@
 //   matching steps (MAX_PATTERN_STEPS); manifest patterns are never run
 //   through unrestricted native RegExp.test.
 
+import type { IsProxyDetector } from "./proxy-detector.js";
+
 /**
  * Proxy-detection port (arch-lint `node-builtin-in-layer`): the domain layer
- * must not import Node builtins, so `util.types.isProxy` is injected here by
- * the composition seam — `src/generators/codec-test.ts` imports it from
- * "node:util" and installs it at module load. Until installed, the fallback
- * relies on the reflection/trap-throw checks below, which still refuse any
- * Proxy whose traps throw; detectable-but-non-throwing Proxies are only
- * refused once the detector is installed (production always installs it).
+ * must not import Node builtins, so `util.types.isProxy` is INJECTED
+ * explicitly as an `IsProxyDetector` parameter by every caller
+ * (infrastructure: `src/generators/codec-test.ts`, `src/sync-engine.ts`).
+ * There is no process-global detector: a missing / non-function detector
+ * FAILS CLOSED — every object value is refused with HOSTILE_INPUT before any
+ * reflection. A detector that throws is a refusal too; a detector that
+ * returns true refuses the value. The reflection/trap-throw checks below
+ * still refuse any Proxy whose traps throw.
  */
-type IsProxyDetector = (value: unknown) => boolean;
 
-let isProxyDetector: IsProxyDetector | null = null;
-
-export function installIsProxyDetector(fn: IsProxyDetector): void {
-  isProxyDetector = fn;
-}
-
-export function looksLikeProxy(value: unknown): boolean {
-  return isProxyDetector !== null && isProxyDetector(value);
+/**
+ * Fail-closed Proxy gate (Lane HXS1). MUST be invoked BEFORE any reflection
+ * (Object.getPrototypeOf, Object.getOwnPropertyDescriptor, `in`,
+ * Array.isArray, `.length`) on a value that may be hostile. Callers must
+ * already have refused null/non-object values (primitives pass through
+ * untouched). Throws HOSTILE_INPUT when the detector is missing, throws, or
+ * returns true.
+ */
+function gateProxy(
+  value: unknown,
+  path: string,
+  isProxy: IsProxyDetector | undefined,
+): void {
+  if (typeof isProxy !== "function") {
+    throw hostile(
+      path,
+      `no proxy detector supplied; refusing an object at ${path}`,
+    );
+  }
+  let refused: boolean;
+  try {
+    refused = isProxy(value) === true;
+  } catch {
+    // A throwing detector is treated as a refusal — fail closed.
+    refused = true;
+  }
+  if (refused) {
+    throw hostile(path, `refusing a Proxy at ${path}`);
+  }
 }
 
 /** Typed refusal reasons for the codec-test generator's trust boundary. */
@@ -117,7 +141,11 @@ function hostile(path: string, message: string): CodecTestGeneratorError {
  * own data property whose value is `undefined` — callers that must
  * distinguish the two use `hasOwnPlainProperty`.
  */
-export function readOwnPlainProperty(obj: unknown, key: string): unknown {
+export function readOwnPlainProperty(
+  obj: unknown,
+  key: string,
+  isProxy?: IsProxyDetector,
+): unknown {
   if (obj === null || typeof obj !== "object") {
     throw hostile(
       key,
@@ -126,9 +154,8 @@ export function readOwnPlainProperty(obj: unknown, key: string): unknown {
       }`,
     );
   }
-  if (looksLikeProxy(obj)) {
-    throw hostile(key, `refusing a Proxy while reading "${key}"`);
-  }
+  // Fail-closed Proxy gate BEFORE the prototype read / descriptor read.
+  gateProxy(obj, key, isProxy);
   let proto: unknown;
   try {
     proto = Object.getPrototypeOf(obj);
@@ -166,7 +193,11 @@ export function readOwnPlainProperty(obj: unknown, key: string): unknown {
  * Distinguish an ABSENT own property from an own data property whose value is
  * `undefined`. O(1) — one trap-catching descriptor read.
  */
-export function hasOwnPlainProperty(obj: unknown, key: string): boolean {
+export function hasOwnPlainProperty(
+  obj: unknown,
+  key: string,
+  isProxy?: IsProxyDetector,
+): boolean {
   if (obj === null || typeof obj !== "object") {
     throw hostile(
       key,
@@ -175,9 +206,8 @@ export function hasOwnPlainProperty(obj: unknown, key: string): boolean {
       }`,
     );
   }
-  if (looksLikeProxy(obj)) {
-    throw hostile(key, `refusing a Proxy while testing "${key}"`);
-  }
+  // Fail-closed Proxy gate BEFORE the prototype read / descriptor read.
+  gateProxy(obj, key, isProxy);
   let proto: unknown;
   try {
     proto = Object.getPrototypeOf(obj);
@@ -204,7 +234,10 @@ export function hasOwnPlainProperty(obj: unknown, key: string): boolean {
  * (or null) prototype, not an array, not a detectable Proxy, with no
  * reflection throw. Refuses null/undefined (HOSTILE_INPUT). Cost: O(1).
  */
-export function validatePlainRecord(value: unknown): void {
+export function validatePlainRecord(
+  value: unknown,
+  isProxy?: IsProxyDetector,
+): void {
   if (value === null || value === undefined) {
     throw hostile(
       "record",
@@ -217,12 +250,8 @@ export function validatePlainRecord(value: unknown): void {
       `expected a plain record, got the primitive ${typeof value}`,
     );
   }
-  if (looksLikeProxy(value)) {
-    throw hostile(
-      "record",
-      `refusing a Proxy where a plain record is required`,
-    );
-  }
+  // Fail-closed Proxy gate BEFORE the prototype read / Array.isArray.
+  gateProxy(value, "record", isProxy);
   let proto: unknown;
   try {
     proto = Object.getPrototypeOf(value);
@@ -330,12 +359,11 @@ function readBoundedDenseArray(
   value: unknown,
   maxLen: number,
   path: string,
+  isProxy?: IsProxyDetector,
 ): readonly unknown[] {
   // Detectable Proxies are refused BEFORE any reflection: getPrototypeOf,
   // descriptor reads and `i in value` would otherwise run Proxy traps.
-  if (looksLikeProxy(value)) {
-    throw hostile(path, `refusing a Proxy array at ${path}`);
-  }
+  gateProxy(value, path, isProxy);
   let isArray: boolean;
   try {
     isArray = Array.isArray(value);
@@ -997,9 +1025,12 @@ export function matchesPatternBounded(
 // Deterministic sample synthesis
 // ---------------------------------------------------------------------------
 
-function isPlainObjectSafe(node: unknown): boolean {
+function isPlainObjectSafe(
+  node: unknown,
+  isProxy: IsProxyDetector | undefined,
+): boolean {
   if (node === null || typeof node !== "object") return false;
-  if (looksLikeProxy(node)) return false;
+  gateProxy(node, "field", isProxy);
   try {
     const proto = Object.getPrototypeOf(node);
     return proto === Object.prototype || proto === null;
@@ -1013,6 +1044,7 @@ function synthesizeNode(
   path: string,
   depth: number,
   budget: SynthesisBudget,
+  isProxy: IsProxyDetector | undefined,
 ): unknown {
   if (depth > MAX_SAMPLE_CONTRACT_DEPTH) {
     throw new CodecTestGeneratorError(
@@ -1033,9 +1065,8 @@ function synthesizeNode(
       }`,
     );
   }
-  if (looksLikeProxy(node)) {
-    throw hostile(path, `refusing a Proxy contract node at ${path}`);
-  }
+  // Fail-closed Proxy gate BEFORE the prototype read (Lane HXS1).
+  gateProxy(node, path, isProxy);
   let proto: unknown;
   try {
     proto = Object.getPrototypeOf(node);
@@ -1047,7 +1078,7 @@ function synthesizeNode(
   }
   chargeNodes(budget, path);
 
-  const kind = readOwnPlainProperty(node, "kind");
+  const kind = readOwnPlainProperty(node, "kind", isProxy);
   if (kind === undefined) {
     throw new CodecTestGeneratorError(
       "MALFORMED_CONTRACT",
@@ -1065,7 +1096,7 @@ function synthesizeNode(
 
   switch (kind) {
     case "object": {
-      const exact = readOwnPlainProperty(node, "exact");
+      const exact = readOwnPlainProperty(node, "exact", isProxy);
       if (exact !== true) {
         throw new CodecTestGeneratorError(
           "MALFORMED_CONTRACT",
@@ -1073,8 +1104,8 @@ function synthesizeNode(
           `object contract at ${path} requires exact: true`,
         );
       }
-      const fields = readOwnPlainProperty(node, "fields");
-      validatePlainRecord(fields);
+      const fields = readOwnPlainProperty(node, "fields", isProxy);
+      validatePlainRecord(fields, isProxy);
       let keys: string[];
       try {
         keys = Object.keys(fields as Record<string, unknown>);
@@ -1102,10 +1133,10 @@ function synthesizeNode(
       )) {
         chargeJsonString(budget, key, path);
         chargeBytes(budget, 2, path); // ":" + ","
-        let field = readOwnPlainProperty(fields, key);
-        if (isPlainObjectSafe(field)) {
-          const optional = readOwnPlainProperty(field, "optional");
-          if (optional !== undefined && isPlainObjectSafe(optional)) {
+        let field = readOwnPlainProperty(fields, key, isProxy);
+        if (isPlainObjectSafe(field, isProxy)) {
+          const optional = readOwnPlainProperty(field, "optional", isProxy);
+          if (optional !== undefined && isPlainObjectSafe(optional, isProxy)) {
             field = optional;
           }
         }
@@ -1114,12 +1145,13 @@ function synthesizeNode(
           `${path}.${key}`,
           depth + 1,
           budget,
+          isProxy,
         );
       }
       return sample;
     }
     case "array": {
-      const maxItems = readOwnPlainProperty(node, "maxItems");
+      const maxItems = readOwnPlainProperty(node, "maxItems", isProxy);
       if (maxItems === undefined) {
         throw new CodecTestGeneratorError(
           "MISSING_BOUND",
@@ -1139,7 +1171,7 @@ function synthesizeNode(
           `array "maxItems" at ${path} must be a positive integer <= ${MAX_ARRAY_ITEMS_BOUND}`,
         );
       }
-      const items = readOwnPlainProperty(node, "items");
+      const items = readOwnPlainProperty(node, "items", isProxy);
       if (items === undefined) {
         throw new CodecTestGeneratorError(
           "MALFORMED_CONTRACT",
@@ -1149,10 +1181,12 @@ function synthesizeNode(
       }
       // One element — item validation is exercised without unbounded output.
       chargeBytes(budget, 2, path);
-      return [synthesizeNode(items, `${path}.items`, depth + 1, budget)];
+      return [
+        synthesizeNode(items, `${path}.items`, depth + 1, budget, isProxy),
+      ];
     }
     case "string": {
-      const maxLength = readOwnPlainProperty(node, "maxLength");
+      const maxLength = readOwnPlainProperty(node, "maxLength", isProxy);
       if (maxLength === undefined) {
         throw new CodecTestGeneratorError(
           "MISSING_BOUND",
@@ -1172,7 +1206,7 @@ function synthesizeNode(
           `string "maxLength" at ${path} must be a positive integer <= ${MAX_STRING_LENGTH_BOUND}`,
         );
       }
-      const pattern = readOwnPlainProperty(node, "pattern");
+      const pattern = readOwnPlainProperty(node, "pattern", isProxy);
       if (pattern !== undefined) {
         if (typeof pattern !== "string" || pattern.length === 0) {
           throw new CodecTestGeneratorError(
@@ -1192,7 +1226,7 @@ function synthesizeNode(
           );
         }
         parsePatternOrThrow(pattern);
-        const example = readOwnPlainProperty(node, "example");
+        const example = readOwnPlainProperty(node, "example", isProxy);
         if (example === undefined || typeof example !== "string") {
           throw new CodecTestGeneratorError(
             "MISSING_PATTERN_EXAMPLE",
@@ -1226,8 +1260,8 @@ function synthesizeNode(
     }
     case "integer":
     case "number": {
-      const min = readOwnPlainProperty(node, "min");
-      const max = readOwnPlainProperty(node, "max");
+      const min = readOwnPlainProperty(node, "min", isProxy);
+      const max = readOwnPlainProperty(node, "max", isProxy);
       if (
         min !== undefined &&
         (typeof min !== "number" || !Number.isFinite(min))
@@ -1289,7 +1323,7 @@ function synthesizeNode(
       chargeBytes(budget, 5, path);
       return false;
     case "enum": {
-      const values = readOwnPlainProperty(node, "values");
+      const values = readOwnPlainProperty(node, "values", isProxy);
       if (values === undefined) {
         throw new CodecTestGeneratorError(
           "MALFORMED_CONTRACT",
@@ -1301,6 +1335,7 @@ function synthesizeNode(
         values,
         MAX_CONTRACT_FIELDS,
         `${path}.values`,
+        isProxy,
       );
       if (dense.length === 0) {
         throw new CodecTestGeneratorError(
@@ -1323,7 +1358,7 @@ function synthesizeNode(
       return first;
     }
     case "literal": {
-      const value = readOwnPlainProperty(node, "value");
+      const value = readOwnPlainProperty(node, "value", isProxy);
       if (
         typeof value !== "string" &&
         typeof value !== "number" &&
@@ -1355,7 +1390,7 @@ function synthesizeNode(
       return value;
     }
     case "nullable": {
-      const of = readOwnPlainProperty(node, "of");
+      const of = readOwnPlainProperty(node, "of", isProxy);
       if (of === undefined) {
         throw new CodecTestGeneratorError(
           "MALFORMED_CONTRACT",
@@ -1376,7 +1411,7 @@ function synthesizeNode(
         bytes: 0,
         discardBytes: true,
       };
-      synthesizeNode(of, `${path}.of`, depth + 1, innerBudget);
+      synthesizeNode(of, `${path}.of`, depth + 1, innerBudget, isProxy);
       budget.nodes = innerBudget.nodes;
       chargeBytes(budget, 4, path);
       return null;
@@ -1400,9 +1435,10 @@ function synthesizeNode(
 export function synthesizeValidSample(
   contract: unknown,
   portLabel: string,
+  isProxy?: IsProxyDetector,
 ): unknown {
   const budget: SynthesisBudget = { nodes: 0, bytes: 0 };
-  const sample = synthesizeNode(contract, portLabel, 1, budget);
+  const sample = synthesizeNode(contract, portLabel, 1, budget, isProxy);
   if (budget.bytes > MAX_SAMPLE_BYTES) {
     throw new CodecTestGeneratorError(
       "TIMEOUT_OR_BUDGET",
