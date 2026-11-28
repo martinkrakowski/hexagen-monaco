@@ -9,6 +9,10 @@ Release notes for the co-published `@hexagen-monaco/sync` and
 (F1 preflight, #432): a merged bump blocks deploys until it is published. That
 is the guard working, not a fault to bypass.
 
+## 0.17.2
+
+**Tightened emitted codec bounds and runtime module validation.** Emitted string and array bounds use the same upper limits as the generated sample synthesis, `codec.runtimeModule` accepts only a package specifier, and error messages bound how much of a key or kind they repeat. The generated codec test pins one refusal reason for a Proxy.
+
 ## 0.17.1
 
 **Hardened codec input handling.** `hexagen sync` now takes its proxy detector
