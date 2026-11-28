@@ -149,20 +149,20 @@ export function readOwnPlainProperty(
 ): unknown {
   if (obj === null || typeof obj !== "object") {
     throw hostile(
-      key,
+      safeEcho(key),
       `expected a plain object to read "${safeEcho(key)}" from, got ${
         obj === null ? "null" : typeof obj
       }`,
     );
   }
   // Fail-closed Proxy gate BEFORE the prototype read / descriptor read.
-  gateProxy(obj, key, isProxy);
+  gateProxy(obj, safeEcho(key), isProxy);
   let proto: unknown;
   try {
     proto = Object.getPrototypeOf(obj);
   } catch {
     throw hostile(
-      key,
+      safeEcho(key),
       `reflection threw while reading the prototype (hostile Proxy trap)`,
     );
   }
@@ -177,13 +177,13 @@ export function readOwnPlainProperty(
     desc = Object.getOwnPropertyDescriptor(obj, key);
   } catch {
     throw hostile(
-      key,
+      safeEcho(key),
       `reflection threw while reading "${safeEcho(key)}" (hostile Proxy trap)`,
     );
   }
   if (desc && (desc.get !== undefined || desc.set !== undefined)) {
     throw hostile(
-      key,
+      safeEcho(key),
       `refusing accessor property "${safeEcho(key)}" (getters are never invoked)`,
     );
   }
@@ -201,14 +201,14 @@ export function hasOwnPlainProperty(
 ): boolean {
   if (obj === null || typeof obj !== "object") {
     throw hostile(
-      key,
+      safeEcho(key),
       `expected a plain object to test "${safeEcho(key)}" on, got ${
         obj === null ? "null" : typeof obj
       }`,
     );
   }
   // Fail-closed Proxy gate BEFORE the prototype read / descriptor read.
-  gateProxy(obj, key, isProxy);
+  gateProxy(obj, safeEcho(key), isProxy);
   let proto: unknown;
   try {
     proto = Object.getPrototypeOf(obj);

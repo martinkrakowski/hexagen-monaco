@@ -20,6 +20,7 @@ import {
   MAX_OBJECT_FIELDS,
 } from "../../src/domain/services/codec-schema-builder.js";
 import {
+  readOwnPlainProperty,
   MAX_ARRAY_ITEMS_BOUND,
   MAX_STRING_LENGTH_BOUND,
 } from "../../src/domain/services/codec-sample-synthesizer.js";
@@ -457,6 +458,26 @@ describe("buildCodecSchema — emitted bound caps and bounded echo", () => {
     expect(error.message).not.toMatch(/[\r\n]/);
     expect(error.path).not.toMatch(/[\r\n]/);
     expect(error.path.length).toBeLessThan(200);
+  });
+});
+
+describe("synthesizer — bounded echo of an untrusted key", () => {
+  it("keeps a long newline-bearing accessor key out of the error path and message", () => {
+    const key = `k\n${"z".repeat(500)}`;
+    const obj = {};
+    Object.defineProperty(obj, key, { get: () => 1, enumerable: true });
+    let caught: unknown;
+    try {
+      readOwnPlainProperty(obj, key, types.isProxy);
+    } catch (e) {
+      caught = e;
+    }
+    const error = caught as { message: string; path: string };
+    expect(error).toBeDefined();
+    expect(error.path).not.toMatch(/[\r\n]/);
+    expect(error.path.length).toBeLessThan(200);
+    expect(error.message).not.toMatch(/[\r\n]/);
+    expect(error.message.length).toBeLessThan(300);
   });
 });
 
