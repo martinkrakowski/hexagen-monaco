@@ -18,6 +18,11 @@
 //   (deterministic code-point key sorting).
 
 import type { IsProxyDetector } from "./proxy-detector.js";
+import { safeEcho } from "./codec-echo.js";
+import {
+  MAX_ARRAY_ITEMS_BOUND,
+  MAX_STRING_LENGTH_BOUND,
+} from "./codec-sample-synthesizer.js";
 
 /**
  * Local Result variant with E pinned to CodecGeneratorError (domain/result's
@@ -197,7 +202,7 @@ export function readOwnDataProperty(
       new CodecGeneratorError(
         "PROTOTYPE_POLLUTION",
         path,
-        `refusing prototype-polluting key "${key}" at ${path}`,
+        `refusing prototype-polluting key "${safeEcho(key)}" at ${path}`,
       ),
     );
   }
@@ -209,7 +214,7 @@ export function readOwnDataProperty(
       new CodecGeneratorError(
         "HOSTILE_INPUT",
         path,
-        `reflection threw while reading "${key}" at ${path} (hostile Proxy trap)`,
+        `reflection threw while reading "${safeEcho(key)}" at ${path} (hostile Proxy trap)`,
       ),
     );
   }
@@ -218,7 +223,7 @@ export function readOwnDataProperty(
       new CodecGeneratorError(
         "HOSTILE_INPUT",
         path,
-        `refusing accessor property "${key}" at ${path} (getters are never invoked)`,
+        `refusing accessor property "${safeEcho(key)}" at ${path} (getters are never invoked)`,
       ),
     );
   }
@@ -256,7 +261,7 @@ export function hasOwnDataProperty(
       new CodecGeneratorError(
         "PROTOTYPE_POLLUTION",
         path,
-        `refusing prototype-polluting key "${key}" at ${path}`,
+        `refusing prototype-polluting key "${safeEcho(key)}" at ${path}`,
       ),
     );
   }
@@ -268,7 +273,7 @@ export function hasOwnDataProperty(
       new CodecGeneratorError(
         "HOSTILE_INPUT",
         path,
-        `reflection threw while reading "${key}" at ${path} (hostile Proxy trap)`,
+        `reflection threw while reading "${safeEcho(key)}" at ${path} (hostile Proxy trap)`,
       ),
     );
   }
@@ -449,28 +454,21 @@ export function resolveRuntimeModule(
       ),
     );
   }
-  // Quotes and line breaks would let a module specifier escape the import
-  // literal; control characters are refused by code unit (eslint
-  // no-control-regex forbids the character-class form).
-  if (/["'`\n\r]/.test(mod)) {
+  // Only a package specifier is accepted (the form codec-test.ts validates):
+  // first character alphanumeric or "@" (so never relative, absolute or a
+  // "node:" specifier), safe characters only, no empty or dot segments.
+  if (
+    !/^[A-Za-z0-9@]/.test(mod) ||
+    !/^[A-Za-z0-9@/._-]*$/.test(mod) ||
+    mod.split("/").some((seg) => seg === "" || seg === "." || seg === "..")
+  ) {
     return err(
       new CodecGeneratorError(
         "MALFORMED_RUNTIME_MODULE",
         "codec.runtimeModule",
-        `codec.runtimeModule contains quotes, newlines or control characters`,
+        `codec.runtimeModule must be a safe package specifier without whitespace, quotes or control characters`,
       ),
     );
-  }
-  for (let i = 0; i < mod.length; i++) {
-    if (mod.charCodeAt(i) < 0x20 || mod.charCodeAt(i) === 0x7f) {
-      return err(
-        new CodecGeneratorError(
-          "MALFORMED_RUNTIME_MODULE",
-          "codec.runtimeModule",
-          `codec.runtimeModule contains quotes, newlines or control characters`,
-        ),
-      );
-    }
   }
   return ok(mod);
 }
@@ -583,13 +581,14 @@ function buildNode(
       if (
         typeof maxLength !== "number" ||
         !Number.isSafeInteger(maxLength) ||
-        maxLength <= 0
+        maxLength <= 0 ||
+        maxLength > MAX_STRING_LENGTH_BOUND
       ) {
         return err(
           new CodecGeneratorError(
             "MALFORMED_CONTRACT",
             path,
-            `string "maxLength" at ${path} is not a positive safe integer`,
+            `string "maxLength" at ${path} is not a positive safe integer of at most ${MAX_STRING_LENGTH_BOUND}`,
           ),
         );
       }
@@ -626,13 +625,14 @@ function buildNode(
       if (
         typeof maxItems !== "number" ||
         !Number.isSafeInteger(maxItems) ||
-        maxItems <= 0
+        maxItems <= 0 ||
+        maxItems > MAX_ARRAY_ITEMS_BOUND
       ) {
         return err(
           new CodecGeneratorError(
             "MALFORMED_CONTRACT",
             path,
-            `array "maxItems" at ${path} is not a positive safe integer`,
+            `array "maxItems" at ${path} is not a positive safe integer of at most ${MAX_ARRAY_ITEMS_BOUND}`,
           ),
         );
       }
@@ -766,13 +766,13 @@ function buildNode(
         const fieldResult = readOwnDataProperty(
           fieldsRaw,
           key,
-          `${path}.${key}`,
+          `${path}.${safeEcho(key)}`,
           isProxy,
         );
         if (!fieldResult.success) return fieldResult;
         const built = buildNode(
           fieldResult.value,
-          `${path}.${key}`,
+          `${path}.${safeEcho(key)}`,
           depth + 1,
           counter,
           isProxy,
@@ -958,7 +958,7 @@ function buildNode(
           new CodecGeneratorError(
             "UNSUPPORTED_SHAPE",
             path,
-            `unsupported contract shape "${kind}" at ${path}`,
+            `unsupported contract shape "${safeEcho(kind)}" at ${path}`,
           ),
         );
       }
@@ -966,7 +966,7 @@ function buildNode(
         new CodecGeneratorError(
           "UNKNOWN_TYPE",
           path,
-          `unknown contract kind "${kind}" at ${path}`,
+          `unknown contract kind "${safeEcho(kind)}" at ${path}`,
         ),
       );
   }

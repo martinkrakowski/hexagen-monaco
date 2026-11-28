@@ -1690,7 +1690,7 @@ describe("generateCodecTests refusals", () => {
     // Real-Proxy test: counting traps, reason allow-list, zero-trap invariant,
     // and a throwing-trap Proxy refused without throwing.
     assert.ok(content.includes("new Proxy(target, {"));
-    assert.ok(content.includes('["proxy", "not-plain-data"]'));
+    assert.ok(content.includes('expect(res.reason).toBe("not-plain-data");'));
     assert.ok(
       content.includes(
         "const refused: DecodeResult<unknown> = codec.decode(throwing);",

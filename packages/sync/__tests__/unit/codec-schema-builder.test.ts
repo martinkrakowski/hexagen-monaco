@@ -19,6 +19,10 @@ import {
   MAX_ENUM_VALUES,
   MAX_OBJECT_FIELDS,
 } from "../../src/domain/services/codec-schema-builder.js";
+import {
+  MAX_ARRAY_ITEMS_BOUND,
+  MAX_STRING_LENGTH_BOUND,
+} from "../../src/domain/services/codec-sample-synthesizer.js";
 
 function expectErr(
   result: { success: boolean; error?: unknown },
@@ -389,6 +393,73 @@ describe("buildCodecSchema — refusals", () => {
   });
 });
 
+describe("buildCodecSchema — emitted bound caps and bounded echo", () => {
+  it("refuses maxLength and maxItems above the synthesizer bounds, accepts them at the bound", () => {
+    expectErr(
+      buildCodecSchema(
+        { kind: "string", maxLength: MAX_STRING_LENGTH_BOUND + 1 },
+        "t",
+        types.isProxy,
+      ),
+      "MALFORMED_CONTRACT",
+    );
+    expectErr(
+      buildCodecSchema(
+        {
+          kind: "array",
+          maxItems: MAX_ARRAY_ITEMS_BOUND + 1,
+          items: { kind: "boolean" },
+        },
+        "t",
+        types.isProxy,
+      ),
+      "MALFORMED_CONTRACT",
+    );
+    const s = buildCodecSchema(
+      { kind: "string", maxLength: MAX_STRING_LENGTH_BOUND },
+      "t",
+      types.isProxy,
+    );
+    expect(s.success).toBe(true);
+    const a = buildCodecSchema(
+      {
+        kind: "array",
+        maxItems: MAX_ARRAY_ITEMS_BOUND,
+        items: { kind: "boolean" },
+      },
+      "t",
+      types.isProxy,
+    );
+    expect(a.success).toBe(true);
+  });
+
+  it("bounds the echo of an unknown kind: capped length, no newlines", () => {
+    const kind = `evil\n${"x".repeat(500)}\r\nend`;
+    const error = expectErr(
+      buildCodecSchema({ kind }, "t", types.isProxy),
+      "UNKNOWN_TYPE",
+    );
+    expect(error.message).not.toMatch(/[\r\n]/);
+    expect(error.message.length).toBeLessThan(200);
+    expect(error.message).not.toContain("x".repeat(100));
+  });
+
+  it("bounds the echo of an oversized field key in the error path", () => {
+    const key = `k\n${"y".repeat(500)}`;
+    const error = expectErr(
+      buildCodecSchema(
+        { kind: "object", exact: true, fields: { [key]: { kind: "nope" } } },
+        "t",
+        types.isProxy,
+      ),
+      "UNKNOWN_TYPE",
+    );
+    expect(error.message).not.toMatch(/[\r\n]/);
+    expect(error.path).not.toMatch(/[\r\n]/);
+    expect(error.path.length).toBeLessThan(200);
+  });
+});
+
 describe("resolveRuntimeModule — refusals", () => {
   it("refuses malformed codec.runtimeModule with MALFORMED_RUNTIME_MODULE", () => {
     expectErr(
@@ -417,6 +488,27 @@ describe("resolveRuntimeModule — refusals", () => {
       resolveRuntimeModule({ codec: { runtimeModule: "a\nb" } }, types.isProxy),
       "MALFORMED_RUNTIME_MODULE",
     );
+    for (const bad of [
+      "./local",
+      "../up",
+      "/abs/path",
+      "node:fs",
+      ".hidden",
+      "a//b",
+      "a/../b",
+    ]) {
+      expectErr(
+        resolveRuntimeModule({ codec: { runtimeModule: bad } }, types.isProxy),
+        "MALFORMED_RUNTIME_MODULE",
+      );
+    }
+    for (const good of ["@fleet/shared", "zod", "@scope/pkg/sub"]) {
+      const ok = resolveRuntimeModule(
+        { codec: { runtimeModule: good } },
+        types.isProxy,
+      );
+      expect(ok.success && ok.value).toBe(good);
+    }
     expectErr(
       resolveRuntimeModule(
         { codec: { runtimeModule: "a\u0000b" } },

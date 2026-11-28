@@ -601,22 +601,27 @@ describe("generateCodecs — emission and traversal", () => {
 
   it("exercises generated codec with ADVERSARIAL_CORPUS via runAdversarialCorpus and returns DecodeResult { ok: false, reason, path } refusals without throwing", async () => {
     fixtureRoot = await createFixture(["alpha"]);
-    // Runtime test double lives next to the workspace root; the emitted codec
-    // imports it via a relative specifier (codec.runtimeModule).
-    const runtimePath = path.join(fixtureRoot, "codec-runtime.mjs");
-    await fs.writeFile(runtimePath, RUNTIME_MODULE_SOURCE, "utf8");
+    // Runtime test double is a package under the fixture's node_modules; the
+    // emitted codec imports it by package specifier (codec.runtimeModule).
+    const runtimeModule = "codec-runtime-double";
+    const runtimeDir = path.join(fixtureRoot, "node_modules", runtimeModule);
+    await fs.mkdir(runtimeDir, { recursive: true });
+    await fs.writeFile(
+      path.join(runtimeDir, "package.json"),
+      JSON.stringify({ name: runtimeModule, type: "module", main: "index.mjs" }),
+      "utf8",
+    );
+    await fs.writeFile(
+      path.join(runtimeDir, "index.mjs"),
+      RUNTIME_MODULE_SOURCE,
+      "utf8",
+    );
 
-    // Point the manifest's runtime module at the test double.
     const moduleDir = path.join(fixtureRoot, "packages", "alpha");
     const codecPath = path.join(
       moduleDir,
       "src/application/ports/in/PlaceOrder.codec.ts",
     );
-    const rel = path
-      .relative(path.dirname(codecPath), runtimePath)
-      .split(path.sep)
-      .join("/");
-    const runtimeModule = rel.startsWith(".") ? rel : `./${rel}`;
 
     const result = await generateCodecs(
       moduleDir,
